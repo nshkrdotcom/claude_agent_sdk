@@ -24,14 +24,19 @@ defmodule ClaudeCodeSDK.AuthChecker do
   """
   @spec check_auth() :: {:ok, String.t()} | {:error, String.t()}
   def check_auth do
-    case System.cmd("claude", ["auth", "status"], stderr_to_stdout: true) do
-      {output, 0} ->
-        info = String.trim(output)
-        {:ok, info}
+    # Check if mocking is enabled
+    if Application.get_env(:claude_code_sdk, :use_mock, false) do
+      {:ok, "Authenticated (mocked) - user@example.com"}
+    else
+      case System.cmd("claude", ["auth", "status"], stderr_to_stdout: true, timeout: 5000) do
+        {output, 0} ->
+          info = String.trim(output)
+          {:ok, info}
 
-      {error_output, _code} ->
-        error_msg = parse_auth_error(error_output)
-        {:error, error_msg}
+        {error_output, _code} ->
+          error_msg = parse_auth_error(error_output)
+          {:error, error_msg}
+      end
     end
   rescue
     e ->
@@ -74,18 +79,23 @@ defmodule ClaudeCodeSDK.AuthChecker do
   """
   @spec check_cli_installation() :: {:ok, map()} | {:error, String.t()}
   def check_cli_installation do
-    case System.find_executable("claude") do
-      nil ->
-        {:error, "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"}
+    # Check if mocking is enabled
+    if Application.get_env(:claude_code_sdk, :use_mock, false) do
+      {:ok, %{path: "/usr/local/bin/claude", version: "1.0.0"}}
+    else
+      case System.find_executable("claude") do
+        nil ->
+          {:error, "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"}
 
-      path ->
-        case get_cli_version() do
-          {:ok, version} ->
-            {:ok, %{path: path, version: version}}
+        path ->
+          case get_cli_version() do
+            {:ok, version} ->
+              {:ok, %{path: path, version: version}}
 
-          {:error, reason} ->
-            {:error, "Claude CLI found at #{path} but #{reason}"}
-        end
+            {:error, reason} ->
+              {:error, "Claude CLI found at #{path} but #{reason}"}
+          end
+      end
     end
   end
 
@@ -170,7 +180,7 @@ defmodule ClaudeCodeSDK.AuthChecker do
   end
 
   defp get_cli_version do
-    case System.cmd("claude", ["--version"], stderr_to_stdout: true) do
+    case System.cmd("claude", ["--version"], stderr_to_stdout: true, timeout: 5000) do
       {output, 0} ->
         version = output |> String.trim() |> parse_version()
         {:ok, version}

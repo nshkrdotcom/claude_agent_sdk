@@ -1,5 +1,5 @@
 import Config
 
-# Development environment - use real API by default
+# Development environment - use mocks by default for safety
 config :claude_code_sdk,
-  use_mock: false
+  use_mock: true

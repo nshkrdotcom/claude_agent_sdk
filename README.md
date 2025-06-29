@@ -35,9 +35,13 @@ end
    mix deps.get
    ```
 
-3. **Run a test**:
+3. **Run the showcase**:
    ```bash
-   mix run final_test.exs
+   # Safe demo with mocks (no API costs)
+   mix showcase
+   
+   # Live demo with real API calls (requires authentication)
+   mix showcase --live
    ```
 
 ## Implementation Status
@@ -45,14 +49,16 @@ end
 ### ✅ **Currently Implemented**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` 
 - **Message Processing**: Structured message types with proper parsing
-- **Options Configuration**: Full CLI argument mapping
+- **Options Configuration**: Full CLI argument mapping with smart presets
 - **Subprocess Management**: Robust erlexec integration
 - **JSON Parsing**: Custom parser without external dependencies
-- **Authentication**: CLI delegation (no API keys needed)
+- **Authentication**: CLI delegation with status checking and diagnostics
 - **Error Handling**: Basic error detection and reporting
 - **Stream Processing**: Lazy evaluation with Elixir Streams
 - **Mocking System**: Comprehensive testing without API calls
 - **Code Quality**: Full dialyzer and credo compliance
+- **Developer Tools**: ContentExtractor, AuthChecker, OptionBuilder, DebugMode
+- **Smart Configuration**: Environment-aware defaults and preset configurations
 
 ### 🔮 **Planned Features** 
 - **Advanced Error Handling**: Retry logic, timeout handling, comprehensive error recovery
@@ -66,16 +72,17 @@ end
 ## Basic Usage
 
 ```elixir
-# Simple query
-ClaudeCodeSDK.query("Say exactly: Hello from Elixir!")
+# Simple query with smart content extraction
+alias ClaudeCodeSDK.{ContentExtractor, OptionBuilder}
+
+# Use preset development options
+options = OptionBuilder.build_development_options()
+
+ClaudeCodeSDK.query("Say exactly: Hello from Elixir!", options)
 |> Enum.each(fn msg ->
   case msg.type do
     :assistant ->
-      content = case msg.data.message do
-        %{"content" => text} when is_binary(text) -> text
-        %{"content" => [%{"text" => text}]} -> text
-        _ -> inspect(msg.data.message)
-      end
+      content = ContentExtractor.extract_text(msg)
       IO.puts("🤖 Claude: #{content}")
       
     :result ->
@@ -136,15 +143,75 @@ For detailed documentation about the mocking system, see [MOCKING.md](MOCKING.md
 
 ## Available Files to Run
 
-### Test Files
+### 🎯 Showcase (Recommended Starting Point)
+```bash
+# Safe demo with mocks (no API costs)  
+mix showcase
+
+# Live demo with real API calls (requires authentication)
+mix showcase --live
+```
+
+### Additional Examples & Tests
 - `mix run final_test.exs` - Complete test showing message parsing and interaction
+- `mix run example.exs` - Basic usage example
+- `mix run demo_mock.exs` - Mock system demonstration
 - `mix run test_full.exs` - Alternative test format
 - `mix run test_mix.exs` - Basic erlexec functionality test
 
-### Example Files  
-- `mix run example.exs` - Basic usage example
-- `mix run debug_test.exs` - Debugging script (if present)
-- `mix run demo_mock.exs` - Mock system demonstration
+**🌟 Start with `mix showcase` for a complete overview of all features!**
+
+### 🎭 Mock vs Live Mode
+
+**All examples and tests can run in two modes:**
+
+| **Mode** | **Command Format** | **API Calls** | **Costs** | **Authentication Required** |
+|----------|-------------------|---------------|-----------|---------------------------|
+| **Mock** | `mix showcase` | None (mocked) | $0.00 | No |
+| **Live** | `mix showcase --live` | Real API calls | Real costs | Yes (`claude login`) |
+
+### 🎯 Showcase Features
+
+The showcase demonstrates all SDK functionality:
+
+| **Feature Demonstrated** | **What It Shows** |
+|-------------------------|-------------------|
+| **OptionBuilder** | Smart configuration presets for development, production, chat, analysis |
+| **AuthChecker** | Environment validation and authentication diagnostics |
+| **Basic SDK Usage** | Core query functionality with mocked/real responses |
+| **ContentExtractor** | Easy text extraction from complex message formats |
+| **DebugMode** | Message analysis, benchmarking, troubleshooting tools |
+| **Mock System** | Complete testing infrastructure without API costs |
+| **Advanced Configurations** | Real-world scenarios for different use cases |
+| **Performance Features** | Benchmarking and timing analysis |
+
+### 🚀 Running Examples
+
+```bash
+# SAFE MODE (Recommended for testing) - Uses mocks, no API costs
+mix showcase                    # Complete feature showcase with mocks
+mix test                       # Run all tests with mocks  
+mix run example.exs            # Basic SDK usage examples with mocks
+mix run examples/simple_analyzer.exs  # Code analysis example with mocks
+mix run demo_mock.exs          # Mock system demo
+
+# LIVE MODE (Real API calls, requires authentication) - Incurs costs
+mix showcase --live            # Complete showcase with real API calls
+MIX_ENV=test mix test.live     # Run tests with real API calls
+```
+
+**⚠️ Live mode will make real API calls and incur costs. Always test with mock mode first!**
+
+### 📋 Available Commands
+
+| **Command** | **Status** | **Notes** |
+|-------------|------------|-----------|
+| `mix showcase` | ✅ Working | Mock mode, fast, no costs |
+| `mix showcase --live` | ✅ Working | Live mode, real API calls, no hanging |
+| `mix test` | ✅ Working | Mock mode, 75 tests, 17 skipped |
+| `mix test.live` | ✅ Working | Live mode, properly warns about costs |
+| `mix run example.exs` | ✅ Working | Uses mock mode by default, auto-starts Mock |
+| `mix run examples/simple_analyzer.exs` | ✅ Working | Uses mock mode by default |
 
 ## API Reference
 
@@ -180,11 +247,12 @@ ClaudeCodeSDK.resume("session-id-here", "Add tests")
 |> Enum.to_list()
 ```
 
-### Options
+### Options & Smart Presets
 
-Configure requests with `ClaudeCodeSDK.Options`:
+Configure requests with `ClaudeCodeSDK.Options` or use smart presets:
 
 ```elixir
+# Manual configuration
 %ClaudeCodeSDK.Options{
   max_turns: 10,              # Maximum conversation turns
   system_prompt: "Custom...", # Override system prompt
@@ -192,6 +260,27 @@ Configure requests with `ClaudeCodeSDK.Options`:
   verbose: true,              # Enable verbose logging
   cwd: "/path/to/project"     # Working directory
 }
+
+# Smart presets with OptionBuilder
+alias ClaudeCodeSDK.OptionBuilder
+
+# Development: permissive settings, verbose logging
+options = OptionBuilder.build_development_options()
+
+# Production: restricted settings, minimal tools
+options = OptionBuilder.build_production_options()
+
+# Analysis: read-only tools for code analysis
+options = OptionBuilder.build_analysis_options()
+
+# Chat: simple conversations
+options = OptionBuilder.build_chat_options()
+
+# Auto-detect based on Mix.env()
+options = OptionBuilder.for_environment()
+
+# Custom combinations
+options = OptionBuilder.merge(:development, %{max_turns: 5})
 ```
 
 ### Message Types
@@ -205,24 +294,55 @@ The SDK returns a stream of `ClaudeCodeSDK.Message` structs with these types:
 
 ### Message Processing
 
+Use the built-in `ContentExtractor` for easy message processing:
+
 ```elixir
-ClaudeCodeSDK.query("Your prompt")
+alias ClaudeCodeSDK.ContentExtractor
+
+# Extract all assistant responses
+content = ClaudeCodeSDK.query("Your prompt")
 |> Stream.filter(fn msg -> msg.type == :assistant end)
-|> Stream.map(fn msg -> extract_content(msg) end)
+|> Stream.map(&ContentExtractor.extract_text/1)
 |> Enum.join("\n")
 
-defp extract_content(msg) do
-  case msg.data.message do
-    %{"content" => text} when is_binary(text) -> text
-    %{"content" => [%{"text" => text}]} -> text
-    _ -> inspect(msg.data.message)
-  end
+# Check if message has text content
+if ContentExtractor.has_text?(message) do
+  text = ContentExtractor.extract_text(message)
+  IO.puts("Response: #{text}")
 end
 ```
 
 ## Authentication
 
 This SDK uses your already-authenticated Claude CLI instance. No API keys needed - just run `claude login` once and the SDK uses the stored session.
+
+### Authentication Checking
+
+Use `AuthChecker` to verify your setup before making queries:
+
+```elixir
+alias ClaudeCodeSDK.AuthChecker
+
+# Quick boolean check
+if AuthChecker.authenticated?() do
+  # Proceed with queries
+  ClaudeCodeSDK.query("Hello!")
+else
+  IO.puts("Please run: claude login")
+end
+
+# Full diagnostic check
+diagnosis = AuthChecker.diagnose()
+# Returns: %{
+#   cli_installed: true,
+#   authenticated: true, 
+#   status: :ready,
+#   recommendations: []
+# }
+
+# Ensure ready or raise error
+AuthChecker.ensure_ready!()
+```
 
 ## Error Handling
 
@@ -277,17 +397,80 @@ claude login
 npm install -g @anthropic-ai/claude-code
 ```
 
+### Debug Mode
+
+Use `DebugMode` for detailed troubleshooting:
+
+```elixir
+alias ClaudeCodeSDK.DebugMode
+
+# Run full diagnostics
+DebugMode.run_diagnostics()
+
+# Debug a specific query with timing
+messages = DebugMode.debug_query("Hello")
+
+# Benchmark performance
+results = DebugMode.benchmark("Test query", nil, 3)
+# Returns timing and cost statistics
+
+# Analyze message statistics
+stats = DebugMode.analyze_messages(messages)
+```
+
+## Developer Tools
+
+The SDK includes four powerful modules to enhance your development experience:
+
+### 🔧 OptionBuilder - Smart Configuration
+Pre-configured option sets for common use cases:
+- `build_development_options()` - Permissive settings for dev work
+- `build_production_options()` - Secure settings for production  
+- `build_analysis_options()` - Read-only tools for code analysis
+- `build_chat_options()` - Simple conversation settings
+- `for_environment()` - Auto-detects based on Mix.env()
+- `merge/2` - Combine presets with custom options
+
+### 🔍 AuthChecker - Environment Validation  
+Prevents authentication errors with proactive checking:
+- `authenticated?/0` - Quick boolean check
+- `diagnose/0` - Full diagnostic with recommendations
+- `ensure_ready!/0` - Raises if not ready for queries
+- Helpful error messages and setup instructions
+
+### 📜 ContentExtractor - Message Processing
+Simplifies extracting text from complex message formats:
+- `extract_text/1` - Get text from any message type
+- `has_text?/1` - Check if message contains text content
+- Handles strings, arrays, tool responses gracefully
+- No more manual message parsing
+
+### 🐛 DebugMode - Troubleshooting Tools
+Comprehensive debugging and performance analysis:
+- `debug_query/2` - Execute queries with detailed logging
+- `run_diagnostics/0` - Full environment health check
+- `benchmark/3` - Performance testing with statistics
+- `analyze_messages/1` - Extract insights from message streams
+
 ## Main Use Cases
 
 ### 🔍 Code Analysis & Review
 ```elixir
-# Analyze code quality and security
-ClaudeCodeSDK.query("""
+# Analyze code quality and security with smart configuration
+alias ClaudeCodeSDK.{OptionBuilder, ContentExtractor}
+
+# Use analysis-specific options (read-only tools)
+options = OptionBuilder.build_analysis_options()
+
+analysis_result = ClaudeCodeSDK.query("""
 Review this code for security vulnerabilities and performance issues:
 #{File.read!("lib/user_auth.ex")}
-""")
+""", options)
 |> Stream.filter(&(&1.type == :assistant))
+|> Stream.map(&ContentExtractor.extract_text/1)
 |> Enum.join("\n")
+
+IO.puts("📊 Analysis Result:\n#{analysis_result}")
 ```
 
 ### 📚 Documentation Generation **(FUTURE/PLANNED)**

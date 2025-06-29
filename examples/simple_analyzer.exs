@@ -2,6 +2,17 @@
 
 # Simple Code Analyzer - Test Claude SDK with file analysis
 # Usage: mix run examples/simple_analyzer.exs <file_path>
+# Uses current application environment (mock by default, live in production)
+
+alias ClaudeCodeSDK.{ContentExtractor, OptionBuilder}
+
+# Start mock if needed
+if Application.get_env(:claude_code_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeCodeSDK.Mock.start_link()
+  IO.puts("🎭 Mock mode enabled")
+else
+  IO.puts("🔴 Live mode enabled")
+end
 
 defmodule SimpleAnalyzer do
   def analyze_file(file_path) do
@@ -18,6 +29,9 @@ defmodule SimpleAnalyzer do
     IO.puts("📝 File size: #{String.length(content)} characters")
     IO.puts("📡 Sending to Claude...")
 
+    # Use analysis-specific options
+    options = OptionBuilder.build_analysis_options()
+
     analysis = ClaudeCodeSDK.query("""
     Analyze this code file and provide a brief summary:
 
@@ -32,7 +46,7 @@ defmodule SimpleAnalyzer do
     3. One key improvement suggestion
 
     Keep it concise.
-    """)
+    """, options)
     |> extract_assistant_content()
 
     IO.puts("\n📋 Analysis:")
@@ -56,15 +70,11 @@ defmodule SimpleAnalyzer do
       System.halt(1)
     end
 
+    # Use ContentExtractor for proper content extraction
     messages
     |> Enum.filter(&(&1.type == :assistant))
-    |> Enum.map(fn msg ->
-      case msg.data.message do
-        %{"content" => text} when is_binary(text) -> text
-        %{"content" => [%{"text" => text}]} -> text
-        other -> inspect(other)
-      end
-    end)
+    |> Enum.map(&ContentExtractor.extract_text/1)
+    |> Enum.filter(&(&1 != nil))
     |> Enum.join("\n")
   end
 end
