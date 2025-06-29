@@ -32,7 +32,7 @@ defmodule ClaudeCodeSDK do
   The SDK will use the stored authentication from your interactive Claude session.
   """
 
-  alias ClaudeCodeSDK.{Query, Options}
+  alias ClaudeCodeSDK.{Options, Query}
 
   @doc """
   Runs a query against Claude Code and returns a stream of messages.
@@ -101,7 +101,8 @@ defmodule ClaudeCodeSDK do
       ClaudeCodeSDK.resume("550e8400-e29b-41d4-a716-446655440000", "Add tests")
       |> Enum.to_list()
   """
-  @spec resume(String.t(), String.t() | nil, Options.t() | nil) :: Enumerable.t(ClaudeCodeSDK.Message.t())
+  @spec resume(String.t(), String.t() | nil, Options.t() | nil) ::
+          Enumerable.t(ClaudeCodeSDK.Message.t())
   def resume(session_id, prompt \\ nil, options \\ nil) do
     opts = options || %Options{}
     Query.resume(session_id, prompt, opts)

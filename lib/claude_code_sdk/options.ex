@@ -129,84 +129,69 @@ defmodule ClaudeCodeSDK.Options do
   """
   @spec to_args(t()) :: [String.t()]
   def to_args(%__MODULE__{} = options) do
-    args = []
-
-    args =
-      if options.output_format do
-        format_args = ["--output-format", to_string(options.output_format)]
-        # CLI requires --verbose when using stream-json with --print
-        if options.output_format == :stream_json do
-          args ++ format_args ++ ["--verbose"]
-        else
-          args ++ format_args
-        end
-      else
-        args
-      end
-
-    args =
-      if options.max_turns do
-        args ++ ["--max-turns", to_string(options.max_turns)]
-      else
-        args
-      end
-
-    args =
-      if options.system_prompt do
-        args ++ ["--system-prompt", options.system_prompt]
-      else
-        args
-      end
-
-    args =
-      if options.append_system_prompt do
-        args ++ ["--append-system-prompt", options.append_system_prompt]
-      else
-        args
-      end
-
-    args =
-      if options.allowed_tools do
-        args ++ ["--allowedTools", Enum.join(options.allowed_tools, " ")]
-      else
-        args
-      end
-
-    args =
-      if options.disallowed_tools do
-        args ++ ["--disallowedTools", Enum.join(options.disallowed_tools, " ")]
-      else
-        args
-      end
-
-    args =
-      if options.mcp_config do
-        args ++ ["--mcp-config", options.mcp_config]
-      else
-        args
-      end
-
-    args =
-      if options.permission_prompt_tool do
-        args ++ ["--permission-prompt-tool", options.permission_prompt_tool]
-      else
-        args
-      end
-
-    args =
-      if options.permission_mode do
-        args ++ ["--permission-mode", to_string(options.permission_mode)]
-      else
-        args
-      end
-
-    args =
-      if options.verbose do
-        args ++ ["--verbose"]
-      else
-        args
-      end
-
-    args
+    []
+    |> add_output_format_args(options)
+    |> add_max_turns_args(options)
+    |> add_system_prompt_args(options)
+    |> add_append_system_prompt_args(options)
+    |> add_allowed_tools_args(options)
+    |> add_disallowed_tools_args(options)
+    |> add_mcp_config_args(options)
+    |> add_permission_prompt_tool_args(options)
+    |> add_permission_mode_args(options)
+    |> add_verbose_args(options)
   end
+
+  defp add_output_format_args(args, %{output_format: nil}), do: args
+
+  defp add_output_format_args(args, %{output_format: format}) do
+    format_args = ["--output-format", to_string(format)]
+    # CLI requires --verbose when using stream-json with --print
+    if format == :stream_json do
+      args ++ format_args ++ ["--verbose"]
+    else
+      args ++ format_args
+    end
+  end
+
+  defp add_max_turns_args(args, %{max_turns: nil}), do: args
+
+  defp add_max_turns_args(args, %{max_turns: turns}),
+    do: args ++ ["--max-turns", to_string(turns)]
+
+  defp add_system_prompt_args(args, %{system_prompt: nil}), do: args
+
+  defp add_system_prompt_args(args, %{system_prompt: prompt}),
+    do: args ++ ["--system-prompt", prompt]
+
+  defp add_append_system_prompt_args(args, %{append_system_prompt: nil}), do: args
+
+  defp add_append_system_prompt_args(args, %{append_system_prompt: prompt}),
+    do: args ++ ["--append-system-prompt", prompt]
+
+  defp add_allowed_tools_args(args, %{allowed_tools: nil}), do: args
+
+  defp add_allowed_tools_args(args, %{allowed_tools: tools}),
+    do: args ++ ["--allowedTools", Enum.join(tools, " ")]
+
+  defp add_disallowed_tools_args(args, %{disallowed_tools: nil}), do: args
+
+  defp add_disallowed_tools_args(args, %{disallowed_tools: tools}),
+    do: args ++ ["--disallowedTools", Enum.join(tools, " ")]
+
+  defp add_mcp_config_args(args, %{mcp_config: nil}), do: args
+  defp add_mcp_config_args(args, %{mcp_config: config}), do: args ++ ["--mcp-config", config]
+
+  defp add_permission_prompt_tool_args(args, %{permission_prompt_tool: nil}), do: args
+
+  defp add_permission_prompt_tool_args(args, %{permission_prompt_tool: tool}),
+    do: args ++ ["--permission-prompt-tool", tool]
+
+  defp add_permission_mode_args(args, %{permission_mode: nil}), do: args
+
+  defp add_permission_mode_args(args, %{permission_mode: mode}),
+    do: args ++ ["--permission-mode", to_string(mode)]
+
+  defp add_verbose_args(args, %{verbose: true}), do: args ++ ["--verbose"]
+  defp add_verbose_args(args, _), do: args
 end

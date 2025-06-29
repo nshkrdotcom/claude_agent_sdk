@@ -85,6 +85,7 @@ defmodule ClaudeCodeSDK.Message do
     case ClaudeCodeSDK.JSON.decode(json_string) do
       {:ok, raw} ->
         {:ok, parse_message(raw)}
+
       {:error, _} ->
         # Fallback to manual parsing for our known message types
         try do
@@ -111,9 +112,10 @@ defmodule ClaudeCodeSDK.Message do
           "permissionMode" => extract_string_field(str, "permissionMode"),
           "apiKeySource" => extract_string_field(str, "apiKeySource")
         }
-        
+
       String.contains?(str, ~s("type":"assistant")) ->
         content = extract_nested_field(str, ["message", "content"], "text")
+
         %{
           "type" => "assistant",
           "message" => %{
@@ -122,7 +124,7 @@ defmodule ClaudeCodeSDK.Message do
           },
           "session_id" => extract_string_field(str, "session_id")
         }
-        
+
       String.contains?(str, ~s("type":"result")) ->
         %{
           "type" => "result",
@@ -135,7 +137,7 @@ defmodule ClaudeCodeSDK.Message do
           "num_turns" => extract_integer_field(str, "num_turns"),
           "is_error" => extract_boolean_field(str, "is_error")
         }
-        
+
       true ->
         %{"type" => "unknown", "content" => str}
     end
@@ -150,13 +152,15 @@ defmodule ClaudeCodeSDK.Message do
 
   defp extract_number_field(str, field) do
     case Regex.run(~r/"#{field}":([\d.]+)/, str) do
-      [_, value] -> 
+      [_, value] ->
         if String.contains?(value, ".") do
           String.to_float(value)
         else
           String.to_integer(value) * 1.0
         end
-      _ -> 0.0
+
+      _ ->
+        0.0
     end
   end
 
@@ -185,8 +189,10 @@ defmodule ClaudeCodeSDK.Message do
           |> String.trim()
           |> String.trim("\"")
         end)
-        |> Enum.filter(& &1 != "")
-      _ -> []
+        |> Enum.filter(&(&1 != ""))
+
+      _ ->
+        []
     end
   end
 
@@ -198,7 +204,9 @@ defmodule ClaudeCodeSDK.Message do
           [_, value] -> value
           _ -> ""
         end
-      _ -> ""
+
+      _ ->
+        ""
     end
   end
 
@@ -210,66 +218,68 @@ defmodule ClaudeCodeSDK.Message do
       raw: raw
     }
 
-    case type do
-      :assistant ->
-        %{message | data: %{message: raw["message"], session_id: raw["session_id"]}}
+    parse_by_type(message, type, raw)
+  end
 
-      :user ->
-        %{message | data: %{message: raw["message"], session_id: raw["session_id"]}}
+  defp parse_by_type(message, :assistant, raw) do
+    %{message | data: %{message: raw["message"], session_id: raw["session_id"]}}
+  end
 
-      :result ->
-        subtype = String.to_atom(raw["subtype"])
+  defp parse_by_type(message, :user, raw) do
+    %{message | data: %{message: raw["message"], session_id: raw["session_id"]}}
+  end
 
-        data =
-          case subtype do
-            :success ->
-              %{
-                result: raw["result"],
-                session_id: raw["session_id"],
-                total_cost_usd: raw["total_cost_usd"],
-                duration_ms: raw["duration_ms"],
-                duration_api_ms: raw["duration_api_ms"],
-                num_turns: raw["num_turns"],
-                is_error: raw["is_error"]
-              }
+  defp parse_by_type(message, :result, raw) do
+    subtype = String.to_atom(raw["subtype"])
+    data = build_result_data(subtype, raw)
+    %{message | subtype: subtype, data: data}
+  end
 
-            error_type when error_type in [:error_max_turns, :error_during_execution] ->
-              %{
-                session_id: raw["session_id"],
-                total_cost_usd: raw["total_cost_usd"] || 0.0,
-                duration_ms: raw["duration_ms"] || 0,
-                duration_api_ms: raw["duration_api_ms"] || 0,
-                num_turns: raw["num_turns"] || 0,
-                is_error: raw["is_error"] || true,
-                error: raw["error"]
-              }
-          end
+  defp parse_by_type(message, :system, raw) do
+    subtype = String.to_atom(raw["subtype"])
+    data = build_system_data(subtype, raw)
+    %{message | subtype: subtype, data: data}
+  end
 
-        %{message | subtype: subtype, data: data}
+  defp parse_by_type(message, _unknown_type, raw) do
+    %{message | data: raw}
+  end
 
-      :system ->
-        subtype = String.to_atom(raw["subtype"])
+  defp build_result_data(:success, raw) do
+    %{
+      result: raw["result"],
+      session_id: raw["session_id"],
+      total_cost_usd: raw["total_cost_usd"],
+      duration_ms: raw["duration_ms"],
+      duration_api_ms: raw["duration_api_ms"],
+      num_turns: raw["num_turns"],
+      is_error: raw["is_error"]
+    }
+  end
 
-        data =
-          case subtype do
-            :init ->
-              %{
-                api_key_source: raw["apiKeySource"],
-                cwd: raw["cwd"],
-                session_id: raw["session_id"],
-                tools: raw["tools"] || [],
-                mcp_servers: raw["mcp_servers"] || [],
-                model: raw["model"],
-                permission_mode: raw["permissionMode"]
-              }
-          end
+  defp build_result_data(error_type, raw)
+       when error_type in [:error_max_turns, :error_during_execution] do
+    %{
+      session_id: raw["session_id"],
+      total_cost_usd: raw["total_cost_usd"] || 0.0,
+      duration_ms: raw["duration_ms"] || 0,
+      duration_api_ms: raw["duration_api_ms"] || 0,
+      num_turns: raw["num_turns"] || 0,
+      is_error: raw["is_error"] || true,
+      error: raw["error"]
+    }
+  end
 
-        %{message | subtype: subtype, data: data}
-
-      _ ->
-        # Unknown type, store raw data
-        %{message | data: raw}
-    end
+  defp build_system_data(:init, raw) do
+    %{
+      api_key_source: raw["apiKeySource"],
+      cwd: raw["cwd"],
+      session_id: raw["session_id"],
+      tools: raw["tools"] || [],
+      mcp_servers: raw["mcp_servers"] || [],
+      model: raw["model"],
+      permission_mode: raw["permissionMode"]
+    }
   end
 
   @doc """

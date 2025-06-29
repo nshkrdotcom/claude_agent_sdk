@@ -1,13 +1,37 @@
 defmodule ClaudeCodeSDK.Process do
   @moduledoc """
   Handles spawning and communicating with the Claude Code CLI process using erlexec.
+
+  This module manages the lifecycle of Claude CLI subprocess execution:
+  - Starting the CLI process with proper arguments
+  - Capturing and parsing JSON output from stdout/stderr
+  - Converting the output into a stream of `ClaudeCodeSDK.Message` structs
+  - Handling errors and cleanup
+
+  The module uses erlexec's synchronous execution mode to capture all output
+  at once, then converts it to a lazy stream for consumption.
   """
 
   alias ClaudeCodeSDK.{Message, Options}
 
   @doc """
   Streams messages from Claude Code CLI using erlexec.
+
+  ## Parameters
+
+  - `args` - List of command-line arguments for the Claude CLI
+  - `options` - Configuration options (see `ClaudeCodeSDK.Options.t/0`)
+
+  ## Returns
+
+  A stream of `ClaudeCodeSDK.Message.t/0` structs.
+
+  ## Examples
+
+      ClaudeCodeSDK.Process.stream(["--print", "Hello"], %ClaudeCodeSDK.Options{})
+
   """
+  @spec stream([String.t()], Options.t()) :: Enumerable.t(ClaudeCodeSDK.Message.t())
   def stream(args, %Options{} = options) do
     Stream.resource(
       fn -> start_claude_process(args, options) end,
@@ -40,6 +64,7 @@ defmodule ClaudeCodeSDK.Process do
 
       {:error, reason} ->
         formatted_error = format_error_message(reason)
+
         error_msg = %Message{
           type: :result,
           subtype: :error_during_execution,
@@ -49,6 +74,7 @@ defmodule ClaudeCodeSDK.Process do
             is_error: true
           }
         }
+
         %{
           mode: :error,
           messages: [error_msg],
@@ -80,8 +106,11 @@ defmodule ClaudeCodeSDK.Process do
 
   defp find_executable do
     case System.find_executable("claude") do
-      nil -> raise "Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code"
-      path -> path
+      nil ->
+        raise "Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code"
+
+      path ->
+        path
     end
   end
 
@@ -99,7 +128,7 @@ defmodule ClaudeCodeSDK.Process do
   end
 
   defp has_stream_json?(args) do
-    case Enum.find_index(args, & &1 == "--output-format") do
+    case Enum.find_index(args, &(&1 == "--output-format")) do
       nil -> false
       idx -> Enum.at(args, idx + 1) == "stream-json"
     end
@@ -116,14 +145,16 @@ defmodule ClaudeCodeSDK.Process do
     all_output
     |> Enum.join()
     |> String.split("\n")
-    |> Enum.filter(& &1 != "")
+    |> Enum.filter(&(&1 != ""))
     |> Enum.map(&parse_json_line/1)
-    |> Enum.filter(& &1 != nil)
+    |> Enum.filter(&(&1 != nil))
   end
 
   defp parse_json_line(line) do
     case Message.from_json(line) do
-      {:ok, message} -> message
+      {:ok, message} ->
+        message
+
       {:error, _} ->
         # If JSON parsing fails, treat as text output
         %Message{
@@ -165,7 +196,7 @@ defmodule ClaudeCodeSDK.Process do
     :ok
   end
 
-    defp format_error_message(reason) do
+  defp format_error_message(reason) do
     case reason do
       [exit_status: status, stdout: stdout_data] when is_list(stdout_data) ->
         # Extract and format JSON from stdout
@@ -173,7 +204,8 @@ defmodule ClaudeCodeSDK.Process do
         formatted_json = format_json_output(json_output)
         "Failed to execute claude (exit status: #{status}):\n#{formatted_json}"
 
-      [exit_status: status, stdout: stdout_data, stderr: _stderr_data] when is_list(stdout_data) ->
+      [exit_status: status, stdout: stdout_data, stderr: _stderr_data]
+      when is_list(stdout_data) ->
         # Extract and format JSON from stdout
         json_output = Enum.join(stdout_data, "")
         formatted_json = format_json_output(json_output)
@@ -190,23 +222,22 @@ defmodule ClaudeCodeSDK.Process do
   defp format_json_output(json_string) do
     json_string
     |> String.split("\n")
-    |> Enum.filter(& &1 != "")
-    |> Enum.map(&format_single_json_line/1)
-    |> Enum.join("\n")
+    |> Enum.filter(&(&1 != ""))
+    |> Enum.map_join("\n", &format_single_json_line/1)
   end
 
   defp format_single_json_line(line) do
-    try do
-      # Try to parse and pretty print the JSON
-      case Jason.decode(line) do
-        {:ok, parsed} ->
-          Jason.encode!(parsed, pretty: true)
-        {:error, _} ->
-          # If parsing fails, return the original line
-          line
-      end
-    rescue
-      _ -> line
+    # Try to parse and pretty print the JSON
+    case Jason.decode(line) do
+      {:ok, parsed} ->
+        case Jason.encode(parsed, pretty: true) do
+          {:ok, formatted} -> formatted
+          {:error, _} -> line
+        end
+
+      {:error, _} ->
+        # If parsing fails, return the original line
+        line
     end
   end
 end
