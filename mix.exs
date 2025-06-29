@@ -26,7 +26,7 @@ defmodule ClaudeCodeSdk.MixProject do
 
   defp deps do
     [
-      {:erlexec, "~> 2.0", runtime: Mix.env() != :test},
+      {:erlexec, "~> 2.0", runtime: runtime_erlexec?()},
       {:jason, "~> 1.4"},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
@@ -53,5 +53,16 @@ defmodule ClaudeCodeSdk.MixProject do
       plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
       plt_add_apps: [:mix]
     ]
+  end
+
+  # Runtime erlexec decision based on environment and live mode intent
+  defp runtime_erlexec? do
+    case Mix.env() do
+      :test ->
+        # In test env, only include erlexec at runtime if running live tests
+        System.get_env("LIVE_TESTS") == "true"
+      _ -> 
+        true
+    end
   end
 end
