@@ -187,22 +187,7 @@ The showcase demonstrates all SDK functionality:
 
 ### 🚀 Running Examples
 
-```bash
-# SAFE MODE (Recommended for testing) - Uses mocks, no API costs
-mix showcase                    # Complete feature showcase with mocks
-mix test                       # Run all tests with mocks  
-mix run example.exs            # Basic SDK usage examples with mocks
-mix run examples/simple_analyzer.exs  # Code analysis example with mocks
-mix run demo_mock.exs          # Mock system demo
-
-# LIVE MODE (Real API calls, requires authentication) - Incurs costs
-mix showcase --live            # Complete showcase with real API calls
-MIX_ENV=test mix test.live     # Run tests with real API calls
-```
-
 **⚠️ Live mode will make real API calls and incur costs. Always test with mock mode first!**
-
-### 📋 Available Commands
 
 | **Command** | **Status** | **Notes** |
 |-------------|------------|-----------|
