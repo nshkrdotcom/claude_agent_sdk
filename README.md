@@ -1,5 +1,7 @@
 # Claude Code SDK for Elixir
 
+[![CI](https://github.com/your-org/claude_code_sdk_elixir/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/claude_code_sdk_elixir/actions/workflows/ci.yml)
+
 An Elixir SDK for programmatically interacting with Claude Code. This library provides a simple interface to query Claude and handle responses using the familiar Elixir streaming patterns.
 
 ## Prerequisites

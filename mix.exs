@@ -11,6 +11,7 @@ defmodule ClaudeCodeSdk.MixProject do
       description: "An Elixir SDK for Claude Code",
       package: package(),
       docs: docs(),
+      dialyzer: dialyzer(),
       preferred_cli_env: [
         "test.live": :test
       ]
@@ -44,6 +45,13 @@ defmodule ClaudeCodeSdk.MixProject do
     [
       main: "ClaudeCodeSDK",
       extras: ["README.md"]
+    ]
+  end
+
+  defp dialyzer do
+    [
+      plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
+      plt_add_apps: [:mix]
     ]
   end
 end
