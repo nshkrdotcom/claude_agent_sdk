@@ -26,7 +26,7 @@ defmodule ClaudeCodeSdk.MixProject do
 
   defp deps do
     [
-      {:erlexec, "~> 2.0"},
+      {:erlexec, "~> 2.0", runtime: Mix.env() != :test},
       {:jason, "~> 1.4"},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},

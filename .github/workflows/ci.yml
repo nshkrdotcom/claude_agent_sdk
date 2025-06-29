@@ -55,6 +55,9 @@ jobs:
 
     - name: Run tests
       run: mix test
+      env:
+        SHELL: /bin/bash
+        MIX_ENV: test
 
     - name: Restore PLT cache
       uses: actions/cache@v3
