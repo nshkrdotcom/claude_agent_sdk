@@ -83,19 +83,27 @@ defmodule ClaudeCodeSDK.AuthChecker do
     if Application.get_env(:claude_code_sdk, :use_mock, false) do
       {:ok, %{path: "/usr/local/bin/claude", version: "1.0.0"}}
     else
-      case System.find_executable("claude") do
-        nil ->
-          {:error, "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"}
+      check_real_cli_installation()
+    end
+  end
 
-        path ->
-          case get_cli_version() do
-            {:ok, version} ->
-              {:ok, %{path: path, version: version}}
+  defp check_real_cli_installation do
+    case System.find_executable("claude") do
+      nil ->
+        {:error, "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"}
 
-            {:error, reason} ->
-              {:error, "Claude CLI found at #{path} but #{reason}"}
-          end
-      end
+      path ->
+        validate_cli_at_path(path)
+    end
+  end
+
+  defp validate_cli_at_path(path) do
+    case get_cli_version() do
+      {:ok, version} ->
+        {:ok, %{path: path, version: version}}
+
+      {:error, reason} ->
+        {:error, "Claude CLI found at #{path} but #{reason}"}
     end
   end
 

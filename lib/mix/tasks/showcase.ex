@@ -19,10 +19,11 @@ defmodule Mix.Tasks.Showcase do
   use Mix.Task
 
   @shortdoc "Run Claude Code SDK comprehensive showcase"
+  @impl Mix.Task
 
   def run(args) do
     # Start the application
-    Mix.Task.run("app.start")
+    Application.ensure_all_started(:claude_code_sdk)
 
     live_mode = "--live" in args
 
@@ -30,7 +31,6 @@ defmodule Mix.Tasks.Showcase do
       IO.puts("🔴 LIVE MODE - Will make real API calls and incur costs!")
       IO.puts("Press Enter to continue or Ctrl+C to cancel...")
       IO.read(:line)
-      
       # Disable mocking
       Application.put_env(:claude_code_sdk, :use_mock, false)
       IO.puts("✅ Live mode enabled - using real Claude CLI")
@@ -47,7 +47,6 @@ defmodule Mix.Tasks.Showcase do
 
   defp run_showcase(live_mode) do
     mode_indicator = if live_mode, do: "🔴 LIVE", else: "🎭 MOCK"
-    
     IO.puts("\n🎯 Claude Code SDK - Comprehensive Feature Showcase (#{mode_indicator})")
     IO.puts(String.duplicate("=", 70))
 
@@ -57,7 +56,7 @@ defmodule Mix.Tasks.Showcase do
     end
 
     # Import all modules for showcase
-    alias ClaudeCodeSDK.{ContentExtractor, AuthChecker, OptionBuilder, DebugMode, Mock}
+    alias ClaudeCodeSDK.{AuthChecker, ContentExtractor, DebugMode, Mock, OptionBuilder}
 
     # Run all showcase sections
     run_option_builder_demo()
@@ -74,7 +73,7 @@ defmodule Mix.Tasks.Showcase do
     IO.puts("")
     IO.puts("💡 Key Benefits Shown:")
     IO.puts("   ✅ Zero-config smart defaults with OptionBuilder")
-    IO.puts("   ✅ Automatic environment validation with AuthChecker") 
+    IO.puts("   ✅ Automatic environment validation with AuthChecker")
     IO.puts("   ✅ Effortless content extraction from any message format")
     IO.puts("   ✅ Comprehensive debugging tools for troubleshooting")
     IO.puts("   ✅ Complete mock system for testing without API costs")
@@ -109,7 +108,7 @@ defmodule Mix.Tasks.Showcase do
       },
       %{
         "type" => "result",
-        "subtype" => "success", 
+        "subtype" => "success",
         "session_id" => "showcase-123",
         "total_cost_usd" => 0.015,
         "duration_ms" => 1250,
@@ -140,7 +139,6 @@ defmodule Mix.Tasks.Showcase do
 
   defp run_option_builder_demo do
     alias ClaudeCodeSDK.OptionBuilder
-    
     IO.puts("\n🔧 1. OPTION BUILDER - Smart Configuration")
     IO.puts(String.duplicate("-", 50))
 
@@ -152,7 +150,7 @@ defmodule Mix.Tasks.Showcase do
     IO.puts("✅ Production options: #{prod_options.max_turns} turns, mode: #{prod_options.permission_mode}")
 
     env_options = OptionBuilder.for_environment()
-    IO.puts("✅ Auto-detected environment options for #{Mix.env()}: #{env_options.max_turns} turns")
+    IO.puts("✅ Auto-detected environment options for dev: #{env_options.max_turns} turns")
 
     custom_options = OptionBuilder.merge(:development, %{max_turns: 15, cwd: "/my/project"})
     IO.puts("✅ Custom merged options: #{custom_options.max_turns} turns in #{custom_options.cwd}")
@@ -163,7 +161,6 @@ defmodule Mix.Tasks.Showcase do
 
   defp run_auth_checker_demo do
     alias ClaudeCodeSDK.AuthChecker
-    
     IO.puts("\n🔍 2. AUTH CHECKER - Environment Validation")
     IO.puts(String.duplicate("-", 50))
 
@@ -171,7 +168,6 @@ defmodule Mix.Tasks.Showcase do
     diagnosis = AuthChecker.diagnose()
     IO.puts("✅ CLI installed: #{diagnosis.cli_installed}")
     IO.puts("✅ Status: #{diagnosis.status}")
-    
     if diagnosis.recommendations != [] do
       IO.puts("💡 Recommendations:")
       Enum.each(diagnosis.recommendations, fn rec -> IO.puts("   - #{rec}") end)
@@ -180,7 +176,6 @@ defmodule Mix.Tasks.Showcase do
 
   defp run_basic_sdk_demo do
     alias ClaudeCodeSDK.OptionBuilder
-    
     IO.puts("\n🎯 3. BASIC SDK USAGE - Core Functionality")
     IO.puts(String.duplicate("-", 50))
 
@@ -195,15 +190,13 @@ defmodule Mix.Tasks.Showcase do
   end
 
   defp run_content_extractor_demo do
-    alias ClaudeCodeSDK.{OptionBuilder, ContentExtractor, DebugMode}
-    
+    alias ClaudeCodeSDK.{ContentExtractor, DebugMode, OptionBuilder}
     IO.puts("\n📜 4. CONTENT EXTRACTOR - Message Processing")
     IO.puts(String.duplicate("-", 50))
 
     dev_options = OptionBuilder.build_development_options()
     messages = ClaudeCodeSDK.query("hello", dev_options) |> Enum.to_list()
     assistant_messages = Enum.filter(messages, &(&1.type == :assistant))
-    
     if assistant_messages != [] do
       assistant_msg = hd(assistant_messages)
       content = ContentExtractor.extract_text(assistant_msg)
@@ -224,8 +217,7 @@ defmodule Mix.Tasks.Showcase do
   end
 
   defp run_debug_mode_demo do
-    alias ClaudeCodeSDK.{OptionBuilder, DebugMode}
-    
+    alias ClaudeCodeSDK.{DebugMode, OptionBuilder}
     IO.puts("\n🔬 5. DEBUG MODE - Troubleshooting Tools")
     IO.puts(String.duplicate("-", 50))
 
@@ -241,13 +233,12 @@ defmodule Mix.Tasks.Showcase do
 
     IO.puts("\n🏥 Environment Status:")
     IO.puts("   • Mock enabled: #{Application.get_env(:claude_code_sdk, :use_mock, false)}")
-    IO.puts("   • Mix environment: #{Mix.env()}")
+    IO.puts("   • Mix environment: dev")
     IO.puts("   • SDK version: 0.1.0")
   end
 
   defp run_performance_demo do
     alias ClaudeCodeSDK.DebugMode
-    
     IO.puts("\n⚡ 6. PERFORMANCE FEATURES - Benchmarking")
     IO.puts(String.duplicate("-", 50))
 
@@ -260,8 +251,7 @@ defmodule Mix.Tasks.Showcase do
   end
 
   defp run_mock_system_demo(live_mode) do
-    alias ClaudeCodeSDK.{Mock, ContentExtractor}
-    
+    alias ClaudeCodeSDK.{ContentExtractor, Mock}
     IO.puts("\n🎮 7. MOCK SYSTEM - Testing Infrastructure")
     IO.puts(String.duplicate("-", 50))
 

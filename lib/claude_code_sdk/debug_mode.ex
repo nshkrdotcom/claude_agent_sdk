@@ -383,28 +383,36 @@ defmodule ClaudeCodeSDK.DebugMode do
 
   defp check_for_errors(acc, _), do: acc
 
+  defp perform_connectivity_test do
+    # Simple echo test
+    case System.cmd("claude", ["--print", "test", "--output-format", "json"],
+           stderr_to_stdout: true,
+           timeout: 5000,
+           env: []
+         ) do
+      {output, 0} ->
+        check_connectivity_output(output)
+
+      {error, code} ->
+        IO.puts("   ❌ Connectivity test failed (exit #{code})")
+        IO.puts("   Error: #{String.trim(error)}")
+    end
+  end
+
+  defp check_connectivity_output(output) do
+    if String.contains?(output, "message") or String.contains?(output, "content") do
+      IO.puts("   ✅ Basic connectivity OK")
+    else
+      IO.puts("   ⚠️  Unexpected response format")
+    end
+  end
+
   defp test_basic_connectivity do
     # Check if mocking is enabled
     if Application.get_env(:claude_code_sdk, :use_mock, false) do
       IO.puts("   ✅ Basic connectivity OK (mocked)")
     else
-      # Simple echo test
-      case System.cmd("claude", ["--print", "test", "--output-format", "json"],
-             stderr_to_stdout: true,
-             timeout: 5000,
-             env: []
-           ) do
-        {output, 0} ->
-          if String.contains?(output, "message") or String.contains?(output, "content") do
-            IO.puts("   ✅ Basic connectivity OK")
-          else
-            IO.puts("   ⚠️  Unexpected response format")
-          end
-
-        {error, code} ->
-          IO.puts("   ❌ Connectivity test failed (exit #{code})")
-          IO.puts("   Error: #{String.trim(error)}")
-      end
+      perform_connectivity_test()
     end
   rescue
     e ->
