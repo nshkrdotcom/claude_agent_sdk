@@ -51,6 +51,8 @@ end
 - **Authentication**: CLI delegation (no API keys needed)
 - **Error Handling**: Basic error detection and reporting
 - **Stream Processing**: Lazy evaluation with Elixir Streams
+- **Mocking System**: Comprehensive testing without API calls
+- **Code Quality**: Full dialyzer and credo compliance
 
 ### 🔮 **Planned Features** 
 - **Advanced Error Handling**: Retry logic, timeout handling, comprehensive error recovery
@@ -84,6 +86,54 @@ ClaudeCodeSDK.query("Say exactly: Hello from Elixir!")
 end)
 ```
 
+## Testing with Mocks
+
+The SDK includes a comprehensive mocking system for testing without making actual API calls.
+
+### Running Tests
+
+```bash
+# Run tests with mocks (default)
+mix test
+
+# Run tests with live API calls
+MIX_ENV=test mix test.live
+
+# Run specific test with live API
+MIX_ENV=test mix test.live test/specific_test.exs
+```
+
+### Using Mocks in Your Code
+
+```elixir
+# Enable mocking
+Application.put_env(:claude_code_sdk, :use_mock, true)
+
+# Start the mock server
+{:ok, _} = ClaudeCodeSDK.Mock.start_link()
+
+# Set a mock response
+ClaudeCodeSDK.Mock.set_response("hello", [
+  %{
+    "type" => "assistant",
+    "message" => %{"content" => "Hello from mock!"}
+  }
+])
+
+# Query will return mock response
+ClaudeCodeSDK.query("say hello") |> Enum.to_list()
+```
+
+### Mock Demo
+
+Run the included demo to see mocking in action:
+
+```bash
+mix run demo_mock.exs
+```
+
+For detailed documentation about the mocking system, see [MOCKING.md](MOCKING.md).
+
 ## Available Files to Run
 
 ### Test Files
@@ -94,6 +144,7 @@ end)
 ### Example Files  
 - `mix run example.exs` - Basic usage example
 - `mix run debug_test.exs` - Debugging script (if present)
+- `mix run demo_mock.exs` - Mock system demonstration
 
 ## API Reference
 
@@ -279,6 +330,47 @@ Create a Phoenix LiveView component for user authentication with:
 - Session management
 - Form validation
 """)
+```
+
+## Testing and Development
+
+### Environment Configuration
+
+The SDK supports different configurations for different environments:
+
+- **Test Environment**: Mocks enabled by default (`config/test.exs`)
+- **Development Environment**: Real API calls (`config/dev.exs`)
+- **Production Environment**: Real API calls (`config/prod.exs`)
+
+### Writing Tests with Mocks
+
+```elixir
+defmodule MyAppTest do
+  use ExUnit.Case
+  alias ClaudeCodeSDK.Mock
+
+  setup do
+    # Clear any existing mock responses
+    Mock.clear_responses()
+    :ok
+  end
+
+  test "my feature works correctly" do
+    # Set up mock response
+    Mock.set_response("analyze", [
+      %{
+        "type" => "assistant",
+        "message" => %{"content" => "Analysis complete: No issues found."}
+      }
+    ])
+    
+    # Your code that uses ClaudeCodeSDK
+    result = MyApp.analyze_code("def hello, do: :world")
+    
+    # Assertions
+    assert result == "Analysis complete: No issues found."
+  end
+end
 ```
 
 ## 📖 Comprehensive Documentation

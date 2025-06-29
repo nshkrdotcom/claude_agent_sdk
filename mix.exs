@@ -10,7 +10,10 @@ defmodule ClaudeCodeSdk.MixProject do
       deps: deps(),
       description: "An Elixir SDK for Claude Code",
       package: package(),
-      docs: docs()
+      docs: docs(),
+      preferred_cli_env: [
+        "test.live": :test
+      ]
     ]
   end
 

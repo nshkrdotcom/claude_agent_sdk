@@ -33,6 +33,19 @@ defmodule ClaudeCodeSDK.Process do
   """
   @spec stream([String.t()], Options.t()) :: Enumerable.t(ClaudeCodeSDK.Message.t())
   def stream(args, %Options{} = options) do
+    # Check if we should use mock
+    if use_mock?() do
+      ClaudeCodeSDK.Mock.Process.stream(args, options)
+    else
+      stream_real(args, options)
+    end
+  end
+
+  defp use_mock? do
+    Application.get_env(:claude_code_sdk, :use_mock, false)
+  end
+
+  defp stream_real(args, options) do
     Stream.resource(
       fn -> start_claude_process(args, options) end,
       &receive_messages/1,

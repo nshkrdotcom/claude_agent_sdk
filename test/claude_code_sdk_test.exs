@@ -2,20 +2,66 @@ defmodule ClaudeCodeSDKTest do
   use ExUnit.Case
   doctest ClaudeCodeSDK
 
-  alias ClaudeCodeSDK.{Options, Message}
+  alias ClaudeCodeSDK.{Mock, Options}
+
+  setup do
+    # Clear any previous mock responses before each test
+    Mock.clear_responses()
+    :ok
+  end
 
   describe "query/2" do
-    test "returns a stream" do
-      # This test would require mocking the CLI process
-      # For now, we'll test that it returns an enumerable
-      result = ClaudeCodeSDK.query("test prompt")
-      assert is_function(result, 2)
+    test "returns a stream with mocked responses" do
+      # Set up a specific mock response
+      Mock.set_response("test prompt", [
+        %{
+          "type" => "system",
+          "subtype" => "init",
+          "session_id" => "test-123",
+          "model" => "claude-test",
+          "tools" => [],
+          "cwd" => "/test",
+          "permissionMode" => "default",
+          "apiKeySource" => "test"
+        },
+        %{
+          "type" => "assistant",
+          "message" => %{
+            "role" => "assistant",
+            "content" => "Test response"
+          },
+          "session_id" => "test-123"
+        },
+        %{
+          "type" => "result",
+          "subtype" => "success",
+          "session_id" => "test-123",
+          "total_cost_usd" => 0.001,
+          "duration_ms" => 100,
+          "duration_api_ms" => 50,
+          "num_turns" => 1,
+          "is_error" => false
+        }
+      ])
+
+      messages = ClaudeCodeSDK.query("test prompt") |> Enum.to_list()
+
+      assert length(messages) == 3
+      assert Enum.at(messages, 0).type == :system
+      assert Enum.at(messages, 1).type == :assistant
+      assert Enum.at(messages, 2).type == :result
+
+      # Check assistant message content
+      assistant_msg = Enum.at(messages, 1)
+      assert assistant_msg.data.message["content"] == "Test response"
     end
 
     test "accepts options" do
       opts = %Options{max_turns: 3, output_format: :json}
-      result = ClaudeCodeSDK.query("test prompt", opts)
-      assert is_function(result, 2)
+      messages = ClaudeCodeSDK.query("test prompt", opts) |> Enum.to_list()
+
+      assert length(messages) > 0
+      assert Enum.any?(messages, &(&1.type == :assistant))
     end
   end
 
