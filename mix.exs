@@ -61,7 +61,8 @@ defmodule ClaudeCodeSdk.MixProject do
       :test ->
         # In test env, only include erlexec at runtime if running live tests
         System.get_env("LIVE_TESTS") == "true"
-      _ -> 
+
+      _ ->
         true
     end
   end

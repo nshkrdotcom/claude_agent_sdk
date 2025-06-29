@@ -22,7 +22,7 @@ defmodule Mix.Tasks.Test.Live do
   def run(args) do
     # Mark that we're running in live mode
     System.put_env("LIVE_TESTS", "true")
-    
+
     # Start the application in test mode but with live API
     Application.put_env(:claude_code_sdk, :use_mock, false)
 
