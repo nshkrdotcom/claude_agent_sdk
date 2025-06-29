@@ -135,7 +135,8 @@ defmodule ClaudeCodeSDK.Message do
           "duration_ms" => extract_integer_field(str, "duration_ms"),
           "duration_api_ms" => extract_integer_field(str, "duration_api_ms"),
           "num_turns" => extract_integer_field(str, "num_turns"),
-          "is_error" => extract_boolean_field(str, "is_error")
+          "is_error" => extract_boolean_field(str, "is_error"),
+          "error" => extract_string_field(str, "error")
         }
 
       true ->
@@ -259,6 +260,8 @@ defmodule ClaudeCodeSDK.Message do
 
   defp build_result_data(error_type, raw)
        when error_type in [:error_max_turns, :error_during_execution] do
+    error_message = get_error_message(error_type, raw["error"])
+
     %{
       session_id: raw["session_id"],
       total_cost_usd: raw["total_cost_usd"] || 0.0,
@@ -266,8 +269,32 @@ defmodule ClaudeCodeSDK.Message do
       duration_api_ms: raw["duration_api_ms"] || 0,
       num_turns: raw["num_turns"] || 0,
       is_error: raw["is_error"] || true,
-      error: raw["error"]
+      error: error_message
     }
+  end
+
+  defp get_error_message(:error_max_turns, nil) do
+    "The task exceeded the maximum number of turns allowed. Consider increasing max_turns option for complex tasks."
+  end
+
+  defp get_error_message(:error_max_turns, "") do
+    "The task exceeded the maximum number of turns allowed. Consider increasing max_turns option for complex tasks."
+  end
+
+  defp get_error_message(:error_during_execution, nil) do
+    "An error occurred during task execution."
+  end
+
+  defp get_error_message(:error_during_execution, "") do
+    "An error occurred during task execution."
+  end
+
+  defp get_error_message(_error_type, error_message) when is_binary(error_message) do
+    error_message
+  end
+
+  defp get_error_message(_error_type, _) do
+    "An unknown error occurred."
   end
 
   defp build_system_data(:init, raw) do
