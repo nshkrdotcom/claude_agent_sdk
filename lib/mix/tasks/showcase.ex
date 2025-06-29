@@ -101,7 +101,10 @@ defmodule Mix.Tasks.Showcase do
         "message" => %{
           "content" => [
             %{"type" => "text", "text" => "Hello! I'm Claude, ready to help you with your code."},
-            %{"type" => "text", "text" => " I can analyze, review, and assist with development tasks."}
+            %{
+              "type" => "text",
+              "text" => " I can analyze, review, and assist with development tasks."
+            }
           ]
         },
         "session_id" => "showcase-123"
@@ -121,7 +124,8 @@ defmodule Mix.Tasks.Showcase do
       %{
         "type" => "assistant",
         "message" => %{
-          "content" => "Code analysis complete: Found 3 potential improvements and 1 security consideration."
+          "content" =>
+            "Code analysis complete: Found 3 potential improvements and 1 security consideration."
         }
       },
       %{
@@ -144,10 +148,16 @@ defmodule Mix.Tasks.Showcase do
 
     # Demonstrate OptionBuilder
     dev_options = OptionBuilder.build_development_options()
-    IO.puts("✅ Development options: #{dev_options.max_turns} turns, verbose: #{dev_options.verbose}")
+
+    IO.puts(
+      "✅ Development options: #{dev_options.max_turns} turns, verbose: #{dev_options.verbose}"
+    )
 
     prod_options = OptionBuilder.build_production_options()
-    IO.puts("✅ Production options: #{prod_options.max_turns} turns, mode: #{prod_options.permission_mode}")
+
+    IO.puts(
+      "✅ Production options: #{prod_options.max_turns} turns, mode: #{prod_options.permission_mode}"
+    )
 
     env_options = OptionBuilder.for_environment()
     IO.puts("✅ Auto-detected environment options for dev: #{env_options.max_turns} turns")
@@ -168,6 +178,7 @@ defmodule Mix.Tasks.Showcase do
     diagnosis = AuthChecker.diagnose()
     IO.puts("✅ CLI installed: #{diagnosis.cli_installed}")
     IO.puts("✅ Status: #{diagnosis.status}")
+
     if diagnosis.recommendations != [] do
       IO.puts("💡 Recommendations:")
       Enum.each(diagnosis.recommendations, fn rec -> IO.puts("   - #{rec}") end)
@@ -184,6 +195,7 @@ defmodule Mix.Tasks.Showcase do
     messages = ClaudeCodeSDK.query("hello", dev_options) |> Enum.to_list()
 
     IO.puts("✅ Received #{length(messages)} messages")
+
     Enum.each(messages, fn msg ->
       IO.puts("   📝 #{msg.type}: #{if msg.subtype, do: "#{msg.subtype}", else: "no subtype"}")
     end)
@@ -197,10 +209,15 @@ defmodule Mix.Tasks.Showcase do
     dev_options = OptionBuilder.build_development_options()
     messages = ClaudeCodeSDK.query("hello", dev_options) |> Enum.to_list()
     assistant_messages = Enum.filter(messages, &(&1.type == :assistant))
+
     if assistant_messages != [] do
       assistant_msg = hd(assistant_messages)
       content = ContentExtractor.extract_text(assistant_msg)
-      IO.puts("✅ Extracted content: \"#{String.slice(content, 0, 80)}#{if String.length(content) > 80, do: "...", else: ""}\"")
+
+      IO.puts(
+        "✅ Extracted content: \"#{String.slice(content, 0, 80)}#{if String.length(content) > 80, do: "...", else: ""}\""
+      )
+
       IO.puts("✅ Has text content: #{ContentExtractor.has_text?(assistant_msg)}")
       IO.puts("✅ Content length: #{String.length(content)} characters")
     end
@@ -226,6 +243,7 @@ defmodule Mix.Tasks.Showcase do
     assistant_messages = Enum.filter(messages, &(&1.type == :assistant))
 
     IO.puts("🔍 Message Inspection:")
+
     if assistant_messages != [] do
       inspection = DebugMode.inspect_message(hd(assistant_messages))
       IO.puts("   #{inspection}")
@@ -272,8 +290,15 @@ defmodule Mix.Tasks.Showcase do
       Mock.set_response("custom", [
         %{"type" => "assistant", "message" => %{"content" => "Custom mock response!"}}
       ])
+
       custom_result = ClaudeCodeSDK.query("custom test") |> Enum.to_list()
-      custom_content = custom_result |> Enum.filter(&(&1.type == :assistant)) |> Enum.map(&ContentExtractor.extract_text/1) |> hd()
+
+      custom_content =
+        custom_result
+        |> Enum.filter(&(&1.type == :assistant))
+        |> Enum.map(&ContentExtractor.extract_text/1)
+        |> hd()
+
       IO.puts("   ✅ Custom mock works: \"#{custom_content}\"")
     end
   end
