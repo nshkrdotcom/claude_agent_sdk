@@ -2,12 +2,58 @@ defmodule ClaudeCodeSDK.Mock do
   @moduledoc """
   Mock implementation for the Claude Code CLI for testing purposes.
 
-  This module provides a way to mock CLI responses without making actual API calls.
-  It can be configured with predefined responses for different prompts.
+  This module provides a GenServer-based mock system that allows testing and development
+  without making actual API calls to the Claude service. It can be configured with
+  predefined responses for different prompt patterns.
+
+  ## Features
+
+  - **Pattern-based responses**: Configure responses for specific prompt patterns
+  - **Default fallback**: Provides realistic default responses for unmatched prompts
+  - **Integration testing**: Seamlessly integrates with the main SDK for testing
+  - **Cost-free development**: Enables development without incurring API costs
+
+  ## Usage
+
+  Start the mock server and configure responses:
+
+      {:ok, _pid} = ClaudeCodeSDK.Mock.start_link()
+      
+      # Set up a specific response
+      ClaudeCodeSDK.Mock.set_response("hello", [
+        %{"type" => "system", "subtype" => "init", "session_id" => "mock-123"},
+        %{"type" => "assistant", "message" => %{"content" => "Hello from mock!"}},
+        %{"type" => "result", "subtype" => "success", "total_cost_usd" => 0.001}
+      ])
+
+  Enable mocking in your application configuration:
+
+      Application.put_env(:claude_code_sdk, :use_mock, true)
+
+  ## Response Format
+
+  Mock responses should follow the same format as the actual Claude CLI output:
+  - Each response is a list of message maps
+  - Each message has a "type" field (system, assistant, user, result)
+  - Messages may include optional "subtype" fields for categorization
+  - Result messages should include cost and timing information for realistic testing
+
+  ## Testing Integration
+
+  The mock system is designed to work seamlessly with testing frameworks:
+
+      test "queries return expected responses" do
+        ClaudeCodeSDK.Mock.set_response("test prompt", expected_messages)
+        
+        result = ClaudeCodeSDK.query("test prompt", options)
+        
+        assert length(Enum.to_list(result)) == length(expected_messages)
+      end
   """
 
   use GenServer
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   @doc """
   Starts the mock server.
   """
@@ -15,6 +61,7 @@ defmodule ClaudeCodeSDK.Mock do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @spec set_response(String.t(), list(map())) :: :ok
   @doc """
   Sets a mock response for a given prompt pattern.
 
@@ -30,6 +77,7 @@ defmodule ClaudeCodeSDK.Mock do
     GenServer.call(__MODULE__, {:set_response, prompt_pattern, messages})
   end
 
+  @spec clear_responses() :: :ok
   @doc """
   Clears all mock responses.
   """
@@ -37,6 +85,7 @@ defmodule ClaudeCodeSDK.Mock do
     GenServer.call(__MODULE__, :clear_responses)
   end
 
+  @spec get_response(String.t()) :: list(map())
   @doc """
   Gets the response for a prompt.
   """
@@ -44,6 +93,7 @@ defmodule ClaudeCodeSDK.Mock do
     GenServer.call(__MODULE__, {:get_response, prompt})
   end
 
+  @spec set_default_response(list(map())) :: :ok
   @doc """
   Sets the default response for any unmatched prompt.
   """

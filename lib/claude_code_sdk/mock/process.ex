@@ -1,10 +1,41 @@
 defmodule ClaudeCodeSDK.Mock.Process do
   @moduledoc """
   Mock process implementation that returns predefined responses instead of spawning a CLI.
+
+  This module serves as a drop-in replacement for `ClaudeCodeSDK.Process` when
+  the mock system is enabled. Instead of spawning actual Claude CLI processes,
+  it retrieves predefined responses from the `ClaudeCodeSDK.Mock` server and
+  converts them into a stream of `Message` structs.
+
+  ## Behavior
+
+  - **Prompt extraction**: Intelligently extracts the relevant prompt from CLI arguments
+  - **Response retrieval**: Fetches appropriate mock responses from the Mock server
+  - **Stream conversion**: Converts raw mock data into proper `Message` structs
+  - **Type preservation**: Maintains the same message types and structure as real CLI output
+
+  ## Message Types Supported
+
+  - `:system` - System initialization and status messages
+  - `:assistant` - AI assistant responses with content
+  - `:user` - User input messages (for conversation context)
+  - `:result` - Final results with cost and performance metrics
+
+  ## Integration
+
+  This module is automatically used when `Application.get_env(:claude_code_sdk, :use_mock, false)`
+  returns `true`. The main SDK seamlessly switches between real and mock processing
+  without requiring code changes in client applications.
+
+  ## Mock Response Format
+
+  Raw mock responses are converted to structured `Message` structs following the same
+  patterns as the real CLI output, ensuring compatibility across mock and live modes.
   """
 
   alias ClaudeCodeSDK.{Message, Mock, Options}
 
+  @spec stream([String.t()], Options.t()) :: Enumerable.t()
   @doc """
   Streams mock messages instead of running the actual CLI.
   """
