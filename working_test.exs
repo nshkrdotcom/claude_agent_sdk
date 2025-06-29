@@ -16,20 +16,25 @@ try do
       :system ->
         IO.puts("📋 Session: #{msg.data.session_id}")
         IO.puts("   Model: #{msg.data.model}")
-        
+
       :assistant ->
         content = msg.data.message["content"]
         IO.puts("\n🤖 Claude: #{content}")
-        
+
       :result ->
         if msg.subtype == :success do
           IO.puts("\n✅ Success!")
           IO.puts("   Cost: $#{msg.data.total_cost_usd}")
           IO.puts("   Time: #{msg.data.duration_ms}ms")
         else
-          IO.puts("\n❌ Error: #{inspect(msg.data)}")
+          IO.puts("\n❌ Error (#{msg.subtype}):")
+          if Map.has_key?(msg.data, :error) do
+            IO.puts("   #{msg.data.error}")
+          else
+            IO.puts("   #{inspect(msg.data)}")
+          end
         end
-        
+
       _ ->
         :ok
     end

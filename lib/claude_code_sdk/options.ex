@@ -1,6 +1,45 @@
 defmodule ClaudeCodeSDK.Options do
   @moduledoc """
   Configuration options for Claude Code SDK requests.
+
+  This struct defines all available options that can be passed to Claude Code CLI.
+  All fields are optional and will be omitted from the CLI command if not provided.
+
+  ## Fields
+
+  - `max_turns` - Maximum number of conversation turns (integer)
+  - `system_prompt` - Custom system prompt to use (string)
+  - `append_system_prompt` - Additional system prompt to append (string)
+  - `output_format` - Output format (`:text`, `:json`, or `:stream_json`)
+  - `allowed_tools` - List of allowed tool names (list of strings)
+  - `disallowed_tools` - List of disallowed tool names (list of strings)
+  - `mcp_config` - Path to MCP configuration file (string)
+  - `permission_prompt_tool` - Tool for permission prompts (string)
+  - `permission_mode` - Permission handling mode (see `t:permission_mode/0`)
+  - `cwd` - Working directory for the CLI (string)
+  - `verbose` - Enable verbose output (boolean)
+  - `executable` - Custom executable to run (string)
+  - `executable_args` - Arguments for custom executable (list of strings)
+  - `path_to_claude_code_executable` - Path to Claude Code CLI (string)
+  - `abort_ref` - Reference for aborting requests (reference)
+
+  ## Examples
+
+      # Basic configuration
+      %ClaudeCodeSDK.Options{
+        max_turns: 5,
+        output_format: :stream_json,
+        verbose: true
+      }
+
+      # Advanced configuration
+      %ClaudeCodeSDK.Options{
+        system_prompt: "You are a helpful coding assistant",
+        allowed_tools: ["editor", "bash"],
+        permission_mode: :accept_edits,
+        cwd: "/path/to/project"
+      }
+
   """
 
   defstruct [
@@ -45,6 +84,14 @@ defmodule ClaudeCodeSDK.Options do
   @doc """
   Creates a new Options struct with the given attributes.
 
+  ## Parameters
+
+  - `attrs` - Keyword list of attributes to set (keyword list)
+
+  ## Returns
+
+  A new `ClaudeCodeSDK.Options.t/0` struct with the specified attributes.
+
   ## Examples
 
       ClaudeCodeSDK.Options.new(
@@ -52,14 +99,35 @@ defmodule ClaudeCodeSDK.Options do
         output_format: :json,
         verbose: true
       )
+
+      # Empty options (all defaults)
+      ClaudeCodeSDK.Options.new()
+
   """
+  @spec new(keyword()) :: t()
   def new(attrs \\ []) do
     struct(__MODULE__, attrs)
   end
 
   @doc """
-  Converts the options to command line arguments.
+  Converts the options to command line arguments for the Claude CLI.
+
+  ## Parameters
+
+  - `options` - The options struct to convert
+
+  ## Returns
+
+  A list of strings representing CLI arguments.
+
+  ## Examples
+
+      options = %ClaudeCodeSDK.Options{max_turns: 5, verbose: true}
+      ClaudeCodeSDK.Options.to_args(options)
+      # => ["--max-turns", "5", "--verbose"]
+
   """
+  @spec to_args(t()) :: [String.t()]
   def to_args(%__MODULE__{} = options) do
     args = []
 

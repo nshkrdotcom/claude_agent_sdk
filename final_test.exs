@@ -21,7 +21,7 @@ try do
         IO.puts("   Auth Source: #{msg.data.api_key_source}")
         IO.puts("   Working Directory: #{msg.data.cwd}")
         IO.puts("\n⏳ Processing request...")
-        
+
       :assistant ->
         # Extract the actual text content
         content = case msg.data.message do
@@ -31,7 +31,7 @@ try do
         end
         IO.puts("\n🤖 Claude API Response:")
         IO.puts("   #{content}")
-        
+
       :result ->
         if msg.subtype == :success do
           IO.puts("\n✅ API Call Completed Successfully!")
@@ -40,14 +40,15 @@ try do
           IO.puts("   🔄 Turns: #{msg.data.num_turns}")
           IO.puts("   📊 Session: #{msg.data.session_id}")
         else
-          IO.puts("\n❌ API Error: #{inspect(msg.data)}")
+          IO.puts("\n❌ API Error:")
+          IO.puts(msg.data.error)
         end
-        
+
       _ ->
         IO.puts("   Other: #{msg.type}")
     end
   end)
-  
+
 rescue
   e ->
     IO.puts("❌ Error: #{inspect(e)}")
@@ -56,6 +57,6 @@ end
 
 IO.puts("\n🏁 Claude Code SDK Test Completed!")
 IO.puts("   ✅ Authentication: Working")
-IO.puts("   ✅ API Connection: Successful") 
+IO.puts("   ✅ API Connection: Successful")
 IO.puts("   ✅ Message Processing: Working")
 IO.puts("   ✅ SDK Integration: Complete")

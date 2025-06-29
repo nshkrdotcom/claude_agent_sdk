@@ -14,8 +14,13 @@ ClaudeCodeSDK.query("Say 'Hello from Elixir SDK!' in a friendly way")
     :assistant ->
       IO.puts("Claude: #{msg.data.message["content"]}")
     :result ->
-      if msg.subtype == :error_during_execution do
-        IO.puts("\n❌ Error: Not authenticated. Run 'claude login' first!")
+      if msg.subtype != :success do
+        IO.puts("\n❌ Error (#{msg.subtype}):")
+        if Map.has_key?(msg.data, :error) do
+          IO.puts(msg.data.error)
+        else
+          IO.puts(inspect(msg.data))
+        end
         System.halt(1)
       end
     _ ->
@@ -25,23 +30,66 @@ end)
 
 # Test 2: Code generation
 IO.puts("\n\n📝 Test 2: Generate Elixir code")
-ClaudeCodeSDK.query("Write a simple Elixir function that reverses a string")
-|> Stream.filter(& &1.type == :assistant)
-|> Enum.each(fn msg ->
-  IO.puts("\nClaude's response:")
-  IO.puts(msg.data.message["content"])
-end)
+try do
+  messages = ClaudeCodeSDK.query("Write a simple Elixir function that reverses a string")
+  |> Enum.to_list()
+
+  # Check for errors first
+  error_msg = Enum.find(messages, & &1.type == :result and &1.subtype != :success)
+  if error_msg do
+    IO.puts("❌ Error (#{error_msg.subtype}):")
+    if Map.has_key?(error_msg.data, :error) do
+      IO.puts(error_msg.data.error)
+    else
+      IO.puts(inspect(error_msg.data))
+    end
+    System.halt(1)
+  else
+    messages
+    |> Enum.filter(& &1.type == :assistant)
+    |> Enum.each(fn msg ->
+      IO.puts("\nClaude's response:")
+      IO.puts(msg.data.message["content"])
+    end)
+  end
+rescue
+  e ->
+    IO.puts("❌ Error in test 2: #{inspect(e)}")
+    System.halt(1)
+end
 
 # Test 3: With options
 IO.puts("\n\n📝 Test 3: Query with options")
-opts = ClaudeCodeSDK.Options.new(
-  max_turns: 1,
-  verbose: false
-)
+try do
+  opts = ClaudeCodeSDK.Options.new(
+    max_turns: 1,
+    verbose: false
+  )
 
-ClaudeCodeSDK.query("What is 2 + 2? Just give the number.", opts)
-|> Stream.filter(& &1.type == :assistant)
-|> Stream.map(& &1.data.message["content"])
-|> Enum.each(&IO.puts("Answer: #{&1}"))
+  messages = ClaudeCodeSDK.query("What is 2 + 2? Just give the number.", opts)
+  |> Enum.to_list()
+
+  # Check for errors first
+  error_msg = Enum.find(messages, & &1.type == :result and &1.subtype != :success)
+  if error_msg do
+    IO.puts("❌ Error (#{error_msg.subtype}):")
+    if Map.has_key?(error_msg.data, :error) do
+      IO.puts(error_msg.data.error)
+    else
+      IO.puts(inspect(error_msg.data))
+    end
+    System.halt(1)
+  else
+    messages
+    |> Enum.filter(& &1.type == :assistant)
+    |> Enum.each(fn msg ->
+      IO.puts("Answer: #{msg.data.message["content"]}")
+    end)
+  end
+rescue
+  e ->
+    IO.puts("❌ Error in test 3: #{inspect(e)}")
+    System.halt(1)
+end
 
 IO.puts("\n✅ All tests completed!")

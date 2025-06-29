@@ -40,6 +40,27 @@ end
    mix run final_test.exs
    ```
 
+## Implementation Status
+
+### ✅ **Currently Implemented**
+- **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` 
+- **Message Processing**: Structured message types with proper parsing
+- **Options Configuration**: Full CLI argument mapping
+- **Subprocess Management**: Robust erlexec integration
+- **JSON Parsing**: Custom parser without external dependencies
+- **Authentication**: CLI delegation (no API keys needed)
+- **Error Handling**: Basic error detection and reporting
+- **Stream Processing**: Lazy evaluation with Elixir Streams
+
+### 🔮 **Planned Features** 
+- **Advanced Error Handling**: Retry logic, timeout handling, comprehensive error recovery
+- **Performance Optimization**: Caching, parallel processing, memory optimization
+- **Integration Patterns**: Phoenix LiveView, OTP applications, worker pools
+- **Security Features**: Input validation, permission management, sandboxing
+- **Developer Tools**: Debug mode, troubleshooting helpers, session management
+- **Advanced Examples**: Code analysis pipelines, test generators, refactoring tools
+- **MCP Support**: Model Context Protocol integration and tool management
+
 ## Basic Usage
 
 ```elixir
@@ -218,40 +239,40 @@ Review this code for security vulnerabilities and performance issues:
 |> Enum.join("\n")
 ```
 
-### 📚 Documentation Generation
+### 📚 Documentation Generation **(FUTURE/PLANNED)**
 ```elixir
-# Generate API documentation
+# Generate API documentation - FUTURE/PLANNED
 ClaudeCodeSDK.query("Generate comprehensive docs for this module: #{file_content}")
 |> Enum.filter(&(&1.type == :assistant))
-|> Enum.map(&extract_content/1)
+|> Enum.map(&extract_content/1)  # extract_content helper not yet implemented
 ```
 
-### 🧪 Test Generation
+### 🧪 Test Generation **(FUTURE/PLANNED)**
 ```elixir
-# Create test suites automatically
+# Create test suites automatically - FUTURE/PLANNED
 options = %ClaudeCodeSDK.Options{max_turns: 5}
 ClaudeCodeSDK.query("Generate ExUnit tests for this module", options)
 ```
 
-### 🔄 Code Refactoring
+### 🔄 Code Refactoring **(FUTURE/PLANNED)**
 ```elixir
-# Multi-step refactoring with session management
-session_id = start_refactoring_session("lib/legacy_code.ex")
+# Multi-step refactoring with session management - FUTURE/PLANNED
+session_id = start_refactoring_session("lib/legacy_code.ex")  # Not yet implemented
 ClaudeCodeSDK.resume(session_id, "Now optimize for performance")
 ClaudeCodeSDK.resume(session_id, "Add proper error handling")
 ```
 
-### 🤖 Interactive Development Assistant
+### 🤖 Interactive Development Assistant **(FUTURE/PLANNED)**
 ```elixir
-# Pair programming sessions
+# Pair programming sessions - FUTURE/PLANNED
 ClaudeCodeSDK.query("I'm working on a GenServer. Help me implement proper state management")
-|> Stream.each(&IO.puts(extract_content(&1)))
+|> Stream.each(&IO.puts(extract_content(&1)))  # extract_content helper not yet implemented
 |> Stream.run()
 ```
 
-### 🏗️ Project Scaffolding
+### 🏗️ Project Scaffolding **(FUTURE/PLANNED)**
 ```elixir
-# Generate boilerplate code
+# Generate boilerplate code - FUTURE/PLANNED  
 ClaudeCodeSDK.query("""
 Create a Phoenix LiveView component for user authentication with:
 - Login/logout functionality  
@@ -267,12 +288,12 @@ For detailed documentation covering all features, advanced patterns, and integra
 **[📋 COMPREHENSIVE_MANUAL.md](COMPREHENSIVE_MANUAL.md)**
 
 The comprehensive manual includes:
-- 🏗️ **Architecture Deep Dive** - Internal workings and design patterns
-- ⚙️ **Advanced Configuration** - MCP support, security, performance tuning  
-- 🔧 **Integration Patterns** - Phoenix LiveView, OTP applications, task pipelines
-- 🛡️ **Security & Best Practices** - Input validation, permission management
-- 🐛 **Troubleshooting Guide** - Common issues and debugging techniques
-- 💡 **Real-World Examples** - Code analysis, test generation, refactoring tools
+- 🏗️ **Architecture Deep Dive** - Internal workings and design patterns ✅ **IMPLEMENTED**
+- ⚙️ **Advanced Configuration** - MCP support, security, performance tuning **(FUTURE/PLANNED)**
+- 🔧 **Integration Patterns** - Phoenix LiveView, OTP applications, task pipelines **(FUTURE/PLANNED)**
+- 🛡️ **Security & Best Practices** - Input validation, permission management **(FUTURE/PLANNED)**
+- 🐛 **Troubleshooting Guide** - Common issues and debugging techniques **(FUTURE/PLANNED)**
+- 💡 **Real-World Examples** - Code analysis, test generation, refactoring tools **(FUTURE/PLANNED)**
 
 ## License
 

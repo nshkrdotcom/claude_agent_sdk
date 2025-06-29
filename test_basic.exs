@@ -20,30 +20,40 @@ IO.puts("ℹ️  Using authenticated Claude CLI session")
 # Test 3: Simple query
 IO.puts("\nTesting simple query...")
 try do
-  messages = 
+  messages =
     ClaudeCodeSDK.query("Say 'Hello from Elixir SDK!' and nothing else")
     |> Enum.to_list()
-  
+
   IO.puts("✅ Received #{length(messages)} messages")
-  
+
   # Check message types
   types = Enum.map(messages, & &1.type) |> Enum.uniq()
   IO.puts("   Message types: #{inspect(types)}")
-  
+
   # Find assistant message
   assistant_msg = Enum.find(messages, & &1.type == :assistant)
   if assistant_msg do
     content = assistant_msg.data.message["content"]
     IO.puts("   Claude said: #{String.trim(content)}")
   end
-  
+
   # Find result message
   result_msg = Enum.find(messages, & &1.type == :result)
   if result_msg do
     IO.puts("   Session ID: #{result_msg.data.session_id}")
     IO.puts("   Success: #{result_msg.subtype == :success}")
+
+    # Show error details if failed
+    if result_msg.subtype != :success do
+      IO.puts("   ❌ Error (#{result_msg.subtype}):")
+      if Map.has_key?(result_msg.data, :error) do
+        IO.puts("   #{result_msg.data.error}")
+      else
+        IO.puts("   #{inspect(result_msg.data)}")
+      end
+    end
   end
-  
+
 rescue
   e ->
     IO.puts("❌ Error: #{inspect(e)}")

@@ -24,13 +24,25 @@ IO.puts("\nAll modules loaded. Starting test...\n")
 try do
   IO.puts("Calling ClaudeCodeSDK.query...")
   stream = ClaudeCodeSDK.query("Hi")
-  
+
   IO.puts("\nStream created. Type: #{inspect(stream)}")
-  
+
   IO.puts("\nTrying to take 1 message...")
   messages = stream |> Enum.take(1)
-  
+
   IO.puts("\nGot messages: #{inspect(messages)}")
+
+  # Check for errors in messages
+  Enum.each(messages, fn msg ->
+    if msg.type == :result and msg.subtype != :success do
+      IO.puts("\n❌ Error found (#{msg.subtype}):")
+      if Map.has_key?(msg.data, :error) do
+        IO.puts(msg.data.error)
+      else
+        IO.puts(inspect(msg.data))
+      end
+    end
+  end)
 rescue
   e ->
     IO.puts("\n!!! ERROR: #{inspect(e)}")

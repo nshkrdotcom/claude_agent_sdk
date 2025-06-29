@@ -10,25 +10,37 @@ case System.cmd("claude", ["--version"], stderr_to_stdout: true) do
   {output, code} -> IO.puts("❌ Claude version failed (#{code}): #{output}")
 end
 
-# Test 2: Test simple query with timeout
-IO.puts("\n2️⃣ Testing simple query with timeout...")
-task = Task.async(fn ->
-  System.cmd("claude", ["--output-format", "stream-json", "--verbose", "Say exactly: Test"], 
-             stderr_to_stdout: true)
-end)
-
-case Task.yield(task, 12_000) do
-  {:ok, {output, code}} ->
-    IO.puts("✅ Claude query completed (code: #{code})")
+# Test 2: Test simple query (should fail fast)
+IO.puts("\n2️⃣ Testing simple query...")
+case System.cmd("claude", ["--output-format", "stream-json", "--verbose", "Say exactly: Test"],
+                stderr_to_stdout: true) do
+  {output, 0} ->
+    IO.puts("✅ Claude query succeeded")
     IO.puts("Output length: #{String.length(output)} chars")
-    
-    # Show first 500 chars
     preview = String.slice(output, 0, 500)
     IO.puts("Preview: #{preview}")
-    
-  nil ->
-    IO.puts("❌ Claude query timed out")
-    Task.shutdown(task, :brutal_kill)
+
+  {output, code} ->
+    IO.puts("❌ Claude query failed (code: #{code})")
+    # Try to parse and format JSON from output
+    if String.contains?(output, "{") do
+      IO.puts("Formatted output:")
+      output
+      |> String.split("\n")
+      |> Enum.filter(& &1 != "" and String.contains?(&1, "{"))
+      |> Enum.each(fn line ->
+        try do
+          case Jason.decode(line) do
+            {:ok, parsed} -> IO.puts(Jason.encode!(parsed, pretty: true))
+            {:error, _} -> IO.puts(line)
+          end
+        rescue
+          _ -> IO.puts(line)
+        end
+      end)
+    else
+      IO.puts("Raw output: #{output}")
+    end
 end
 
 # Test 3: Check auth status

@@ -25,7 +25,7 @@ defmodule ClaudeCodeSDK.Process do
 
     # Build the command
     cmd = build_claude_command(args, options)
-    
+
     # Execute with erlexec - use sync mode to capture all output
     case :exec.run(cmd, [:sync, :stdout, :stderr]) do
       {:ok, result} ->
@@ -37,13 +37,14 @@ defmodule ClaudeCodeSDK.Process do
           current_index: 0,
           done: false
         }
-        
+
       {:error, reason} ->
+        formatted_error = format_error_message(reason)
         error_msg = %Message{
           type: :result,
           subtype: :error_during_execution,
           data: %{
-            error: "Failed to execute claude: #{inspect(reason)}",
+            error: formatted_error,
             session_id: "error",
             is_error: true
           }
@@ -59,15 +60,15 @@ defmodule ClaudeCodeSDK.Process do
 
   defp build_claude_command(args, _options) do
     executable = find_executable()
-    
+
     # Ensure proper flags for JSON output
     final_args = ensure_json_flags(args)
-    
+
     # Build command with proper shell escaping
     quoted_args = Enum.map(final_args, &shell_escape/1)
     Enum.join([executable | quoted_args], " ")
   end
-  
+
   defp shell_escape(arg) do
     # Escape arguments that contain spaces or special characters
     if String.contains?(arg, [" ", "!", "\"", "'", "$", "`", "\\", "|", "&", ";", "(", ")"]) do
@@ -88,10 +89,10 @@ defmodule ClaudeCodeSDK.Process do
     cond do
       "--output-format" not in args ->
         args ++ ["--output-format", "stream-json", "--verbose"]
-        
+
       has_stream_json?(args) and "--verbose" not in args ->
         args ++ ["--verbose"]
-        
+
       true ->
         args
     end
@@ -107,10 +108,10 @@ defmodule ClaudeCodeSDK.Process do
   defp parse_sync_result(result) do
     stdout_data = get_in(result, [:stdout]) || []
     stderr_data = get_in(result, [:stderr]) || []
-    
+
     # Combine all output
     all_output = stdout_data ++ stderr_data
-    
+
     # Parse JSON messages from the output
     all_output
     |> Enum.join()
@@ -123,7 +124,7 @@ defmodule ClaudeCodeSDK.Process do
   defp parse_json_line(line) do
     case Message.from_json(line) do
       {:ok, message} -> message
-      {:error, _} -> 
+      {:error, _} ->
         # If JSON parsing fails, treat as text output
         %Message{
           type: :assistant,
@@ -149,7 +150,7 @@ defmodule ClaudeCodeSDK.Process do
     else
       message = Enum.at(messages, idx)
       new_state = %{state | current_index: idx + 1}
-      
+
       # Check if this is the final message
       if Message.final?(message) do
         {[message], %{new_state | done: true}}
@@ -162,5 +163,50 @@ defmodule ClaudeCodeSDK.Process do
   defp cleanup_process(_state) do
     # erlexec handles cleanup automatically for sync operations
     :ok
+  end
+
+    defp format_error_message(reason) do
+    case reason do
+      [exit_status: status, stdout: stdout_data] when is_list(stdout_data) ->
+        # Extract and format JSON from stdout
+        json_output = Enum.join(stdout_data, "")
+        formatted_json = format_json_output(json_output)
+        "Failed to execute claude (exit status: #{status}):\n#{formatted_json}"
+
+      [exit_status: status, stdout: stdout_data, stderr: _stderr_data] when is_list(stdout_data) ->
+        # Extract and format JSON from stdout
+        json_output = Enum.join(stdout_data, "")
+        formatted_json = format_json_output(json_output)
+        "Failed to execute claude (exit status: #{status}):\n#{formatted_json}"
+
+      [exit_status: status] ->
+        "Failed to execute claude (exit status: #{status})"
+
+      other ->
+        "Failed to execute claude: #{inspect(other)}"
+    end
+  end
+
+  defp format_json_output(json_string) do
+    json_string
+    |> String.split("\n")
+    |> Enum.filter(& &1 != "")
+    |> Enum.map(&format_single_json_line/1)
+    |> Enum.join("\n")
+  end
+
+  defp format_single_json_line(line) do
+    try do
+      # Try to parse and pretty print the JSON
+      case Jason.decode(line) do
+        {:ok, parsed} ->
+          Jason.encode!(parsed, pretty: true)
+        {:error, _} ->
+          # If parsing fails, return the original line
+          line
+      end
+    rescue
+      _ -> line
+    end
   end
 end

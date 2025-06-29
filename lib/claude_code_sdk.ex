@@ -57,7 +57,7 @@ defmodule ClaudeCodeSDK do
       ClaudeCodeSDK.query("Build a web server", opts)
       |> Enum.to_list()
   """
-  @spec query(String.t(), Options.t() | nil) :: Enumerable.t()
+  @spec query(String.t(), Options.t() | nil) :: Enumerable.t(ClaudeCodeSDK.Message.t())
   def query(prompt, options \\ nil) do
     opts = options || %Options{}
     Query.run(prompt, opts)
@@ -81,7 +81,7 @@ defmodule ClaudeCodeSDK do
       ClaudeCodeSDK.continue("Now add error handling")
       |> Enum.to_list()
   """
-  @spec continue(String.t() | nil, Options.t() | nil) :: Enumerable.t()
+  @spec continue(String.t() | nil, Options.t() | nil) :: Enumerable.t(ClaudeCodeSDK.Message.t())
   def continue(prompt \\ nil, options \\ nil) do
     opts = options || %Options{}
     Query.continue(prompt, opts)
@@ -101,7 +101,7 @@ defmodule ClaudeCodeSDK do
       ClaudeCodeSDK.resume("550e8400-e29b-41d4-a716-446655440000", "Add tests")
       |> Enum.to_list()
   """
-  @spec resume(String.t(), String.t() | nil, Options.t() | nil) :: Enumerable.t()
+  @spec resume(String.t(), String.t() | nil, Options.t() | nil) :: Enumerable.t(ClaudeCodeSDK.Message.t())
   def resume(session_id, prompt \\ nil, options \\ nil) do
     opts = options || %Options{}
     Query.resume(session_id, prompt, opts)

@@ -23,6 +23,32 @@ An exhaustive guide to the Elixir implementation of the Claude Code SDK, coverin
 
 The Claude Code SDK for Elixir provides a native Elixir interface to Claude Code, enabling developers to build AI-powered applications that leverage Claude's capabilities through familiar Elixir patterns. Unlike direct API integrations, this SDK uses the Claude CLI as a subprocess, providing access to all Claude Code features including tool usage, file operations, and interactive capabilities.
 
+## Implementation Status
+
+### ✅ **Currently Implemented (Working)**
+- **Core API**: `ClaudeCodeSDK.query/2`, `continue/2`, `resume/3` functions
+- **Message System**: Complete message parsing with types `:system`, `:user`, `:assistant`, `:result`
+- **Options Configuration**: Full `ClaudeCodeSDK.Options` struct with CLI argument mapping
+- **Process Management**: Robust subprocess handling using erlexec
+- **JSON Processing**: Custom JSON parser (`ClaudeCodeSDK.JSON`) without external dependencies
+- **Authentication**: Seamless CLI authentication delegation
+- **Stream Processing**: Efficient lazy evaluation with Elixir Streams
+- **Error Detection**: Basic error handling for authentication and execution failures
+- **Architecture Documentation**: Complete technical documentation
+
+### 🔮 **Planned Features (Not Yet Implemented)**
+All sections marked with **(FUTURE/PLANNED)** represent planned functionality including:
+- **Advanced Error Handling**: Retry mechanisms, timeout handling, comprehensive error recovery
+- **Performance Features**: Query caching, parallel processing, memory optimization
+- **Integration Modules**: Phoenix LiveView integration, OTP application patterns, worker pools
+- **Security Components**: Input validation, permission management, sandboxed execution
+- **Developer Tools**: Debug mode, troubleshooting utilities, session management helpers
+- **Advanced Examples**: Code analysis pipelines, documentation generators, test creators
+- **MCP Integration**: Model Context Protocol support and tool management
+- **Helper Modules**: Content extractors, option builders, authentication checkers
+
+**Note**: The comprehensive examples and patterns shown in this manual serve as both documentation and implementation roadmap. The core SDK is fully functional, while advanced features await future development.
+
 ### Key Features
 
 - **Stream-based Processing**: Efficient handling of large responses through Elixir Streams
@@ -136,10 +162,10 @@ ClaudeCodeSDK.query("Hello")
 end)
 ```
 
-### Authentication Status Check
+### Authentication Status Check **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule AuthChecker do
+defmodule AuthChecker do  # FUTURE/PLANNED - Not yet implemented
   def check_auth do
     case System.cmd("claude", ["auth", "status"]) do
       {output, 0} -> 
@@ -251,10 +277,10 @@ The `ClaudeCodeSDK.Options` struct supports all Claude CLI options:
 }
 ```
 
-### Option Builder Pattern
+### Option Builder Pattern **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule OptionBuilder do
+defmodule OptionBuilder do  # FUTURE/PLANNED - Not yet implemented
   def build_development_options do
     ClaudeCodeSDK.Options.new(
       max_turns: 5,
@@ -387,10 +413,10 @@ Final messages with conversation statistics:
 }
 ```
 
-### Content Extraction Helpers
+### Content Extraction Helpers **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule ContentExtractor do
+defmodule ContentExtractor do  # FUTURE/PLANNED - Not yet implemented
   def extract_text(message) do
     case message do
       %{type: :assistant, data: %{message: %{"content" => content}}} ->
@@ -474,12 +500,12 @@ end)
 |> Enum.to_list()
 ```
 
-### Session Management
+### Session Management **(FUTURE/PLANNED)**
 
-#### Session Tracking
+#### Session Tracking **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule SessionManager do
+defmodule SessionManager do  # FUTURE/PLANNED - Not yet implemented
   use GenServer
   
   # Client API
@@ -543,10 +569,10 @@ defmodule SessionManager do
 end
 ```
 
-#### Conversation Chains
+#### Conversation Chains **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule ConversationChain do
+defmodule ConversationChain do  # FUTURE/PLANNED - Not yet implemented
   def run_chain(prompts, options \\ nil) when is_list(prompts) do
     [first_prompt | rest_prompts] = prompts
     
@@ -584,12 +610,12 @@ conversation_steps = [
 ConversationChain.run_chain(conversation_steps)
 ```
 
-### Concurrent Processing
+### Concurrent Processing **(FUTURE/PLANNED)**
 
-#### Parallel Queries
+#### Parallel Queries **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule ParallelProcessor do
+defmodule ParallelProcessor do  # FUTURE/PLANNED - Not yet implemented
   def run_parallel_queries(prompts, options \\ nil) do
     prompts
     |> Enum.map(fn prompt ->
@@ -644,10 +670,10 @@ defmodule ErrorHandler do
 end
 ```
 
-#### Timeout Handling
+#### Timeout Handling **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule TimeoutHandler do
+defmodule TimeoutHandler do  # FUTURE/PLANNED - Not yet implemented
   def query_with_timeout(prompt, timeout_ms \\ 30_000) do
     task = Task.async(fn ->
       ClaudeCodeSDK.query(prompt) |> Enum.to_list()
@@ -664,10 +690,10 @@ defmodule TimeoutHandler do
 end
 ```
 
-#### Retry Logic
+#### Retry Logic **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule RetryHandler do
+defmodule RetryHandler do  # FUTURE/PLANNED - Not yet implemented
   def query_with_retry(prompt, max_retries \\ 3, delay_ms \\ 1000) do
     do_query_with_retry(prompt, max_retries, delay_ms, 0)
   end
@@ -690,10 +716,10 @@ defmodule RetryHandler do
 end
 ```
 
-#### Comprehensive Error Handler
+#### Comprehensive Error Handler **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule ComprehensiveErrorHandler do
+defmodule ComprehensiveErrorHandler do  # FUTURE/PLANNED - Not yet implemented
   def safe_query(prompt, options \\ nil) do
     try do
       ClaudeCodeSDK.query(prompt, options)
@@ -748,10 +774,10 @@ end
 
 ## Performance Optimization
 
-### Stream Optimization
+### Stream Optimization **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule PerformanceOptimizer do
+defmodule PerformanceOptimizer do  # FUTURE/PLANNED - Not yet implemented
   # Lazy evaluation for large responses
   def lazy_process_large_response(prompt) do
     ClaudeCodeSDK.query(prompt)
@@ -791,10 +817,10 @@ defmodule PerformanceOptimizer do
 end
 ```
 
-### Caching Strategies
+### Caching Strategies **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule QueryCache do
+defmodule QueryCache do  # FUTURE/PLANNED - Not yet implemented
   use GenServer
   
   # Cache based on prompt hash
@@ -859,10 +885,10 @@ end
 
 ## Integration Patterns
 
-### Phoenix LiveView Integration
+### Phoenix LiveView Integration **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule MyAppWeb.ClaudeLive do
+defmodule MyAppWeb.ClaudeLive do  # FUTURE/PLANNED - Not yet implemented
   use MyAppWeb, :live_view
   
   def mount(_params, _session, socket) do
@@ -935,10 +961,10 @@ defmodule MyAppWeb.ClaudeLive do
 end
 ```
 
-### OTP Application Integration
+### OTP Application Integration **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule ClaudeCodeApp.Supervisor do
+defmodule ClaudeCodeApp.Supervisor do  # FUTURE/PLANNED - Not yet implemented
   use Supervisor
   
   def start_link(init_arg) do
@@ -956,7 +982,7 @@ defmodule ClaudeCodeApp.Supervisor do
   end
 end
 
-defmodule ClaudeWorkerPool do
+defmodule ClaudeWorkerPool do  # FUTURE/PLANNED - Not yet implemented
   use GenServer
   
   def start_link(opts) do
@@ -1055,10 +1081,10 @@ end
 
 ## MCP Support
 
-### MCP Configuration
+### MCP Configuration **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule MCPConfig do
+defmodule MCPConfig do  # FUTURE/PLANNED - Not yet implemented
   def filesystem_config do
     %{
       "mcpServers" => %{
@@ -1113,10 +1139,10 @@ options = MCPConfig.create_options_with_mcp(
 ClaudeCodeSDK.query("Search for open issues about performance", options)
 ```
 
-### MCP Tool Management
+### MCP Tool Management **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule MCPToolManager do
+defmodule MCPToolManager do  # FUTURE/PLANNED - Not yet implemented
   def list_available_tools(mcp_config_path) do
     # This would need to be implemented by querying MCP servers
     # For now, return common patterns
@@ -1159,10 +1185,10 @@ end
 
 ## Security Considerations
 
-### Input Validation
+### Input Validation **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule SecurityValidator do
+defmodule SecurityValidator do  # FUTURE/PLANNED - Not yet implemented
   @max_prompt_length 50_000
   @dangerous_patterns [
     ~r/rm -rf/i,
@@ -1225,8 +1251,8 @@ defmodule SecurityValidator do
   end
 end
 
-# Secure query wrapper
-defmodule SecureClaudeSDK do
+# Secure query wrapper - FUTURE/PLANNED
+defmodule SecureClaudeSDK do  # FUTURE/PLANNED - Not yet implemented
   def secure_query(prompt, options \\ nil) do
     with {:ok, validated_prompt} <- SecurityValidator.validate_prompt(prompt),
          {:ok, validated_options} <- SecurityValidator.validate_options(options || %ClaudeCodeSDK.Options{}) do
@@ -1238,10 +1264,10 @@ defmodule SecureClaudeSDK do
 end
 ```
 
-### Permission Management
+### Permission Management **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule PermissionManager do
+defmodule PermissionManager do  # FUTURE/PLANNED - Not yet implemented
   def safe_options_for_environment(env) do
     case env do
       :development ->
@@ -1285,10 +1311,10 @@ end
 
 ### Common Issues and Solutions
 
-#### Authentication Problems
+#### Authentication Problems **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule TroubleshootAuth do
+defmodule TroubleshootAuth do  # FUTURE/PLANNED - Not yet implemented
   def diagnose_auth_issue do
     case System.cmd("claude", ["auth", "status"]) do
       {output, 0} ->
@@ -1318,10 +1344,10 @@ defmodule TroubleshootAuth do
 end
 ```
 
-#### Process and Stream Issues
+#### Process and Stream Issues **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule TroubleshootProcess do
+defmodule TroubleshootProcess do  # FUTURE/PLANNED - Not yet implemented
   def diagnose_hanging_query(prompt) do
     IO.puts("🔍 Diagnosing query: #{inspect(prompt)}")
     
@@ -1372,10 +1398,10 @@ defmodule TroubleshootProcess do
 end
 ```
 
-### Debug Mode
+### Debug Mode **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule DebugMode do
+defmodule DebugMode do  # FUTURE/PLANNED - Not yet implemented
   def debug_query(prompt, options \\ nil) do
     IO.puts("🐛 DEBUG MODE ENABLED")
     IO.puts("   Prompt: #{inspect(prompt)}")
@@ -1411,10 +1437,10 @@ end
 
 ## Examples & Use Cases
 
-### Code Analysis Pipeline
+### Code Analysis Pipeline **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule CodeAnalyzer do
+defmodule CodeAnalyzer do  # FUTURE/PLANNED - Not yet implemented
   def analyze_project(project_path) do
     project_path
     |> find_source_files()
@@ -1484,10 +1510,10 @@ defmodule CodeAnalyzer do
 end
 ```
 
-### Documentation Generator
+### Documentation Generator **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule DocGenerator do
+defmodule DocGenerator do  # FUTURE/PLANNED - Not yet implemented
   def generate_api_docs(module_files) do
     module_files
     |> Enum.map(&extract_module_info/1)
@@ -1586,10 +1612,10 @@ defmodule DocGenerator do
 end
 ```
 
-### Test Generator
+### Test Generator **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule TestGenerator do
+defmodule TestGenerator do  # FUTURE/PLANNED - Not yet implemented
   def generate_tests_for_module(module_file) do
     content = File.read!(module_file)
     
@@ -1689,10 +1715,10 @@ defmodule TestGenerator do
 end
 ```
 
-### Interactive Development Assistant
+### Interactive Development Assistant **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule DevAssistant do
+defmodule DevAssistant do  # FUTURE/PLANNED - Not yet implemented
   use GenServer
   
   # Client API
@@ -1789,10 +1815,10 @@ end
 # DevAssistant.continue_session("Let's add better error handling")
 ```
 
-### Automated Refactoring Tool
+### Automated Refactoring Tool **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule RefactoringTool do
+defmodule RefactoringTool do  # FUTURE/PLANNED - Not yet implemented
   def refactor_codebase(project_path, refactoring_goals) do
     project_path
     |> scan_codebase()

@@ -23,7 +23,10 @@ defmodule ClaudeCodeSdk.MixProject do
   defp deps do
     [
       {:erlexec, "~> 2.0"},
-      {:ex_doc, "~> 0.31", only: :dev, runtime: false}
+      {:jason, "~> 1.4"},
+      {:ex_doc, "~> 0.31", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
+      {:credo, "~> 1.6", only: [:dev, :test], runtime: false}
     ]
   end
 

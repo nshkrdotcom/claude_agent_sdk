@@ -2,7 +2,7 @@
 
 # Simple test - just say hi
 Code.require_file("lib/claude_code_sdk/options.ex")
-Code.require_file("lib/claude_code_sdk/message.ex") 
+Code.require_file("lib/claude_code_sdk/message.ex")
 Code.require_file("lib/claude_code_sdk/process.ex")
 Code.require_file("lib/claude_code_sdk/query.ex")
 Code.require_file("lib/claude_code_sdk.ex")
@@ -22,7 +22,12 @@ ClaudeCodeSDK.query("Say 'Hi!' and nothing else")
       if msg.subtype == :success do
         IO.puts("\n✓ Success!")
       else
-        IO.puts("\n✗ Error: #{inspect(msg.data)}")
+        IO.puts("\n✗ Error (#{msg.subtype}):")
+        if Map.has_key?(msg.data, :error) do
+          IO.puts(msg.data.error)
+        else
+          IO.puts(inspect(msg.data))
+        end
       end
     _ ->
       :ok

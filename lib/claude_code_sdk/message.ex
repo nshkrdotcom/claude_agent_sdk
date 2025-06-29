@@ -1,6 +1,52 @@
 defmodule ClaudeCodeSDK.Message do
   @moduledoc """
-  Represents a message from Claude Code.
+  Represents a message from Claude Code CLI.
+
+  Messages are the core data structure returned by the Claude Code SDK. They represent
+  different types of communication during a conversation with Claude, including system
+  initialization, user inputs, assistant responses, and final results.
+
+  ## Message Types
+
+  - `:system` - Session initialization messages with metadata
+  - `:user` - User input messages (echoed back from CLI)
+  - `:assistant` - Claude's response messages containing the actual AI output
+  - `:result` - Final result messages with cost, duration, and completion status
+
+  ## Result Subtypes
+
+  - `:success` - Successful completion
+  - `:error_max_turns` - Terminated due to max turns limit
+  - `:error_during_execution` - Error occurred during execution
+
+  ## System Subtypes
+
+  - `:init` - Initial system message with session setup
+
+  ## Examples
+
+      # Assistant message
+      %ClaudeCodeSDK.Message{
+        type: :assistant,
+        subtype: nil,
+        data: %{
+          message: %{"content" => "Hello! How can I help?"},
+          session_id: "session-123"
+        }
+      }
+
+      # Result message
+      %ClaudeCodeSDK.Message{
+        type: :result,
+        subtype: :success,
+        data: %{
+          total_cost_usd: 0.001,
+          duration_ms: 1500,
+          num_turns: 2,
+          session_id: "session-123"
+        }
+      }
+
   """
 
   defstruct [:type, :subtype, :data, :raw]
@@ -18,7 +64,23 @@ defmodule ClaudeCodeSDK.Message do
 
   @doc """
   Parses a JSON message from Claude Code into a Message struct.
+
+  ## Parameters
+
+  - `json_string` - Raw JSON string from Claude CLI
+
+  ## Returns
+
+  - `{:ok, message}` - Successfully parsed message
+  - `{:error, reason}` - Parsing failed
+
+  ## Examples
+
+      iex> ClaudeCodeSDK.Message.from_json(~s({"type":"assistant","message":{"content":"Hello"}}))
+      {:ok, %ClaudeCodeSDK.Message{type: :assistant, ...}}
+
   """
+  @spec from_json(String.t()) :: {:ok, t()} | {:error, term()}
   def from_json(json_string) when is_binary(json_string) do
     case ClaudeCodeSDK.JSON.decode(json_string) do
       {:ok, raw} ->
@@ -212,7 +274,27 @@ defmodule ClaudeCodeSDK.Message do
 
   @doc """
   Checks if the message is a final result message.
+
+  Final messages indicate the end of a conversation or query.
+
+  ## Parameters
+
+  - `message` - The message to check
+
+  ## Returns
+
+  `true` if the message is a final result, `false` otherwise.
+
+  ## Examples
+
+      iex> ClaudeCodeSDK.Message.final?(%ClaudeCodeSDK.Message{type: :result})
+      true
+
+      iex> ClaudeCodeSDK.Message.final?(%ClaudeCodeSDK.Message{type: :assistant})
+      false
+
   """
+  @spec final?(t()) :: boolean()
   def final?(%__MODULE__{type: :result}), do: true
   def final?(_), do: false
 
