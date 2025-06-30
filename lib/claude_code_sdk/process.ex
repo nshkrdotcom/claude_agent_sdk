@@ -164,20 +164,44 @@ defmodule ClaudeCodeSDK.Process do
   end
 
   defp parse_json_line(line) do
-    case Message.from_json(line) do
-      {:ok, message} ->
-        message
-
-      {:error, _} ->
-        # If JSON parsing fails, treat as text output
+    # First try to parse as a Claude CLI result object
+    case Jason.decode(line) do
+      {:ok, %{"type" => "result", "result" => result, "session_id" => session_id}} ->
+        # This is a Claude CLI result format
         %Message{
           type: :assistant,
           data: %{
-            message: %{"role" => "assistant", "content" => line},
-            session_id: "unknown"
+            message: %{"role" => "assistant", "content" => result},
+            session_id: session_id
           }
         }
+
+      {:ok, json_obj} when is_map(json_obj) ->
+        # Try to parse as a regular message
+        case Message.from_json(line) do
+          {:ok, message} -> message
+          {:error, _} -> handle_fallback_parsing(line, json_obj)
+        end
+
+      {:ok, _other} ->
+        # JSON parsed but not a map (like a number or string)
+        handle_fallback_parsing(line, nil)
+
+      {:error, _} ->
+        # JSON parsing failed completely
+        handle_fallback_parsing(line, nil)
     end
+  end
+
+  defp handle_fallback_parsing(line, _json_obj) do
+    # If JSON parsing fails or doesn't match expected format, treat as text output
+    %Message{
+      type: :assistant,
+      data: %{
+        message: %{"role" => "assistant", "content" => line},
+        session_id: "unknown"
+      }
+    }
   end
 
   defp receive_messages(%{done: true} = state) do
