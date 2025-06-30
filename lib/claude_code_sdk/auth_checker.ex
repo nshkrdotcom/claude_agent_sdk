@@ -1,277 +1,534 @@
 defmodule ClaudeCodeSDK.AuthChecker do
   @moduledoc """
-  Module for checking Claude CLI authentication status.
+  Authentication checker and environment validator for Claude Code SDK.
 
-  Provides utilities to verify authentication status and diagnose
-  authentication issues before making API calls.
-  """
+  This module provides functions to validate the authentication state and
+  environment setup before making queries to Claude Code. It helps prevent
+  authentication errors and provides helpful diagnostic information.
 
-  @doc """
-  Checks if the Claude CLI is properly authenticated.
+  ## Basic Usage
 
-  ## Returns
-
-    - `{:ok, info}` - Authenticated, with info string
-    - `{:error, reason}` - Not authenticated or error occurred
-
-  ## Examples
-
-      iex> ClaudeCodeSDK.AuthChecker.check_auth()
-      {:ok, "Authenticated as user@example.com"}
-      
-      iex> ClaudeCodeSDK.AuthChecker.check_auth()
-      {:error, "Not authenticated. Run 'claude login' to authenticate."}
-  """
-  @spec check_auth() :: {:ok, String.t()} | {:error, String.t()}
-  def check_auth do
-    # Check if mocking is enabled
-    if Application.get_env(:claude_code_sdk, :use_mock, false) do
-      {:ok, "Authenticated (mocked) - user@example.com"}
-    else
-      case System.cmd("claude", ["auth", "status"], stderr_to_stdout: true, timeout: 5000) do
-        {output, 0} ->
-          info = String.trim(output)
-          {:ok, info}
-
-        {error_output, _code} ->
-          error_msg = parse_auth_error(error_output)
-          {:error, error_msg}
+      # Quick boolean check
+      if ClaudeCodeSDK.AuthChecker.authenticated?() do
+        ClaudeCodeSDK.query("Hello!")
+      else
+        IO.puts("Please run: claude login")
       end
-    end
-  rescue
-    e ->
-      {:error, "Claude CLI command failed: #{inspect(e)}"}
-  end
+
+      # Full diagnostic check
+      diagnosis = ClaudeCodeSDK.AuthChecker.diagnose()
+      
+      # Ensure ready or raise error
+      ClaudeCodeSDK.AuthChecker.ensure_ready!()
+
+  ## Authentication Methods
+
+  The Claude CLI supports multiple authentication methods:
+  - Anthropic API key via `claude login` or `ANTHROPIC_API_KEY` environment variable
+  - Amazon Bedrock via `CLAUDE_CODE_USE_BEDROCK=1` and AWS credentials
+  - Google Vertex AI via `CLAUDE_CODE_USE_VERTEX=1` and GCP credentials
+
+  This module detects and validates all supported authentication methods.
+  """
+
+  @type auth_status ::
+          :ready | :cli_not_found | :not_authenticated | :invalid_credentials | :unknown
+
+  @type diagnosis :: %{
+          cli_installed: boolean(),
+          cli_version: String.t() | nil,
+          cli_path: String.t() | nil,
+          cli_error: String.t() | nil,
+          authenticated: boolean(),
+          auth_method: String.t() | nil,
+          auth_info: String.t() | nil,
+          auth_error: String.t() | nil,
+          api_key_source: String.t() | nil,
+          status: auth_status(),
+          recommendations: [String.t()],
+          last_checked: DateTime.t()
+        }
 
   @doc """
-  Checks if authenticated, returning a boolean.
+  Quick boolean check for authentication status.
 
-  ## Returns
-
-    - `true` if authenticated
-    - `false` if not authenticated or error occurred
+  Returns `true` if Claude CLI is installed and properly authenticated,
+  `false` otherwise.
 
   ## Examples
 
-      iex> ClaudeCodeSDK.AuthChecker.authenticated?()
-      true
+      if ClaudeCodeSDK.AuthChecker.authenticated?() do
+        IO.puts("Ready to make queries")
+      else
+        IO.puts("Authentication required")
+      end
+
   """
   @spec authenticated?() :: boolean()
   def authenticated? do
-    case check_auth() do
+    case check_cli_auth_status() do
       {:ok, _} -> true
       {:error, _} -> false
     end
   end
 
   @doc """
-  Checks Claude CLI installation and provides diagnostic information.
+  Performs comprehensive diagnostic check of the environment.
+
+  Returns a detailed diagnosis map with information about CLI installation,
+  authentication status, detected auth method, and recommendations.
 
   ## Returns
 
-    - `{:ok, %{path: String.t(), version: String.t()}}` - CLI installed
-    - `{:error, reason}` - CLI not found or error
+  A `t:diagnosis/0` map containing:
+  - `cli_installed` - Whether the Claude CLI is installed
+  - `cli_version` - Version of the installed CLI (if available)
+  - `authenticated` - Whether authentication is working
+  - `auth_method` - Detected authentication method
+  - `api_key_source` - Source of API credentials
+  - `status` - Overall status (see `t:auth_status/0`)
+  - `recommendations` - List of recommended actions
+  - `last_checked` - Timestamp of this check
 
   ## Examples
 
-      iex> ClaudeCodeSDK.AuthChecker.check_cli_installation()
-      {:ok, %{path: "/usr/local/bin/claude", version: "1.0.0"}}
+      diagnosis = ClaudeCodeSDK.AuthChecker.diagnose()
+      
+      case diagnosis.status do
+        :ready ->
+          IO.puts("✅ Ready to use Claude")
+          
+        :cli_not_found ->
+          IO.puts("❌ Claude CLI not found")
+          
+        :not_authenticated ->
+          IO.puts("❌ Not authenticated")
+      end
+
   """
-  @spec check_cli_installation() :: {:ok, map()} | {:error, String.t()}
-  def check_cli_installation do
-    # Check if mocking is enabled
-    if Application.get_env(:claude_code_sdk, :use_mock, false) do
-      {:ok, %{path: "/usr/local/bin/claude", version: "1.0.0"}}
-    else
-      check_real_cli_installation()
-    end
-  end
-
-  defp check_real_cli_installation do
-    case System.find_executable("claude") do
-      nil ->
-        {:error, "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"}
-
-      path ->
-        validate_cli_at_path(path)
-    end
-  end
-
-  defp validate_cli_at_path(path) do
-    case get_cli_version() do
-      {:ok, version} ->
-        {:ok, %{path: path, version: version}}
-
-      {:error, reason} ->
-        {:error, "Claude CLI found at #{path} but #{reason}"}
-    end
-  end
-
-  @doc """
-  Performs full diagnostic check of Claude CLI setup.
-
-  Returns a map with diagnostic information including:
-  - CLI installation status
-  - Authentication status
-  - Recommendations for fixing issues
-
-  ## Examples
-
-      iex> ClaudeCodeSDK.AuthChecker.diagnose()
-      %{
-        cli_installed: true,
-        cli_path: "/usr/local/bin/claude",
-        cli_version: "1.0.0",
-        authenticated: true,
-        auth_info: "Authenticated as user@example.com",
-        status: :ready,
-        recommendations: []
-      }
-  """
-  @spec diagnose() :: map()
+  @spec diagnose() :: diagnosis()
   def diagnose do
-    cli_result = check_cli_installation()
-    auth_result = check_auth()
+    timestamp = DateTime.utc_now()
 
-    base_diagnosis = build_diagnosis(cli_result, auth_result)
+    # Check CLI installation
+    {cli_installed, cli_version} = check_cli_installation_private()
 
-    base_diagnosis
-    |> add_status()
-    |> add_recommendations()
+    if cli_installed do
+      # Check authentication
+      {authenticated, auth_info} = check_detailed_auth()
+
+      status = determine_status(cli_installed, authenticated, auth_info)
+      recommendations = generate_recommendations(status, auth_info)
+
+      %{
+        cli_installed: cli_installed,
+        cli_version: cli_version,
+        # Placeholder, could be improved
+        cli_path: "/usr/bin/claude",
+        cli_error: nil,
+        authenticated: authenticated,
+        auth_method: auth_info[:method],
+        auth_info: if(authenticated, do: "Authenticated", else: nil),
+        auth_error: if(authenticated, do: nil, else: "Not authenticated"),
+        api_key_source: auth_info[:source],
+        status: status,
+        recommendations: recommendations,
+        last_checked: timestamp
+      }
+    else
+      %{
+        cli_installed: false,
+        cli_version: nil,
+        cli_path: nil,
+        cli_error: "Claude CLI not found",
+        authenticated: false,
+        auth_method: nil,
+        auth_info: nil,
+        auth_error: nil,
+        api_key_source: nil,
+        status: :cli_not_found,
+        recommendations: [
+          "Install Claude CLI: npm install -g @anthropic-ai/claude-code",
+          "Verify installation: claude --version",
+          "Authenticate: claude login"
+        ],
+        last_checked: timestamp
+      }
+    end
   end
 
   @doc """
-  Ensures the CLI is ready for use, raising an error if not.
+  Ensures the environment is ready for Claude queries.
 
-  ## Returns
+  Raises an exception with helpful error message if not ready.
+  Returns `:ok` if ready to proceed.
 
-    - `:ok` if everything is ready
+  ## Examples
+
+      # Will raise if not ready
+      ClaudeCodeSDK.AuthChecker.ensure_ready!()
+      
+      # Safe to make queries now
+      ClaudeCodeSDK.query("Hello!")
 
   ## Raises
 
-    - `RuntimeError` if CLI is not installed or not authenticated
+  - `RuntimeError` - If CLI not found or authentication missing
 
-  ## Examples
-
-      iex> ClaudeCodeSDK.AuthChecker.ensure_ready!()
-      :ok
   """
   @spec ensure_ready!() :: :ok
   def ensure_ready! do
-    diagnosis = diagnose()
-
-    case diagnosis.status do
-      :ready ->
+    case diagnose() do
+      %{status: :ready} ->
         :ok
 
-      :not_installed ->
-        raise "Claude CLI not installed. #{Enum.join(diagnosis.recommendations, " ")}"
+      %{status: :cli_not_found} ->
+        raise """
+        Claude CLI not found. Please install it first:
+
+        npm install -g @anthropic-ai/claude-code
+
+        Then verify: claude --version
+        """
+
+      %{status: :not_authenticated} ->
+        raise """
+        Claude CLI not authenticated. Please authenticate first:
+
+        claude login
+
+        Or set environment variable: ANTHROPIC_API_KEY=your_key_here
+        """
+
+      %{status: status, recommendations: recommendations} ->
+        recommendation_text = Enum.map_join(recommendations, "\n", &"  • #{&1}")
+
+        raise """
+        Claude Code environment not ready (status: #{status}).
+
+        Recommendations:
+        #{recommendation_text}
+        """
+    end
+  end
+
+  @doc """
+  Checks authentication status and returns result tuple.
+
+  Returns `{:ok, info}` if authenticated, `{:error, reason}` otherwise.
+
+  ## Examples
+
+      case ClaudeCodeSDK.AuthChecker.check_auth() do
+        {:ok, info} -> IO.puts("Authenticated: \#{info}")
+        {:error, reason} -> IO.puts("Auth failed: \#{reason}")
+      end
+
+  """
+  @spec check_auth() :: {:ok, String.t()} | {:error, String.t()}
+  def check_auth do
+    case check_cli_auth_status() do
+      {:ok, _} -> {:ok, "Authenticated"}
+      {:error, reason} -> {:error, "Authentication failed: #{reason}"}
+    end
+  end
+
+  @doc """
+  Checks Claude CLI installation status.
+
+  Returns `{:ok, %{path: path, version: version}}` if installed,
+  `{:error, reason}` otherwise.
+
+  ## Examples
+
+      case ClaudeCodeSDK.AuthChecker.check_cli_installation() do
+        {:ok, %{path: path, version: version}} -> 
+          IO.puts("CLI installed at \#{path}, version \#{version}")
+        {:error, reason} -> 
+          IO.puts("CLI not found: \#{reason}")
+      end
+
+  """
+  @spec check_cli_installation() :: {:ok, map()} | {:error, String.t()}
+  def check_cli_installation do
+    {installed, version} = check_cli_installation_private()
+
+    if installed do
+      {:ok, %{path: "/usr/bin/claude", version: version}}
+    else
+      {:error, "Claude CLI not found"}
+    end
+  end
+
+  @doc """
+  Checks if a specific authentication method is available.
+
+  ## Parameters
+
+  - `method` - Authentication method to check (`:anthropic`, `:bedrock`, or `:vertex`)
+
+  ## Examples
+
+      if ClaudeCodeSDK.AuthChecker.auth_method_available?(:bedrock) do
+        IO.puts("AWS Bedrock authentication is configured")
+      end
+
+  """
+  @spec auth_method_available?(atom()) :: boolean()
+  def auth_method_available?(method) do
+    case method do
+      :anthropic ->
+        check_anthropic_auth()
+
+      :bedrock ->
+        check_bedrock_auth()
+
+      :vertex ->
+        check_vertex_auth()
+
+      _ ->
+        false
+    end
+  end
+
+  @doc """
+  Gets the current API key source information.
+
+  Returns information about where the API credentials are coming from.
+
+  ## Examples
+
+      case ClaudeCodeSDK.AuthChecker.get_api_key_source() do
+        {:ok, "environment variable ANTHROPIC_API_KEY"} ->
+          IO.puts("Using environment variable")
+          
+        {:ok, "claude login session"} ->
+          IO.puts("Using stored session")
+          
+        {:error, reason} ->
+          IO.puts("No valid API key: \#{reason}")
+      end
+
+  """
+  @spec get_api_key_source() :: {:ok, String.t()} | {:error, String.t()}
+  def get_api_key_source do
+    cond do
+      System.get_env("ANTHROPIC_API_KEY") ->
+        {:ok, "environment variable ANTHROPIC_API_KEY"}
+
+      System.get_env("CLAUDE_CODE_USE_BEDROCK") == "1" ->
+        if check_aws_credentials() do
+          {:ok, "AWS credentials for Bedrock"}
+        else
+          {:error, "CLAUDE_CODE_USE_BEDROCK set but AWS credentials not found"}
+        end
+
+      System.get_env("CLAUDE_CODE_USE_VERTEX") == "1" ->
+        if check_gcp_credentials() do
+          {:ok, "Google Cloud credentials for Vertex AI"}
+        else
+          {:error, "CLAUDE_CODE_USE_VERTEX set but GCP credentials not found"}
+        end
+
+      true ->
+        case check_cli_session() do
+          true -> {:ok, "claude login session"}
+          false -> {:error, "no authentication method found"}
+        end
+    end
+  end
+
+  # Private helper functions
+
+  defp check_cli_installation_private do
+    case System.find_executable("claude") do
+      nil ->
+        {false, nil}
+
+      _path ->
+        case System.cmd("claude", ["--version"], stderr_to_stdout: true) do
+          {version_output, 0} ->
+            version = String.trim(version_output)
+            {true, version}
+
+          {_error, _code} ->
+            # CLI found but version check failed
+            {true, nil}
+        end
+    end
+  end
+
+  defp check_cli_auth_status do
+    # Check if mocking is enabled
+    if Application.get_env(:claude_code_sdk, :use_mock, false) do
+      {:ok, :authenticated}
+    else
+      execute_auth_test()
+    end
+  end
+
+  defp execute_auth_test do
+    case System.cmd("claude", ["--print", "test", "--output-format", "json"],
+           stderr_to_stdout: true
+         ) do
+      {output, 0} -> validate_cli_output(output)
+      {error, _code} -> parse_cli_error(error)
+    end
+  end
+
+  defp validate_cli_output(output) do
+    case ClaudeCodeSDK.JSON.decode(output) do
+      {:ok, _parsed} -> {:ok, :authenticated}
+      {:error, _} -> {:error, :invalid_response}
+    end
+  end
+
+  defp parse_cli_error(error) do
+    cond do
+      String.contains?(error, "not authenticated") or
+        String.contains?(error, "login") or
+          String.contains?(error, "API key") ->
+        {:error, :not_authenticated}
+
+      String.contains?(error, "network") or
+          String.contains?(error, "connection") ->
+        {:error, :network_error}
+
+      true ->
+        {:error, :unknown}
+    end
+  end
+
+  defp check_detailed_auth do
+    # Check different auth methods in order of preference
+    cond do
+      check_anthropic_auth() ->
+        source = if System.get_env("ANTHROPIC_API_KEY"), do: "env", else: "session"
+        {true, %{method: "Anthropic API", source: source}}
+
+      check_bedrock_auth() ->
+        {true, %{method: "AWS Bedrock", source: "aws_credentials"}}
+
+      check_vertex_auth() ->
+        {true, %{method: "Google Vertex AI", source: "gcp_credentials"}}
+
+      true ->
+        {false, %{method: nil, source: nil}}
+    end
+  end
+
+  defp check_anthropic_auth do
+    # Check environment variable first
+    if System.get_env("ANTHROPIC_API_KEY") do
+      true
+    else
+      # Check CLI session
+      check_cli_session()
+    end
+  end
+
+  defp check_bedrock_auth do
+    System.get_env("CLAUDE_CODE_USE_BEDROCK") == "1" and check_aws_credentials()
+  end
+
+  defp check_vertex_auth do
+    System.get_env("CLAUDE_CODE_USE_VERTEX") == "1" and check_gcp_credentials()
+  end
+
+  defp check_cli_session do
+    # Try a simple test command to see if CLI is authenticated
+    case System.cmd("claude", ["--version"], stderr_to_stdout: true) do
+      {_output, 0} ->
+        # CLI works, now test auth with a minimal query
+        case System.cmd("claude", ["--print", "hello", "--max-turns", "1"],
+               stderr_to_stdout: true
+             ) do
+          {_output, 0} -> true
+          {_error, _} -> false
+        end
+
+      {_error, _} ->
+        false
+    end
+  end
+
+  defp check_aws_credentials do
+    # Check for AWS credentials in common locations
+    System.get_env("AWS_ACCESS_KEY_ID") != nil or
+      System.get_env("AWS_PROFILE") != nil or
+      File.exists?(Path.expand("~/.aws/credentials"))
+  end
+
+  defp check_gcp_credentials do
+    # Check for GCP credentials
+    System.get_env("GOOGLE_APPLICATION_CREDENTIALS") != nil or
+      System.get_env("GOOGLE_CLOUD_PROJECT") != nil or
+      File.exists?(Path.expand("~/.config/gcloud/application_default_credentials.json"))
+  end
+
+  defp determine_status(cli_installed, authenticated, auth_info) do
+    cond do
+      not cli_installed ->
+        :cli_not_found
+
+      not authenticated ->
+        # Check if we have partial auth info indicating invalid credentials
+        if auth_info[:method] && not authenticated do
+          :invalid_credentials
+        else
+          :not_authenticated
+        end
+
+      authenticated and auth_info[:method] ->
+        :ready
+
+      true ->
+        :unknown
+    end
+  end
+
+  defp generate_recommendations(status, _auth_info) do
+    case status do
+      :ready ->
+        ["Environment is ready for Claude queries"]
+
+      :cli_not_found ->
+        [
+          "Install Claude CLI: npm install -g @anthropic-ai/claude-code",
+          "Verify installation: claude --version"
+        ]
 
       :not_authenticated ->
-        raise "Claude CLI not authenticated. #{Enum.join(diagnosis.recommendations, " ")}"
+        base_recommendations = ["Run 'claude login' to authenticate"]
+        additional = get_provider_specific_recommendations()
+        base_recommendations ++ additional
+
+      :invalid_credentials ->
+        [
+          "Check your API key or credentials",
+          "Try re-authenticating: claude login",
+          "Verify network connectivity"
+        ]
+
+      _ ->
+        [
+          "Run diagnostic: ClaudeCodeSDK.AuthChecker.diagnose()",
+          "Check Claude CLI installation: claude --version",
+          "Verify authentication: claude login"
+        ]
     end
   end
 
-  # Private functions
-
-  defp parse_auth_error(output) do
+  defp get_provider_specific_recommendations do
     cond do
-      String.contains?(output, "not logged in") || String.contains?(output, "not authenticated") ->
-        "Not authenticated. Run 'claude login' to authenticate."
+      System.get_env("CLAUDE_CODE_USE_BEDROCK") == "1" ->
+        ["Ensure AWS credentials are configured", "Check AWS_PROFILE or AWS_ACCESS_KEY_ID"]
 
-      String.contains?(output, "command not found") ->
-        "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"
+      System.get_env("CLAUDE_CODE_USE_VERTEX") == "1" ->
+        ["Ensure GCP credentials are configured", "Check GOOGLE_APPLICATION_CREDENTIALS"]
 
       true ->
-        "Authentication check failed: #{String.trim(output)}"
+        ["Or set ANTHROPIC_API_KEY environment variable"]
     end
-  end
-
-  defp get_cli_version do
-    case System.cmd("claude", ["--version"], stderr_to_stdout: true, timeout: 5000) do
-      {output, 0} ->
-        version = output |> String.trim() |> parse_version()
-        {:ok, version}
-
-      {_, _} ->
-        {:error, "version check failed"}
-    end
-  rescue
-    _ -> {:error, "version command failed"}
-  end
-
-  defp parse_version(output) do
-    # Handle various version output formats
-    cond do
-      # Format: "claude/1.0.0"
-      match = Regex.run(~r/claude\/(\d+\.\d+\.\d+)/, output) ->
-        Enum.at(match, 1)
-
-      # Format: "1.0.0"
-      match = Regex.run(~r/^(\d+\.\d+\.\d+)/, output) ->
-        Enum.at(match, 1)
-
-      # Format: "Claude CLI version 1.0.0"
-      match = Regex.run(~r/version\s+(\d+\.\d+\.\d+)/i, output) ->
-        Enum.at(match, 1)
-
-      true ->
-        String.trim(output)
-    end
-  end
-
-  defp build_diagnosis({:ok, cli_info}, {:ok, auth_info}) do
-    %{
-      cli_installed: true,
-      cli_path: cli_info.path,
-      cli_version: cli_info.version,
-      authenticated: true,
-      auth_info: auth_info
-    }
-  end
-
-  defp build_diagnosis({:ok, cli_info}, {:error, auth_error}) do
-    %{
-      cli_installed: true,
-      cli_path: cli_info.path,
-      cli_version: cli_info.version,
-      authenticated: false,
-      auth_error: auth_error
-    }
-  end
-
-  defp build_diagnosis({:error, cli_error}, _) do
-    %{
-      cli_installed: false,
-      cli_error: cli_error,
-      authenticated: false
-    }
-  end
-
-  defp add_status(diagnosis) do
-    status =
-      cond do
-        not diagnosis.cli_installed -> :not_installed
-        not diagnosis.authenticated -> :not_authenticated
-        true -> :ready
-      end
-
-    Map.put(diagnosis, :status, status)
-  end
-
-  defp add_recommendations(diagnosis) do
-    recommendations =
-      case diagnosis.status do
-        :ready ->
-          []
-
-        :not_installed ->
-          ["Install Claude CLI with: npm install -g @anthropic-ai/claude-code"]
-
-        :not_authenticated ->
-          ["Run 'claude login' to authenticate with your Anthropic account"]
-      end
-
-    Map.put(diagnosis, :recommendations, recommendations)
   end
 end

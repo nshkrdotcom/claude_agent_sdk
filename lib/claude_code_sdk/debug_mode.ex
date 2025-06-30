@@ -1,108 +1,237 @@
 defmodule ClaudeCodeSDK.DebugMode do
   @moduledoc """
-  Debug mode utilities for troubleshooting Claude Code SDK queries.
+  Comprehensive debugging and diagnostics for Claude Code SDK.
 
-  Provides detailed logging, timing information, and diagnostic output
-  to help understand query execution and identify issues.
+  This module provides tools for troubleshooting queries, analyzing performance,
+  and diagnosing environment issues. Essential for development, testing, and
+  production monitoring of Claude Code SDK usage.
+
+  ## Features
+
+  - **Query Debugging**: Detailed execution logging with timing
+  - **Environment Diagnostics**: CLI installation and auth status checks
+  - **Performance Benchmarking**: Multi-run performance analysis
+  - **Message Analysis**: Content statistics and error detection
+  - **Connectivity Testing**: Basic health checks and validation
+
+  ## Basic Usage
+
+      # Debug a specific query
+      messages = ClaudeCodeSDK.DebugMode.debug_query("Hello, Claude!")
+      
+      # Run full environment diagnostics
+      ClaudeCodeSDK.DebugMode.run_diagnostics()
+      
+      # Benchmark query performance
+      results = ClaudeCodeSDK.DebugMode.benchmark("Analyze this code", nil, 3)
+      
+      # Analyze message statistics
+      stats = ClaudeCodeSDK.DebugMode.analyze_messages(messages)
+
+  ## Debug Output Example
+
+      🐛 DEBUG MODE ENABLED
+         Prompt: "Hello, Claude!"
+         Options: %ClaudeCodeSDK.Options{verbose: true, max_turns: 1}
+         ✅ Auth: Authenticated as user@example.com
+         [0ms] system:init: session_id=abc123, model=claude-opus-4
+         [1250ms] assistant: "Hello! How can I help you today?" (35 chars)
+         [1680ms] result:success: cost=$0.003, turns=1
+      🏁 Debug completed in 1680ms with 3 messages
+
+  ## Environment Diagnostics
+
+      🔍 Running Claude Code SDK Diagnostics...
+      ✅ CLI Status: Installed at /usr/local/bin/claude
+         Version: 1.2.3
+      ✅ Authentication: Authenticated as user@example.com
+      📋 Environment:
+         Mix env: dev
+         Mock enabled: false
+         Elixir: 1.15.0
+         OTP: 26
+      🔌 Testing basic connectivity...
+         ✅ Basic connectivity OK
+      ✅ All systems operational!
+
   """
 
-  alias ClaudeCodeSDK.{AuthChecker, ContentExtractor, Options}
+  alias ClaudeCodeSDK.{AuthChecker, ContentExtractor, Message, Options}
 
   @doc """
-  Executes a query in debug mode with detailed logging.
+  Executes a query in debug mode with detailed logging and timing.
+
+  Provides comprehensive debug output including authentication status,
+  timing information for each message, and final statistics. Automatically
+  enables verbose mode and catches/reports any errors.
 
   ## Parameters
 
-    - `prompt` - The query prompt
-    - `options` - Optional ClaudeCodeSDK.Options (verbose will be enabled)
+  - `prompt` - The query prompt to debug
+  - `options` - Optional `ClaudeCodeSDK.Options` (verbose will be auto-enabled)
 
   ## Returns
 
-    - List of messages with debug information
+  - List of messages with complete debug trace
 
   ## Examples
 
-      iex> messages = ClaudeCodeSDK.DebugMode.debug_query("Hello")
+      # Basic debug query
+      messages = ClaudeCodeSDK.DebugMode.debug_query("Hello")
+      
+      # Debug with custom options
+      options = %ClaudeCodeSDK.Options{max_turns: 3}
+      messages = ClaudeCodeSDK.DebugMode.debug_query("Complex task", options)
+
+  ## Output Format
+
       🐛 DEBUG MODE ENABLED
-         Prompt: "Hello"
-         Options: %ClaudeCodeSDK.Options{verbose: true, ...}
-      ...
+         Prompt: "Hello, Claude!"
+         Options: %ClaudeCodeSDK.Options{verbose: true, max_turns: 1}
+         ✅ Auth: Authenticated as user@example.com
+         [0ms] system:init: session_id=abc123, model=claude-opus-4
+         [1250ms] assistant: "Hello! How can I help you today?" (35 chars)
+         [1680ms] result:success: cost=$0.003, turns=1
+      🏁 Debug completed in 1680ms with 3 messages
+
   """
-  @spec debug_query(String.t(), Options.t() | nil) :: list()
+  @spec debug_query(String.t(), Options.t() | nil) :: [Message.t()]
   def debug_query(prompt, options \\ nil) do
-    IO.puts("🐛 DEBUG MODE ENABLED")
-    IO.puts("   Prompt: #{inspect(prompt, limit: 100)}")
-    IO.puts("   Options: #{inspect(options, limit: :infinity)}")
+    IO.puts("\n🐛 DEBUG MODE ENABLED")
+    IO.puts("   Prompt: #{inspect(prompt, limit: 200)}")
 
-    # Add debug options
-    debug_options =
-      case options do
-        nil -> %Options{verbose: true}
-        opts -> %{opts | verbose: true}
-      end
+    # Build debug options
+    debug_options = build_debug_options(options)
+    IO.puts("   Options: #{format_options_summary(debug_options)}")
 
-    IO.puts("   Final options: #{inspect(debug_options, limit: :infinity)}")
+    # Pre-flight checks
+    auth_status = check_authentication()
+    environment_info = check_environment()
 
-    # Check authentication first
-    case AuthChecker.check_auth() do
-      {:ok, auth_info} ->
-        IO.puts("   ✅ Auth: #{auth_info}")
+    IO.puts("   #{auth_status}")
+    IO.puts("   Environment: #{environment_info}")
+    IO.puts("   Starting query execution...")
 
-      {:error, auth_error} ->
-        IO.puts("   ❌ Auth Error: #{auth_error}")
-    end
-
-    # Time the query
+    # Execute with timing and error handling
     start_time = System.monotonic_time(:millisecond)
 
     try do
-      result =
-        ClaudeCodeSDK.query(prompt, debug_options)
-        |> Stream.map(fn msg ->
-          elapsed = System.monotonic_time(:millisecond) - start_time
-
-          debug_info = format_debug_message(msg, elapsed)
-          IO.puts(debug_info)
-
-          msg
-        end)
-        |> Enum.to_list()
+      result = execute_debug_query(prompt, debug_options, start_time)
 
       total_time = System.monotonic_time(:millisecond) - start_time
       IO.puts("🏁 Debug completed in #{total_time}ms with #{length(result)} messages")
+
+      print_final_summary(result, total_time)
 
       result
     rescue
       e ->
         elapsed = System.monotonic_time(:millisecond) - start_time
-        IO.puts("   [#{elapsed}ms] ❌ ERROR: #{inspect(e)}")
-        IO.puts("   Stacktrace:")
-        Exception.format_stacktrace(__STACKTRACE__) |> IO.puts()
+        IO.puts("\n❌ QUERY FAILED after #{elapsed}ms")
+        IO.puts("   Error: #{Exception.message(e)}")
+        IO.puts("   Type: #{e.__struct__}")
+        print_error_suggestions(e)
         reraise e, __STACKTRACE__
     end
   end
 
   @doc """
-  Analyzes a stream of messages and provides statistics.
+  Executes a query with performance profiling.
+
+  Similar to `debug_query/2` but focuses on performance metrics,
+  memory usage, and execution timing rather than detailed content logging.
 
   ## Parameters
 
-    - `messages` - List or stream of ClaudeCodeSDK.Message structs
+  - `prompt` - The query prompt
+  - `options` - Optional `ClaudeCodeSDK.Options`
 
   ## Returns
 
-    - Map with analysis results
+  - `{messages, profile}` where profile contains performance data
 
   ## Examples
 
-      iex> stats = ClaudeCodeSDK.DebugMode.analyze_messages(messages)
-      %{
-        total_messages: 5,
-        message_types: %{assistant: 2, system: 1, result: 1, user: 1},
-        total_cost_usd: 0.025,
-        duration_ms: 3420,
-        content_length: 1523
-      }
+      {messages, profile} = ClaudeCodeSDK.DebugMode.profile_query("Complex task")
+      IO.puts("Peak memory: \#{profile.peak_memory_mb}MB")
+      IO.puts("Execution time: \#{profile.execution_time_ms}ms")
+
+  """
+  @spec profile_query(String.t(), Options.t() | nil) :: {[Message.t()], map()}
+  def profile_query(prompt, options \\ nil) do
+    IO.puts("📊 PERFORMANCE PROFILING ENABLED")
+
+    # Start profiling
+    start_time = System.monotonic_time(:millisecond)
+    start_memory = :erlang.memory(:total)
+
+    # Execute query
+    messages = ClaudeCodeSDK.query(prompt, options) |> Enum.to_list()
+
+    # Calculate metrics
+    end_time = System.monotonic_time(:millisecond)
+    end_memory = :erlang.memory(:total)
+
+    profile = %{
+      execution_time_ms: end_time - start_time,
+      memory_delta_bytes: end_memory - start_memory,
+      peak_memory_mb: Float.round(:erlang.memory(:total) / 1_048_576, 2),
+      message_count: length(messages),
+      process_count: :erlang.system_info(:process_count)
+    }
+
+    IO.puts("📊 Profile Results:")
+    IO.puts("   Execution time: #{profile.execution_time_ms}ms")
+    IO.puts("   Memory delta: #{Float.round(profile.memory_delta_bytes / 1024, 1)}KB")
+    IO.puts("   Peak memory: #{profile.peak_memory_mb}MB")
+    IO.puts("   Messages: #{profile.message_count}")
+
+    {messages, profile}
+  end
+
+  @doc """
+  Analyzes a stream of messages and provides comprehensive statistics.
+
+  Examines message patterns, content metrics, performance data, and error
+  conditions to provide insights into query execution and results.
+
+  ## Parameters
+
+  - `messages` - List or stream of `ClaudeCodeSDK.Message` structs
+
+  ## Returns
+
+  - Map with detailed analysis results
+
+  ## Examples
+
+      messages = ClaudeCodeSDK.query("Analyze this code")
+      stats = ClaudeCodeSDK.DebugMode.analyze_messages(messages)
+      
+      # %{
+      #   total_messages: 5,
+      #   message_types: %{assistant: 2, system: 1, result: 1, user: 1},
+      #   total_cost_usd: 0.025,
+      #   duration_ms: 3420,
+      #   content_length: 1523,
+      #   tools_used: ["Read", "Grep"],
+      #   session_id: "abc123",
+      #   success: true,
+      #   errors: []
+      # }
+
+  ## Analysis Fields
+
+  - `total_messages` - Count of all messages
+  - `message_types` - Breakdown by message type
+  - `total_cost_usd` - Total API cost (if available)
+  - `duration_ms` - Total execution time
+  - `content_length` - Total character count of text content
+  - `tools_used` - List of tools invoked during execution
+  - `session_id` - Session identifier
+  - `success` - Whether query completed successfully
+  - `errors` - List of any error conditions encountered
+
   """
   @spec analyze_messages(Enumerable.t()) :: map()
   def analyze_messages(messages) do
@@ -115,11 +244,16 @@ defmodule ClaudeCodeSDK.DebugMode do
         duration_ms: nil,
         session_id: nil,
         content_length: 0,
-        tools_used: [],
-        errors: []
+        tools_used: MapSet.new(),
+        errors: [],
+        success: false,
+        turns_used: nil,
+        api_duration_ms: nil,
+        model_used: nil
       },
       &analyze_message/2
     )
+    |> finalize_analysis()
   end
 
   @doc """
@@ -321,27 +455,139 @@ defmodule ClaudeCodeSDK.DebugMode do
     benchmark_results
   end
 
-  # Private functions
+  # Private helper functions
 
-  defp format_debug_message(msg, elapsed) do
-    data_preview =
-      case msg.type do
-        :assistant ->
-          content = ContentExtractor.extract_text(msg)
-          format_assistant_preview(content)
+  defp build_debug_options(nil) do
+    %Options{verbose: true, output_format: :stream_json}
+  end
 
-        :system ->
-          "session_id=#{msg.data[:session_id]}, model=#{msg.data[:model]}"
+  defp build_debug_options(options) do
+    %{options | verbose: true, output_format: :stream_json}
+  end
 
-        :result ->
-          "cost=$#{msg.data[:total_cost_usd]}, turns=#{msg.data[:num_turns]}"
+  defp format_options_summary(%Options{} = options) do
+    parts = [
+      "max_turns: #{options.max_turns || "default"}",
+      "tools: #{format_tools_summary(options)}",
+      "mode: #{options.permission_mode || "default"}"
+    ]
+
+    Enum.join(parts, ", ")
+  end
+
+  defp format_tools_summary(%Options{allowed_tools: allowed, disallowed_tools: disallowed}) do
+    cond do
+      allowed && length(allowed) > 0 -> "allowed[#{length(allowed)}]"
+      disallowed && length(disallowed) > 0 -> "disallowed[#{length(disallowed)}]"
+      true -> "default"
+    end
+  end
+
+  defp check_authentication do
+    case AuthChecker.authenticated?() do
+      true -> "✅ Auth: Ready"
+      false -> "❌ Auth: Not authenticated"
+    end
+  end
+
+  defp check_environment do
+    mock_status =
+      if Application.get_env(:claude_code_sdk, :use_mock, false), do: "mock", else: "live"
+
+    "#{Mix.env()}/#{mock_status}"
+  end
+
+  defp execute_debug_query(prompt, options, start_time) do
+    ClaudeCodeSDK.query(prompt, options)
+    |> Stream.map(fn msg ->
+      elapsed = System.monotonic_time(:millisecond) - start_time
+      debug_info = format_debug_message(msg, elapsed)
+      IO.puts(debug_info)
+      msg
+    end)
+    |> Enum.to_list()
+  end
+
+  defp print_final_summary(messages, total_time) do
+    stats = analyze_messages(messages)
+
+    IO.puts("\n📊 Summary:")
+    IO.puts("   Total time: #{total_time}ms")
+    IO.puts("   API time: #{stats.api_duration_ms || "unknown"}ms")
+
+    if stats.total_cost_usd do
+      IO.puts("   Cost: $#{stats.total_cost_usd}")
+    end
+
+    if stats.content_length > 0 do
+      IO.puts("   Content: #{stats.content_length} chars")
+    end
+
+    if not Enum.empty?(stats.tools_used) do
+      tools_list = Enum.join(stats.tools_used, ", ")
+      IO.puts("   Tools: #{tools_list}")
+    end
+
+    if not Enum.empty?(stats.errors) do
+      error_list = Enum.join(stats.errors, ", ")
+      IO.puts("   ⚠️  Errors: #{error_list}")
+    end
+  end
+
+  defp print_error_suggestions(exception) do
+    suggestions =
+      case exception do
+        %ErlangError{original: :enoent} ->
+          ["Ensure Claude CLI is installed: npm install -g @anthropic-ai/claude-code"]
+
+        %ErlangError{original: :timeout} ->
+          ["Query timed out - try reducing complexity or increasing timeout"]
+
+        %Jason.DecodeError{} ->
+          ["JSON parsing error - possible CLI output format issue"]
 
         _ ->
-          inspect(msg.data, limit: 50)
+          ["Run ClaudeCodeSDK.DebugMode.run_diagnostics() for environment check"]
       end
 
-    type_str = if msg.subtype, do: "#{msg.type}:#{msg.subtype}", else: "#{msg.type}"
+    IO.puts("\n💡 Suggestions:")
+    Enum.each(suggestions, &IO.puts("   - #{&1}"))
+  end
+
+  defp format_debug_message(msg, elapsed) do
+    data_preview = format_message_data(msg)
+    type_str = format_message_type(msg)
     "   [#{elapsed}ms] #{type_str}: #{data_preview}"
+  end
+
+  defp format_message_data(msg) do
+    case msg.type do
+      :assistant -> format_assistant_data(msg)
+      :system -> format_system_data(msg)
+      :result -> format_result_data(msg)
+      _ -> inspect(msg.data, limit: 50)
+    end
+  end
+
+  defp format_message_type(msg) do
+    if msg.subtype, do: "#{msg.type}:#{msg.subtype}", else: "#{msg.type}"
+  end
+
+  defp format_assistant_data(msg) do
+    content = ContentExtractor.extract_text(msg)
+    format_assistant_preview(content)
+  end
+
+  defp format_system_data(msg) do
+    session = msg.data[:session_id] || "unknown"
+    model = msg.data[:model] || "unknown"
+    "session_id=#{String.slice(session, 0, 8)}..., model=#{model}"
+  end
+
+  defp format_result_data(msg) do
+    cost = msg.data[:total_cost_usd] || "unknown"
+    turns = msg.data[:num_turns] || "unknown"
+    "cost=$#{cost}, turns=#{turns}"
   end
 
   defp analyze_message(message, acc) do
@@ -352,7 +598,9 @@ defmodule ClaudeCodeSDK.DebugMode do
     end)
     |> update_cost_duration(message)
     |> update_session_id(message)
+    |> update_model_info(message)
     |> update_content_length(message)
+    |> extract_tools_used(message)
     |> check_for_errors(message)
   end
 
@@ -360,15 +608,26 @@ defmodule ClaudeCodeSDK.DebugMode do
     acc
     |> Map.put(:total_cost_usd, data[:total_cost_usd])
     |> Map.put(:duration_ms, data[:duration_ms])
+    |> Map.put(:api_duration_ms, data[:duration_api_ms])
+    |> Map.put(:turns_used, data[:num_turns])
+    |> Map.put(:success, data[:subtype] == :success || data["subtype"] == "success")
   end
 
   defp update_cost_duration(acc, _), do: acc
 
-  defp update_session_id(acc, %{type: :system, data: %{session_id: id}}) do
-    Map.put(acc, :session_id, id)
+  defp update_session_id(acc, %{type: :system, data: data}) do
+    session_id = data[:session_id] || data["session_id"]
+    if session_id, do: Map.put(acc, :session_id, session_id), else: acc
   end
 
   defp update_session_id(acc, _), do: acc
+
+  defp update_model_info(acc, %{type: :system, data: data}) do
+    model = data[:model] || data["model"]
+    if model, do: Map.put(acc, :model_used, model), else: acc
+  end
+
+  defp update_model_info(acc, _), do: acc
 
   defp update_content_length(acc, message) do
     case ContentExtractor.extract_text(message) do
@@ -377,11 +636,30 @@ defmodule ClaudeCodeSDK.DebugMode do
     end
   end
 
+  defp extract_tools_used(acc, %{type: :assistant, data: %{message: %{"content" => content}}})
+       when is_list(content) do
+    tools =
+      content
+      |> Enum.filter(fn item ->
+        is_map(item) && (item["type"] == "tool_use" || Map.has_key?(item, "name"))
+      end)
+      |> Enum.map(& &1["name"])
+      |> Enum.reject(&is_nil/1)
+
+    Map.update(acc, :tools_used, MapSet.new(tools), &MapSet.union(&1, MapSet.new(tools)))
+  end
+
+  defp extract_tools_used(acc, _), do: acc
+
   defp check_for_errors(acc, %{type: :result, subtype: subtype}) when subtype != :success do
     Map.update(acc, :errors, [subtype], &[subtype | &1])
   end
 
   defp check_for_errors(acc, _), do: acc
+
+  defp finalize_analysis(acc) do
+    %{acc | tools_used: MapSet.to_list(acc.tools_used), errors: Enum.reverse(acc.errors)}
+  end
 
   defp perform_connectivity_test do
     # Simple echo test

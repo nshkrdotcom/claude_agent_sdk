@@ -1,131 +1,203 @@
 defmodule ClaudeCodeSDK.OptionBuilder do
   @moduledoc """
-  Builder patterns for common ClaudeCodeSDK.Options configurations.
+  Smart option builder for Claude Code SDK configurations.
 
-  Provides pre-configured option sets for different environments and use cases,
-  making it easier to work with the SDK in various contexts.
+  This module provides pre-configured option sets and builder patterns for
+  common use cases. Instead of manually constructing `ClaudeCodeSDK.Options`
+  structs, you can use these convenience functions to get sensible defaults
+  for different environments and scenarios.
+
+  ## Design Philosophy
+
+  - **Environment-aware**: Automatically adapt to dev, test, and production
+  - **Security-first**: Production configs are restrictive by default
+  - **Composable**: Mix and match presets with custom overrides
+  - **Practical**: Based on real-world usage patterns
+
+  ## Quick Start
+
+      # Get options for current environment
+      options = ClaudeCodeSDK.OptionBuilder.for_environment()
+      
+      # Use a specific preset
+      options = ClaudeCodeSDK.OptionBuilder.build_development_options()
+      
+      # Customize a preset
+      options = ClaudeCodeSDK.OptionBuilder.merge(:development, %{max_turns: 15})
+
+  ## Environment Presets
+
+  | Environment | Security | Tools | Turn Limit | Use Case |
+  |-------------|----------|-------|------------|----------|
+  | **Development** | Permissive | All tools | 10 | Local development |
+  | **Staging** | Moderate | Read-only | 5 | Testing/CI |
+  | **Production** | Restrictive | Read-only | 3 | Production analysis |
+
+  ## Use Case Presets
+
+  | Preset | Tools | Purpose | Permissions |
+  |--------|-------|---------|-------------|
+  | **Analysis** | Read, Grep, Find | Code review | Read-only |
+  | **Documentation** | Read, Write | Doc generation | File creation |
+  | **Chat** | None | Simple Q&A | No tools |
+  | **Sandboxed** | Custom | Safe execution | Isolated |
+
   """
 
   alias ClaudeCodeSDK.Options
 
+  # Environment-specific presets
+
   @doc """
   Builds options suitable for development environment.
 
-  Features:
-  - Higher turn limit (10)
-  - Verbose output enabled
-  - All tools allowed
-  - Edit permissions accepted
+  **Use for**: Local development, debugging, experimentation
+
+  **Features**:
+  - Higher turn limit (10) for complex tasks
+  - Verbose output for debugging
+  - All tools allowed for full functionality
+  - Edit permissions accepted for rapid iteration
+  - Stream JSON output for real-time feedback
 
   ## Examples
 
-      iex> options = ClaudeCodeSDK.OptionBuilder.build_development_options()
-      iex> options.max_turns
-      10
-      iex> options.verbose
-      true
+      # Basic development setup
+      options = ClaudeCodeSDK.OptionBuilder.build_development_options()
+      ClaudeCodeSDK.query("Help me debug this function", options)
+
+      # Development with custom system prompt
+      options = 
+        ClaudeCodeSDK.OptionBuilder.build_development_options()
+        |> ClaudeCodeSDK.OptionBuilder.with_system_prompt("You are a debugging expert")
+
   """
   @spec build_development_options() :: Options.t()
   def build_development_options do
     %Options{
       max_turns: 10,
       verbose: true,
-      allowed_tools: ["Bash", "Read", "Write", "Edit"],
-      permission_mode: :accept_edits
+      output_format: :stream_json,
+      allowed_tools: ["Bash", "Read", "Write", "Edit", "Grep", "Find"],
+      permission_mode: :accept_edits,
+      system_prompt:
+        "You are a helpful development assistant. Focus on practical solutions and explain your reasoning."
     }
   end
 
   @doc """
   Builds options suitable for staging/testing environment.
 
-  Features:
-  - Moderate turn limit (5)
-  - Read-only tools
-  - Plan mode (no automatic edits)
-  - Bash disabled for safety
+  **Use for**: CI/CD pipelines, automated testing, code review
+
+  **Features**:
+  - Moderate turn limit (5) for focused tasks
+  - Read-only tools for safety
+  - Plan mode prevents automatic changes
+  - Bash disabled to prevent system modifications
+  - JSON output for structured results
 
   ## Examples
 
-      iex> options = ClaudeCodeSDK.OptionBuilder.build_staging_options()
-      iex> options.permission_mode
-      :plan
+      # Use in CI for code analysis
+      options = ClaudeCodeSDK.OptionBuilder.build_staging_options()
+      ClaudeCodeSDK.query("Analyze this code for security issues", options)
+
   """
   @spec build_staging_options() :: Options.t()
   def build_staging_options do
     %Options{
       max_turns: 5,
       verbose: false,
+      output_format: :json,
       permission_mode: :plan,
       allowed_tools: ["Read"],
-      disallowed_tools: ["Bash", "Write", "Edit"]
+      disallowed_tools: ["Bash", "Write", "Edit"],
+      system_prompt: "You are a code reviewer. Provide thorough analysis without making changes."
     }
   end
 
   @doc """
   Builds options suitable for production environment.
 
-  Features:
-  - Low turn limit (3)
-  - Read-only access
-  - Plan mode
+  **Use for**: Production monitoring, read-only analysis, customer-facing features
+
+  **Features**:
+  - Low turn limit (3) for efficiency
+  - Read-only access only
+  - Plan mode for safety
   - Minimal tool access
+  - Structured JSON output
 
   ## Examples
 
-      iex> options = ClaudeCodeSDK.OptionBuilder.build_production_options()
-      iex> options.max_turns
-      3
+      # Production-safe code analysis
+      options = ClaudeCodeSDK.OptionBuilder.build_production_options()
+      ClaudeCodeSDK.query("Explain what this function does", options)
+
   """
   @spec build_production_options() :: Options.t()
   def build_production_options do
     %Options{
       max_turns: 3,
       verbose: false,
+      output_format: :stream_json,
       permission_mode: :plan,
       allowed_tools: ["Read"],
-      disallowed_tools: ["Bash", "Write", "Edit"],
-      output_format: :stream_json
+      disallowed_tools: ["Bash", "Write", "Edit", "Grep", "Find"],
+      system_prompt: "You are a helpful assistant. Provide concise, accurate information."
     }
   end
 
-  @doc """
-  Builds options for code analysis tasks.
+  # Use-case specific presets
 
-  Features:
-  - Read-only access
-  - Higher turn limit for thorough analysis
-  - No modification permissions
+  @doc """
+  Builds options optimized for code analysis tasks.
+
+  **Use for**: Code reviews, security audits, quality analysis
+
+  **Features**:
+  - Read and search tools for thorough analysis
+  - Higher turn limit (7) for comprehensive review
+  - No modification permissions for safety
+  - Specialized system prompt for analysis focus
 
   ## Examples
 
-      iex> options = ClaudeCodeSDK.OptionBuilder.build_analysis_options()
-      iex> "Write" in options.disallowed_tools
-      true
+      options = ClaudeCodeSDK.OptionBuilder.build_analysis_options()
+      ClaudeCodeSDK.query("Review this module for potential issues", options)
+
   """
   @spec build_analysis_options() :: Options.t()
   def build_analysis_options do
     %Options{
       max_turns: 7,
+      output_format: :stream_json,
       allowed_tools: ["Read", "Grep", "Find"],
       disallowed_tools: ["Write", "Edit", "Bash"],
       permission_mode: :plan,
-      verbose: false
+      verbose: false,
+      system_prompt:
+        "You are a senior code reviewer. Analyze code for security, performance, maintainability, and best practices. Provide specific recommendations."
     }
   end
 
   @doc """
-  Builds options for interactive chat/assistance.
+  Builds options for simple chat and Q&A interactions.
 
-  Features:
-  - Lower turn limit
-  - Text output format
-  - No tool access by default
+  **Use for**: Help desk, documentation queries, general assistance
+
+  **Features**:
+  - Single turn for quick responses
+  - Text output for simple display
+  - No tool access to prevent unintended actions
+  - Minimal permissions
 
   ## Examples
 
-      iex> options = ClaudeCodeSDK.OptionBuilder.build_chat_options()
-      iex> options.output_format
-      :text
+      options = ClaudeCodeSDK.OptionBuilder.build_chat_options()
+      ClaudeCodeSDK.query("What is the difference between async and sync?", options)
+
   """
   @spec build_chat_options() :: Options.t()
   def build_chat_options do
@@ -133,86 +205,96 @@ defmodule ClaudeCodeSDK.OptionBuilder do
       max_turns: 1,
       output_format: :text,
       allowed_tools: [],
-      permission_mode: :plan
+      disallowed_tools: ["Bash", "Read", "Write", "Edit", "Grep", "Find"],
+      permission_mode: :plan,
+      verbose: false,
+      system_prompt: "You are a helpful programming assistant. Provide clear, concise answers."
     }
   end
 
   @doc """
-  Builds options for documentation generation.
+  Builds options for documentation generation tasks.
 
-  Features:
-  - Read access to understand code
-  - Write access for creating docs
-  - Higher turn limit for comprehensive docs
+  **Use for**: API docs, README generation, code documentation
+
+  **Features**:
+  - Read access to understand existing code
+  - Write access for creating documentation files
+  - Higher turn limit (8) for comprehensive docs
+  - Accept edits mode for file creation
+  - Specialized prompt for documentation focus
 
   ## Examples
 
-      iex> options = ClaudeCodeSDK.OptionBuilder.build_documentation_options()
-      iex> "Write" in options.allowed_tools
-      true
+      options = ClaudeCodeSDK.OptionBuilder.build_documentation_options()
+      ClaudeCodeSDK.query("Generate API documentation for this module", options)
+
   """
   @spec build_documentation_options() :: Options.t()
   def build_documentation_options do
     %Options{
       max_turns: 8,
-      allowed_tools: ["Read", "Write"],
+      output_format: :stream_json,
+      allowed_tools: ["Read", "Write", "Grep"],
       disallowed_tools: ["Bash", "Edit"],
       permission_mode: :accept_edits,
-      verbose: false
+      verbose: false,
+      system_prompt:
+        "You are a technical writer. Create clear, comprehensive documentation that helps users understand and use the code effectively."
     }
   end
 
   @doc """
-  Builds options with custom working directory.
+  Builds options for test generation and testing tasks.
 
-  ## Parameters
+  **Use for**: Unit test creation, test analysis, quality assurance
 
-    - `cwd` - Working directory path
-    - `base_options` - Base options to extend (optional)
-
-  ## Examples
-
-      iex> options = ClaudeCodeSDK.OptionBuilder.with_working_directory("/project")
-      iex> options.cwd
-      "/project"
-  """
-  @spec with_working_directory(String.t(), Options.t()) :: Options.t()
-  def with_working_directory(cwd, base_options \\ %Options{}) do
-    %{base_options | cwd: cwd}
-  end
-
-  @doc """
-  Builds options with custom system prompt.
-
-  ## Parameters
-
-    - `prompt` - System prompt to use
-    - `base_options` - Base options to extend (optional)
+  **Features**:
+  - Read access to understand code under test
+  - Write access for creating test files
+  - Moderate turn limit for thorough test coverage
+  - Testing-focused system prompt
 
   ## Examples
 
-      iex> options = ClaudeCodeSDK.OptionBuilder.with_system_prompt("You are a helpful assistant")
-      iex> options.system_prompt
-      "You are a helpful assistant"
+      options = ClaudeCodeSDK.OptionBuilder.build_testing_options()
+      ClaudeCodeSDK.query("Generate comprehensive unit tests for this module", options)
+
   """
-  @spec with_system_prompt(String.t(), Options.t()) :: Options.t()
-  def with_system_prompt(prompt, base_options \\ %Options{}) do
-    %{base_options | system_prompt: prompt}
+  @spec build_testing_options() :: Options.t()
+  def build_testing_options do
+    %Options{
+      max_turns: 6,
+      output_format: :stream_json,
+      allowed_tools: ["Read", "Write", "Grep"],
+      disallowed_tools: ["Bash", "Edit"],
+      permission_mode: :accept_edits,
+      verbose: false,
+      system_prompt:
+        "You are a QA engineer. Create thorough, maintainable tests that cover edge cases and follow testing best practices."
+    }
   end
+
+  # Builder utilities and combinators
 
   @doc """
   Builds options for a specific environment based on Mix.env().
 
   Automatically selects appropriate options based on current environment:
-  - `:dev` -> development options
-  - `:test` -> staging options  
-  - `:prod` -> production options
+  - `:dev` -> development options (permissive, verbose)
+  - `:test` -> staging options (moderate restrictions)
+  - `:prod` -> production options (restrictive, safe)
+
+  This is the recommended way to get environment-appropriate defaults.
 
   ## Examples
 
-      iex> options = ClaudeCodeSDK.OptionBuilder.for_environment()
-      iex> is_struct(options, ClaudeCodeSDK.Options)
-      true
+      # Get options for current environment
+      options = ClaudeCodeSDK.OptionBuilder.for_environment()
+      
+      # In development, this gives you full access
+      # In production, this gives you read-only access
+
   """
   @spec for_environment() :: Options.t()
   def for_environment do
@@ -220,7 +302,7 @@ defmodule ClaudeCodeSDK.OptionBuilder do
       :dev -> build_development_options()
       :test -> build_staging_options()
       :prod -> build_production_options()
-      # Safe default
+      # Safe default for unknown environments
       _ -> build_production_options()
     end
   end
@@ -228,18 +310,29 @@ defmodule ClaudeCodeSDK.OptionBuilder do
   @doc """
   Merges custom options with a base configuration.
 
+  Allows you to start with a preset and customize specific fields.
+  This is the recommended pattern for customizing presets.
+
   ## Parameters
 
-    - `base` - Base options or builder function atom
-    - `custom` - Map of custom options to override
+  - `base` - Base preset (atom) or Options struct
+  - `custom` - Map of custom options to override
 
   ## Examples
 
-      iex> options = ClaudeCodeSDK.OptionBuilder.merge(:development, %{max_turns: 15})
-      iex> options.max_turns
-      15
-      iex> options.verbose
-      true
+      # Start with development preset, customize turn limit
+      options = ClaudeCodeSDK.OptionBuilder.merge(:development, %{max_turns: 15})
+      
+      # Start with analysis preset, add custom prompt
+      options = ClaudeCodeSDK.OptionBuilder.merge(:analysis, %{
+        system_prompt: "Focus on security vulnerabilities",
+        max_turns: 10
+      })
+      
+      # Merge with existing options
+      base_options = ClaudeCodeSDK.OptionBuilder.build_chat_options()
+      options = ClaudeCodeSDK.OptionBuilder.merge(base_options, %{max_turns: 3})
+
   """
   @spec merge(atom() | Options.t(), map()) :: Options.t()
   def merge(base, custom) when is_atom(base) do
@@ -251,6 +344,7 @@ defmodule ClaudeCodeSDK.OptionBuilder do
         :analysis -> build_analysis_options()
         :chat -> build_chat_options()
         :documentation -> build_documentation_options()
+        :testing -> build_testing_options()
         _ -> %Options{}
       end
 
@@ -262,29 +356,242 @@ defmodule ClaudeCodeSDK.OptionBuilder do
   end
 
   @doc """
-  Creates a sandboxed configuration for safe execution.
+  Adds a custom working directory to any options.
 
   ## Parameters
 
-    - `sandbox_path` - Path to sandbox directory
-    - `allowed_tools` - List of tools to allow (default: ["Read", "Write"])
+  - `cwd` - Working directory path
+  - `options` - Options struct to modify (optional, creates new if not provided)
 
   ## Examples
 
-      iex> options = ClaudeCodeSDK.OptionBuilder.sandboxed("/tmp/sandbox")
-      iex> options.cwd
-      "/tmp/sandbox"
-      iex> "Bash" in options.disallowed_tools
-      true
+      options = ClaudeCodeSDK.OptionBuilder.with_working_directory("/project")
+      
+      options = 
+        ClaudeCodeSDK.OptionBuilder.build_development_options()
+        |> ClaudeCodeSDK.OptionBuilder.with_working_directory("/project")
+
   """
-  @spec sandboxed(String.t(), list(String.t())) :: Options.t()
+  @spec with_working_directory(String.t()) :: Options.t()
+  def with_working_directory(cwd) do
+    %Options{cwd: cwd}
+  end
+
+  @spec with_working_directory(Options.t(), String.t()) :: Options.t()
+  def with_working_directory(%Options{} = options, cwd) do
+    %{options | cwd: cwd}
+  end
+
+  @doc """
+  Adds a custom system prompt to any options.
+
+  ## Parameters
+
+  - `prompt` - System prompt to use
+  - `options` - Options struct to modify (optional, creates new if not provided)
+
+  ## Examples
+
+      options = ClaudeCodeSDK.OptionBuilder.with_system_prompt("You are a security expert")
+      
+      options = 
+        ClaudeCodeSDK.OptionBuilder.build_analysis_options()
+        |> ClaudeCodeSDK.OptionBuilder.with_system_prompt("You are a security expert")
+
+  """
+  @spec with_system_prompt(String.t()) :: Options.t()
+  def with_system_prompt(prompt) do
+    %Options{system_prompt: prompt}
+  end
+
+  @spec with_system_prompt(Options.t(), String.t()) :: Options.t()
+  def with_system_prompt(%Options{} = options, prompt) do
+    %{options | system_prompt: prompt}
+  end
+
+  @doc """
+  Adds additional allowed tools to any options.
+
+  ## Parameters
+
+  - `options` - Options struct to modify
+  - `tools` - List of additional tools to allow
+
+  ## Examples
+
+      options = 
+        ClaudeCodeSDK.OptionBuilder.build_production_options()
+        |> ClaudeCodeSDK.OptionBuilder.with_additional_tools(["Grep"])
+
+  """
+  @spec with_additional_tools(Options.t(), [String.t()]) :: Options.t()
+  def with_additional_tools(%Options{} = options, additional_tools) do
+    current_tools = options.allowed_tools || []
+    %{options | allowed_tools: current_tools ++ additional_tools}
+  end
+
+  @doc """
+  Sets a custom turn limit for any options.
+
+  ## Parameters
+
+  - `options` - Options struct to modify  
+  - `turns` - Maximum number of turns
+
+  ## Examples
+
+      options = 
+        ClaudeCodeSDK.OptionBuilder.build_chat_options()
+        |> ClaudeCodeSDK.OptionBuilder.with_turn_limit(5)
+
+  """
+  @spec with_turn_limit(Options.t(), pos_integer()) :: Options.t()
+  def with_turn_limit(%Options{} = options, turns) do
+    %{options | max_turns: turns}
+  end
+
+  @doc """
+  Creates a sandboxed configuration for safe execution.
+
+  **Use for**: Untrusted code execution, isolated environments, testing
+
+  **Features**:
+  - Isolated to specific directory
+  - Bypass permissions (safe within sandbox)
+  - Customizable tool access
+  - No bash access by default
+
+  ## Parameters
+
+  - `sandbox_path` - Path to sandbox directory
+  - `allowed_tools` - List of tools to allow (default: ["Read", "Write"])
+
+  ## Examples
+
+      # Basic sandbox
+      options = ClaudeCodeSDK.OptionBuilder.sandboxed("/tmp/sandbox")
+      
+      # Sandbox with custom tools
+      options = ClaudeCodeSDK.OptionBuilder.sandboxed("/tmp/safe", ["Read", "Write", "Grep"])
+
+  """
+  @spec sandboxed(String.t(), [String.t()]) :: Options.t()
   def sandboxed(sandbox_path, allowed_tools \\ ["Read", "Write"]) do
     %Options{
       cwd: sandbox_path,
       permission_mode: :bypass_permissions,
       allowed_tools: allowed_tools,
       disallowed_tools: ["Bash"],
-      max_turns: 5
+      max_turns: 5,
+      output_format: :stream_json,
+      system_prompt:
+        "You are working in a sandboxed environment. Only work within the current directory."
     }
+  end
+
+  @doc """
+  Creates options for quick, one-off queries.
+
+  **Use for**: Simple questions, quick checks, lightweight operations
+
+  **Features**:
+  - Single turn limit
+  - Text output for simplicity
+  - No tools for safety
+  - Fast response
+
+  ## Examples
+
+      options = ClaudeCodeSDK.OptionBuilder.quick()
+      ClaudeCodeSDK.query("What does this error mean?", options)
+
+  """
+  @spec quick() :: Options.t()
+  def quick do
+    %Options{
+      max_turns: 1,
+      output_format: :text,
+      allowed_tools: [],
+      permission_mode: :plan,
+      verbose: false,
+      system_prompt: "Provide a quick, helpful answer."
+    }
+  end
+
+  @doc """
+  Lists all available preset names.
+
+  Useful for dynamic configuration or validation.
+
+  ## Examples
+
+      presets = ClaudeCodeSDK.OptionBuilder.available_presets()
+      # => [:development, :staging, :production, :analysis, :chat, :documentation, :testing]
+
+  """
+  @spec available_presets() :: [atom()]
+  def available_presets do
+    [:development, :staging, :production, :analysis, :chat, :documentation, :testing]
+  end
+
+  @doc """
+  Validates that an options struct has sensible configuration.
+
+  Checks for common misconfigurations and provides warnings.
+
+  ## Parameters
+
+  - `options` - Options struct to validate
+
+  ## Returns
+
+  - `{:ok, options}` if valid
+  - `{:warning, options, warnings}` if valid but has warnings
+  - `{:error, reason}` if invalid
+
+  ## Examples
+
+      options = ClaudeCodeSDK.OptionBuilder.build_development_options()
+      {:ok, _} = ClaudeCodeSDK.OptionBuilder.validate(options)
+
+  """
+  @spec validate(Options.t()) ::
+          {:ok, Options.t()} | {:warning, Options.t(), [String.t()]} | {:error, String.t()}
+  def validate(%Options{} = options) do
+    warnings =
+      []
+      |> check_turn_limit(options)
+      |> check_bypass_permissions(options)
+      |> check_bash_bypass_combination(options)
+
+    case warnings do
+      [] -> {:ok, options}
+      warnings -> {:warning, options, Enum.reverse(warnings)}
+    end
+  end
+
+  defp check_turn_limit(warnings, options) do
+    if options.max_turns && options.max_turns > 20 do
+      ["Turn limit very high (#{options.max_turns}), may be expensive" | warnings]
+    else
+      warnings
+    end
+  end
+
+  defp check_bypass_permissions(warnings, options) do
+    if options.permission_mode == :bypass_permissions && !options.cwd do
+      ["bypass_permissions without cwd could be unsafe" | warnings]
+    else
+      warnings
+    end
+  end
+
+  defp check_bash_bypass_combination(warnings, options) do
+    if options.allowed_tools && "Bash" in options.allowed_tools &&
+         options.permission_mode == :bypass_permissions do
+      ["Bash + bypass_permissions can be dangerous" | warnings]
+    else
+      warnings
+    end
   end
 end

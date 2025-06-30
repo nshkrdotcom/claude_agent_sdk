@@ -307,4 +307,326 @@ defmodule ClaudeCodeSDK.DebugModeTest do
       assert stats.content_length > 0
     end
   end
+
+  describe "profile_query/2" do
+    test "executes query with performance profiling" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          {messages, profile} = DebugMode.profile_query("test query")
+
+          assert is_list(messages)
+          assert is_map(profile)
+
+          # Check profile structure
+          assert Map.has_key?(profile, :execution_time_ms)
+          assert Map.has_key?(profile, :memory_delta_bytes)
+          assert Map.has_key?(profile, :peak_memory_mb)
+          assert Map.has_key?(profile, :message_count)
+          assert Map.has_key?(profile, :process_count)
+
+          # Check profile types
+          assert is_integer(profile.execution_time_ms)
+          assert is_integer(profile.memory_delta_bytes)
+          assert is_float(profile.peak_memory_mb)
+          assert is_integer(profile.message_count)
+          assert is_integer(profile.process_count)
+        end)
+
+      assert String.contains?(output, "📊 PERFORMANCE PROFILING ENABLED")
+      assert String.contains?(output, "📊 Profile Results:")
+      assert String.contains?(output, "Execution time:")
+      assert String.contains?(output, "Memory delta:")
+      assert String.contains?(output, "Peak memory:")
+      assert String.contains?(output, "Messages:")
+    end
+
+    test "profile_query works with custom options" do
+      options = %ClaudeCodeSDK.Options{max_turns: 1}
+
+      _output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          {_messages, profile} = DebugMode.profile_query("test", options)
+          assert profile.message_count >= 0
+        end)
+    end
+  end
+
+  describe "enhanced message inspection" do
+    test "inspect_message handles system messages" do
+      message = %Message{
+        type: :system,
+        subtype: :init,
+        data: %{session_id: "123", model: "claude-3"}
+      }
+
+      result = DebugMode.inspect_message(message)
+      assert String.contains?(result, "Message[system:init]")
+      assert String.contains?(result, "keys(")
+    end
+
+    test "inspect_message handles assistant messages" do
+      message = %Message{
+        type: :assistant,
+        data: %{message: %{"content" => "Hello world"}}
+      }
+
+      result = DebugMode.inspect_message(message)
+      assert String.contains?(result, "Message[assistant]:")
+      assert String.contains?(result, "Hello world")
+      assert String.contains?(result, "(11 chars)")
+    end
+
+    test "inspect_message handles result messages" do
+      message = %Message{
+        type: :result,
+        subtype: :success,
+        data: %{total_cost_usd: 0.025, duration_ms: 1500}
+      }
+
+      result = DebugMode.inspect_message(message)
+      assert String.contains?(result, "Message[result:success]:")
+      assert String.contains?(result, "cost=$0.025")
+      assert String.contains?(result, "duration=1500ms")
+    end
+
+    test "inspect_message truncates long content" do
+      long_content = String.duplicate("a", 200)
+
+      message = %Message{
+        type: :assistant,
+        data: %{message: %{"content" => long_content}}
+      }
+
+      result = DebugMode.inspect_message(message)
+      assert String.contains?(result, "...")
+      assert String.length(result) < String.length(long_content)
+    end
+
+    test "inspect_message handles messages without text" do
+      message = %Message{
+        type: :assistant,
+        data: %{message: %{}}
+      }
+
+      result = DebugMode.inspect_message(message)
+      assert String.contains?(result, "no text content")
+    end
+  end
+
+  describe "enhanced analysis functionality" do
+    test "analyzes tool usage in messages" do
+      messages = [
+        %Message{
+          type: :assistant,
+          data: %{
+            message: %{
+              "content" => [
+                %{"type" => "text", "text" => "Let me help"},
+                %{"type" => "tool_use", "name" => "Read"},
+                %{"type" => "tool_use", "name" => "Grep"}
+              ]
+            }
+          }
+        }
+      ]
+
+      stats = DebugMode.analyze_messages(messages)
+      assert length(stats.tools_used) == 2
+      assert "Read" in stats.tools_used
+      assert "Grep" in stats.tools_used
+    end
+
+    test "analyzes error conditions" do
+      messages = [
+        %Message{
+          type: :result,
+          subtype: :error,
+          data: %{error: "Something went wrong"}
+        }
+      ]
+
+      stats = DebugMode.analyze_messages(messages)
+      assert stats.success == false
+      assert :error in stats.errors
+    end
+
+    test "analyzes session and model information" do
+      messages = [
+        %Message{
+          type: :system,
+          data: %{session_id: "abc123", model: "claude-3-opus"}
+        }
+      ]
+
+      stats = DebugMode.analyze_messages(messages)
+      assert stats.session_id == "abc123"
+      assert stats.model_used == "claude-3-opus"
+    end
+
+    test "analyzes cost and duration from result messages" do
+      messages = [
+        %Message{
+          type: :result,
+          subtype: :success,
+          data: %{
+            total_cost_usd: 0.035,
+            duration_ms: 2500,
+            duration_api_ms: 2000,
+            num_turns: 3,
+            subtype: :success
+          }
+        }
+      ]
+
+      stats = DebugMode.analyze_messages(messages)
+      assert stats.total_cost_usd == 0.035
+      assert stats.duration_ms == 2500
+      assert stats.api_duration_ms == 2000
+      assert stats.turns_used == 3
+      assert stats.success == true
+    end
+
+    test "handles messages with mixed data formats" do
+      messages = [
+        %Message{
+          type: :system,
+          data: %{"session_id" => "string_key", :model => :atom_key}
+        },
+        %Message{
+          type: :result,
+          data: %{"subtype" => "success", total_cost_usd: 0.01}
+        }
+      ]
+
+      stats = DebugMode.analyze_messages(messages)
+      assert stats.session_id == "string_key"
+      assert stats.total_cost_usd == 0.01
+      assert stats.success == true
+    end
+  end
+
+  describe "enhanced debugging output" do
+    @tag :skip
+    test "debug_query shows comprehensive timing (skipped - calls AuthChecker)" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          DebugMode.debug_query("test query")
+        end)
+
+      assert String.contains?(output, "🐛 DEBUG MODE ENABLED")
+      assert String.contains?(output, "Prompt:")
+      assert String.contains?(output, "Options:")
+      assert String.contains?(output, "Auth:")
+      assert String.contains?(output, "Environment:")
+      assert String.contains?(output, "Starting query execution...")
+      assert String.contains?(output, "🏁 Debug completed")
+    end
+
+    @tag :skip
+    test "debug_query shows error handling (skipped - calls AuthChecker)" do
+      # Mock an error scenario
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          try do
+            # This should cause an error
+            DebugMode.debug_query(nil)
+          rescue
+            _ -> :ok
+          end
+        end)
+
+      # Should contain error handling output
+      assert String.contains?(output, "🐛 DEBUG MODE ENABLED")
+    end
+
+    test "benchmark shows detailed progress" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          DebugMode.benchmark("test", nil, 2)
+        end)
+
+      assert String.contains?(output, "📊 Benchmarking 2 run(s)")
+      assert String.contains?(output, "Run 1/2")
+      assert String.contains?(output, "Run 2/2")
+      assert String.contains?(output, "📊 Benchmark Results:")
+      assert String.contains?(output, "Avg Duration:")
+      assert String.contains?(output, "Min/Max:")
+      assert String.contains?(output, "Avg Cost:")
+      assert String.contains?(output, "Total Cost:")
+    end
+  end
+
+  describe "diagnostic functionality" do
+    @tag :skip
+    test "run_diagnostics provides comprehensive system check (skipped in test env)" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          :ok = DebugMode.run_diagnostics()
+        end)
+
+      assert String.contains?(output, "🔍 Running Claude Code SDK Diagnostics...")
+      assert String.contains?(output, "CLI Status:")
+      assert String.contains?(output, "Authentication:")
+      assert String.contains?(output, "📋 Environment:")
+      assert String.contains?(output, "Mix env:")
+      assert String.contains?(output, "Mock enabled:")
+      assert String.contains?(output, "Elixir:")
+      assert String.contains?(output, "OTP:")
+      assert String.contains?(output, "🔌 Testing basic connectivity...")
+    end
+
+    @tag :skip
+    test "run_diagnostics shows recommendations when issues found (skipped in test env)" do
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          DebugMode.run_diagnostics()
+        end)
+
+      # Should either show "All systems operational!" or recommendations
+      condition1 = String.contains?(output, "✅ All systems operational!")
+      condition2 = String.contains?(output, "💡 Recommendations:")
+
+      assert condition1 or condition2
+    end
+  end
+
+  describe "utility functions" do
+    test "handles empty analysis correctly" do
+      stats = DebugMode.analyze_messages([])
+
+      assert stats.total_messages == 0
+      assert stats.message_types == %{}
+      assert stats.content_length == 0
+      assert stats.tools_used == []
+      assert stats.errors == []
+      assert stats.success == false
+    end
+
+    test "finalizes analysis properly" do
+      # Test that MapSet is converted to list and errors are reversed
+      messages = [
+        %Message{
+          type: :assistant,
+          data: %{
+            message: %{
+              "content" => [
+                %{"type" => "tool_use", "name" => "Tool1"},
+                %{"type" => "tool_use", "name" => "Tool2"}
+              ]
+            }
+          }
+        }
+      ]
+
+      stats = DebugMode.analyze_messages(messages)
+
+      # tools_used should be a list, not MapSet
+      assert is_list(stats.tools_used)
+      assert length(stats.tools_used) == 2
+
+      # Should contain both tools
+      assert "Tool1" in stats.tools_used
+      assert "Tool2" in stats.tools_used
+    end
+  end
 end

@@ -109,7 +109,7 @@ defmodule ClaudeCodeSDK.AuthCheckerTest do
     test "provides install recommendation when CLI not found (skipped in test env)" do
       diagnosis = AuthChecker.diagnose()
 
-      if diagnosis.status == :not_installed do
+      if diagnosis.status == :cli_not_found do
         assert Enum.any?(diagnosis.recommendations, &String.contains?(&1, "npm install"))
       end
     end
@@ -129,6 +129,196 @@ defmodule ClaudeCodeSDK.AuthCheckerTest do
 
       if diagnosis.status == :ready do
         assert diagnosis.recommendations == []
+      end
+    end
+  end
+
+  describe "auth_method_available?/1" do
+    @tag :skip
+    test "returns boolean for valid auth methods (skipped - calls CLI)" do
+      assert is_boolean(AuthChecker.auth_method_available?(:anthropic))
+      assert is_boolean(AuthChecker.auth_method_available?(:bedrock))
+      assert is_boolean(AuthChecker.auth_method_available?(:vertex))
+    end
+
+    test "returns false for invalid auth methods" do
+      assert AuthChecker.auth_method_available?(:invalid) == false
+      assert AuthChecker.auth_method_available?(:unknown) == false
+      assert AuthChecker.auth_method_available?(nil) == false
+    end
+  end
+
+  describe "get_api_key_source/0" do
+    @tag :skip
+    test "returns tuple with ok or error (skipped - calls CLI)" do
+      result = AuthChecker.get_api_key_source()
+      assert match?({:ok, _}, result) or match?({:error, _}, result)
+    end
+
+    test "detects environment variable when set" do
+      # Mock the environment variable
+      System.put_env("ANTHROPIC_API_KEY", "test-key")
+
+      try do
+        {:ok, source} = AuthChecker.get_api_key_source()
+        assert String.contains?(source, "ANTHROPIC_API_KEY")
+      after
+        System.delete_env("ANTHROPIC_API_KEY")
+      end
+    end
+
+    test "detects bedrock configuration when set" do
+      System.put_env("CLAUDE_CODE_USE_BEDROCK", "1")
+      System.put_env("AWS_ACCESS_KEY_ID", "test-key")
+
+      try do
+        result = AuthChecker.get_api_key_source()
+
+        case result do
+          {:ok, source} -> assert String.contains?(source, "AWS")
+          # May not have full AWS setup
+          {:error, _} -> :ok
+        end
+      after
+        System.delete_env("CLAUDE_CODE_USE_BEDROCK")
+        System.delete_env("AWS_ACCESS_KEY_ID")
+      end
+    end
+
+    test "detects vertex configuration when set" do
+      System.put_env("CLAUDE_CODE_USE_VERTEX", "1")
+      System.put_env("GOOGLE_CLOUD_PROJECT", "test-project")
+
+      try do
+        result = AuthChecker.get_api_key_source()
+
+        case result do
+          {:ok, source} -> assert String.contains?(source, "Google")
+          # May not have full GCP setup
+          {:error, _} -> :ok
+        end
+      after
+        System.delete_env("CLAUDE_CODE_USE_VERTEX")
+        System.delete_env("GOOGLE_CLOUD_PROJECT")
+      end
+    end
+  end
+
+  describe "diagnosis struct validation" do
+    @tag :skip
+    test "diagnosis contains all required fields (skipped in test env)" do
+      diagnosis = AuthChecker.diagnose()
+
+      # Test all required fields exist
+      required_fields = [
+        :cli_installed,
+        :cli_version,
+        :cli_path,
+        :cli_error,
+        :authenticated,
+        :auth_method,
+        :auth_info,
+        :auth_error,
+        :api_key_source,
+        :status,
+        :recommendations,
+        :last_checked
+      ]
+
+      for field <- required_fields do
+        assert Map.has_key?(diagnosis, field), "Missing field: #{field}"
+      end
+
+      # Test field types
+      assert is_boolean(diagnosis.cli_installed)
+      assert is_boolean(diagnosis.authenticated)
+
+      assert diagnosis.status in [
+               :ready,
+               :cli_not_found,
+               :not_authenticated,
+               :invalid_credentials,
+               :unknown
+             ]
+
+      assert is_list(diagnosis.recommendations)
+      assert %DateTime{} = diagnosis.last_checked
+    end
+
+    @tag :skip
+    test "diagnosis fields are consistent (skipped in test env)" do
+      diagnosis = AuthChecker.diagnose()
+
+      # If CLI not installed, other fields should reflect this
+      if not diagnosis.cli_installed do
+        assert diagnosis.status == :cli_not_found
+        assert diagnosis.cli_error != nil
+        assert diagnosis.authenticated == false
+      end
+
+      # If authenticated, should have auth info
+      if diagnosis.authenticated do
+        assert diagnosis.auth_method != nil
+        assert diagnosis.status in [:ready]
+      end
+
+      # Status should match overall state
+      case diagnosis.status do
+        :ready ->
+          assert diagnosis.cli_installed == true
+          assert diagnosis.authenticated == true
+
+        :cli_not_found ->
+          assert diagnosis.cli_installed == false
+
+        :not_authenticated ->
+          assert diagnosis.cli_installed == true
+          assert diagnosis.authenticated == false
+      end
+    end
+  end
+
+  describe "enhanced multi-provider auth support" do
+    @tag :skip
+    test "supports multiple authentication providers (skipped - calls CLI)" do
+      # Test that all expected providers are recognized
+      providers = [:anthropic, :bedrock, :vertex]
+
+      for provider <- providers do
+        # Should return boolean without error
+        result = AuthChecker.auth_method_available?(provider)
+        assert is_boolean(result)
+      end
+    end
+
+    @tag :skip
+    test "provides provider-specific recommendations (skipped in test env)" do
+      # Test with Bedrock environment
+      System.put_env("CLAUDE_CODE_USE_BEDROCK", "1")
+
+      try do
+        diagnosis = AuthChecker.diagnose()
+
+        if diagnosis.status == :not_authenticated do
+          bedrock_rec = Enum.any?(diagnosis.recommendations, &String.contains?(&1, "AWS"))
+          assert bedrock_rec, "Should include AWS-specific recommendations"
+        end
+      after
+        System.delete_env("CLAUDE_CODE_USE_BEDROCK")
+      end
+
+      # Test with Vertex environment
+      System.put_env("CLAUDE_CODE_USE_VERTEX", "1")
+
+      try do
+        diagnosis = AuthChecker.diagnose()
+
+        if diagnosis.status == :not_authenticated do
+          vertex_rec = Enum.any?(diagnosis.recommendations, &String.contains?(&1, "GCP"))
+          assert vertex_rec, "Should include GCP-specific recommendations"
+        end
+      after
+        System.delete_env("CLAUDE_CODE_USE_VERTEX")
       end
     end
   end
