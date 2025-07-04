@@ -346,12 +346,12 @@ defmodule ClaudeCodeSDK.AuthChecker do
         {false, nil}
 
       _path ->
-        case System.cmd("claude", ["--version"], stderr_to_stdout: true) do
-          {version_output, 0} ->
-            version = String.trim(version_output)
+        case execute_with_timeout("claude --version", 10_000) do
+          {:ok, output} ->
+            version = String.trim(output)
             {true, version}
 
-          {_error, _code} ->
+          {:error, _} ->
             # CLI found but version check failed
             {true, nil}
         end
@@ -368,11 +368,10 @@ defmodule ClaudeCodeSDK.AuthChecker do
   end
 
   defp execute_auth_test do
-    case System.cmd("claude", ["--print", "test", "--output-format", "json"],
-           stderr_to_stdout: true
-         ) do
-      {output, 0} -> validate_cli_output(output)
-      {error, _code} -> parse_cli_error(error)
+    case execute_with_timeout("claude --print test --output-format json", 30_000) do
+      {:ok, output} -> validate_cli_output(output)
+      {:error, :timeout} -> {:error, :timeout}
+      {:error, error} -> parse_cli_error(error)
     end
   end
 
@@ -437,17 +436,15 @@ defmodule ClaudeCodeSDK.AuthChecker do
 
   defp check_cli_session do
     # Try a simple test command to see if CLI is authenticated
-    case System.cmd("claude", ["--version"], stderr_to_stdout: true) do
-      {_output, 0} ->
+    case execute_with_timeout("claude --version", 10_000) do
+      {:ok, _output} ->
         # CLI works, now test auth with a minimal query
-        case System.cmd("claude", ["--print", "hello", "--max-turns", "1"],
-               stderr_to_stdout: true
-             ) do
-          {_output, 0} -> true
-          {_error, _} -> false
+        case execute_with_timeout("claude --print hello --max-turns 1", 30_000) do
+          {:ok, _output} -> true
+          {:error, _} -> false
         end
 
-      {_error, _} ->
+      {:error, _} ->
         false
     end
   end
@@ -529,6 +526,36 @@ defmodule ClaudeCodeSDK.AuthChecker do
 
       true ->
         ["Or set ANTHROPIC_API_KEY environment variable"]
+    end
+  end
+
+  defp execute_with_timeout(command, timeout_ms) do
+    # Start erlexec application if not already running
+    case Application.ensure_all_started(:erlexec) do
+      {:ok, _} -> :ok
+      {:error, reason} -> raise "Failed to start erlexec application: #{inspect(reason)}"
+    end
+
+    # Execute with timeout using erlexec
+    case :exec.run(command, [:sync, :stdout, :stderr, {:timeout, timeout_ms}]) do
+      {:ok, result} ->
+        # Extract stdout data
+        stdout_data = get_in(result, [:stdout]) || []
+        output = Enum.join(stdout_data, "")
+        {:ok, output}
+
+      {:error, [exit_status: status, stdout: stdout_data, stderr: stderr_data]} ->
+        # Command failed with exit status
+        stdout_text = if is_list(stdout_data), do: Enum.join(stdout_data, ""), else: ""
+        stderr_text = if is_list(stderr_data), do: Enum.join(stderr_data, ""), else: ""
+        error_text = if stderr_text != "", do: stderr_text, else: stdout_text
+        {:error, "Command failed (exit #{status}): #{error_text}"}
+
+      {:error, :timeout} ->
+        {:error, :timeout}
+
+      {:error, reason} ->
+        {:error, "Command failed: #{inspect(reason)}"}
     end
   end
 end
