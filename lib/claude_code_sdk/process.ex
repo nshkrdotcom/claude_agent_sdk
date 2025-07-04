@@ -63,8 +63,11 @@ defmodule ClaudeCodeSDK.Process do
     # Build the command
     cmd = build_claude_command(args, options)
 
+    # Build exec options with working directory if specified
+    exec_options = build_exec_options(options)
+
     # Execute with erlexec - use sync mode to capture all output
-    case :exec.run(cmd, [:sync, :stdout, :stderr]) do
+    case :exec.run(cmd, exec_options) do
       {:ok, result} ->
         # Process the synchronous result and convert to streaming format
         %{
@@ -76,7 +79,7 @@ defmodule ClaudeCodeSDK.Process do
         }
 
       {:error, reason} ->
-        formatted_error = format_error_message(reason)
+        formatted_error = format_error_message(reason, options)
 
         error_msg = %Message{
           type: :result,
@@ -106,6 +109,23 @@ defmodule ClaudeCodeSDK.Process do
     # Build command with proper shell escaping
     quoted_args = Enum.map(final_args, &shell_escape/1)
     Enum.join([executable | quoted_args], " ")
+  end
+
+  defp build_exec_options(options) do
+    base_options = [:sync, :stdout, :stderr]
+
+    case options.cwd do
+      nil ->
+        base_options
+
+      cwd ->
+        # Ensure the directory exists
+        unless File.dir?(cwd) do
+          File.mkdir_p!(cwd)
+        end
+
+        [{:cd, cwd} | base_options]
+    end
   end
 
   defp shell_escape(arg) do
@@ -233,26 +253,31 @@ defmodule ClaudeCodeSDK.Process do
     :ok
   end
 
-  defp format_error_message(reason) do
+  defp format_error_message(reason, options) do
+    cwd_info = if options.cwd, do: " (cwd: #{options.cwd})", else: ""
+
     case reason do
       [exit_status: status, stdout: stdout_data] when is_list(stdout_data) ->
         # Extract and format JSON from stdout
         json_output = Enum.join(stdout_data, "")
         formatted_json = format_json_output(json_output)
-        "Failed to execute claude (exit status: #{status}):\n#{formatted_json}"
+        "Failed to execute claude#{cwd_info} (exit status: #{status}):\n#{formatted_json}"
 
-      [exit_status: status, stdout: stdout_data, stderr: _stderr_data]
+      [exit_status: status, stdout: stdout_data, stderr: stderr_data]
       when is_list(stdout_data) ->
         # Extract and format JSON from stdout
         json_output = Enum.join(stdout_data, "")
         formatted_json = format_json_output(json_output)
-        "Failed to execute claude (exit status: #{status}):\n#{formatted_json}"
+        stderr_text = if is_list(stderr_data), do: Enum.join(stderr_data, ""), else: ""
+        error_details = if stderr_text != "", do: "\nstderr: #{stderr_text}", else: ""
+
+        "Failed to execute claude#{cwd_info} (exit status: #{status}):\n#{formatted_json}#{error_details}"
 
       [exit_status: status] ->
-        "Failed to execute claude (exit status: #{status})"
+        "Failed to execute claude#{cwd_info} (exit status: #{status})"
 
       other ->
-        "Failed to execute claude: #{inspect(other)}"
+        "Failed to execute claude#{cwd_info}: #{inspect(other)}"
     end
   end
 
