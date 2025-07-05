@@ -17,11 +17,11 @@ defmodule ClaudeCodeSDK.Query do
   ## Parameters
 
   - `prompt` - The prompt to send to Claude (string)
-  - `options` - Configuration options (see `ClaudeCodeSDK.Options.t/0`)
+  - `options` - Configuration options (see `t:ClaudeCodeSDK.Options.t/0`)
 
   ## Returns
 
-  A stream of `ClaudeCodeSDK.Message.t/0` structs.
+  A stream of `t:ClaudeCodeSDK.Message.t/0` structs.
 
   ## Examples
 
@@ -40,11 +40,11 @@ defmodule ClaudeCodeSDK.Query do
   ## Parameters
 
   - `prompt` - Optional additional prompt to send (string or nil)
-  - `options` - Configuration options (see `ClaudeCodeSDK.Options.t/0`)
+  - `options` - Configuration options (see `t:ClaudeCodeSDK.Options.t/0`)
 
   ## Returns
 
-  A stream of `ClaudeCodeSDK.Message.t/0` structs.
+  A stream of `t:ClaudeCodeSDK.Message.t/0` structs.
 
   ## Examples
 
@@ -72,11 +72,11 @@ defmodule ClaudeCodeSDK.Query do
 
   - `session_id` - The session ID to resume (string)
   - `prompt` - Optional additional prompt to send (string or nil)
-  - `options` - Configuration options (see `ClaudeCodeSDK.Options.t/0`)
+  - `options` - Configuration options (see `t:ClaudeCodeSDK.Options.t/0`)
 
   ## Returns
 
-  A stream of `ClaudeCodeSDK.Message.t/0` structs.
+  A stream of `t:ClaudeCodeSDK.Message.t/0` structs.
 
   ## Examples
 

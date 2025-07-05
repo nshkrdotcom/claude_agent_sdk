@@ -4,6 +4,35 @@
 
 An Elixir SDK for programmatically interacting with Claude Code. This library provides a simple interface to query Claude and handle responses using the familiar Elixir streaming patterns.
 
+## Architecture
+
+```mermaid
+graph TB
+    subgraph "Your Elixir Application"
+        A[ClaudeCodeSDK] --> B[Process Manager]
+        B --> C[Message Parser]
+        B --> D[Auth Checker]
+    end
+    
+    subgraph "Claude Code CLI"
+        E[claude-code executable]
+        E --> F[API Communication]
+    end
+    
+    subgraph "Claude API"
+        G[Claude Service]
+    end
+    
+    A -->|spawn & control| E
+    E -->|HTTPS| G
+    G -->|Responses| E
+    E -->|JSON stream| B
+    C -->|Parsed Messages| A
+    
+    style A fill:#4a9eff,stroke:#2d7dd2,stroke-width:2px,color:#000
+    style G fill:#ff6b6b,stroke:#ff4757,stroke-width:2px,color:#000
+```
+
 ## Prerequisites
 
 This SDK requires the Claude Code CLI to be installed:
@@ -14,15 +43,20 @@ npm install -g @anthropic-ai/claude-code
 
 ## Installation
 
-Add dependencies to your `mix.exs`:
+Add `claude_code_sdk` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:erlexec, "~> 2.0"},
-    {:ex_doc, "~> 0.31", only: :dev, runtime: false}
+    {:claude_code_sdk, "~> 0.0.1"}
   ]
 end
+```
+
+Then run:
+
+```bash
+mix deps.get
 ```
 
 ## Quick Start
@@ -654,4 +688,4 @@ The comprehensive manual includes:
 
 ## License
 
-Apache License 2.0
+MIT License

@@ -20,11 +20,11 @@ defmodule ClaudeCodeSDK.Process do
   ## Parameters
 
   - `args` - List of command-line arguments for the Claude CLI
-  - `options` - Configuration options (see `ClaudeCodeSDK.Options.t/0`)
+  - `options` - Configuration options (see `t:ClaudeCodeSDK.Options.t/0`)
 
   ## Returns
 
-  A stream of `ClaudeCodeSDK.Message.t/0` structs.
+  A stream of `t:ClaudeCodeSDK.Message.t/0` structs.
 
   ## Examples
 

@@ -90,7 +90,7 @@ defmodule ClaudeCodeSDK.Options do
 
   ## Returns
 
-  A new `ClaudeCodeSDK.Options.t/0` struct with the specified attributes.
+  A new `t:ClaudeCodeSDK.Options.t/0` struct with the specified attributes.
 
   ## Examples
 
