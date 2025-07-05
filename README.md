@@ -46,19 +46,27 @@ end
    mix showcase --live
    ```
 
+4. **Try the live script runner**:
+   ```bash
+   # Run example scripts with live API calls
+   mix run.live examples/basic_example.exs
+   mix run.live examples/simple_analyzer.exs lib/claude_code_sdk.ex
+   ```
+
 ## Implementation Status
 
 ### ✅ **Currently Implemented**
-- **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` 
+- **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
+- **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
-- **Options Configuration**: Full CLI argument mapping with smart presets
-- **Subprocess Management**: Robust erlexec integration
+- **Options Configuration**: Full CLI argument mapping with smart presets and correct CLI formats
+- **Subprocess Management**: Robust erlexec integration with stdin support
 - **JSON Parsing**: Custom parser without external dependencies
 - **Authentication**: CLI delegation with status checking and diagnostics
-- **Error Handling**: Basic error detection and reporting
+- **Error Handling**: Improved error detection and timeout handling
 - **Stream Processing**: Lazy evaluation with Elixir Streams
-- **Mocking System**: Comprehensive testing without API calls
-- **Code Quality**: Full dialyzer and credo compliance
+- **Mocking System**: Comprehensive testing without API calls (supports stdin workflows)
+- **Code Quality**: Full dialyzer and credo compliance with refactored complex functions
 - **Developer Tools**: ContentExtractor, AuthChecker, OptionBuilder, DebugMode
 - **Smart Configuration**: Environment-aware defaults and preset configurations
 
@@ -163,6 +171,77 @@ mix showcase --live
 
 **🌟 Start with `mix showcase` for a complete overview of all features!**
 
+## Live Script Runner
+
+The SDK includes a powerful `mix run.live` task for executing Elixir scripts with live Claude API calls:
+
+### Usage
+
+```bash
+# Run any .exs script with live API
+mix run.live script.exs [args...]
+
+# Examples
+mix run.live examples/basic_example.exs
+mix run.live examples/simple_analyzer.exs lib/claude_code_sdk.ex
+mix run.live examples/file_reviewer.exs path/to/your/file.txt
+```
+
+### Features
+
+- **🔴 Live API Integration**: Makes real Claude API calls with proper stdin handling
+- **⚠️ Cost Warnings**: Clear warnings about API usage and costs
+- **📄 Argument Passing**: Supports passing arguments to scripts
+- **🛡️ Safe by Default**: Requires explicit live mode activation
+- **🎭 Mock Fallback**: Scripts can still run in mock mode during development
+
+### Difference from Regular `mix run`
+
+| **Command** | **API Calls** | **Costs** | **Authentication Required** |
+|-------------|---------------|-----------|---------------------------|
+| `mix run script.exs` | None (mock mode) | $0.00 | No |
+| `mix run.live script.exs` | Real API calls | Real costs | Yes (`claude login`) |
+
+### Example Scripts
+
+The SDK includes several example scripts you can run immediately:
+
+```bash
+# Basic factorial function generation
+mix run.live examples/basic_example.exs
+
+# Code analysis with file input
+mix run.live examples/simple_analyzer.exs lib/claude_code_sdk.ex
+
+# Simple batch processing
+mix run.live examples/simple_batch.exs
+
+# File review and analysis
+mix run.live examples/file_reviewer.exs README.md
+```
+
+### Creating Your Own Live Scripts
+
+Create scripts that automatically work in both mock and live modes:
+
+```elixir
+#!/usr/bin/env elixir
+
+# Check if we're in live mode
+if Application.get_env(:claude_code_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeCodeSDK.Mock.start_link()
+  IO.puts("🎭 Mock mode enabled")
+else
+  IO.puts("🔴 Live mode enabled")
+end
+
+# Your script logic here...
+response = ClaudeCodeSDK.query("Your prompt here")
+|> extract_response()
+
+IO.puts("Response: #{response}")
+```
+
 ### 🎭 Mock vs Live Mode
 
 **All examples and tests can run in two modes:**
@@ -199,6 +278,8 @@ The showcase demonstrates all SDK functionality:
 | `mix test.live` | ✅ Working | Live mode, properly warns about costs |
 | `mix run example.exs` | ✅ Working | Uses mock mode by default, auto-starts Mock |
 | `mix run examples/simple_analyzer.exs` | ✅ Working | Uses mock mode by default |
+| `mix run.live examples/basic_example.exs` | ✅ Working | Live mode, real API calls, stdin support |
+| `mix run.live examples/simple_analyzer.exs` | ✅ Working | Live mode, file analysis with arguments |
 
 ## API Reference
 
@@ -382,6 +463,20 @@ claude login
 **Process errors**: Ensure Claude CLI is installed:
 ```bash
 npm install -g @anthropic-ai/claude-code
+```
+
+**CLI argument format errors**: Recent improvements have fixed common CLI format issues:
+- Output format: Now correctly uses `stream-json` instead of `stream_json`
+- Permission modes: Now correctly uses `acceptEdits` instead of `accept_edits`
+- These fixes ensure compatibility with the latest Claude CLI versions
+
+**Live mode not working**: Make sure you're using `mix run.live` for live API calls:
+```bash
+# ❌ Won't make live API calls
+mix run examples/basic_example.exs
+
+# ✅ Makes live API calls
+mix run.live examples/basic_example.exs
 ```
 
 ### Debug Mode

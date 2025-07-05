@@ -35,13 +35,13 @@ defmodule ClaudeCodeSDK.Mock.Process do
 
   alias ClaudeCodeSDK.{Message, Mock, Options}
 
-  @spec stream([String.t()], Options.t()) :: Enumerable.t()
+  @spec stream([String.t()], Options.t(), String.t() | nil) :: Enumerable.t()
   @doc """
   Streams mock messages instead of running the actual CLI.
   """
-  def stream(args, %Options{} = _options) do
-    # Extract the prompt from args (it's usually the last argument)
-    prompt = extract_prompt(args)
+  def stream(args, %Options{} = _options, stdin_input \\ nil) do
+    # Extract the prompt from args or use stdin_input
+    prompt = stdin_input || extract_prompt(args)
 
     # Get mock response
     messages = Mock.get_response(prompt)

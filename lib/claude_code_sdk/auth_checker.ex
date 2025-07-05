@@ -530,32 +530,47 @@ defmodule ClaudeCodeSDK.AuthChecker do
   end
 
   defp execute_with_timeout(command, timeout_ms) do
-    # Start erlexec application if not already running
+    with :ok <- ensure_erlexec_started() do
+      run_command_with_timeout(command, timeout_ms)
+    end
+  end
+
+  defp ensure_erlexec_started do
     case Application.ensure_all_started(:erlexec) do
       {:ok, _} -> :ok
       {:error, reason} -> raise "Failed to start erlexec application: #{inspect(reason)}"
     end
+  end
 
-    # Execute with timeout using erlexec
+  defp run_command_with_timeout(command, timeout_ms) do
     case :exec.run(command, [:sync, :stdout, :stderr, {:timeout, timeout_ms}]) do
       {:ok, result} ->
-        # Extract stdout data
-        stdout_data = get_in(result, [:stdout]) || []
-        output = Enum.join(stdout_data, "")
-        {:ok, output}
+        handle_successful_execution(result)
 
-      {:error, [exit_status: status, stdout: stdout_data, stderr: stderr_data]} ->
-        # Command failed with exit status
-        stdout_text = if is_list(stdout_data), do: Enum.join(stdout_data, ""), else: ""
-        stderr_text = if is_list(stderr_data), do: Enum.join(stderr_data, ""), else: ""
-        error_text = if stderr_text != "", do: stderr_text, else: stdout_text
-        {:error, "Command failed (exit #{status}): #{error_text}"}
-
-      {:error, :timeout} ->
-        {:error, :timeout}
-
-      {:error, reason} ->
-        {:error, "Command failed: #{inspect(reason)}"}
+      {:error, error_data} ->
+        handle_execution_error(error_data)
     end
+  end
+
+  defp handle_successful_execution(result) do
+    stdout_data = get_in(result, [:stdout]) || []
+    output = Enum.join(stdout_data, "")
+    {:ok, output}
+  end
+
+  defp handle_execution_error([exit_status: status, stdout: stdout_data, stderr: stderr_data]) do
+    error_text = extract_error_text(stdout_data, stderr_data)
+    {:error, "Command failed (exit #{status}): #{error_text}"}
+  end
+
+  defp handle_execution_error(:timeout), do: {:error, :timeout}
+
+  defp handle_execution_error(reason), do: {:error, "Command failed: #{inspect(reason)}"}
+
+  defp extract_error_text(stdout_data, stderr_data) do
+    stdout_text = if is_list(stdout_data), do: Enum.join(stdout_data, ""), else: ""
+    stderr_text = if is_list(stderr_data), do: Enum.join(stderr_data, ""), else: ""
+
+    if stderr_text != "", do: stderr_text, else: stdout_text
   end
 end

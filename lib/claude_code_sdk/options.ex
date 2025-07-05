@@ -145,7 +145,14 @@ defmodule ClaudeCodeSDK.Options do
   defp add_output_format_args(args, %{output_format: nil}), do: args
 
   defp add_output_format_args(args, %{output_format: format}) do
-    format_args = ["--output-format", to_string(format)]
+    # Convert format atom to CLI string format
+    format_string =
+      case format do
+        :stream_json -> "stream-json"
+        other -> to_string(other)
+      end
+
+    format_args = ["--output-format", format_string]
     # CLI requires --verbose when using stream-json with --print
     if format == :stream_json do
       args ++ format_args ++ ["--verbose"]
@@ -189,8 +196,17 @@ defmodule ClaudeCodeSDK.Options do
 
   defp add_permission_mode_args(args, %{permission_mode: nil}), do: args
 
-  defp add_permission_mode_args(args, %{permission_mode: mode}),
-    do: args ++ ["--permission-mode", to_string(mode)]
+  defp add_permission_mode_args(args, %{permission_mode: mode}) do
+    # Convert permission mode atom to CLI string format
+    mode_string =
+      case mode do
+        :accept_edits -> "acceptEdits"
+        :bypass_permissions -> "bypassPermissions"
+        other -> to_string(other)
+      end
+
+    args ++ ["--permission-mode", mode_string]
+  end
 
   defp add_verbose_args(args, %{verbose: true}), do: args ++ ["--verbose"]
   defp add_verbose_args(args, _), do: args

@@ -30,8 +30,8 @@ defmodule ClaudeCodeSDK.Query do
   """
   @spec run(String.t(), Options.t()) :: Enumerable.t(ClaudeCodeSDK.Message.t())
   def run(prompt, %Options{} = options) do
-    args = build_args(prompt, options)
-    Process.stream(args, options)
+    {args, stdin_prompt} = build_args(prompt, options)
+    Process.stream(args, options, stdin_prompt)
   end
 
   @doc """
@@ -57,12 +57,12 @@ defmodule ClaudeCodeSDK.Query do
     # For continue, we need to ensure --print is included if we have a prompt
     args =
       if prompt do
-        ["--print", "--continue", prompt] ++ Enum.reject(base_args, &(&1 == "--print"))
+        ["--print", "--continue"] ++ Enum.reject(base_args, &(&1 == "--print"))
       else
         ["--continue"] ++ base_args
       end
 
-    Process.stream(args, options)
+    Process.stream(args, options, prompt)
   end
 
   @doc """
@@ -90,16 +90,17 @@ defmodule ClaudeCodeSDK.Query do
     # For resume, we need to ensure --print is included if we have a prompt
     args =
       if prompt do
-        ["--print", "--resume", session_id, prompt] ++ Enum.reject(base_args, &(&1 == "--print"))
+        ["--print", "--resume", session_id] ++ Enum.reject(base_args, &(&1 == "--print"))
       else
         ["--resume", session_id] ++ base_args
       end
 
-    Process.stream(args, options)
+    Process.stream(args, options, prompt)
   end
 
   defp build_args(prompt, options) do
     # Add --print to run non-interactively
-    ["--print"] ++ Options.to_args(options) ++ [prompt]
+    # The prompt needs to be passed separately since --print expects stdin input
+    {["--print"] ++ Options.to_args(options), prompt}
   end
 end

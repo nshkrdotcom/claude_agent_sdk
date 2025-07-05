@@ -13,7 +13,8 @@ defmodule ClaudeCodeSdk.MixProject do
       docs: docs(),
       dialyzer: dialyzer(),
       preferred_cli_env: [
-        "test.live": :test
+        "test.live": :test,
+        "run.live": :dev
       ]
     ]
   end
