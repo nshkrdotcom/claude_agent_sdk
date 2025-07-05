@@ -151,15 +151,16 @@ defmodule ClaudeCodeSDK.Process do
       {:stdout, ^os_pid, data} ->
         # Check for challenge URL in the output
         combined_output = [data | stdout_acc] |> Enum.reverse() |> Enum.join()
+
         if challenge_url = detect_challenge_url(combined_output) do
           # Challenge URL detected - dump it and terminate
           IO.puts("\n🔐 Challenge URL detected:")
           IO.puts("#{challenge_url}")
           IO.puts("\nTerminating process...")
-          
+
           # Stop the process
           :exec.stop(pid)
-          
+
           # Return a special error message indicating challenge URL was detected
           error_msg = %Message{
             type: :result,
@@ -185,15 +186,16 @@ defmodule ClaudeCodeSDK.Process do
       {:stderr, ^os_pid, data} ->
         # Also check stderr for challenge URL
         combined_output = [data | stderr_acc] |> Enum.reverse() |> Enum.join()
+
         if challenge_url = detect_challenge_url(combined_output) do
           # Challenge URL detected - dump it and terminate
           IO.puts("\n🔐 Challenge URL detected:")
           IO.puts("#{challenge_url}")
           IO.puts("\nTerminating process...")
-          
+
           # Stop the process
           :exec.stop(pid)
-          
+
           # Return a special error message indicating challenge URL was detected
           error_msg = %Message{
             type: :result,
@@ -338,17 +340,19 @@ defmodule ClaudeCodeSDK.Process do
       IO.puts("\n🔐 Challenge URL detected:")
       IO.puts("#{challenge_url}")
       IO.puts("\nTerminating process...")
-      
-      [%Message{
-        type: :result,
-        subtype: :authentication_required,
-        data: %{
-          error: "Authentication challenge detected",
-          challenge_url: challenge_url,
-          session_id: "auth_challenge",
-          is_error: true
+
+      [
+        %Message{
+          type: :result,
+          subtype: :authentication_required,
+          data: %{
+            error: "Authentication challenge detected",
+            challenge_url: challenge_url,
+            session_id: "auth_challenge",
+            is_error: true
+          }
         }
-      }]
+      ]
     else
       # Parse JSON messages from the output
       combined_text
@@ -470,6 +474,7 @@ defmodule ClaudeCodeSDK.Process do
       {:ok, _parsed} ->
         # Since we don't have a pretty print encoder, just return the line
         line
+
       {:error, _} ->
         # If parsing fails, return the original line
         line
@@ -500,15 +505,18 @@ defmodule ClaudeCodeSDK.Process do
 
     # Try each pattern
     Enum.find_value(patterns, fn pattern ->
-      case Regex.run(pattern, output) do
-        [full_match | _captures] ->
-          # Extract just the URL part if it's embedded in a larger match
-          url = extract_url_from_match(full_match)
-          if valid_challenge_url?(url), do: url, else: nil
-        nil ->
-          nil
-      end
+      pattern
+      |> Regex.run(output)
+      |> process_regex_match()
     end)
+  end
+
+  # Process regex match result
+  defp process_regex_match(nil), do: nil
+
+  defp process_regex_match([full_match | _captures]) do
+    url = extract_url_from_match(full_match)
+    if valid_challenge_url?(url), do: url, else: nil
   end
 
   # Extract clean URL from a regex match
@@ -524,10 +532,10 @@ defmodule ClaudeCodeSDK.Process do
   defp valid_challenge_url?(url) do
     String.starts_with?(url, "https://") and
       (String.contains?(url, "anthropic.com") or
-       String.contains?(url, "challenge") or
-       String.contains?(url, "auth") or
-       String.contains?(url, "login") or
-       String.contains?(url, "verify") or
-       String.contains?(url, "oauth"))
+         String.contains?(url, "challenge") or
+         String.contains?(url, "auth") or
+         String.contains?(url, "login") or
+         String.contains?(url, "verify") or
+         String.contains?(url, "oauth"))
   end
 end

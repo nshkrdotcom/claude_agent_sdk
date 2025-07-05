@@ -558,7 +558,7 @@ defmodule ClaudeCodeSDK.AuthChecker do
     {:ok, output}
   end
 
-  defp handle_execution_error([exit_status: status, stdout: stdout_data, stderr: stderr_data]) do
+  defp handle_execution_error(exit_status: status, stdout: stdout_data, stderr: stderr_data) do
     error_text = extract_error_text(stdout_data, stderr_data)
     {:error, "Command failed (exit #{status}): #{error_text}"}
   end

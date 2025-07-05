@@ -1,7 +1,7 @@
 defmodule Factorial do
   @moduledoc """
   A module for calculating factorial of non-negative integers.
-  
+
   The factorial of n (denoted as n!) is the product of all positive integers less than or equal to n.
   """
 
