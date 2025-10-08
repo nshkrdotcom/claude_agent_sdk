@@ -57,11 +57,26 @@ defmodule ClaudeCodeSDK.Options do
     :executable,
     :executable_args,
     :path_to_claude_code_executable,
-    :abort_ref
+    :abort_ref,
+    # New fields for v0.1.0
+    # Model selection ("opus", "sonnet", "haiku", or full name)
+    :model,
+    # Fallback model when primary is busy
+    :fallback_model,
+    # Custom agent definitions
+    :agents,
+    # Explicit session ID (UUID)
+    :session_id
   ]
 
   @type output_format :: :text | :json | :stream_json
   @type permission_mode :: :default | :accept_edits | :bypass_permissions | :plan
+  @type model_name :: String.t()
+  @type agent_name :: String.t()
+  @type agent_definition :: %{
+          description: String.t(),
+          prompt: String.t()
+        }
 
   @type t :: %__MODULE__{
           max_turns: integer() | nil,
@@ -78,7 +93,11 @@ defmodule ClaudeCodeSDK.Options do
           executable: String.t() | nil,
           executable_args: [String.t()] | nil,
           path_to_claude_code_executable: String.t() | nil,
-          abort_ref: reference() | nil
+          abort_ref: reference() | nil,
+          model: model_name() | nil,
+          fallback_model: model_name() | nil,
+          agents: %{agent_name() => agent_definition()} | nil,
+          session_id: String.t() | nil
         }
 
   @doc """
@@ -140,6 +159,10 @@ defmodule ClaudeCodeSDK.Options do
     |> add_permission_prompt_tool_args(options)
     |> add_permission_mode_args(options)
     |> add_verbose_args(options)
+    |> add_model_args(options)
+    |> add_fallback_model_args(options)
+    |> add_agents_args(options)
+    |> add_session_id_args(options)
   end
 
   defp add_output_format_args(args, %{output_format: nil}), do: args
@@ -210,4 +233,23 @@ defmodule ClaudeCodeSDK.Options do
 
   defp add_verbose_args(args, %{verbose: true}), do: args ++ ["--verbose"]
   defp add_verbose_args(args, _), do: args
+
+  defp add_model_args(args, %{model: nil}), do: args
+  defp add_model_args(args, %{model: model}), do: args ++ ["--model", model]
+
+  defp add_fallback_model_args(args, %{fallback_model: nil}), do: args
+
+  defp add_fallback_model_args(args, %{fallback_model: model}),
+    do: args ++ ["--fallback-model", model]
+
+  defp add_agents_args(args, %{agents: nil}), do: args
+
+  defp add_agents_args(args, %{agents: agents}) do
+    # Convert agents map to JSON format expected by CLI
+    json = Jason.encode!(agents)
+    args ++ ["--agents", json]
+  end
+
+  defp add_session_id_args(args, %{session_id: nil}), do: args
+  defp add_session_id_args(args, %{session_id: id}), do: args ++ ["--session-id", id]
 end

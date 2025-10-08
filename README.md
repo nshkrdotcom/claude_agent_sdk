@@ -89,29 +89,41 @@ mix deps.get
 
 ## Implementation Status
 
-### ✅ **Currently Implemented**
+### ✅ **Currently Implemented (v0.1.0)**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
 - **Options Configuration**: Full CLI argument mapping with smart presets and correct CLI formats
 - **Subprocess Management**: Robust erlexec integration with stdin support
 - **JSON Parsing**: Custom parser without external dependencies
-- **Authentication**: CLI delegation with status checking and diagnostics
+- **Authentication Management**: AutoManager with OAuth token support (v2.0.10+)
+  - Automatic token setup via `mix claude.setup_token`
+  - Token persistence and auto-refresh (1 year validity)
+  - Multi-provider support (Anthropic/Bedrock/Vertex)
+  - Environment variable fallback (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`)
+- **Model Selection**: Choose Opus, Sonnet, Haiku, or specific versions
+  - Automatic fallback when model overloaded
+  - Full model name support (e.g., `claude-sonnet-4-5-20250929`)
+- **Custom Agents**: Define specialized agents with custom prompts
+- **Concurrent Orchestration**: Parallel query execution and workflows
+  - `Orchestrator.query_parallel/2` - Run queries concurrently (3-5x faster)
+  - `Orchestrator.query_pipeline/2` - Sequential workflows with context passing
+  - `Orchestrator.query_with_retry/3` - Automatic retry with exponential backoff
 - **Error Handling**: Improved error detection and timeout handling
 - **Stream Processing**: Lazy evaluation with Elixir Streams
 - **Mocking System**: Comprehensive testing without API calls (supports stdin workflows)
 - **Code Quality**: Full dialyzer and credo compliance with refactored complex functions
-- **Developer Tools**: ContentExtractor, AuthChecker, OptionBuilder, DebugMode
+- **Developer Tools**: ContentExtractor, AuthChecker, OptionBuilder, DebugMode, AuthManager
 - **Smart Configuration**: Environment-aware defaults and preset configurations
 
-### 🔮 **Planned Features** 
-- **Advanced Error Handling**: Retry logic, timeout handling, comprehensive error recovery
-- **Performance Optimization**: Caching, parallel processing, memory optimization
-- **Integration Patterns**: Phoenix LiveView, OTP applications, worker pools
-- **Security Features**: Input validation, permission management, sandboxing
-- **Developer Tools**: Debug mode, troubleshooting helpers, session management
+### 🔮 **Planned Features (v0.2.0+)**
+- **Rate Limiting & Circuit Breaking**: Prevent API overload and cascading failures
+- **Session Persistence**: Save and resume sessions with metadata and tagging
+- **Bidirectional Streaming**: Real-time interactive conversations
+- **Performance Optimization**: Caching, memory optimization
+- **Integration Patterns**: Phoenix LiveView examples, OTP applications, worker pools
 - **Advanced Examples**: Code analysis pipelines, test generators, refactoring tools
-- **MCP Support**: Model Context Protocol integration and tool management
+- **Plugin System**: Extensible architecture for custom behaviors
 
 ## Basic Usage
 
@@ -416,34 +428,155 @@ end
 
 ## Authentication
 
-This SDK uses your already-authenticated Claude CLI instance. No API keys needed - just run `claude login` once and the SDK uses the stored session.
+### Automatic Authentication (v0.1.0+)
+
+The SDK now provides automatic token management with the AuthManager:
+
+```bash
+# One-time setup (requires Claude subscription)
+$ mix claude.setup_token
+```
+
+This generates a long-lived OAuth token (1 year) and stores it securely. The SDK automatically uses this token for all queries.
+
+### Environment Variable (Recommended for CI/CD)
+
+```bash
+# Set OAuth token
+export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-your-token-here
+
+# Or use API key (legacy)
+export ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
+```
+
+The SDK automatically detects and uses these environment variables.
+
+### Legacy: Manual CLI Login
+
+```bash
+# Still supported but requires re-authentication
+$ claude login
+```
+
+This SDK also supports your already-authenticated Claude CLI session.
 
 ### Authentication Checking
 
-Use `AuthChecker` to verify your setup before making queries:
+Use `AuthManager` to check status:
 
 ```elixir
-alias ClaudeCodeSDK.AuthChecker
+alias ClaudeCodeSDK.AuthManager
 
-# Quick boolean check
-if AuthChecker.authenticated?() do
-  # Proceed with queries
-  ClaudeCodeSDK.query("Hello!")
-else
-  IO.puts("Please run: claude login")
-end
-
-# Full diagnostic check
-diagnosis = AuthChecker.diagnose()
-# Returns: %{
-#   cli_installed: true,
-#   authenticated: true, 
-#   status: :ready,
-#   recommendations: []
+# Check authentication status
+status = AuthManager.status()
+# => %{
+#   authenticated: true,
+#   provider: :anthropic,
+#   token_present: true,
+#   expires_at: ~U[2026-10-07 ...],
+#   time_until_expiry_hours: 8760.0
 # }
 
-# Ensure ready or raise error
-AuthChecker.ensure_ready!()
+# Ensure authenticated (auto-setup if needed)
+:ok = AuthManager.ensure_authenticated()
+```
+
+## Model Selection (v0.1.0+)
+
+Choose the best Claude model for your task:
+
+```elixir
+alias ClaudeCodeSDK.OptionBuilder
+
+# Opus - Most capable, complex reasoning
+options = OptionBuilder.with_opus()
+ClaudeCodeSDK.query("Design a complex system architecture", options)
+
+# Sonnet - Balanced, cost-effective (default)
+options = OptionBuilder.with_sonnet()
+ClaudeCodeSDK.query("Review this code", options)
+
+# Haiku - Fastest, lowest cost
+options = OptionBuilder.with_haiku()
+ClaudeCodeSDK.query("What is 2+2?", options)
+
+# Custom model with automatic fallback
+options = %Options{
+  model: "opus",
+  fallback_model: "sonnet"  # If opus is overloaded
+}
+
+# Use specific model version
+options = %Options{
+  model: "claude-sonnet-4-5-20250929"
+}
+```
+
+## Custom Agents (v0.1.0+)
+
+Define specialized agents with custom prompts:
+
+```elixir
+# Define a security-focused agent
+options = %Options{
+  agents: %{
+    "security_reviewer" => %{
+      description: "Security vulnerability scanner",
+      prompt: """
+      You are a security expert specializing in OWASP Top 10.
+      Review code for vulnerabilities and provide specific fixes.
+      """
+    }
+  }
+}
+
+ClaudeCodeSDK.query("Review this authentication code", options)
+
+# Or use OptionBuilder helper
+options = OptionBuilder.build_analysis_options()
+|> OptionBuilder.with_agent("security_reviewer", %{
+  description: "Security expert",
+  prompt: "Review for OWASP Top 10 vulnerabilities"
+})
+```
+
+## Concurrent Orchestration (v0.1.0+)
+
+Execute multiple queries in parallel for 3-5x speedup:
+
+```elixir
+alias ClaudeCodeSDK.Orchestrator
+
+# Parallel execution
+queries = [
+  {"Analyze file1.ex", analysis_opts},
+  {"Analyze file2.ex", analysis_opts},
+  {"Analyze file3.ex", analysis_opts}
+]
+
+{:ok, results} = Orchestrator.query_parallel(queries, max_concurrent: 3)
+
+Enum.each(results, fn result ->
+  IO.puts("Prompt: #{result.prompt}")
+  IO.puts("Success: #{result.success}")
+  IO.puts("Cost: $#{result.cost}")
+  IO.puts("Duration: #{result.duration_ms}ms")
+end)
+
+# Pipeline workflows (output → next input)
+{:ok, final_result} = Orchestrator.query_pipeline([
+  {"Analyze code quality", analysis_opts},
+  {"Suggest refactorings", refactor_opts},
+  {"Generate tests for refactored code", test_opts}
+], use_context: true)
+
+# Retry with exponential backoff
+{:ok, result} = Orchestrator.query_with_retry(
+  prompt,
+  options,
+  max_retries: 3,
+  backoff_ms: 1000
+)
 ```
 
 ## Error Handling

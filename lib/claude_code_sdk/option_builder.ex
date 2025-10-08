@@ -594,4 +594,139 @@ defmodule ClaudeCodeSDK.OptionBuilder do
       warnings
     end
   end
+
+  # Model selection helpers (v0.1.0)
+
+  @doc """
+  Builds options for maximum capability using Opus model.
+
+  Best for:
+  - Complex reasoning tasks
+  - Code generation requiring deep understanding
+  - Multi-step problem solving
+
+  Higher cost but better results.
+
+  ## Examples
+
+      options = ClaudeCodeSDK.OptionBuilder.with_opus()
+      ClaudeCodeSDK.query("Architect a complex system", options)
+  """
+  @spec with_opus() :: Options.t()
+  def with_opus do
+    %Options{
+      model: "opus",
+      # Fallback if opus busy
+      fallback_model: "sonnet",
+      max_turns: 10,
+      output_format: :stream_json
+    }
+  end
+
+  @doc """
+  Builds options for balanced performance using Sonnet model (default).
+
+  Best for:
+  - General-purpose tasks
+  - Good balance of speed and capability
+  - Most cost-effective for production
+
+  ## Examples
+
+      options = ClaudeCodeSDK.OptionBuilder.with_sonnet()
+      ClaudeCodeSDK.query("Review this code", options)
+  """
+  @spec with_sonnet() :: Options.t()
+  def with_sonnet do
+    %Options{
+      model: "sonnet",
+      max_turns: 5,
+      output_format: :stream_json
+    }
+  end
+
+  @doc """
+  Builds options for fast responses using Haiku model.
+
+  Best for:
+  - Simple queries
+  - Quick responses needed
+  - High-volume use cases
+  - Lowest cost option
+
+  ## Examples
+
+      options = ClaudeCodeSDK.OptionBuilder.with_haiku()
+      ClaudeCodeSDK.query("What is 2+2?", options)
+  """
+  @spec with_haiku() :: Options.t()
+  def with_haiku do
+    %Options{
+      model: "haiku",
+      max_turns: 3,
+      output_format: :stream_json
+    }
+  end
+
+  @doc """
+  Adds specific model to any options.
+
+  ## Parameters
+
+  - `options` - Existing options
+  - `model_name` - Model name ("opus", "sonnet", "haiku", or full name like "claude-sonnet-4-5-20250929")
+  - `fallback` - Optional fallback model
+
+  ## Examples
+
+      options = build_development_options()
+      |> with_model("opus", "sonnet")
+  """
+  @spec with_model(Options.t(), String.t(), String.t() | nil) :: Options.t()
+  def with_model(options, model_name, fallback \\ nil) do
+    %{options | model: model_name, fallback_model: fallback}
+  end
+
+  @doc """
+  Adds custom agent to options.
+
+  ## Examples
+
+      options = OptionBuilder.build_development_options()
+      |> OptionBuilder.with_agent("security_reviewer", %{
+        description: "Security-focused code reviewer",
+        prompt: "You are a security expert. Review for vulnerabilities."
+      })
+  """
+  @spec with_agent(Options.t(), String.t(), map()) :: Options.t()
+  def with_agent(%Options{agents: nil} = options, name, definition) do
+    %{options | agents: %{name => definition}}
+  end
+
+  def with_agent(%Options{agents: agents} = options, name, definition) do
+    %{options | agents: Map.put(agents, name, definition)}
+  end
+
+  @doc """
+  Sets multiple agents at once.
+
+  ## Examples
+
+      agents = %{
+        "reviewer" => %{description: "Code reviewer", prompt: "Review code"},
+        "tester" => %{description: "Test generator", prompt: "Generate tests"}
+      }
+
+      options = OptionBuilder.with_agents(agents)
+  """
+  @spec with_agents(map()) :: Options.t()
+  def with_agents(agents) when is_map(agents) do
+    %Options{agents: agents}
+  end
+
+  @spec with_agents(Options.t(), map()) :: Options.t()
+  def with_agents(%Options{} = options, agents) when is_map(agents) do
+    existing = options.agents || %{}
+    %{options | agents: Map.merge(existing, agents)}
+  end
 end

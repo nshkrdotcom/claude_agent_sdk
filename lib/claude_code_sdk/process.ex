@@ -109,10 +109,11 @@ defmodule ClaudeCodeSDK.Process do
     end
   end
 
-  defp run_with_stdin_erlexec(cmd, input, exec_options, options) do
+  defp run_with_stdin_erlexec(cmd, input, _exec_options, options) do
     # Add stdin to the exec options and use async execution
-    # Remove sync and add monitor for async execution
-    base_options = exec_options |> Enum.reject(&(&1 in [:sync, :stdout, :stderr]))
+    # Build fresh options with env vars for async mode
+    env_vars = build_env_vars()
+    base_options = if env_vars != [], do: [{:env, env_vars}], else: []
     stdin_exec_options = [:stdin, :stdout, :stderr, :monitor] ++ base_options
 
     case :exec.run(cmd, stdin_exec_options) do
@@ -273,6 +274,12 @@ defmodule ClaudeCodeSDK.Process do
   defp build_exec_options(options) do
     base_options = [:sync, :stdout, :stderr]
 
+    # Add environment variables (critical for authentication!)
+    env_options = build_env_vars()
+
+    base_options =
+      if env_options != [], do: [{:env, env_options} | base_options], else: base_options
+
     case options.cwd do
       nil ->
         base_options
@@ -284,6 +291,28 @@ defmodule ClaudeCodeSDK.Process do
         end
 
         [{:cd, cwd} | base_options]
+    end
+  end
+
+  defp build_env_vars do
+    # Pass authentication environment variables to subprocess
+    # The Claude CLI checks these in order:
+    # 1. CLAUDE_CODE_OAUTH_TOKEN (OAuth tokens from setup-token)
+    # 2. ANTHROPIC_API_KEY (API keys)
+    # 3. Stored session from 'claude login'
+
+    []
+    |> add_env_var("CLAUDE_CODE_OAUTH_TOKEN")
+    |> add_env_var("ANTHROPIC_API_KEY")
+    |> add_env_var("PATH")
+    |> add_env_var("HOME")
+  end
+
+  defp add_env_var(env_vars, var_name) do
+    case System.get_env(var_name) do
+      nil -> env_vars
+      "" -> env_vars
+      value -> [{var_name, value} | env_vars]
     end
   end
 

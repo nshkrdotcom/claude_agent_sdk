@@ -179,7 +179,7 @@ defmodule Mix.Tasks.Showcase do
     IO.puts("✅ CLI installed: #{diagnosis.cli_installed}")
     IO.puts("✅ Status: #{diagnosis.status}")
 
-    if diagnosis.recommendations != [] do
+    unless Enum.empty?(diagnosis.recommendations) do
       IO.puts("💡 Recommendations:")
       Enum.each(diagnosis.recommendations, fn rec -> IO.puts("   - #{rec}") end)
     end

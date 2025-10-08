@@ -316,14 +316,14 @@ defmodule ClaudeCodeSDK.DebugMode do
     IO.puts("")
 
     # Recommendations
-    if diagnosis.recommendations != [] do
+    if Enum.empty?(diagnosis.recommendations) do
+      IO.puts("✅ All systems operational!")
+    else
       IO.puts("💡 Recommendations:")
 
       Enum.each(diagnosis.recommendations, fn rec ->
         IO.puts("   - #{rec}")
       end)
-    else
-      IO.puts("✅ All systems operational!")
     end
 
     :ok
