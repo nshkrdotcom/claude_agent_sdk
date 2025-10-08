@@ -1,6 +1,16 @@
-# Claude Code SDK for Elixir
+<p align="center">
+  <img src="assets/logo.svg" alt="Claude Code Elixir SDK Logo" width="200"/>
+</p>
 
-[![CI](https://github.com/nshkrdotcom/claude_code_sdk_elixir/actions/workflows/elixir.yaml/badge.svg)](https://github.com/nshkrdotcom/claude_code_sdk_elixir/actions/workflows/elixir.yaml)
+<h1 align="center">Claude Code SDK for Elixir</h1>
+
+<p align="center">
+  <a href="https://github.com/nshkrdotcom/claude_code_sdk_elixir/actions/workflows/elixir.yaml">
+    <img src="https://github.com/nshkrdotcom/claude_code_sdk_elixir/actions/workflows/elixir.yaml/badge.svg" alt="CI">
+  </a>
+</p>
+
+> **Note:** This SDK is fully compatible with the **Claude Code 2.0 CLI** and its latest features, including advanced authentication, model selection, and session management.
 
 An Elixir SDK for programmatically interacting with Claude Code. This library provides a simple interface to query Claude and handle responses using the familiar Elixir streaming patterns.
 

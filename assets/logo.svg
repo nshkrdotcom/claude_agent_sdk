@@ -1,0 +1,11 @@
+<svg width="200" height="220" viewBox="0 0 100 115.47" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="hexGradient" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#6E4E95" />
+      <stop offset="100%" stop-color="#4B326F" />
+    </linearGradient>
+  </defs>
+  <path d="M50 0L100 28.87L100 86.6L50 115.47L0 86.6L0 28.87L50 0Z" fill="url(#hexGradient)" />
+  <path d="M75 35.735a28.868 28.868 0 0 0-50 0v44.002a28.868 28.868 0 0 0 50 0V57.736"
+        fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+</svg>
