@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-10-07
+
+### Added - Session Management & Coverage Improvements
+
+#### Session Persistence
+- **SessionStore GenServer** - Persistent session storage and management
+- **Session helper module** - Extract metadata from message lists
+- **File-based storage** - Sessions saved in `~/.claude_sdk/sessions/`
+- **ETS caching** - Fast in-memory access to session metadata
+- **Tag system** - Organize sessions with custom tags
+- **Search functionality** - Find sessions by tags, date range, cost
+- **Automatic cleanup** - Remove sessions older than 30 days
+- **Session metadata** - Track cost, message count, model used, timestamps
+
+#### Additional CLI Flags (Quick Wins)
+- **`fork_session`** - Create new session ID when resuming (`--fork-session`)
+- **`add_dir`** - Work across multiple directories (`--add-dir`)
+- **`strict_mcp_config`** - Isolated MCP server usage (`--strict-mcp-config`)
+
+### Changed
+- **Options struct** - Added `fork_session`, `add_dir`, `strict_mcp_config` fields
+- **CLI argument generation** - Extended with 3 additional flags
+- **Coverage** - Now 84% of Claude Code 2.0 CLI features (was 76%)
+
+### Documentation
+- **Rate Limiting Best Practices** - Comprehensive guide using hammer/:fuse
+- **Next Features Recommendation** - Analysis of remaining gaps
+- **Session features example** - Complete demonstration of all session capabilities
+
+### Examples
+- `examples/session_features_example.exs` - Session persistence, forking, multi-dir
+- `test_session_persistence_live.exs` - Live API validation
+
 ## [0.1.0] - 2025-10-07
 
 ### Added - Production Orchestration Features

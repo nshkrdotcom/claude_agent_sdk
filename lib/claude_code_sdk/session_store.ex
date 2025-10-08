@@ -413,19 +413,27 @@ defmodule ClaudeCodeSDK.SessionStore do
   defp load_sessions_into_cache(state) do
     case File.ls(state.storage_dir) do
       {:ok, files} ->
-        files
-        |> Enum.filter(&String.ends_with?(&1, ".json"))
-        |> Enum.each(fn file ->
-          session_id = Path.basename(file, ".json")
+        load_session_files(files, state)
 
-          case read_session_file(state.storage_dir, session_id) do
-            {:ok, data} ->
-              :ets.insert(state.cache, {session_id, data["metadata"]})
+      {:error, _} ->
+        :ok
+    end
+  end
 
-            {:error, _} ->
-              :ok
-          end
-        end)
+  defp load_session_files(files, state) do
+    files
+    |> Enum.filter(&String.ends_with?(&1, ".json"))
+    |> Enum.each(fn file ->
+      load_single_session_file(file, state)
+    end)
+  end
+
+  defp load_single_session_file(file, state) do
+    session_id = Path.basename(file, ".json")
+
+    case read_session_file(state.storage_dir, session_id) do
+      {:ok, data} ->
+        :ets.insert(state.cache, {session_id, data["metadata"]})
 
       {:error, _} ->
         :ok

@@ -48,7 +48,7 @@ Add `claude_code_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_code_sdk, "~> 0.1.0"}
+    {:claude_code_sdk, "~> 0.2.0"}
   ]
 end
 ```
@@ -89,7 +89,7 @@ mix deps.get
 
 ## Implementation Status
 
-### ✅ **Currently Implemented (v0.1.0)**
+### ✅ **Currently Implemented (v0.2.0)**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
@@ -109,6 +109,15 @@ mix deps.get
   - `Orchestrator.query_parallel/2` - Run queries concurrently (3-5x faster)
   - `Orchestrator.query_pipeline/2` - Sequential workflows with context passing
   - `Orchestrator.query_with_retry/3` - Automatic retry with exponential backoff
+- **Session Persistence** (v0.2.0): Save and resume sessions across restarts
+  - `SessionStore` GenServer for session management
+  - Save/load sessions with tags and metadata
+  - Search by tags, date range, cost
+  - Automatic cleanup of old sessions
+- **Advanced Session Flags** (v0.2.0): Additional CLI capabilities
+  - Session forking (`fork_session`) - Experiment with different approaches
+  - Multiple directories (`add_dir`) - Work across project boundaries
+  - Strict MCP config (`strict_mcp_config`) - Isolated MCP testing
 - **Error Handling**: Improved error detection and timeout handling
 - **Stream Processing**: Lazy evaluation with Elixir Streams
 - **Mocking System**: Comprehensive testing without API calls (supports stdin workflows)
@@ -116,10 +125,9 @@ mix deps.get
 - **Developer Tools**: ContentExtractor, AuthChecker, OptionBuilder, DebugMode, AuthManager
 - **Smart Configuration**: Environment-aware defaults and preset configurations
 
-### 🔮 **Planned Features (v0.2.0+)**
-- **Rate Limiting & Circuit Breaking**: Prevent API overload and cascading failures
-- **Session Persistence**: Save and resume sessions with metadata and tagging
-- **Bidirectional Streaming**: Real-time interactive conversations
+### 🔮 **Planned Features (v0.3.0+)**
+- **Bidirectional Streaming**: Character-level streaming for chat UIs
+- **Telemetry Integration**: Production observability with :telemetry events
 - **Performance Optimization**: Caching, memory optimization
 - **Integration Patterns**: Phoenix LiveView examples, OTP applications, worker pools
 - **Advanced Examples**: Code analysis pipelines, test generators, refactoring tools
@@ -577,6 +585,49 @@ end)
   max_retries: 3,
   backoff_ms: 1000
 )
+```
+
+## Session Persistence (v0.2.0+)
+
+Save and resume Claude conversations across application restarts:
+
+```elixir
+alias ClaudeCodeSDK.{SessionStore, Session}
+
+# Start the session store
+{:ok, _pid} = SessionStore.start_link()
+
+# Execute a query
+messages = ClaudeCodeSDK.query("Build a user authentication system")
+|> Enum.to_list()
+
+# Save the session with tags
+session_id = Session.extract_session_id(messages)
+
+:ok = SessionStore.save_session(session_id, messages,
+  tags: ["feature-dev", "auth", "important"],
+  description: "Building user authentication"
+)
+
+# Later... load and resume
+{:ok, session_data} = SessionStore.load_session(session_id)
+# session_data.messages - Full conversation history
+# session_data.metadata - Tags, cost, timestamps
+
+# Resume the conversation
+ClaudeCodeSDK.resume(session_id, "Now add password reset functionality")
+
+# Search sessions
+security_sessions = SessionStore.search(tags: ["auth", "security"])
+expensive_sessions = SessionStore.search(min_cost: 0.10)
+recent_sessions = SessionStore.search(after: ~D[2025-10-01])
+
+# Session forking - experiment with different approaches
+fork_options = %Options{
+  fork_session: true  # Creates new session ID, preserves context
+}
+
+ClaudeCodeSDK.resume(session_id, "Try a different approach", fork_options)
 ```
 
 ## Error Handling
