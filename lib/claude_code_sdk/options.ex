@@ -66,7 +66,14 @@ defmodule ClaudeCodeSDK.Options do
     # Custom agent definitions
     :agents,
     # Explicit session ID (UUID)
-    :session_id
+    :session_id,
+    # Quick wins (v0.2.0)
+    # Create new session ID when resuming
+    :fork_session,
+    # Additional directories for tool access
+    :add_dir,
+    # Only use MCP servers from --mcp-config
+    :strict_mcp_config
   ]
 
   @type output_format :: :text | :json | :stream_json
@@ -97,7 +104,10 @@ defmodule ClaudeCodeSDK.Options do
           model: model_name() | nil,
           fallback_model: model_name() | nil,
           agents: %{agent_name() => agent_definition()} | nil,
-          session_id: String.t() | nil
+          session_id: String.t() | nil,
+          fork_session: boolean() | nil,
+          add_dir: [String.t()] | nil,
+          strict_mcp_config: boolean() | nil
         }
 
   @doc """
@@ -163,6 +173,9 @@ defmodule ClaudeCodeSDK.Options do
     |> add_fallback_model_args(options)
     |> add_agents_args(options)
     |> add_session_id_args(options)
+    |> add_fork_session_args(options)
+    |> add_dir_args(options)
+    |> add_strict_mcp_args(options)
   end
 
   defp add_output_format_args(args, %{output_format: nil}), do: args
@@ -252,4 +265,16 @@ defmodule ClaudeCodeSDK.Options do
 
   defp add_session_id_args(args, %{session_id: nil}), do: args
   defp add_session_id_args(args, %{session_id: id}), do: args ++ ["--session-id", id]
+
+  defp add_fork_session_args(args, %{fork_session: true}), do: args ++ ["--fork-session"]
+  defp add_fork_session_args(args, _), do: args
+
+  defp add_dir_args(args, %{add_dir: nil}), do: args
+
+  defp add_dir_args(args, %{add_dir: directories}) when is_list(directories) do
+    args ++ ["--add-dir"] ++ directories
+  end
+
+  defp add_strict_mcp_args(args, %{strict_mcp_config: true}), do: args ++ ["--strict-mcp-config"]
+  defp add_strict_mcp_args(args, _), do: args
 end
