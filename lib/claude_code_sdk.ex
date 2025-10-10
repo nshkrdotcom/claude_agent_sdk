@@ -1,5 +1,8 @@
 defmodule ClaudeCodeSDK do
   @moduledoc """
+  > **MIGRATION NOTICE**: This package has been renamed to `claude_agent_sdk`.
+  > Please use the new package: [https://hexdocs.pm/claude_agent_sdk](https://hexdocs.pm/claude_agent_sdk)
+
   An Elixir SDK for Claude Code.
 
   This module provides a simple interface for interacting with Claude Code programmatically.
