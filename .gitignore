@@ -38,3 +38,6 @@ claude_code_sdk-*.tar
 # OS files
 .DS_Store
 Thumbs.db
+
+anthropics/
+claude-agent-sdk-python/
