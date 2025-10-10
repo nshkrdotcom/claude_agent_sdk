@@ -26,10 +26,10 @@ If you're using this package in your project, please update your `mix.exs`:
 
 ```elixir
 # OLD (deprecated)
-{:claude_code_sdk, "~> 0.2.1"}
+{:claude_code_sdk, "~> 0.x.x"}
 
 # NEW (current)
-{:claude_agent_sdk, "~> 0.2.1"}
+{:claude_agent_sdk, "~> 0.2.2"}
 ```
 
 All module names, functionality, and APIs remain the same. Only the package name and repository location have changed.
