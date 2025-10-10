@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-10-09
+
+### Added - Bidirectional Streaming
+
+#### Real-Time Character-by-Character Streaming
+- **ClaudeCodeSDK.Streaming module** - Public API for bidirectional streaming sessions
+- **Streaming.Session GenServer** - Manages persistent subprocess with stdin/stdout pipes
+- **EventParser** - Parses SSE events (message_start, text_delta, content_block_stop, message_stop)
+- **Text delta events** - Character-by-character streaming for typewriter effects
+- **Multi-turn conversations** - Full context preservation across multiple messages in one session
+- **Message queueing** - Sequential processing of messages with automatic dequeuing
+- **Subscriber management** - Proper event routing to active subscriber only
+- **Multiple concurrent sessions** - True parallelism by running multiple independent sessions
+
+#### Streaming Features
+- `start_session/1` - Start persistent bidirectional connection
+- `send_message/2` - Send message and receive streaming events
+- `close_session/1` - Clean subprocess termination
+- `get_session_id/1` - Retrieve Claude session ID
+- Phoenix LiveView integration examples
+- Comprehensive event types (text_delta, tool_use, thinking, errors)
+
+### Fixed
+- Event parser unwraps `stream_event` wrapper from Claude CLI output
+- Added required `--verbose` flag for `stream-json` output format
+- Proper `:DOWN` message handling for erlexec subprocess monitoring
+- Subscriber queue prevents message crosstalk in concurrent scenarios
+- Sequential message processing within single session (prevents race conditions)
+
+### Changed
+- Streaming uses CLI flags: `--input-format stream-json --output-format stream-json --include-partial-messages --verbose`
+- Messages within one session are processed sequentially (by design)
+- For parallelism, use multiple independent sessions
+
+### Testing
+- `test_streaming.exs` - Basic streaming functionality with statistics
+- `test_bidirectional.exs` - Multi-turn, rapid sequential, concurrent sessions, message queueing
+
 ## [0.2.0] - 2025-10-07
 
 ### Added - Session Management & Coverage Improvements

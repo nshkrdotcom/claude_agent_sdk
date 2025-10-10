@@ -48,7 +48,7 @@ Add `claude_code_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_code_sdk, "~> 0.2.0"}
+    {:claude_code_sdk, "~> 0.2.1"}
   ]
 end
 ```
@@ -89,7 +89,7 @@ mix deps.get
 
 ## Implementation Status
 
-### ✅ **Currently Implemented (v0.2.0)**
+### ✅ **Currently Implemented (v0.2.1)**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
@@ -118,6 +118,12 @@ mix deps.get
   - Session forking (`fork_session`) - Experiment with different approaches
   - Multiple directories (`add_dir`) - Work across project boundaries
   - Strict MCP config (`strict_mcp_config`) - Isolated MCP testing
+- **Bidirectional Streaming** (v0.2.1): Real-time character-by-character streaming
+  - `ClaudeCodeSDK.Streaming` module with persistent sessions
+  - Text delta events for typewriter effects
+  - Multi-turn conversations with context preservation
+  - Message queueing for sequential processing
+  - Multiple concurrent sessions for parallelism
 - **Error Handling**: Improved error detection and timeout handling
 - **Stream Processing**: Lazy evaluation with Elixir Streams
 - **Mocking System**: Comprehensive testing without API calls (supports stdin workflows)
@@ -126,7 +132,6 @@ mix deps.get
 - **Smart Configuration**: Environment-aware defaults and preset configurations
 
 ### 🔮 **Planned Features (v0.3.0+)**
-- **Bidirectional Streaming**: Character-level streaming for chat UIs
 - **Telemetry Integration**: Production observability with :telemetry events
 - **Performance Optimization**: Caching, memory optimization
 - **Integration Patterns**: Phoenix LiveView examples, OTP applications, worker pools
