@@ -8,7 +8,7 @@ IO.puts("=" |> String.duplicate(70))
 IO.puts("")
 
 # Disable mocking
-Application.put_env(:claude_code_sdk, :use_mock, false)
+Application.put_env(:claude_agent_sdk, :use_mock, false)
 
 # Test helper function
 defmodule AuthTester do
@@ -42,13 +42,13 @@ defmodule AuthTester do
     # Test through SDK
     try do
       result =
-        ClaudeCodeSDK.query("Say: SDK test", %ClaudeCodeSDK.Options{max_turns: 1})
+        ClaudeAgentSDK.query("Say: SDK test", %ClaudeAgentSDK.Options{max_turns: 1})
         |> Enum.to_list()
 
       assistant_msg = Enum.find(result, &(&1.type == :assistant))
 
       if assistant_msg do
-        response = ClaudeCodeSDK.ContentExtractor.extract_text(assistant_msg)
+        response = ClaudeAgentSDK.ContentExtractor.extract_text(assistant_msg)
 
         cond do
           String.contains?(response, "authentication_error") or
@@ -103,29 +103,29 @@ end
 IO.puts("")
 
 # ============================================================================
-# METHOD 2: CLAUDE_CODE_OAUTH_TOKEN
+# METHOD 2: CLAUDE_AGENT_OAUTH_TOKEN
 # ============================================================================
 
-IO.puts("METHOD 2: CLAUDE_CODE_OAUTH_TOKEN Environment Variable")
+IO.puts("METHOD 2: CLAUDE_AGENT_OAUTH_TOKEN Environment Variable")
 IO.puts("─" |> String.duplicate(70))
 
-oauth_token = System.get_env("CLAUDE_CODE_OAUTH_TOKEN")
+oauth_token = System.get_env("CLAUDE_AGENT_OAUTH_TOKEN")
 
 if oauth_token do
   IO.puts("   Token found: #{String.slice(oauth_token, 0, 30)}...")
 
   env_with_oauth = [
-    {"CLAUDE_CODE_OAUTH_TOKEN", oauth_token},
+    {"CLAUDE_AGENT_OAUTH_TOKEN", oauth_token},
     {"PATH", System.get_env("PATH")},
     {"HOME", System.get_env("HOME")}
   ]
 
   case AuthTester.test_cli_with_env(env_with_oauth) do
     {:ok, :authenticated} ->
-      IO.puts("   ✅ PASS: CLI accepts CLAUDE_CODE_OAUTH_TOKEN")
+      IO.puts("   ✅ PASS: CLI accepts CLAUDE_AGENT_OAUTH_TOKEN")
 
     {:error, :auth_failed} ->
-      IO.puts("   ❌ FAIL: CLI doesn't recognize CLAUDE_CODE_OAUTH_TOKEN")
+      IO.puts("   ❌ FAIL: CLI doesn't recognize CLAUDE_AGENT_OAUTH_TOKEN")
       IO.puts("   Note: CLI may require ANTHROPIC_API_KEY instead")
 
     {:error, reason} ->
@@ -136,8 +136,8 @@ if oauth_token do
       IO.puts("   Output: #{String.slice(output, 0, 200)}")
   end
 else
-  IO.puts("   ⚠️  SKIP: CLAUDE_CODE_OAUTH_TOKEN not set")
-  IO.puts("   Set with: export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-oat01-...'")
+  IO.puts("   ⚠️  SKIP: CLAUDE_AGENT_OAUTH_TOKEN not set")
+  IO.puts("   Set with: export CLAUDE_AGENT_OAUTH_TOKEN='sk-ant-oat01-...'")
 end
 
 IO.puts("")
@@ -186,7 +186,7 @@ IO.puts("METHOD 4: SDK Integration (with current environment)")
 IO.puts("─" |> String.duplicate(70))
 
 IO.puts("   Current environment:")
-IO.puts("   • CLAUDE_CODE_OAUTH_TOKEN: #{if oauth_token, do: "SET", else: "NOT SET"}")
+IO.puts("   • CLAUDE_AGENT_OAUTH_TOKEN: #{if oauth_token, do: "SET", else: "NOT SET"}")
 
 IO.puts(
   "   • ANTHROPIC_API_KEY: #{if System.get_env("ANTHROPIC_API_KEY"), do: "SET", else: "NOT SET"}"

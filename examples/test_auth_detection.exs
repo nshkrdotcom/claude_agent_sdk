@@ -3,7 +3,7 @@
 # Test script to verify challenge URL detection
 # This script attempts to trigger authentication to see if we can detect the challenge URL
 
-alias ClaudeCodeSDK.Options
+alias ClaudeAgentSDK.Options
 
 IO.puts("🧪 Testing Challenge URL Detection")
 IO.puts("=" |> String.duplicate(60))
@@ -21,10 +21,10 @@ IO.puts("\n🔍 Attempting to query Claude with invalid credentials...")
 IO.puts("This should trigger a challenge URL if authentication is needed.\n")
 
 try do
-  ClaudeCodeSDK.query("Hello", options)
+  ClaudeAgentSDK.query("Hello", options)
   |> Enum.each(fn msg ->
     IO.inspect(msg, label: "Message")
-    
+
     # Check if we got an authentication_required message
     if msg.type == :result and msg.subtype == :authentication_required do
       IO.puts("\n✅ Challenge URL detection successful!")

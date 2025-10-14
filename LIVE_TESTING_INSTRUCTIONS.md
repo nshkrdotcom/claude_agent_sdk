@@ -18,14 +18,14 @@ source set_token_helper.sh
 
 ### Option 2: Manual Export (Single Line!)
 ```bash
-export CLAUDE_CODE_OAUTH_TOKEN='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'
+export CLAUDE_AGENT_OAUTH_TOKEN='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'
 ```
 
 **Important**: Use single quotes and keep on ONE LINE!
 
 ### Verify Token is Set
 ```bash
-echo $CLAUDE_CODE_OAUTH_TOKEN | head -c 30
+echo $CLAUDE_AGENT_OAUTH_TOKEN | head -c 30
 # Should show: sk-ant-oat01-MvxhX-8pnRRnRsma
 ```
 
@@ -42,7 +42,7 @@ mix run test_live_v0_1_0.exs
 
 ## 🔍 If Still Getting Auth Errors
 
-The issue might be that the Claude CLI doesn't automatically use `CLAUDE_CODE_OAUTH_TOKEN`.
+The issue might be that the Claude CLI doesn't automatically use `CLAUDE_AGENT_OAUTH_TOKEN`.
 
 **Let's test the CLI directly**:
 
@@ -51,7 +51,7 @@ The issue might be that the Claude CLI doesn't automatically use `CLAUDE_CODE_OA
 claude --print "hello" --output-format json
 
 # If you get auth error, try setting it as ANTHROPIC_API_KEY instead:
-export ANTHROPIC_API_KEY="$CLAUDE_CODE_OAUTH_TOKEN"
+export ANTHROPIC_API_KEY="$CLAUDE_AGENT_OAUTH_TOKEN"
 claude --print "hello" --output-format json
 ```
 
@@ -80,7 +80,7 @@ This should work because the CLI will use its stored session.
 After testing, tell me:
 
 1. **Which method worked?**
-   - [ ] CLAUDE_CODE_OAUTH_TOKEN env var
+   - [ ] CLAUDE_AGENT_OAUTH_TOKEN env var
    - [ ] ANTHROPIC_API_KEY env var
    - [ ] Existing `claude login` session
 

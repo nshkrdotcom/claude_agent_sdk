@@ -3,9 +3,9 @@
 # Live test script for bidirectional streaming
 # Tests TRUE character-by-character streaming with --include-partial-messages
 
-Application.put_env(:claude_code_sdk, :use_mock, false)
+Application.put_env(:claude_agent_sdk, :use_mock, false)
 
-alias ClaudeCodeSDK.Streaming
+alias ClaudeAgentSDK.Streaming
 
 IO.puts("🔄 Testing Bidirectional Streaming (LIVE API)")
 IO.puts("=" |> String.duplicate(60))
@@ -21,7 +21,7 @@ IO.gets("")
 IO.puts("")
 IO.puts("🚀 Starting streaming session...")
 
-case Streaming.start_session(%ClaudeCodeSDK.Options{max_turns: 1}) do
+case Streaming.start_session(%ClaudeAgentSDK.Options{max_turns: 1}) do
   {:ok, session} ->
     IO.puts("✅ Session started!")
 

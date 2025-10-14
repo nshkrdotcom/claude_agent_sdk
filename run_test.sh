@@ -30,4 +30,4 @@ mix compile
 # Run the basic test
 echo ""
 echo "Running basic test..."
-elixir -pa _build/dev/lib/claude_code_sdk/ebin -pa _build/dev/lib/jason/ebin test_basic.exs
+elixir -pa _build/dev/lib/claude_agent_sdk/ebin -pa _build/dev/lib/jason/ebin test_basic.exs

@@ -35,10 +35,10 @@
 mix run final_test.exs
 
 # Analyze a single file  
-mix run examples/simple_analyzer.exs lib/claude_code_sdk.ex
+mix run examples/simple_analyzer.exs lib/claude_agent_sdk.ex
 
 # Review code quality
-mix run examples/file_reviewer.exs lib/claude_code_sdk.ex
+mix run examples/file_reviewer.exs lib/claude_agent_sdk.ex
 ```
 
 ### **Batch Processing (Intermediate)**
@@ -77,7 +77,7 @@ defmodule MyExample do
     end
     
     # Claude processing
-    result = ClaudeCodeSDK.query("Your prompt here")
+    result = ClaudeAgentSDK.query("Your prompt here")
              |> extract_assistant_content()
     
     # Output handling

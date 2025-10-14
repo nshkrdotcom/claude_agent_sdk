@@ -45,7 +45,7 @@
 
 **Example**:
 ```elixir
-defmodule ClaudeCodeSDK.OptionsTest do
+defmodule ClaudeAgentSDK.OptionsTest do
   use ExUnit.Case
 
   describe "to_args/1" do
@@ -81,16 +81,16 @@ end
 
 **Example**:
 ```elixir
-defmodule ClaudeCodeSDK.AuthIntegrationTest do
+defmodule ClaudeAgentSDK.AuthIntegrationTest do
   use ExUnit.Case
 
   @tag :integration
   test "AuthManager integrates with Process" do
     # Setup authentication
-    {:ok, _token} = ClaudeCodeSDK.AuthManager.setup_token()
+    {:ok, _token} = ClaudeAgentSDK.AuthManager.setup_token()
 
     # Verify Process can use authentication
-    messages = ClaudeCodeSDK.query("Hello") |> Enum.to_list()
+    messages = ClaudeAgentSDK.query("Hello") |> Enum.to_list()
 
     assert Enum.any?(messages, &(&1.type == :assistant))
   end
@@ -112,17 +112,17 @@ end
 
 **Example**:
 ```elixir
-defmodule ClaudeCodeSDK.E2ETest do
+defmodule ClaudeAgentSDK.E2ETest do
   use ExUnit.Case
 
   @tag :e2e
   @tag :expensive
   test "complete workflow: auth → query → session → resume" do
     # 1. Authenticate
-    {:ok, _token} = ClaudeCodeSDK.AuthManager.setup_token()
+    {:ok, _token} = ClaudeAgentSDK.AuthManager.setup_token()
 
     # 2. Run query
-    messages = ClaudeCodeSDK.query("Write a function to add two numbers")
+    messages = ClaudeAgentSDK.query("Write a function to add two numbers")
     |> Enum.to_list()
 
     session_id = extract_session_id(messages)
@@ -131,7 +131,7 @@ defmodule ClaudeCodeSDK.E2ETest do
     :ok = SessionStore.save_session(session_id, messages)
 
     # 4. Resume session
-    more_messages = ClaudeCodeSDK.resume(session_id, "Now add error handling")
+    more_messages = ClaudeAgentSDK.resume(session_id, "Now add error handling")
     |> Enum.to_list()
 
     # 5. Verify continuity
@@ -192,7 +192,7 @@ mix test --include integration
 mix test --include expensive --include e2e
 
 # Run specific test file
-mix test test/claude_code_sdk/auth_manager_test.exs
+mix test test/claude_agent_sdk/auth_manager_test.exs
 
 # Run with coverage
 mix test --cover
@@ -212,16 +212,16 @@ mix test --cover
 **Example**:
 ```elixir
 # test/test_helper.exs
-Application.put_env(:claude_code_sdk, :use_mock, true)
-{:ok, _} = ClaudeCodeSDK.Mock.start_link()
+Application.put_env(:claude_agent_sdk, :use_mock, true)
+{:ok, _} = ClaudeAgentSDK.Mock.start_link()
 
 # In tests
 test "query returns mocked response" do
-  ClaudeCodeSDK.Mock.set_response("hello", [
+  ClaudeAgentSDK.Mock.set_response("hello", [
     %{"type" => "assistant", "message" => %{"content" => "Hello!"}}
   ])
 
-  messages = ClaudeCodeSDK.query("hello") |> Enum.to_list()
+  messages = ClaudeAgentSDK.query("hello") |> Enum.to_list()
 
   assert Enum.any?(messages, &(&1.type == :assistant))
 end
@@ -237,12 +237,12 @@ end
 **Example**:
 ```elixir
 # Define behavior
-defmodule ClaudeCodeSDK.Auth.Provider do
+defmodule ClaudeAgentSDK.Auth.Provider do
   @callback setup_token() :: {:ok, String.t(), DateTime.t()} | {:error, term()}
 end
 
 # Define mock
-Mox.defmock(ClaudeCodeSDK.Auth.MockProvider, for: ClaudeCodeSDK.Auth.Provider)
+Mox.defmock(ClaudeAgentSDK.Auth.MockProvider, for: ClaudeAgentSDK.Auth.Provider)
 
 # In tests
 test "AuthManager uses provider" do
@@ -368,7 +368,7 @@ jobs:
 ### StreamData for AuthManager
 
 ```elixir
-defmodule ClaudeCodeSDK.AuthManager.PropertyTest do
+defmodule ClaudeAgentSDK.AuthManager.PropertyTest do
   use ExUnit.Case
   use ExUnitProperties
 
@@ -485,7 +485,7 @@ end
 **Tool**: Custom Elixir load generator
 
 ```elixir
-defmodule ClaudeCodeSDK.LoadTest do
+defmodule ClaudeAgentSDK.LoadTest do
   def run_load_test(queries_per_second, duration_seconds) do
     # Spawn workers
     workers = for _i <- 1..queries_per_second do
@@ -516,7 +516,7 @@ end
 **Run Load Test**:
 ```bash
 # 100 QPS for 60 seconds
-mix run -e 'ClaudeCodeSDK.LoadTest.run_load_test(100, 60)'
+mix run -e 'ClaudeAgentSDK.LoadTest.run_load_test(100, 60)'
 ```
 
 ### Chaos Testing
@@ -524,11 +524,11 @@ mix run -e 'ClaudeCodeSDK.LoadTest.run_load_test(100, 60)'
 **Simulate Failures**:
 
 ```elixir
-defmodule ClaudeCodeSDK.ChaosTest do
+defmodule ClaudeAgentSDK.ChaosTest do
   test "recovers from subprocess crash" do
     # Start query
     task = Task.async(fn ->
-      ClaudeCodeSDK.query("Long task...")
+      ClaudeAgentSDK.query("Long task...")
     end)
 
     # Kill subprocess mid-query
@@ -545,14 +545,14 @@ defmodule ClaudeCodeSDK.ChaosTest do
     # Simulate 5 consecutive API failures
     for _i <- 1..5 do
       simulate_api_failure()
-      assert {:error, _} = ClaudeCodeSDK.query("Test")
+      assert {:error, _} = ClaudeAgentSDK.query("Test")
     end
 
     # Circuit should be open
     assert CircuitBreaker.state() == :open
 
     # Requests should be rejected immediately
-    assert {:error, :circuit_open} = ClaudeCodeSDK.query("Test")
+    assert {:error, :circuit_open} = ClaudeAgentSDK.query("Test")
   end
 end
 ```

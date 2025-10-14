@@ -5,7 +5,7 @@
 
 ## 📚 Directory Contents
 
-This directory contains detailed implementation plans for transforming `claude_code_sdk_elixir` from v0.0.1 (excellent foundation) to v1.0.0 (production-ready orchestration platform).
+This directory contains detailed implementation plans for transforming `claude_agent_sdk` from v0.0.1 (excellent foundation) to v1.0.0 (production-ready orchestration platform).
 
 ### Master Documents
 

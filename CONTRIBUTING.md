@@ -18,7 +18,7 @@ Welcome to the Claude Code SDK for Elixir! This guide is designed for senior Eli
 The Claude Code SDK for Elixir is a wrapper around the Claude Code CLI tool that uses **erlexec** for robust subprocess management. The architecture follows functional programming principles with clear separation of concerns:
 
 ```
-User Code → ClaudeCodeSDK → Query → Process → erlexec → claude CLI
+User Code → ClaudeAgentSDK → Query → Process → erlexec → claude CLI
                                 ↓
                             Message ← JSON Parser
 ```
@@ -27,7 +27,7 @@ User Code → ClaudeCodeSDK → Query → Process → erlexec → claude CLI
 
 1. **Erlexec over Port**: We use erlexec instead of native Elixir `Port.open/2` for superior process management, IO handling, and error recovery
 2. **Stream-based Processing**: Lazy evaluation using Elixir Streams for memory efficiency
-3. **Structured Messages**: All CLI output is parsed into typed `ClaudeCodeSDK.Message` structs
+3. **Structured Messages**: All CLI output is parsed into typed `ClaudeAgentSDK.Message` structs
 4. **Zero External JSON Dependencies**: Custom JSON parser to avoid external dependencies
 5. **Synchronous Execution**: Using erlexec's `:sync` mode for reliable output capture
 
@@ -70,7 +70,7 @@ Erlexec is our primary dependency and the foundation of the SDK's reliability. I
 ```bash
 # Clone and setup
 git clone <repository-url>
-cd claude_code_sdk_elixir
+cd claude_agent_sdk
 
 # Install dependencies
 mix deps.get
@@ -100,8 +100,8 @@ Expected output should show successful API connection, message processing, and c
 ### Module Structure
 
 ```
-lib/claude_code_sdk/
-├── claude_code_sdk.ex      # Public API (query, continue, resume)
+lib/claude_agent_sdk/
+├── claude_agent_sdk.ex      # Public API (query, continue, resume)
 ├── query.ex                # Query orchestration and CLI args building  
 ├── process.ex              # Erlexec subprocess management
 ├── message.ex              # Message parsing and type definitions
@@ -111,7 +111,7 @@ lib/claude_code_sdk/
 
 ### Key Modules Deep Dive
 
-#### `ClaudeCodeSDK.Process` - Erlexec Integration
+#### `ClaudeAgentSDK.Process` - Erlexec Integration
 
 This is the core module that interfaces with erlexec:
 
@@ -129,7 +129,7 @@ end
 - Implements proper shell escaping for command arguments
 - Converts erlexec results to Elixir Streams
 
-#### `ClaudeCodeSDK.Message` - Type System
+#### `ClaudeAgentSDK.Message` - Type System
 
 Structured message types with comprehensive parsing:
 
@@ -144,12 +144,12 @@ Structured message types with comprehensive parsing:
 - Graceful fallback parsing for malformed JSON
 - Type safety with Dialyzer specs
 
-#### `ClaudeCodeSDK.Options` - Configuration
+#### `ClaudeAgentSDK.Options` - Configuration
 
 Comprehensive configuration system that maps to Claude CLI arguments:
 
 ```elixir
-%ClaudeCodeSDK.Options{
+%ClaudeAgentSDK.Options{
   max_turns: 10,
   output_format: :stream_json,
   system_prompt: "Custom prompt",
@@ -301,14 +301,14 @@ When modifying erlexec integration:
 
 #### Adding New CLI Options
 
-1. Add field to `ClaudeCodeSDK.Options` struct
+1. Add field to `ClaudeAgentSDK.Options` struct
 2. Update `to_args/1` function to convert to CLI argument
 3. Add documentation and type specs
 4. Test with integration tests
 
 #### Adding New Message Types
 
-1. Define type in `ClaudeCodeSDK.Message`
+1. Define type in `ClaudeAgentSDK.Message`
 2. Update JSON parsing logic
 3. Add pattern matching in examples
 4. Document new message structure

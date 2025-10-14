@@ -1,5 +1,5 @@
 import Config
 
 # Production environment - use real API
-config :claude_code_sdk,
+config :claude_agent_sdk,
   use_mock: false

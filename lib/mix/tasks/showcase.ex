@@ -23,7 +23,7 @@ defmodule Mix.Tasks.Showcase do
 
   def run(args) do
     # Start the application
-    Application.ensure_all_started(:claude_code_sdk)
+    Application.ensure_all_started(:claude_agent_sdk)
 
     live_mode = "--live" in args
 
@@ -32,12 +32,12 @@ defmodule Mix.Tasks.Showcase do
       IO.puts("Press Enter to continue or Ctrl+C to cancel...")
       IO.read(:line)
       # Disable mocking
-      Application.put_env(:claude_code_sdk, :use_mock, false)
+      Application.put_env(:claude_agent_sdk, :use_mock, false)
       IO.puts("✅ Live mode enabled - using real Claude CLI")
     else
       # Enable mocking (default)
-      Application.put_env(:claude_code_sdk, :use_mock, true)
-      {:ok, _} = ClaudeCodeSDK.Mock.start_link()
+      Application.put_env(:claude_agent_sdk, :use_mock, true)
+      {:ok, _} = ClaudeAgentSDK.Mock.start_link()
       IO.puts("✅ Mock mode enabled - no API calls will be made")
     end
 
@@ -56,7 +56,7 @@ defmodule Mix.Tasks.Showcase do
     end
 
     # Import all modules for showcase
-    alias ClaudeCodeSDK.{AuthChecker, ContentExtractor, DebugMode, Mock, OptionBuilder}
+    alias ClaudeAgentSDK.{AuthChecker, ContentExtractor, DebugMode, Mock, OptionBuilder}
 
     # Run all showcase sections
     run_option_builder_demo()
@@ -84,7 +84,7 @@ defmodule Mix.Tasks.Showcase do
   end
 
   defp setup_mock_responses do
-    alias ClaudeCodeSDK.Mock
+    alias ClaudeAgentSDK.Mock
 
     # Set up realistic mock responses
     Mock.set_response("hello", [
@@ -142,7 +142,7 @@ defmodule Mix.Tasks.Showcase do
   end
 
   defp run_option_builder_demo do
-    alias ClaudeCodeSDK.OptionBuilder
+    alias ClaudeAgentSDK.OptionBuilder
     IO.puts("\n🔧 1. OPTION BUILDER - Smart Configuration")
     IO.puts(String.duplicate("-", 50))
 
@@ -170,7 +170,7 @@ defmodule Mix.Tasks.Showcase do
   end
 
   defp run_auth_checker_demo do
-    alias ClaudeCodeSDK.AuthChecker
+    alias ClaudeAgentSDK.AuthChecker
     IO.puts("\n🔍 2. AUTH CHECKER - Environment Validation")
     IO.puts(String.duplicate("-", 50))
 
@@ -186,13 +186,13 @@ defmodule Mix.Tasks.Showcase do
   end
 
   defp run_basic_sdk_demo do
-    alias ClaudeCodeSDK.OptionBuilder
+    alias ClaudeAgentSDK.OptionBuilder
     IO.puts("\n🎯 3. BASIC SDK USAGE - Core Functionality")
     IO.puts(String.duplicate("-", 50))
 
     IO.puts("🚀 Making query with development options...")
     dev_options = OptionBuilder.build_development_options()
-    messages = ClaudeCodeSDK.query("hello", dev_options) |> Enum.to_list()
+    messages = ClaudeAgentSDK.query("hello", dev_options) |> Enum.to_list()
 
     IO.puts("✅ Received #{length(messages)} messages")
 
@@ -202,12 +202,12 @@ defmodule Mix.Tasks.Showcase do
   end
 
   defp run_content_extractor_demo do
-    alias ClaudeCodeSDK.{ContentExtractor, DebugMode, OptionBuilder}
+    alias ClaudeAgentSDK.{ContentExtractor, DebugMode, OptionBuilder}
     IO.puts("\n📜 4. CONTENT EXTRACTOR - Message Processing")
     IO.puts(String.duplicate("-", 50))
 
     dev_options = OptionBuilder.build_development_options()
-    messages = ClaudeCodeSDK.query("hello", dev_options) |> Enum.to_list()
+    messages = ClaudeAgentSDK.query("hello", dev_options) |> Enum.to_list()
     assistant_messages = Enum.filter(messages, &(&1.type == :assistant))
 
     if assistant_messages != [] do
@@ -234,12 +234,12 @@ defmodule Mix.Tasks.Showcase do
   end
 
   defp run_debug_mode_demo do
-    alias ClaudeCodeSDK.{DebugMode, OptionBuilder}
+    alias ClaudeAgentSDK.{DebugMode, OptionBuilder}
     IO.puts("\n🔬 5. DEBUG MODE - Troubleshooting Tools")
     IO.puts(String.duplicate("-", 50))
 
     dev_options = OptionBuilder.build_development_options()
-    messages = ClaudeCodeSDK.query("hello", dev_options) |> Enum.to_list()
+    messages = ClaudeAgentSDK.query("hello", dev_options) |> Enum.to_list()
     assistant_messages = Enum.filter(messages, &(&1.type == :assistant))
 
     IO.puts("🔍 Message Inspection:")
@@ -250,13 +250,13 @@ defmodule Mix.Tasks.Showcase do
     end
 
     IO.puts("\n🏥 Environment Status:")
-    IO.puts("   • Mock enabled: #{Application.get_env(:claude_code_sdk, :use_mock, false)}")
+    IO.puts("   • Mock enabled: #{Application.get_env(:claude_agent_sdk, :use_mock, false)}")
     IO.puts("   • Mix environment: dev")
     IO.puts("   • SDK version: 0.1.0")
   end
 
   defp run_performance_demo do
-    alias ClaudeCodeSDK.DebugMode
+    alias ClaudeAgentSDK.DebugMode
     IO.puts("\n⚡ 6. PERFORMANCE FEATURES - Benchmarking")
     IO.puts(String.duplicate("-", 50))
 
@@ -269,7 +269,7 @@ defmodule Mix.Tasks.Showcase do
   end
 
   defp run_mock_system_demo(live_mode) do
-    alias ClaudeCodeSDK.{ContentExtractor, Mock}
+    alias ClaudeAgentSDK.{ContentExtractor, Mock}
     IO.puts("\n🎮 7. MOCK SYSTEM - Testing Infrastructure")
     IO.puts(String.duplicate("-", 50))
 
@@ -291,7 +291,7 @@ defmodule Mix.Tasks.Showcase do
         %{"type" => "assistant", "message" => %{"content" => "Custom mock response!"}}
       ])
 
-      custom_result = ClaudeCodeSDK.query("custom test") |> Enum.to_list()
+      custom_result = ClaudeAgentSDK.query("custom test") |> Enum.to_list()
 
       custom_content =
         custom_result

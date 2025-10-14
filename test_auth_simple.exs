@@ -1,19 +1,19 @@
 #!/usr/bin/env elixir
 
 # Simple auth diagnostic
-# Tests if Claude CLI can use CLAUDE_CODE_OAUTH_TOKEN
+# Tests if Claude CLI can use CLAUDE_AGENT_OAUTH_TOKEN
 
 IO.puts("🔍 Testing Authentication Methods")
 IO.puts("")
 
 # Check what env vars are set
-oauth_token = System.get_env("CLAUDE_CODE_OAUTH_TOKEN")
+oauth_token = System.get_env("CLAUDE_AGENT_OAUTH_TOKEN")
 api_key = System.get_env("ANTHROPIC_API_KEY")
 
 IO.puts("Environment variables:")
 
 IO.puts(
-  "  CLAUDE_CODE_OAUTH_TOKEN: #{if oauth_token, do: String.slice(oauth_token, 0, 30) <> "...", else: "NOT SET"}"
+  "  CLAUDE_AGENT_OAUTH_TOKEN: #{if oauth_token, do: String.slice(oauth_token, 0, 30) <> "...", else: "NOT SET"}"
 )
 
 IO.puts(
@@ -39,7 +39,7 @@ case System.cmd("claude", ["--print", "test", "--output-format", "json"], stderr
       IO.puts("")
       IO.puts("❌ CLAUDE CLI CANNOT SEE THE TOKEN VIA ENV VAR")
       IO.puts("")
-      IO.puts("Solution: The CLI likely doesn't use CLAUDE_CODE_OAUTH_TOKEN automatically.")
+      IO.puts("Solution: The CLI likely doesn't use CLAUDE_AGENT_OAUTH_TOKEN automatically.")
       IO.puts("You need to either:")
       IO.puts("  1. Run 'claude login' to create a stored session")
       IO.puts("  2. Find out how to pass OAuth token to CLI")
@@ -59,16 +59,16 @@ IO.puts("Now testing through SDK...")
 IO.puts("")
 
 # Disable mocking
-Application.put_env(:claude_code_sdk, :use_mock, false)
+Application.put_env(:claude_agent_sdk, :use_mock, false)
 
 # Test through SDK
 try do
-  result = ClaudeCodeSDK.query("test") |> Enum.to_list()
+  result = ClaudeAgentSDK.query("test") |> Enum.to_list()
 
   assistant_msg = Enum.find(result, &(&1.type == :assistant))
 
   if assistant_msg do
-    response = ClaudeCodeSDK.ContentExtractor.extract_text(assistant_msg)
+    response = ClaudeAgentSDK.ContentExtractor.extract_text(assistant_msg)
 
     if String.contains?(response, "authentication_error") do
       IO.puts("❌ SDK query got auth error")

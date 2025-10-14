@@ -1,11 +1,11 @@
-defmodule ClaudeCodeSdk.MixProject do
+defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
   @version "0.2.2"
 
   def project do
     [
-      app: :claude_code_sdk,
+      app: :claude_agent_sdk,
       version: @version,
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
@@ -18,7 +18,7 @@ defmodule ClaudeCodeSdk.MixProject do
         "test.live": :test,
         "run.live": :dev
       ],
-      source_url: "https://github.com/nshkrdotcom/claude_code_sdk_elixir"
+      source_url: "https://github.com/nshkrdotcom/claude_agent_sdk"
     ]
   end
 
@@ -40,25 +40,87 @@ defmodule ClaudeCodeSdk.MixProject do
 
   defp package do
     [
-      name: "claude_code_sdk",
+      name: "claude_agent_sdk",
       licenses: ["MIT"],
       links: %{
-        "GitHub" => "https://github.com/nshkrdotcom/claude_code_sdk_elixir",
-        "Documentation" => "https://hexdocs.pm/claude_code_sdk",
+        "GitHub" => "https://github.com/nshkrdotcom/claude_agent_sdk",
+        "Documentation" => "https://hexdocs.pm/claude_agent_sdk",
         "Claude Code" => "https://claude.ai/code"
       },
       maintainers: [{"NSHkr", "ZeroTrust@NSHkr.com"}],
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs)
+      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs assets)
     ]
   end
 
   defp docs do
     [
-      main: "ClaudeCodeSDK",
-      extras: ["README.md", "CHANGELOG.md", "LICENSE", "COMPREHENSIVE_MANUAL.md", "MOCKING.md"],
+      main: "readme",
+      name: "ClaudeAgentSDK",
       source_ref: "v#{@version}",
-      source_url: "https://github.com/nshkrdotcom/claude_code_sdk_elixir",
+      source_url: "https://github.com/nshkrdotcom/claude_agent_sdk",
       homepage_url: "https://claude.ai/code",
+      assets: %{"assets" => "assets"},
+      logo: "assets/claude_agent_sdk.svg",
+      extras: [
+        "README.md",
+        "COMPREHENSIVE_MANUAL.md",
+        "MOCKING.md",
+        "CHANGELOG.md",
+        "LICENSE"
+      ],
+      groups_for_extras: [
+        Guides: ["README.md"],
+        Documentation: ["COMPREHENSIVE_MANUAL.md", "MOCKING.md"],
+        "Release Notes": ["CHANGELOG.md", "LICENSE"]
+      ],
+      groups_for_modules: [
+        "Core API": [
+          ClaudeAgentSDK,
+          ClaudeAgentSDK.Orchestrator,
+          ClaudeAgentSDK.Query
+        ],
+        Session: [
+          ClaudeAgentSDK.Session,
+          ClaudeAgentSDK.SessionStore
+        ],
+        Authentication: [
+          ClaudeAgentSDK.AuthManager,
+          ClaudeAgentSDK.AuthChecker,
+          ClaudeAgentSDK.Auth.TokenStore,
+          ClaudeAgentSDK.Auth.Provider,
+          ClaudeAgentSDK.Auth.Providers.Anthropic,
+          ClaudeAgentSDK.Auth.Providers.Vertex,
+          ClaudeAgentSDK.Auth.Providers.Bedrock
+        ],
+        Streaming: [
+          ClaudeAgentSDK.Streaming,
+          ClaudeAgentSDK.Streaming.Session,
+          ClaudeAgentSDK.Streaming.EventParser
+        ],
+        "Message Handling": [
+          ClaudeAgentSDK.Message,
+          ClaudeAgentSDK.ContentExtractor
+        ],
+        Configuration: [
+          ClaudeAgentSDK.Options,
+          ClaudeAgentSDK.OptionBuilder
+        ],
+        Testing: [
+          ClaudeAgentSDK.Mock,
+          ClaudeAgentSDK.Mock.Process
+        ],
+        Utilities: [
+          ClaudeAgentSDK.JSON,
+          ClaudeAgentSDK.DebugMode,
+          ClaudeAgentSDK.Process
+        ],
+        "Mix Tasks": [
+          Mix.Tasks.Claude.SetupToken,
+          Mix.Tasks.Run.Live,
+          Mix.Tasks.Test.Live,
+          Mix.Tasks.Showcase
+        ]
+      ],
       before_closing_head_tag: &before_closing_head_tag/1,
       before_closing_body_tag: &before_closing_body_tag/1
     ]

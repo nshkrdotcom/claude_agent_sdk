@@ -1,6 +1,6 @@
 # Rate Limiting & Circuit Breaking - Best Practices
 ## Application-Level Implementation Guide
-## claude_code_sdk_elixir
+## claude_agent_sdk
 
 ---
 
@@ -25,7 +25,7 @@
 ```elixir
 # Accidental abuse - rapid loop
 1..10_000 |> Enum.each(fn i ->
-  ClaudeCodeSDK.query("Query #{i}")  # ← Could hit API limits!
+  ClaudeAgentSDK.query("Query #{i}")  # ← Could hit API limits!
 end)
 
 # Concurrent orchestration
@@ -45,7 +45,7 @@ Orchestrator.query_parallel(500_queries)  # ← Could overwhelm API
 # mix.exs
 defp deps do
   [
-    {:claude_code_sdk, "~> 0.1.0"},
+    {:claude_agent_sdk, "~> 0.1.0"},
     {:hammer, "~> 6.1"}
   ]
 end
@@ -83,7 +83,7 @@ defmodule MyApp.Claude do
 
     case Hammer.check_rate(bucket, scale_ms, limit) do
       {:allow, _count} ->
-        ClaudeCodeSDK.query(prompt, options) |> Enum.to_list()
+        ClaudeAgentSDK.query(prompt, options) |> Enum.to_list()
 
       {:deny, retry_after_ms} ->
         {:error, {:rate_limited, "Retry after #{retry_after_ms}ms"}}
@@ -104,7 +104,7 @@ defmodule MyApp.Claude do
     case Hammer.check_rate(bucket, 60_000, @queries_per_user_per_minute) do
       {:allow, count} ->
         Logger.info("User #{user_id} query #{count}/#{@queries_per_user_per_minute}")
-        ClaudeCodeSDK.query(prompt, options) |> Enum.to_list()
+        ClaudeAgentSDK.query(prompt, options) |> Enum.to_list()
 
       {:deny, retry_after_ms} ->
         Logger.warning("User #{user_id} rate limited, retry in #{retry_after_ms}ms")
@@ -118,7 +118,7 @@ end
 
 ```elixir
 defmodule MyApp.BulkAnalyzer do
-  alias ClaudeCodeSDK.Orchestrator
+  alias ClaudeAgentSDK.Orchestrator
 
   @rate_limit_per_minute 60
 
@@ -184,7 +184,7 @@ end
 # Usage
 case MyApp.CostLimiter.check_budget(0.05) do  # Opus query ~$0.05
   :ok ->
-    result = ClaudeCodeSDK.query(prompt, OptionBuilder.with_opus())
+    result = ClaudeAgentSDK.query(prompt, OptionBuilder.with_opus())
     # Track actual cost after
     cost = Session.calculate_cost(result)
     # Could adjust budget tracking here
@@ -208,7 +208,7 @@ defmodule MyApp.Claude do
   def query_with_limit(prompt) do
     case ExRated.check_rate("claude_api", 60_000, 60) do
       {:ok, _count} ->
-        ClaudeCodeSDK.query(prompt) |> Enum.to_list()
+        ClaudeAgentSDK.query(prompt) |> Enum.to_list()
 
       {:error, _limit} ->
         {:error, :rate_limited}
@@ -227,9 +227,9 @@ end
 
 ```elixir
 # Claude API is down
-ClaudeCodeSDK.query("test")  # ← Fails
-ClaudeCodeSDK.query("test")  # ← Fails
-ClaudeCodeSDK.query("test")  # ← Fails
+ClaudeAgentSDK.query("test")  # ← Fails
+ClaudeAgentSDK.query("test")  # ← Fails
+ClaudeAgentSDK.query("test")  # ← Fails
 # ... keeps trying, wastes time/money
 ```
 
@@ -287,7 +287,7 @@ defmodule MyApp.Claude do
       :ok ->
         # Circuit closed, try query
         try do
-          result = ClaudeCodeSDK.query(prompt, options) |> Enum.to_list()
+          result = ClaudeAgentSDK.query(prompt, options) |> Enum.to_list()
 
           # Check for errors in result
           if has_errors?(result) do
@@ -490,7 +490,7 @@ defmodule MyApp.Workers.CodeReview do
 
   defp execute_review(code) do
     try do
-      result = ClaudeCodeSDK.query("Review: #{code}")
+      result = ClaudeAgentSDK.query("Review: #{code}")
       |> Enum.to_list()
 
       :fuse.reset(:claude_api)
@@ -508,7 +508,7 @@ end
 
 ```elixir
 defmodule MyApp.BulkProcessor do
-  alias ClaudeCodeSDK.{Orchestrator, Session}
+  alias ClaudeAgentSDK.{Orchestrator, Session}
 
   def process_with_budget(queries, max_cost_usd \\ 5.0) do
     # Track cost as we go
@@ -655,7 +655,7 @@ defmodule MyApp.AdaptiveRateLimiter do
 
     case Hammer.check_rate("claude_adaptive", 60_000, limit) do
       {:allow, _} ->
-        result = ClaudeCodeSDK.query(prompt) |> Enum.to_list()
+        result = ClaudeAgentSDK.query(prompt) |> Enum.to_list()
 
         # Adjust based on result
         if got_rate_limited?(result) do
@@ -703,7 +703,7 @@ defmodule MyApp.PriorityQueue do
     end
 
     case Hammer.check_rate(bucket, 60_000, limit) do
-      {:allow, _} -> ClaudeCodeSDK.query(prompt) |> Enum.to_list()
+      {:allow, _} -> ClaudeAgentSDK.query(prompt) |> Enum.to_list()
       {:deny, _} -> {:error, :rate_limited}
     end
   end
@@ -760,7 +760,7 @@ end
 ```elixir
 # No rate limiting needed
 # Just use SDK directly
-ClaudeCodeSDK.query(prompt)
+ClaudeAgentSDK.query(prompt)
 ```
 
 **Production apps**:
@@ -827,7 +827,7 @@ defmodule MyApp.Claude do
   def query(prompt) do
     case Hammer.check_rate("claude", 60_000, 60) do
       {:allow, _} ->
-        ClaudeCodeSDK.query(prompt) |> Enum.to_list()
+        ClaudeAgentSDK.query(prompt) |> Enum.to_list()
 
       {:deny, retry_ms} ->
         {:error, {:rate_limited, retry_ms}}
@@ -856,7 +856,7 @@ end
 
 # lib/my_app/claude.ex
 defmodule MyApp.Claude do
-  alias ClaudeCodeSDK.Orchestrator
+  alias ClaudeAgentSDK.Orchestrator
 
   def query(prompt, opts \\ %{}) do
     with :ok <- check_rate_limit(),

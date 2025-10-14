@@ -24,7 +24,7 @@ Implement automatic token-based authentication to eliminate manual `claude login
 # Current: Manual intervention required
 $ claude login  # ← User must leave Elixir and authenticate manually
 $ iex -S mix
-iex> ClaudeCodeSDK.query("Hello")  # Only works if login was done
+iex> ClaudeAgentSDK.query("Hello")  # Only works if login was done
 
 # In CI/CD: Completely broken
 # - Can't run `claude login` interactively
@@ -34,17 +34,17 @@ iex> ClaudeCodeSDK.query("Hello")  # Only works if login was done
 ### Desired State
 ```elixir
 # Automatic authentication with no user intervention
-iex> ClaudeCodeSDK.AuthManager.setup_token()  # One-time setup
+iex> ClaudeAgentSDK.AuthManager.setup_token()  # One-time setup
 {:ok, "sk-ant-api03-..."}
 
 # Future queries just work
-iex> ClaudeCodeSDK.query("Hello")  # ✅ Automatically authenticated
+iex> ClaudeAgentSDK.query("Hello")  # ✅ Automatically authenticated
 
 # Background jobs work seamlessly
 defmodule MyApp.ScheduledTask do
   def run do
     # No manual auth needed - token managed automatically
-    ClaudeCodeSDK.query("Daily report")
+    ClaudeAgentSDK.query("Daily report")
   end
 end
 ```
@@ -57,7 +57,7 @@ end
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ ClaudeCodeSDK.AuthManager (GenServer)                   │
+│ ClaudeAgentSDK.AuthManager (GenServer)                   │
 ├─────────────────────────────────────────────────────────┤
 │ Responsibilities:                                        │
 │ • Token acquisition via `claude setup-token`            │
@@ -82,7 +82,7 @@ end
 defmodule MyApp.Application do
   def start(_type, _args) do
     children = [
-      ClaudeCodeSDK.AuthManager,  # ← Add to supervision tree
+      ClaudeAgentSDK.AuthManager,  # ← Add to supervision tree
       # ... other children
     ]
     Supervisor.start_link(children, strategy: :one_for_one)
@@ -90,10 +90,10 @@ defmodule MyApp.Application do
 end
 
 # 2. Process.stream/3 (automatic auth check)
-defmodule ClaudeCodeSDK.Process do
+defmodule ClaudeAgentSDK.Process do
   defp stream_real(args, options, stdin_input) do
     # Check authentication before spawning subprocess
-    case ClaudeCodeSDK.AuthManager.ensure_authenticated() do
+    case ClaudeAgentSDK.AuthManager.ensure_authenticated() do
       :ok ->
         Stream.resource(...)
       {:error, reason} ->
@@ -111,7 +111,7 @@ $ mix claude.setup_token
 ## 📁 File Structure
 
 ```
-lib/claude_code_sdk/
+lib/claude_agent_sdk/
   auth_manager.ex          # New: Main GenServer implementation
   auth/
     token_store.ex         # New: Persistent token storage
@@ -124,7 +124,7 @@ lib/claude_code_sdk/
 lib/mix/tasks/
   claude.setup_token.ex    # New: Mix task for manual setup
 
-test/claude_code_sdk/
+test/claude_agent_sdk/
   auth_manager_test.exs    # New: Unit tests
   auth/
     token_store_test.exs   # New: Storage tests
@@ -140,10 +140,10 @@ config/
 
 ### Phase 1: Core AuthManager GenServer
 
-**File**: `lib/claude_code_sdk/auth_manager.ex`
+**File**: `lib/claude_agent_sdk/auth_manager.ex`
 
 ```elixir
-defmodule ClaudeCodeSDK.AuthManager do
+defmodule ClaudeAgentSDK.AuthManager do
   @moduledoc """
   Manages authentication tokens for Claude Code SDK.
 
@@ -161,18 +161,18 @@ defmodule ClaudeCodeSDK.AuthManager do
   ## Usage
 
       # One-time setup (interactive, requires Claude subscription)
-      {:ok, token} = ClaudeCodeSDK.AuthManager.setup_token()
+      {:ok, token} = ClaudeAgentSDK.AuthManager.setup_token()
 
       # Subsequent calls automatically use stored token
-      ClaudeCodeSDK.query("Hello")  # ✅ Authenticated
+      ClaudeAgentSDK.query("Hello")  # ✅ Authenticated
 
       # Manual refresh if needed
-      {:ok, token} = ClaudeCodeSDK.AuthManager.refresh_token()
+      {:ok, token} = ClaudeAgentSDK.AuthManager.refresh_token()
 
   ## Configuration
 
       # config/config.exs
-      config :claude_code_sdk,
+      config :claude_agent_sdk,
         auth_storage: :file,  # :file | :application_env | :custom
         auth_file_path: "~/.claude_sdk/token.json",
         auto_refresh: true,
@@ -182,7 +182,7 @@ defmodule ClaudeCodeSDK.AuthManager do
   use GenServer
   require Logger
 
-  alias ClaudeCodeSDK.Auth.{TokenStore, Provider}
+  alias ClaudeAgentSDK.Auth.{TokenStore, Provider}
 
   # State structure
   defstruct [
@@ -225,11 +225,11 @@ defmodule ClaudeCodeSDK.AuthManager do
 
   ## Examples
 
-      iex> ClaudeCodeSDK.AuthManager.ensure_authenticated()
+      iex> ClaudeAgentSDK.AuthManager.ensure_authenticated()
       :ok
 
       # In CI without token:
-      iex> ClaudeCodeSDK.AuthManager.ensure_authenticated()
+      iex> ClaudeAgentSDK.AuthManager.ensure_authenticated()
       {:error, :authentication_required}
   """
   @spec ensure_authenticated() :: :ok | {:error, term()}
@@ -247,10 +247,10 @@ defmodule ClaudeCodeSDK.AuthManager do
 
   ## Examples
 
-      iex> ClaudeCodeSDK.AuthManager.setup_token()
+      iex> ClaudeAgentSDK.AuthManager.setup_token()
       {:ok, "sk-ant-api03-..."}
 
-      iex> ClaudeCodeSDK.AuthManager.setup_token()
+      iex> ClaudeAgentSDK.AuthManager.setup_token()
       {:error, "claude setup-token failed: not subscribed"}
   """
   @spec setup_token() :: {:ok, String.t()} | {:error, term()}
@@ -265,10 +265,10 @@ defmodule ClaudeCodeSDK.AuthManager do
 
   ## Examples
 
-      iex> ClaudeCodeSDK.AuthManager.get_token()
+      iex> ClaudeAgentSDK.AuthManager.get_token()
       {:ok, "sk-ant-api03-..."}
 
-      iex> ClaudeCodeSDK.AuthManager.get_token()
+      iex> ClaudeAgentSDK.AuthManager.get_token()
       {:error, :not_authenticated}
   """
   @spec get_token() :: {:ok, String.t()} | {:error, :not_authenticated}
@@ -283,7 +283,7 @@ defmodule ClaudeCodeSDK.AuthManager do
 
   ## Examples
 
-      iex> ClaudeCodeSDK.AuthManager.refresh_token()
+      iex> ClaudeAgentSDK.AuthManager.refresh_token()
       {:ok, "sk-ant-api03-..."}
   """
   @spec refresh_token() :: {:ok, String.t()} | {:error, term()}
@@ -298,7 +298,7 @@ defmodule ClaudeCodeSDK.AuthManager do
 
   ## Examples
 
-      iex> ClaudeCodeSDK.AuthManager.clear_auth()
+      iex> ClaudeAgentSDK.AuthManager.clear_auth()
       :ok
   """
   @spec clear_auth() :: :ok
@@ -311,7 +311,7 @@ defmodule ClaudeCodeSDK.AuthManager do
 
   ## Examples
 
-      iex> ClaudeCodeSDK.AuthManager.status()
+      iex> ClaudeAgentSDK.AuthManager.status()
       %{
         authenticated: true,
         provider: :anthropic,
@@ -514,8 +514,8 @@ defmodule ClaudeCodeSDK.AuthManager do
 
   defp detect_provider do
     cond do
-      System.get_env("CLAUDE_CODE_USE_BEDROCK") == "1" -> :bedrock
-      System.get_env("CLAUDE_CODE_USE_VERTEX") == "1" -> :vertex
+      System.get_env("CLAUDE_AGENT_USE_BEDROCK") == "1" -> :bedrock
+      System.get_env("CLAUDE_AGENT_USE_VERTEX") == "1" -> :vertex
       true -> :anthropic
     end
   end
@@ -526,7 +526,7 @@ defmodule ClaudeCodeSDK.AuthManager do
 
     # Get refresh interval from config
     refresh_before_ms = Application.get_env(
-      :claude_code_sdk,
+      :claude_agent_sdk,
       :refresh_before_expiry,
       86_400_000  # 1 day default
     )
@@ -571,16 +571,16 @@ end
 
 ### Phase 2: Token Storage Backend
 
-**File**: `lib/claude_code_sdk/auth/token_store.ex`
+**File**: `lib/claude_agent_sdk/auth/token_store.ex`
 
 ```elixir
-defmodule ClaudeCodeSDK.Auth.TokenStore do
+defmodule ClaudeAgentSDK.Auth.TokenStore do
   @moduledoc """
   Persistent token storage for authentication.
 
   Supports multiple storage backends:
   - File-based (default): ~/.claude_sdk/token.json
-  - Application environment: :claude_code_sdk, :auth_token
+  - Application environment: :claude_agent_sdk, :auth_token
   - Custom: User-provided module implementing this behavior
   """
 
@@ -677,7 +677,7 @@ defmodule ClaudeCodeSDK.Auth.TokenStore do
   end
 
   defp storage_path do
-    Application.get_env(:claude_code_sdk, :auth_file_path, @default_path)
+    Application.get_env(:claude_agent_sdk, :auth_file_path, @default_path)
     |> Path.expand()
   end
 
@@ -693,10 +693,10 @@ end
 
 ### Phase 3: Provider Abstraction
 
-**File**: `lib/claude_code_sdk/auth/provider.ex`
+**File**: `lib/claude_agent_sdk/auth/provider.ex`
 
 ```elixir
-defmodule ClaudeCodeSDK.Auth.Provider do
+defmodule ClaudeAgentSDK.Auth.Provider do
   @moduledoc """
   Multi-provider authentication abstraction.
 
@@ -715,23 +715,23 @@ defmodule ClaudeCodeSDK.Auth.Provider do
   """
   @spec setup_token(provider()) :: {:ok, String.t(), DateTime.t() | nil} | {:error, term()}
   def setup_token(:anthropic) do
-    ClaudeCodeSDK.Auth.Providers.Anthropic.setup_token()
+    ClaudeAgentSDK.Auth.Providers.Anthropic.setup_token()
   end
 
   def setup_token(:bedrock) do
-    ClaudeCodeSDK.Auth.Providers.Bedrock.setup_token()
+    ClaudeAgentSDK.Auth.Providers.Bedrock.setup_token()
   end
 
   def setup_token(:vertex) do
-    ClaudeCodeSDK.Auth.Providers.Vertex.setup_token()
+    ClaudeAgentSDK.Auth.Providers.Vertex.setup_token()
   end
 end
 ```
 
-**File**: `lib/claude_code_sdk/auth/providers/anthropic.ex`
+**File**: `lib/claude_agent_sdk/auth/providers/anthropic.ex`
 
 ```elixir
-defmodule ClaudeCodeSDK.Auth.Providers.Anthropic do
+defmodule ClaudeAgentSDK.Auth.Providers.Anthropic do
   @moduledoc """
   Anthropic-specific authentication via `claude setup-token`.
   """
@@ -864,7 +864,7 @@ defmodule Mix.Tasks.Claude.SetupToken do
   end
 
   defp token_exists? do
-    case ClaudeCodeSDK.AuthManager.get_token() do
+    case ClaudeAgentSDK.AuthManager.get_token() do
       {:ok, _token} -> true
       _ -> false
     end
@@ -879,7 +879,7 @@ defmodule Mix.Tasks.Claude.SetupToken do
     Mix.shell().info("  3. Store the token for automatic use")
     Mix.shell().info("")
 
-    case ClaudeCodeSDK.AuthManager.setup_token() do
+    case ClaudeAgentSDK.AuthManager.setup_token() do
       {:ok, token} ->
         Mix.shell().info("✅ Authentication successful!")
         Mix.shell().info("")
@@ -899,12 +899,12 @@ defmodule Mix.Tasks.Claude.SetupToken do
 
   defp clear_auth do
     Mix.shell().info("🗑️  Clearing authentication...")
-    :ok = ClaudeCodeSDK.AuthManager.clear_auth()
+    :ok = ClaudeAgentSDK.AuthManager.clear_auth()
     Mix.shell().info("✅ Authentication cleared")
   end
 
   defp show_status do
-    status = ClaudeCodeSDK.AuthManager.status()
+    status = ClaudeAgentSDK.AuthManager.status()
 
     Mix.shell().info("")
     Mix.shell().info("📊 Authentication Status:")
@@ -917,7 +917,7 @@ defmodule Mix.Tasks.Claude.SetupToken do
     end
 
     Mix.shell().info("")
-    Mix.shell().info("Ready to use ClaudeCodeSDK.query/2")
+    Mix.shell().info("Ready to use ClaudeAgentSDK.query/2")
   end
 end
 ```
@@ -928,14 +928,14 @@ end
 
 ### Unit Tests
 
-**File**: `test/claude_code_sdk/auth_manager_test.exs`
+**File**: `test/claude_agent_sdk/auth_manager_test.exs`
 
 ```elixir
-defmodule ClaudeCodeSDK.AuthManagerTest do
+defmodule ClaudeAgentSDK.AuthManagerTest do
   use ExUnit.Case, async: false
 
-  alias ClaudeCodeSDK.AuthManager
-  alias ClaudeCodeSDK.Auth.TokenStore
+  alias ClaudeAgentSDK.AuthManager
+  alias ClaudeAgentSDK.Auth.TokenStore
 
   setup do
     # Use test storage backend
@@ -1021,16 +1021,16 @@ end
 ### Integration Tests
 
 ```elixir
-defmodule ClaudeCodeSDK.AuthIntegrationTest do
+defmodule ClaudeAgentSDK.AuthIntegrationTest do
   use ExUnit.Case
 
   @tag :integration
   test "queries work automatically with stored token" do
     # Setup token once
-    {:ok, _token} = ClaudeCodeSDK.AuthManager.setup_token()
+    {:ok, _token} = ClaudeAgentSDK.AuthManager.setup_token()
 
     # Query should work without manual authentication
-    messages = ClaudeCodeSDK.query("Hello") |> Enum.to_list()
+    messages = ClaudeAgentSDK.query("Hello") |> Enum.to_list()
 
     assert Enum.any?(messages, &(&1.type == :assistant))
   end
@@ -1038,14 +1038,14 @@ defmodule ClaudeCodeSDK.AuthIntegrationTest do
   @tag :integration
   test "survives application restart" do
     # Setup token
-    {:ok, token} = ClaudeCodeSDK.AuthManager.setup_token()
+    {:ok, token} = ClaudeAgentSDK.AuthManager.setup_token()
 
     # Restart GenServer (simulating app restart)
-    Process.exit(Process.whereis(ClaudeCodeSDK.AuthManager), :kill)
+    Process.exit(Process.whereis(ClaudeAgentSDK.AuthManager), :kill)
     Process.sleep(100)
 
     # Token should be reloaded from storage
-    {:ok, loaded_token} = ClaudeCodeSDK.AuthManager.get_token()
+    {:ok, loaded_token} = ClaudeAgentSDK.AuthManager.get_token()
     assert loaded_token == token
   end
 end
@@ -1101,7 +1101,7 @@ $ mix claude.setup_token  # One-time setup
 # config/config.exs
 
 # Optional: Customize token storage
-config :claude_code_sdk,
+config :claude_agent_sdk,
   auth_storage: :file,  # or :application_env
   auth_file_path: "~/.my_app/claude_token.json",
   auto_refresh: true,
@@ -1119,7 +1119,7 @@ config :claude_code_sdk,
 def start(_type, _args) do
   children = [
     # Add AuthManager to supervision tree
-    ClaudeCodeSDK.AuthManager,  # ← New
+    ClaudeAgentSDK.AuthManager,  # ← New
     # ... rest of your children
   ]
 
@@ -1231,13 +1231,13 @@ Still works but requires re-authentication more frequently.
 - `jason` (already in deps)
 
 ### Internal
-- `ClaudeCodeSDK.Process` (update for auth check)
-- `ClaudeCodeSDK.AuthChecker` (deprecate in favor of AuthManager)
+- `ClaudeAgentSDK.Process` (update for auth check)
+- `ClaudeAgentSDK.AuthChecker` (deprecate in favor of AuthManager)
 
 ### New
-- `ClaudeCodeSDK.AuthManager`
-- `ClaudeCodeSDK.Auth.TokenStore`
-- `ClaudeCodeSDK.Auth.Provider`
+- `ClaudeAgentSDK.AuthManager`
+- `ClaudeAgentSDK.Auth.TokenStore`
+- `ClaudeAgentSDK.Auth.Provider`
 
 ---
 

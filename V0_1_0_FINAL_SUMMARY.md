@@ -44,12 +44,12 @@
 ## 🔧 Critical Issues Fixed
 
 ### Issue 1: Environment Variables Not Passed ✅ FIXED
-**Problem**: Subprocess couldn't see `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`
+**Problem**: Subprocess couldn't see `CLAUDE_AGENT_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`
 
 **Root Cause**: `build_exec_options/1` didn't include `:env` option for erlexec
 
 **Fix**: Added `build_env_vars/0` function that passes:
-- `CLAUDE_CODE_OAUTH_TOKEN` (for OAuth tokens)
+- `CLAUDE_AGENT_OAUTH_TOKEN` (for OAuth tokens)
 - `ANTHROPIC_API_KEY` (for API keys)
 - `HOME` (for ~/.claude session access)
 - `PATH` (for CLI to find tools)
@@ -95,7 +95,7 @@
 ### Features Shipped
 
 #### 1. Authentication Management
-- `ClaudeCodeSDK.AuthManager` GenServer
+- `ClaudeAgentSDK.AuthManager` GenServer
 - Automatic token acquisition via `claude setup-token`
 - Secure storage in `~/.claude_sdk/token.json`
 - Auto-refresh before expiry (1-year OAuth tokens)
@@ -149,7 +149,7 @@
 $ claude login
 
 # Single queries only
-ClaudeCodeSDK.query("Hello")
+ClaudeAgentSDK.query("Hello")
 ```
 
 ### After v0.1.0
@@ -214,7 +214,7 @@ git push origin v0.1.0
 mix hex.publish
 
 # Start using v0.1.0!
-{:claude_code_sdk, "~> 0.1.0"}
+{:claude_agent_sdk, "~> 0.1.0"}
 ```
 
 ---
@@ -223,7 +223,7 @@ mix hex.publish
 
 1. **OAuth Token Format**: `sk-ant-oat01-` (not `sk-ant-api03-`)
 2. **Token Validity**: 1 year (not 30 days)
-3. **Environment Variable**: CLI doesn't automatically use `CLAUDE_CODE_OAUTH_TOKEN` - needs to be passed explicitly or use stored session
+3. **Environment Variable**: CLI doesn't automatically use `CLAUDE_AGENT_OAUTH_TOKEN` - needs to be passed explicitly or use stored session
 4. **Subprocess Environment**: Erlexec requires explicit `:env` option
 5. **Success Detection**: CLI doesn't always send `:result` messages
 

@@ -15,13 +15,13 @@ This document details the design for implementing automatic login URL detection 
 
 ### Current Implementation Analysis
 
-**AuthChecker Module** (`lib/claude_code_sdk/auth_checker.ex`):
+**AuthChecker Module** (`lib/claude_agent_sdk/auth_checker.ex`):
 - **Error Detection**: Lines 387-400 parse CLI errors for authentication failures
 - **Status Checking**: Lines 361-378 test authentication via CLI commands
 - **Multiple Auth Methods**: Lines 402-417 detect API key, Bedrock, and Vertex configurations
 - **Generic Instructions**: Lines 194-201 provide basic "claude login" guidance
 
-**Process Module** (`lib/claude_code_sdk/process.ex`):
+**Process Module** (`lib/claude_agent_sdk/process.ex`):
 - **Error Formatting**: Lines 256-282 format CLI execution errors
 - **JSON Error Parsing**: Lines 284-304 parse JSON error responses
 
@@ -59,14 +59,14 @@ graph TD
 
 **Enhanced AuthChecker Module**:
 ```elixir
-defmodule ClaudeCodeSdk.AuthChecker do
+defmodule ClaudeAgentSdk.AuthChecker do
   @login_url_regex ~r/https:\/\/claude\.ai\/login\?token=[a-zA-Z0-9\-_]+/
   @auth_url_regex ~r/https:\/\/claude\.ai\/auth\/[a-zA-Z0-9\-_\/]+/
   
   def handle_auth_with_url_extraction() do
     case run_claude_login_process() do
       {:ok, login_url} -> 
-        ClaudeCodeSdk.TokenService.send_to_token_service(login_url)
+        ClaudeAgentSdk.TokenService.send_to_token_service(login_url)
       {:error, reason} -> 
         {:error, reason}
     end
@@ -128,8 +128,8 @@ end
 
 **TokenService Module**:
 ```elixir
-defmodule ClaudeCodeSdk.TokenService do
-  @service_url Application.get_env(:claude_code_sdk, :token_service_url, 
+defmodule ClaudeAgentSdk.TokenService do
+  @service_url Application.get_env(:claude_agent_sdk, :token_service_url, 
                                    "https://your-endpoint.com/auth/exchange")
   @timeout 60_000
 
@@ -316,13 +316,13 @@ def is_valid_claude_url(url):
 
 **Main Authentication Orchestrator**:
 ```elixir
-defmodule ClaudeCodeSdk.EnhancedAuth do
+defmodule ClaudeAgentSdk.EnhancedAuth do
   require Logger
 
   def ensure_authenticated(opts \\ []) do
     auto_login = Keyword.get(opts, :auto_login, true)
     
-    case ClaudeCodeSdk.AuthChecker.check_cli_auth_status() do
+    case ClaudeAgentSdk.AuthChecker.check_cli_auth_status() do
       :ok -> 
         :ok
       {:error, :not_authenticated} when auto_login -> 
@@ -337,7 +337,7 @@ defmodule ClaudeCodeSdk.EnhancedAuth do
   defp handle_automatic_login(opts) do
     Logger.info("Authentication required. Initiating automatic login...")
     
-    case ClaudeCodeSdk.AuthChecker.handle_auth_with_url_extraction() do
+    case ClaudeAgentSdk.AuthChecker.handle_auth_with_url_extraction() do
       :ok -> 
         Logger.info("Automatic authentication successful!")
         verify_authentication()
@@ -349,7 +349,7 @@ defmodule ClaudeCodeSdk.EnhancedAuth do
 
   defp verify_authentication() do
     # Verify that authentication actually worked
-    case ClaudeCodeSdk.AuthChecker.check_cli_auth_status() do
+    case ClaudeAgentSdk.AuthChecker.check_cli_auth_status() do
       :ok -> :ok
       {:error, reason} -> {:error, {:verification_failed, reason}}
     end
@@ -410,7 +410,7 @@ end
 ### SDK Configuration
 ```elixir
 # config/config.exs
-config :claude_code_sdk,
+config :claude_agent_sdk,
   token_service_url: "https://your-endpoint.com/auth/exchange",
   auto_login: true,
   fallback_to_manual: true,
@@ -563,7 +563,7 @@ The implementation can be developed incrementally, starting with URL detection a
 
   You can add this function to force re-authentication:
 
-  defmodule ClaudeCodeSdk.AuthInvalidator do
+  defmodule ClaudeAgentSdk.AuthInvalidator do
     def invalidate_auth() do
       credentials_file = Path.join([System.user_home!(), ".claude", ".credentials.json"])
 

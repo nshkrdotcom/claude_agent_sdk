@@ -17,7 +17,7 @@ defmodule Mix.Tasks.Run.Live do
   ## Examples
 
       # Run a simple analysis script
-      mix run.live examples/simple_analyzer.exs lib/claude_code_sdk.ex
+      mix run.live examples/simple_analyzer.exs lib/claude_agent_sdk.ex
       
       # Run any custom script with live API
       mix run.live my_script.exs
@@ -44,7 +44,7 @@ defmodule Mix.Tasks.Run.Live do
         System.put_env("LIVE_TESTS", "true")
 
         # Configure the application for live API
-        Application.put_env(:claude_code_sdk, :use_mock, false)
+        Application.put_env(:claude_agent_sdk, :use_mock, false)
 
         IO.puts("🔴 Running script with LIVE API calls...")
         IO.puts("⚠️  Warning: This will make real API calls and may incur costs!")

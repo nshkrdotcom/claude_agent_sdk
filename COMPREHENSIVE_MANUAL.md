@@ -26,11 +26,11 @@ The Claude Code SDK for Elixir provides a native Elixir interface to Claude Code
 ## Implementation Status
 
 ### ✅ **Currently Implemented (Working)**
-- **Core API**: `ClaudeCodeSDK.query/2`, `continue/2`, `resume/3` functions
+- **Core API**: `ClaudeAgentSDK.query/2`, `continue/2`, `resume/3` functions
 - **Message System**: Complete message parsing with types `:system`, `:user`, `:assistant`, `:result`
-- **Options Configuration**: Full `ClaudeCodeSDK.Options` struct with CLI argument mapping
+- **Options Configuration**: Full `ClaudeAgentSDK.Options` struct with CLI argument mapping
 - **Process Management**: Robust subprocess handling using erlexec
-- **JSON Processing**: Custom JSON parser (`ClaudeCodeSDK.JSON`) without external dependencies
+- **JSON Processing**: Custom JSON parser (`ClaudeAgentSDK.JSON`) without external dependencies
 - **Authentication**: Seamless CLI authentication delegation
 - **Stream Processing**: Efficient lazy evaluation with Elixir Streams
 - **Error Detection**: Basic error handling for authentication and execution failures
@@ -64,7 +64,7 @@ All sections marked with **(FUTURE/PLANNED)** represent planned functionality in
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   User Code     │───▶│  ClaudeCodeSDK  │───▶│   Claude CLI    │
+│   User Code     │───▶│  ClaudeAgentSDK  │───▶│   Claude CLI    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                               │
                               ▼
@@ -75,12 +75,12 @@ All sections marked with **(FUTURE/PLANNED)** represent planned functionality in
 
 ### Module Structure
 
-- **`ClaudeCodeSDK`**: Main public API interface
-- **`ClaudeCodeSDK.Query`**: Query construction and execution
-- **`ClaudeCodeSDK.Process`**: Subprocess management with erlexec
-- **`ClaudeCodeSDK.Message`**: Message parsing and type definitions
-- **`ClaudeCodeSDK.Options`**: Configuration and CLI argument building
-- **`ClaudeCodeSDK.JSON`**: Custom JSON parsing without external dependencies
+- **`ClaudeAgentSDK`**: Main public API interface
+- **`ClaudeAgentSDK.Query`**: Query construction and execution
+- **`ClaudeAgentSDK.Process`**: Subprocess management with erlexec
+- **`ClaudeAgentSDK.Message`**: Message parsing and type definitions
+- **`ClaudeAgentSDK.Options`**: Configuration and CLI argument building
+- **`ClaudeAgentSDK.JSON`**: Custom JSON parsing without external dependencies
 
 ### Data Flow
 
@@ -127,7 +127,7 @@ cd your-project
 mix deps.get
 
 # Verify installation
-mix run -e "ClaudeCodeSDK.query(\"Hello\") |> Enum.take(1) |> IO.inspect"
+mix run -e "ClaudeAgentSDK.query(\"Hello\") |> Enum.take(1) |> IO.inspect"
 ```
 
 ## Authentication
@@ -151,7 +151,7 @@ claude auth status
 # The SDK automatically uses CLI authentication
 
 # Error handling for unauthenticated sessions
-ClaudeCodeSDK.query("Hello")
+ClaudeAgentSDK.query("Hello")
 |> Enum.each(fn msg ->
   case msg do
     %{type: :result, subtype: :error_during_execution} ->
@@ -183,7 +183,7 @@ end
 
 ### Primary Functions
 
-#### `ClaudeCodeSDK.query/2`
+#### `ClaudeAgentSDK.query/2`
 
 Executes a single query with optional configuration.
 
@@ -191,18 +191,18 @@ Executes a single query with optional configuration.
 @spec query(String.t(), Options.t() | nil) :: Stream.t()
 
 # Basic usage
-ClaudeCodeSDK.query("Write a hello world function")
+ClaudeAgentSDK.query("Write a hello world function")
 
 # With options
-options = %ClaudeCodeSDK.Options{
+options = %ClaudeAgentSDK.Options{
   max_turns: 3,
   output_format: :stream_json,
   verbose: true
 }
-ClaudeCodeSDK.query("Complex task", options)
+ClaudeAgentSDK.query("Complex task", options)
 ```
 
-#### `ClaudeCodeSDK.continue/2`
+#### `ClaudeAgentSDK.continue/2`
 
 Continues the most recent conversation.
 
@@ -210,17 +210,17 @@ Continues the most recent conversation.
 @spec continue(String.t() | nil, Options.t() | nil) :: Stream.t()
 
 # Continue without additional prompt
-ClaudeCodeSDK.continue()
+ClaudeAgentSDK.continue()
 
 # Continue with new prompt
-ClaudeCodeSDK.continue("Now add error handling")
+ClaudeAgentSDK.continue("Now add error handling")
 
 # Continue with options
-options = %ClaudeCodeSDK.Options{max_turns: 5}
-ClaudeCodeSDK.continue("Refactor for performance", options)
+options = %ClaudeAgentSDK.Options{max_turns: 5}
+ClaudeAgentSDK.continue("Refactor for performance", options)
 ```
 
-#### `ClaudeCodeSDK.resume/3`
+#### `ClaudeAgentSDK.resume/3`
 
 Resumes a specific conversation by session ID.
 
@@ -229,20 +229,20 @@ Resumes a specific conversation by session ID.
 
 # Resume existing session
 session_id = "550e8400-e29b-41d4-a716-446655440000"
-ClaudeCodeSDK.resume(session_id, "Add tests")
+ClaudeAgentSDK.resume(session_id, "Add tests")
 
 # Resume with options
-ClaudeCodeSDK.resume(session_id, "Deploy", %ClaudeCodeSDK.Options{
+ClaudeAgentSDK.resume(session_id, "Deploy", %ClaudeAgentSDK.Options{
   permission_mode: :bypass_permissions
 })
 ```
 
 ### Options Configuration
 
-The `ClaudeCodeSDK.Options` struct supports all Claude CLI options:
+The `ClaudeAgentSDK.Options` struct supports all Claude CLI options:
 
 ```elixir
-%ClaudeCodeSDK.Options{
+%ClaudeAgentSDK.Options{
   # Conversation control
   max_turns: 10,                    # Limit conversation turns
   
@@ -282,7 +282,7 @@ The `ClaudeCodeSDK.Options` struct supports all Claude CLI options:
 ```elixir
 defmodule OptionBuilder do  # FUTURE/PLANNED - Not yet implemented
   def build_development_options do
-    ClaudeCodeSDK.Options.new(
+    ClaudeAgentSDK.Options.new(
       max_turns: 5,
       verbose: true,
       allowed_tools: ["Bash", "Read", "Write"],
@@ -291,7 +291,7 @@ defmodule OptionBuilder do  # FUTURE/PLANNED - Not yet implemented
   end
   
   def build_production_options do
-    ClaudeCodeSDK.Options.new(
+    ClaudeAgentSDK.Options.new(
       max_turns: 3,
       verbose: false,
       permission_mode: :plan,
@@ -300,7 +300,7 @@ defmodule OptionBuilder do  # FUTURE/PLANNED - Not yet implemented
   end
   
   def build_mcp_options(mcp_config_path) do
-    ClaudeCodeSDK.Options.new(
+    ClaudeAgentSDK.Options.new(
       mcp_config: mcp_config_path,
       allowed_tools: ["mcp__filesystem__read", "mcp__github__search"],
       permission_prompt_tool: "mcp__auth__approve"
@@ -316,7 +316,7 @@ end
 All messages follow a consistent structure:
 
 ```elixir
-%ClaudeCodeSDK.Message{
+%ClaudeAgentSDK.Message{
   type: :system | :user | :assistant | :result,
   subtype: atom() | nil,
   data: map(),
@@ -450,13 +450,13 @@ end
 ```elixir
 # Extract only assistant responses
 assistant_responses = 
-  ClaudeCodeSDK.query("Explain quantum computing")
+  ClaudeAgentSDK.query("Explain quantum computing")
   |> Stream.filter(&(&1.type == :assistant))
   |> Stream.map(&ContentExtractor.extract_text/1)
   |> Enum.join("\n")
 
 # Process messages in real-time
-ClaudeCodeSDK.query("Generate a large report")
+ClaudeAgentSDK.query("Generate a large report")
 |> Stream.each(fn msg ->
   case msg.type do
     :assistant -> 
@@ -474,7 +474,7 @@ end)
 
 ```elixir
 # Process messages in chunks
-ClaudeCodeSDK.query("Generate 100 test cases")
+ClaudeAgentSDK.query("Generate 100 test cases")
 |> Stream.chunk_every(5)
 |> Stream.each(fn chunk ->
   IO.puts("Processing chunk of #{length(chunk)} messages...")
@@ -487,7 +487,7 @@ end)
 
 ```elixir
 # Stop when specific condition is met
-ClaudeCodeSDK.query("Find all bugs in this codebase")
+ClaudeAgentSDK.query("Find all bugs in this codebase")
 |> Stream.take_while(fn msg ->
   case msg do
     %{type: :result} -> false  # Stop at result
@@ -531,7 +531,7 @@ defmodule SessionManager do  # FUTURE/PLANNED - Not yet implemented
   end
   
   def handle_call({:track_session, prompt, options}, _from, state) do
-    stream = ClaudeCodeSDK.query(prompt, options)
+    stream = ClaudeAgentSDK.query(prompt, options)
     
     # Extract session info from first message
     session_info = 
@@ -563,7 +563,7 @@ defmodule SessionManager do  # FUTURE/PLANNED - Not yet implemented
   end
   
   def handle_call({:continue_session, session_id, prompt}, _from, state) do
-    stream = ClaudeCodeSDK.resume(session_id, prompt)
+    stream = ClaudeAgentSDK.resume(session_id, prompt)
     {:reply, stream, state}
   end
 end
@@ -577,11 +577,11 @@ defmodule ConversationChain do  # FUTURE/PLANNED - Not yet implemented
     [first_prompt | rest_prompts] = prompts
     
     # Start with first prompt
-    session_id = get_session_id(ClaudeCodeSDK.query(first_prompt, options))
+    session_id = get_session_id(ClaudeAgentSDK.query(first_prompt, options))
     
     # Continue with remaining prompts
     Enum.reduce(rest_prompts, session_id, fn prompt, acc_session_id ->
-      stream = ClaudeCodeSDK.resume(acc_session_id, prompt, options)
+      stream = ClaudeAgentSDK.resume(acc_session_id, prompt, options)
       
       # Process stream and return session_id
       stream |> Enum.to_list()
@@ -620,7 +620,7 @@ defmodule ParallelProcessor do  # FUTURE/PLANNED - Not yet implemented
     prompts
     |> Enum.map(fn prompt ->
       Task.async(fn ->
-        ClaudeCodeSDK.query(prompt, options)
+        ClaudeAgentSDK.query(prompt, options)
         |> Enum.to_list()
       end)
     end)
@@ -630,7 +630,7 @@ defmodule ParallelProcessor do  # FUTURE/PLANNED - Not yet implemented
   def run_with_rate_limit(prompts, rate_limit_ms \\ 1000) do
     prompts
     |> Enum.map(fn prompt ->
-      result = ClaudeCodeSDK.query(prompt) |> Enum.to_list()
+      result = ClaudeAgentSDK.query(prompt) |> Enum.to_list()
       Process.sleep(rate_limit_ms)
       result
     end)
@@ -676,7 +676,7 @@ end
 defmodule TimeoutHandler do  # FUTURE/PLANNED - Not yet implemented
   def query_with_timeout(prompt, timeout_ms \\ 30_000) do
     task = Task.async(fn ->
-      ClaudeCodeSDK.query(prompt) |> Enum.to_list()
+      ClaudeAgentSDK.query(prompt) |> Enum.to_list()
     end)
     
     case Task.yield(task, timeout_ms) do
@@ -700,7 +700,7 @@ defmodule RetryHandler do  # FUTURE/PLANNED - Not yet implemented
   
   defp do_query_with_retry(prompt, max_retries, delay_ms, attempt) do
     try do
-      result = ClaudeCodeSDK.query(prompt) |> Enum.to_list()
+      result = ClaudeAgentSDK.query(prompt) |> Enum.to_list()
       {:ok, result}
     rescue
       error ->
@@ -722,7 +722,7 @@ end
 defmodule ComprehensiveErrorHandler do  # FUTURE/PLANNED - Not yet implemented
   def safe_query(prompt, options \\ nil) do
     try do
-      ClaudeCodeSDK.query(prompt, options)
+      ClaudeAgentSDK.query(prompt, options)
       |> Stream.map(&validate_message/1)
       |> Enum.to_list()
       |> case do
@@ -738,7 +738,7 @@ defmodule ComprehensiveErrorHandler do  # FUTURE/PLANNED - Not yet implemented
   
   defp validate_message(msg) do
     case msg do
-      %ClaudeCodeSDK.Message{} -> msg
+      %ClaudeAgentSDK.Message{} -> msg
       other -> 
         IO.warn("Invalid message format: #{inspect(other)}")
         msg
@@ -780,7 +780,7 @@ end
 defmodule PerformanceOptimizer do  # FUTURE/PLANNED - Not yet implemented
   # Lazy evaluation for large responses
   def lazy_process_large_response(prompt) do
-    ClaudeCodeSDK.query(prompt)
+    ClaudeAgentSDK.query(prompt)
     |> Stream.filter(&(&1.type == :assistant))
     |> Stream.map(&extract_and_process_content/1)
     |> Stream.chunk_every(10)  # Process in chunks
@@ -803,7 +803,7 @@ defmodule PerformanceOptimizer do  # FUTURE/PLANNED - Not yet implemented
     prompts
     |> Task.async_stream(
       fn prompt ->
-        ClaudeCodeSDK.query(prompt) |> Enum.to_list()
+        ClaudeAgentSDK.query(prompt) |> Enum.to_list()
       end,
       max_concurrency: concurrency,
       timeout: 60_000,
@@ -833,7 +833,7 @@ defmodule QueryCache do  # FUTURE/PLANNED - Not yet implemented
         result
       :miss ->
         IO.puts("💾 Cache miss, executing query")
-        result = ClaudeCodeSDK.query(prompt, options) |> Enum.to_list()
+        result = ClaudeAgentSDK.query(prompt, options) |> Enum.to_list()
         GenServer.cast(__MODULE__, {:put, cache_key, result, ttl_ms})
         result
     end
@@ -906,7 +906,7 @@ defmodule MyAppWeb.ClaudeLive do  # FUTURE/PLANNED - Not yet implemented
       {:noreply, socket}
     else
       # Start query stream
-      query_stream = ClaudeCodeSDK.query(prompt)
+      query_stream = ClaudeAgentSDK.query(prompt)
       
       # Process stream asynchronously
       pid = self()
@@ -964,7 +964,7 @@ end
 ### OTP Application Integration **(FUTURE/PLANNED)**
 
 ```elixir
-defmodule ClaudeCodeApp.Supervisor do  # FUTURE/PLANNED - Not yet implemented
+defmodule ClaudeAgentApp.Supervisor do  # FUTURE/PLANNED - Not yet implemented
   use Supervisor
   
   def start_link(init_arg) do
@@ -1039,7 +1039,7 @@ defmodule TaskPipeline do
     """
     
     analysis = 
-      ClaudeCodeSDK.query(prompt)
+      ClaudeAgentSDK.query(prompt)
       |> Enum.filter(&(&1.type == :assistant))
       |> Enum.map(&ContentExtractor.extract_text/1)
       |> Enum.join("\n")
@@ -1059,7 +1059,7 @@ defmodule TaskPipeline do
     """
     
     review = 
-      ClaudeCodeSDK.query(prompt)
+      ClaudeAgentSDK.query(prompt)
       |> Enum.filter(&(&1.type == :assistant))
       |> Enum.map(&ContentExtractor.extract_text/1)
       |> Enum.join("\n")
@@ -1119,7 +1119,7 @@ defmodule MCPConfig do  # FUTURE/PLANNED - Not yet implemented
   end
   
   def create_options_with_mcp(mcp_config_path, allowed_tools) do
-    ClaudeCodeSDK.Options.new(
+    ClaudeAgentSDK.Options.new(
       mcp_config: mcp_config_path,
       allowed_tools: allowed_tools,
       permission_prompt_tool: "mcp__auth__approve"
@@ -1136,7 +1136,7 @@ options = MCPConfig.create_options_with_mcp(
   ["mcp__filesystem__read_file", "mcp__github__search_issues"]
 )
 
-ClaudeCodeSDK.query("Search for open issues about performance", options)
+ClaudeAgentSDK.query("Search for open issues about performance", options)
 ```
 
 ### MCP Tool Management **(FUTURE/PLANNED)**
@@ -1215,7 +1215,7 @@ defmodule SecurityValidator do  # FUTURE/PLANNED - Not yet implemented
     Enum.any?(@dangerous_patterns, &Regex.match?(&1, prompt))
   end
   
-  def validate_options(%ClaudeCodeSDK.Options{} = options) do
+  def validate_options(%ClaudeAgentSDK.Options{} = options) do
     with :ok <- validate_working_directory(options.cwd),
          :ok <- validate_tools(options.allowed_tools),
          :ok <- validate_mcp_config(options.mcp_config) do
@@ -1255,8 +1255,8 @@ end
 defmodule SecureClaudeSDK do  # FUTURE/PLANNED - Not yet implemented
   def secure_query(prompt, options \\ nil) do
     with {:ok, validated_prompt} <- SecurityValidator.validate_prompt(prompt),
-         {:ok, validated_options} <- SecurityValidator.validate_options(options || %ClaudeCodeSDK.Options{}) do
-      ClaudeCodeSDK.query(validated_prompt, validated_options)
+         {:ok, validated_options} <- SecurityValidator.validate_options(options || %ClaudeAgentSDK.Options{}) do
+      ClaudeAgentSDK.query(validated_prompt, validated_options)
     else
       error -> Stream.concat([%{type: :error, error: error}])
     end
@@ -1271,14 +1271,14 @@ defmodule PermissionManager do  # FUTURE/PLANNED - Not yet implemented
   def safe_options_for_environment(env) do
     case env do
       :development ->
-        %ClaudeCodeSDK.Options{
+        %ClaudeAgentSDK.Options{
           permission_mode: :accept_edits,
           allowed_tools: ["Read", "Write", "Bash"],
           max_turns: 10
         }
         
       :staging ->
-        %ClaudeCodeSDK.Options{
+        %ClaudeAgentSDK.Options{
           permission_mode: :plan,
           allowed_tools: ["Read"],
           disallowed_tools: ["Bash"],
@@ -1286,7 +1286,7 @@ defmodule PermissionManager do  # FUTURE/PLANNED - Not yet implemented
         }
         
       :production ->
-        %ClaudeCodeSDK.Options{
+        %ClaudeAgentSDK.Options{
           permission_mode: :plan,
           allowed_tools: ["Read"],
           disallowed_tools: ["Bash", "Write"],
@@ -1296,7 +1296,7 @@ defmodule PermissionManager do  # FUTURE/PLANNED - Not yet implemented
   end
   
   def create_sandboxed_options(sandbox_path) do
-    %ClaudeCodeSDK.Options{
+    %ClaudeAgentSDK.Options{
       cwd: sandbox_path,
       permission_mode: :bypass_permissions,
       allowed_tools: ["Read", "Write"],
@@ -1353,7 +1353,7 @@ defmodule TroubleshootProcess do  # FUTURE/PLANNED - Not yet implemented
     
     # Test with timeout
     task = Task.async(fn ->
-      ClaudeCodeSDK.query(prompt) |> Enum.take(3)
+      ClaudeAgentSDK.query(prompt) |> Enum.take(3)
     end)
     
     case Task.yield(task, 10_000) do
@@ -1409,7 +1409,7 @@ defmodule DebugMode do  # FUTURE/PLANNED - Not yet implemented
     
     # Add debug options
     debug_options = case options do
-      nil -> %ClaudeCodeSDK.Options{verbose: true}
+      nil -> %ClaudeAgentSDK.Options{verbose: true}
       opts -> %{opts | verbose: true}
     end
     
@@ -1419,7 +1419,7 @@ defmodule DebugMode do  # FUTURE/PLANNED - Not yet implemented
     start_time = System.monotonic_time(:millisecond)
     
     result = 
-      ClaudeCodeSDK.query(prompt, debug_options)
+      ClaudeAgentSDK.query(prompt, debug_options)
       |> Stream.map(fn msg ->
         elapsed = System.monotonic_time(:millisecond) - start_time
         IO.puts("   [#{elapsed}ms] #{msg.type}: #{inspect(msg.data, limit: 1)}")
@@ -1456,7 +1456,7 @@ defmodule CodeAnalyzer do  # FUTURE/PLANNED - Not yet implemented
     content = File.read!(file_path)
     
     analysis = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Analyze this code file for:
       1. Code quality issues
       2. Security vulnerabilities  
@@ -1487,7 +1487,7 @@ defmodule CodeAnalyzer do  # FUTURE/PLANNED - Not yet implemented
     end)
     
     summary = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Create a executive summary of these code analysis results:
       
       #{all_issues}
@@ -1526,7 +1526,7 @@ defmodule DocGenerator do  # FUTURE/PLANNED - Not yet implemented
     
     # Extract basic info first
     module_info = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Extract the following information from this Elixir module:
       
       1. Module name and purpose
@@ -1554,7 +1554,7 @@ defmodule DocGenerator do  # FUTURE/PLANNED - Not yet implemented
   
   defp generate_module_docs(%{content: content, extracted_info: info} = module_data) do
     docs = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Generate comprehensive documentation for this Elixir module:
       
       Extracted information:
@@ -1588,7 +1588,7 @@ defmodule DocGenerator do  # FUTURE/PLANNED - Not yet implemented
       |> Enum.join("\n\n---\n\n")
     
     full_docs = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Create a comprehensive API documentation index from these individual module docs:
       
       #{combined_content}
@@ -1621,7 +1621,7 @@ defmodule TestGenerator do  # FUTURE/PLANNED - Not yet implemented
     
     # Generate comprehensive test suite
     test_content = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Generate a comprehensive ExUnit test suite for this Elixir module:
       
       ```elixir
@@ -1637,14 +1637,14 @@ defmodule TestGenerator do  # FUTURE/PLANNED - Not yet implemented
       6. Mock/stub patterns where needed
       
       Follow ExUnit best practices and naming conventions.
-      """, %ClaudeCodeSDK.Options{max_turns: 5})
+      """, %ClaudeAgentSDK.Options{max_turns: 5})
       |> Enum.filter(&(&1.type == :assistant))
       |> Enum.map(&ContentExtractor.extract_text/1)
       |> Enum.join("\n")
     
     # Clean up and format the test code
     clean_tests = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Clean up and optimize this test code:
       
       #{test_content}
@@ -1693,7 +1693,7 @@ defmodule TestGenerator do  # FUTURE/PLANNED - Not yet implemented
   
   defp fix_tests(test_info, error_output) do
     fixed_content = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Fix the failing tests based on this error output:
       
       Error output:
@@ -1745,7 +1745,7 @@ defmodule DevAssistant do  # FUTURE/PLANNED - Not yet implemented
   
   def handle_call({:ask, question}, _from, state) do
     response = 
-      ClaudeCodeSDK.query(question)
+      ClaudeAgentSDK.query(question)
       |> Enum.filter(&(&1.type == :assistant))
       |> Enum.map(&ContentExtractor.extract_text/1)
       |> Enum.join("\n")
@@ -1766,7 +1766,7 @@ defmodule DevAssistant do  # FUTURE/PLANNED - Not yet implemented
     Please analyze the code and suggest what we should work on together.
     """
     
-    session_stream = ClaudeCodeSDK.query(initial_prompt)
+    session_stream = ClaudeAgentSDK.query(initial_prompt)
     session_id = extract_session_id(session_stream)
     
     response = 
@@ -1790,7 +1790,7 @@ defmodule DevAssistant do  # FUTURE/PLANNED - Not yet implemented
   
   def handle_call({:continue, input}, _from, %{current_session: session_id} = state) do
     response = 
-      ClaudeCodeSDK.resume(session_id, input)
+      ClaudeAgentSDK.resume(session_id, input)
       |> Enum.filter(&(&1.type == :assistant))
       |> Enum.map(&ContentExtractor.extract_text/1)
       |> Enum.join("\n")
@@ -1837,7 +1837,7 @@ defmodule RefactoringTool do  # FUTURE/PLANNED - Not yet implemented
         content = File.read!(file)
         
         analysis = 
-          ClaudeCodeSDK.query("""
+          ClaudeAgentSDK.query("""
           Analyze this Elixir file for refactoring opportunities:
           
           File: #{file}
@@ -1867,7 +1867,7 @@ defmodule RefactoringTool do  # FUTURE/PLANNED - Not yet implemented
       |> Enum.join("\n\n---\n\n")
     
     prioritized_opportunities = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Based on these file analyses and refactoring goals:
       
       Goals: #{Enum.join(goals, ", ")}
@@ -1885,7 +1885,7 @@ defmodule RefactoringTool do  # FUTURE/PLANNED - Not yet implemented
   
   defp plan_refactoring_steps(%{opportunities: opportunities} = data) do
     refactoring_plan = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Create a detailed refactoring execution plan:
       
       Opportunities:
@@ -1912,7 +1912,7 @@ defmodule RefactoringTool do  # FUTURE/PLANNED - Not yet implemented
       files
       |> Enum.map(fn %{file: file, content: content} ->
         refactored_content = 
-          ClaudeCodeSDK.query("""
+          ClaudeAgentSDK.query("""
           Refactor this Elixir file according to the plan:
           
           Plan:
@@ -1935,7 +1935,7 @@ defmodule RefactoringTool do  # FUTURE/PLANNED - Not yet implemented
   
   defp validate_refactoring(%{refactored_files: refactored_files} = data) do
     validation_report = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Validate this refactoring by comparing original and refactored code:
       
       #{Enum.map_join(refactored_files, "\n\n", fn %{file: file, original: orig, refactored: ref} ->

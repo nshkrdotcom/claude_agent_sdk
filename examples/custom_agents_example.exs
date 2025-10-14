@@ -3,11 +3,11 @@
 # Example: Custom agent workflows
 # Shows how to define specialized agents for different tasks
 
-alias ClaudeCodeSDK.OptionBuilder
+alias ClaudeAgentSDK.OptionBuilder
 
 # Enable mocking
-Application.put_env(:claude_code_sdk, :use_mock, true)
-{:ok, _} = ClaudeCodeSDK.Mock.start_link()
+Application.put_env(:claude_agent_sdk, :use_mock, true)
+{:ok, _} = ClaudeAgentSDK.Mock.start_link()
 
 IO.puts("🤖 Custom Agents Example")
 IO.puts("=" |> String.duplicate(50))
@@ -59,7 +59,7 @@ multi_agents = %{
   }
 }
 
-options_multi = %ClaudeCodeSDK.Options{agents: multi_agents}
+_options_multi = %ClaudeAgentSDK.Options{agents: multi_agents}
 
 IO.puts("📋 Defined #{map_size(multi_agents)} agents:")
 

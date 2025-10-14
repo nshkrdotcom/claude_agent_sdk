@@ -18,7 +18,7 @@ A complete reference showing how to use the official Claude Code SDK features in
   - [x] Third-party provider support (AWS Bedrock, Google Vertex AI)
 
 - [x] **Options Configuration**
-  - [x] Complete `ClaudeCodeSDK.Options` struct
+  - [x] Complete `ClaudeAgentSDK.Options` struct
   - [x] All CLI arguments mapped to Elixir options
   - [x] Type-safe option definitions
 
@@ -98,17 +98,17 @@ A complete reference showing how to use the official Claude Code SDK features in
 
 ```elixir
 # Simple text query
-ClaudeCodeSDK.query("Write a function to calculate Fibonacci numbers")
+ClaudeAgentSDK.query("Write a function to calculate Fibonacci numbers")
 |> Enum.to_list()
 
 # With basic options
-options = %ClaudeCodeSDK.Options{
+options = %ClaudeAgentSDK.Options{
   max_turns: 3,
   output_format: :stream_json,
   verbose: true
 }
 
-ClaudeCodeSDK.query("Build a REST API", options)
+ClaudeAgentSDK.query("Build a REST API", options)
 |> Enum.each(fn msg ->
   case msg.type do
     :assistant -> IO.puts("Claude: #{inspect(msg.data)}")
@@ -122,17 +122,17 @@ end)
 
 ```elixir
 # Continue the most recent conversation
-ClaudeCodeSDK.continue("Now add error handling")
+ClaudeAgentSDK.continue("Now add error handling")
 |> Enum.to_list()
 
 # Resume a specific session
 session_id = "550e8400-e29b-41d4-a716-446655440000"
-ClaudeCodeSDK.resume(session_id, "Add unit tests")
+ClaudeAgentSDK.resume(session_id, "Add unit tests")
 |> Enum.to_list()
 
 # Extract session ID from messages
 session_id = 
-  ClaudeCodeSDK.query("Initial query")
+  ClaudeAgentSDK.query("Initial query")
   |> Enum.find(&(&1.type == :system))
   |> case do
     %{data: %{session_id: id}} -> id
@@ -145,7 +145,7 @@ session_id =
 ```elixir
 # Filter and process assistant responses only
 assistant_content = 
-  ClaudeCodeSDK.query("Explain quantum computing")
+  ClaudeAgentSDK.query("Explain quantum computing")
   |> Stream.filter(&(&1.type == :assistant))
   |> Stream.map(fn msg -> 
     # Extract text content from message
@@ -158,7 +158,7 @@ assistant_content =
   |> Enum.join("\n")
 
 # Real-time processing with early termination
-ClaudeCodeSDK.query("Generate a large report")
+ClaudeAgentSDK.query("Generate a large report")
 |> Stream.take_while(fn msg ->
   case msg.type do
     :result -> false  # Stop at final result
@@ -188,16 +188,16 @@ end)
 | `--permission-prompt-tool` | `:permission_prompt_tool` | `String.t()` | `permission_prompt_tool: "mcp__auth__approve"` |
 | `--permission-mode` | `:permission_mode` | `:default \| :accept_edits \| :bypass_permissions \| :plan` | `permission_mode: :accept_edits` |
 | `--verbose` | `:verbose` | `boolean()` | `verbose: true` |
-| `--continue` | `continue/2` function | - | `ClaudeCodeSDK.continue("new prompt")` |
-| `--resume` | `resume/3` function | - | `ClaudeCodeSDK.resume(session_id, "prompt")` |
+| `--continue` | `continue/2` function | - | `ClaudeAgentSDK.continue("new prompt")` |
+| `--resume` | `resume/3` function | - | `ClaudeAgentSDK.resume(session_id, "prompt")` |
 
 ### Authentication Methods
 
 | **Official SDK** | **Elixir Implementation** | **Setup** |
 |------------------|---------------------------|-----------|
 | Anthropic API key | ✅ Supported via CLI | `claude login` or `ANTHROPIC_API_KEY=...` |
-| Amazon Bedrock | ✅ Supported via CLI | `CLAUDE_CODE_USE_BEDROCK=1` + AWS credentials |
-| Google Vertex AI | ✅ Supported via CLI | `CLAUDE_CODE_USE_VERTEX=1` + GCP credentials |
+| Amazon Bedrock | ✅ Supported via CLI | `CLAUDE_AGENT_USE_BEDROCK=1` + AWS credentials |
+| Google Vertex AI | ✅ Supported via CLI | `CLAUDE_AGENT_USE_VERTEX=1` + GCP credentials |
 
 ### Output Format Comparison
 
@@ -216,7 +216,7 @@ end)
 The SDK includes the `OptionBuilder` module for intelligent option presets:
 
 ```elixir
-alias ClaudeCodeSDK.OptionBuilder
+alias ClaudeAgentSDK.OptionBuilder
 
 # Environment-aware options (recommended)
 options = OptionBuilder.for_environment()  # Auto-detects dev/test/prod
@@ -244,7 +244,7 @@ sandbox_options = OptionBuilder.sandboxed("/tmp/safe", ["Read", "Write"])
 
 ```elixir
 # MCP configuration with multiple servers
-mcp_options = %ClaudeCodeSDK.Options{
+mcp_options = %ClaudeAgentSDK.Options{
   mcp_config: "/path/to/mcp_servers.json",
   allowed_tools: [
     "mcp__filesystem__read_file",
@@ -254,7 +254,7 @@ mcp_options = %ClaudeCodeSDK.Options{
   permission_prompt_tool: "mcp__auth__approve"
 }
 
-ClaudeCodeSDK.query("Search for performance issues and notify team", mcp_options)
+ClaudeAgentSDK.query("Search for performance issues and notify team", mcp_options)
 ```
 
 ---
@@ -264,7 +264,7 @@ ClaudeCodeSDK.query("Search for performance issues and notify team", mcp_options
 ### Authentication Errors
 
 ```elixir
-ClaudeCodeSDK.query("test")
+ClaudeAgentSDK.query("test")
 |> Enum.each(fn msg ->
   case msg do
     %{type: :result, subtype: :error_during_execution} ->
@@ -285,7 +285,7 @@ end)
 ```elixir
 # Wrap in a task with timeout
 task = Task.async(fn ->
-  ClaudeCodeSDK.query("complex query") |> Enum.to_list()
+  ClaudeAgentSDK.query("complex query") |> Enum.to_list()
 end)
 
 case Task.yield(task, 30_000) do
@@ -307,7 +307,7 @@ end
 The SDK now includes the built-in `ContentExtractor` module for easy message processing:
 
 ```elixir
-alias ClaudeCodeSDK.ContentExtractor
+alias ClaudeAgentSDK.ContentExtractor
 
 # Extract text from any message
 content = ContentExtractor.extract_text(message)
@@ -325,7 +325,7 @@ all_text = ContentExtractor.extract_all_text(messages, " | ")
 preview = ContentExtractor.summarize(message, 100)
 
 # Real usage example
-ClaudeCodeSDK.query("Explain this code")
+ClaudeAgentSDK.query("Explain this code")
 |> Stream.filter(&ContentExtractor.has_text?/1)
 |> Stream.map(&ContentExtractor.extract_text/1)
 |> Enum.join("\n")
@@ -354,7 +354,7 @@ end
 
 # Usage
 stats = 
-  ClaudeCodeSDK.query("Generate documentation")
+  ClaudeAgentSDK.query("Generate documentation")
   |> StatsCollector.collect_stats()
 
 IO.puts("Cost: $#{stats.cost_usd}, Duration: #{stats.duration_ms}ms")
@@ -373,13 +373,13 @@ defmodule MyAppTest do
   
   setup do
     # Enable mocking for tests
-    Application.put_env(:claude_code_sdk, :use_mock, true)
-    {:ok, _} = ClaudeCodeSDK.Mock.start_link()
+    Application.put_env(:claude_agent_sdk, :use_mock, true)
+    {:ok, _} = ClaudeAgentSDK.Mock.start_link()
     :ok
   end
   
   test "processes Claude responses correctly" do
-    ClaudeCodeSDK.Mock.set_response("test", [
+    ClaudeAgentSDK.Mock.set_response("test", [
       %{
         "type" => "assistant",
         "message" => %{"content" => "Hello from mock!"}
@@ -391,7 +391,7 @@ defmodule MyAppTest do
       }
     ])
     
-    result = ClaudeCodeSDK.query("test") |> Enum.to_list()
+    result = ClaudeAgentSDK.query("test") |> Enum.to_list()
     assert length(result) == 2
   end
 end
@@ -410,7 +410,7 @@ defmodule LiveIntegrationTest do
   test "real API integration" do
     # Only runs with mix test.live
     result = 
-      ClaudeCodeSDK.query("Say exactly: test response")
+      ClaudeAgentSDK.query("Say exactly: test response")
       |> Enum.to_list()
     
     assert Enum.any?(result, &(&1.type == :assistant))
@@ -431,7 +431,7 @@ defmodule CodeAnalyzer do
     content = File.read!(file_path)
     
     analysis = 
-      ClaudeCodeSDK.query("""
+      ClaudeAgentSDK.query("""
       Analyze this code for security issues and best practices:
       
       ```
@@ -439,7 +439,7 @@ defmodule CodeAnalyzer do
       ```
       
       Provide specific recommendations.
-      """, %ClaudeCodeSDK.Options{
+      """, %ClaudeAgentSDK.Options{
         max_turns: 3,
         system_prompt: "You are a security-focused code reviewer"
       })
@@ -466,7 +466,7 @@ defmodule BatchProcessor do
       fn file_path ->
         content = File.read!(file_path)
         
-        ClaudeCodeSDK.query("Summarize this file: #{content}")
+        ClaudeAgentSDK.query("Summarize this file: #{content}")
         |> Enum.filter(&(&1.type == :result && &1.subtype == :success))
         |> List.first()
       end,
@@ -501,7 +501,7 @@ defmodule SessionManager do
   end
   
   def handle_call({:new_session, prompt}, _from, state) do
-    stream = ClaudeCodeSDK.query(prompt)
+    stream = ClaudeAgentSDK.query(prompt)
     messages = Enum.to_list(stream)
     
     session_id = 
@@ -518,7 +518,7 @@ defmodule SessionManager do
   end
   
   def handle_call({:continue, session_id, prompt}, _from, state) do
-    messages = ClaudeCodeSDK.resume(session_id, prompt) |> Enum.to_list()
+    messages = ClaudeAgentSDK.resume(session_id, prompt) |> Enum.to_list()
     new_sessions = Map.put(state.sessions, session_id, messages)
     
     {:reply, messages, %{state | sessions: new_sessions}}
@@ -534,13 +534,13 @@ end
 
 ```elixir
 # Good: Stream processing (lazy evaluation)
-ClaudeCodeSDK.query("large task")
+ClaudeAgentSDK.query("large task")
 |> Stream.filter(&(&1.type == :assistant))
 |> Stream.take(10)  # Only process first 10 assistant messages
 |> Enum.to_list()
 
 # Avoid: Loading entire response into memory
-# large_response = ClaudeCodeSDK.query("huge task") |> Enum.to_list()
+# large_response = ClaudeAgentSDK.query("huge task") |> Enum.to_list()
 ```
 
 ### Rate Limiting
@@ -548,7 +548,7 @@ ClaudeCodeSDK.query("large task")
 ```elixir
 defmodule RateLimitedClient do
   def query_with_delay(prompt, delay_ms \\ 1000) do
-    result = ClaudeCodeSDK.query(prompt) |> Enum.to_list()
+    result = ClaudeAgentSDK.query(prompt) |> Enum.to_list()
     Process.sleep(delay_ms)
     result
   end
@@ -582,7 +582,7 @@ end
 The SDK includes comprehensive debugging tools:
 
 ```elixir
-alias ClaudeCodeSDK.DebugMode
+alias ClaudeAgentSDK.DebugMode
 
 # Run full environment diagnostics
 DebugMode.run_diagnostics()

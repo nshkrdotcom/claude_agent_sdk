@@ -3,11 +3,11 @@
 # Week 1-2 Features Showcase
 # Demonstrates AuthManager, Model Selection, Agents, and Orchestrator
 
-alias ClaudeCodeSDK.{OptionBuilder, Orchestrator, ContentExtractor, AuthManager}
+alias ClaudeAgentSDK.{OptionBuilder, Orchestrator, ContentExtractor, AuthManager}
 
 # Enable mocking for demo
-Application.put_env(:claude_code_sdk, :use_mock, true)
-{:ok, _} = ClaudeCodeSDK.Mock.start_link()
+Application.put_env(:claude_agent_sdk, :use_mock, true)
+{:ok, _} = ClaudeAgentSDK.Mock.start_link()
 
 # Start AuthManager
 {:ok, _} = AuthManager.start_link()
@@ -42,7 +42,7 @@ end
 
 IO.puts("")
 IO.puts("   💡 In production, run: mix claude.setup_token")
-IO.puts("   💡 Or set: export CLAUDE_CODE_OAUTH_TOKEN=<your-token>")
+IO.puts("   💡 Or set: export CLAUDE_AGENT_OAUTH_TOKEN=<your-token>")
 IO.puts("")
 
 # ============================================================================
@@ -108,7 +108,7 @@ IO.puts("─" |> String.duplicate(60))
 IO.puts("")
 
 # Setup mock responses for demo
-ClaudeCodeSDK.Mock.set_response("analyze", [
+ClaudeAgentSDK.Mock.set_response("analyze", [
   %{
     "type" => "system",
     "subtype" => "init",
@@ -130,9 +130,9 @@ ClaudeCodeSDK.Mock.set_response("analyze", [
 
 # Execute parallel queries
 queries = [
-  {"Analyze file1.ex", %ClaudeCodeSDK.Options{}},
-  {"Analyze file2.ex", %ClaudeCodeSDK.Options{}},
-  {"Analyze file3.ex", %ClaudeCodeSDK.Options{}}
+  {"Analyze file1.ex", %ClaudeAgentSDK.Options{}},
+  {"Analyze file2.ex", %ClaudeAgentSDK.Options{}},
+  {"Analyze file3.ex", %ClaudeAgentSDK.Options{}}
 ]
 
 start_time = System.monotonic_time(:millisecond)
@@ -154,9 +154,9 @@ IO.puts("─" |> String.duplicate(60))
 IO.puts("")
 
 steps = [
-  {"Step 1: Analyze code", %ClaudeCodeSDK.Options{}},
-  {"Step 2: Suggest improvements", %ClaudeCodeSDK.Options{}},
-  {"Step 3: Generate tests", %ClaudeCodeSDK.Options{}}
+  {"Step 1: Analyze code", %ClaudeAgentSDK.Options{}},
+  {"Step 2: Suggest improvements", %ClaudeAgentSDK.Options{}},
+  {"Step 3: Generate tests", %ClaudeAgentSDK.Options{}}
 ]
 
 {:ok, pipeline_result} = Orchestrator.query_pipeline(steps, use_context: true)
@@ -176,7 +176,7 @@ IO.puts("")
 {:ok, retry_result} =
   Orchestrator.query_with_retry(
     "Test query",
-    %ClaudeCodeSDK.Options{},
+    %ClaudeAgentSDK.Options{},
     max_retries: 3,
     backoff_ms: 100
   )

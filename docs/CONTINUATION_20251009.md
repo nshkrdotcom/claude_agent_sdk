@@ -1,6 +1,6 @@
  ▐▛███▜▌   Claude Code v2.0.13
 ▝▜█████▛▘  Sonnet 4.5 · Claude API
-  ▘▘ ▝▝    /home/home/p/g/n/claude_code_sdk_elixir
+  ▘▘ ▝▝    /home/home/p/g/n/claude_agent_sdk
 
 > assess status
 
@@ -49,9 +49,9 @@
 
   📁 Key Files
 
-  - lib/claude_code_sdk.ex - Main API
-  - lib/claude_code_sdk/session_store.ex - Session persistence
-  - lib/claude_code_sdk/orchestrator.ex - Concurrent execution
+  - lib/claude_agent_sdk.ex - Main API
+  - lib/claude_agent_sdk/session_store.ex - Session persistence
+  - lib/claude_agent_sdk/orchestrator.ex - Concurrent execution
   - mix.exs:4 - Current version: 0.2.0
 
   The project is in a stable, production-ready state with v0.2.0 successfully released. All major features are working, and
@@ -104,14 +104,14 @@
 
   Query Start Event:
   :telemetry.execute(
-    [:claude_code_sdk, :query, :start],
+    [:claude_agent_sdk, :query, :start],
     %{system_time: System.system_time()},
     %{prompt: prompt, options: options}
   )
 
   Query Stop Event:
   :telemetry.execute(
-    [:claude_code_sdk, :query, :stop],
+    [:claude_agent_sdk, :query, :stop],
     %{duration: duration, cost: cost},
     %{session_id: session_id}
   )
@@ -120,11 +120,11 @@
 
   | Event Name                              | Measurements                 | Metadata                                   |
   |-----------------------------------------|------------------------------|--------------------------------------------|
-  | [:claude_code_sdk, :query, :start]      | %{system_time: ...}          | %{prompt: ..., options: ...}               |
-  | [:claude_code_sdk, :query, :stop]       | %{duration: ..., cost: ...}  | %{session_id: ...}                         |
-  | [:claude_code_sdk, :query, :exception]  | %{duration: ...}             | %{kind: ..., reason: ..., stacktrace: ...} |
-  | [:claude_code_sdk, :session, :start]    | %{timestamp: ...}            | %{session_id: ..., model: ...}             |
-  | [:claude_code_sdk, :message, :received] | %{size: ..., timestamp: ...} | %{type: ..., session_id: ...}              |
+  | [:claude_agent_sdk, :query, :start]      | %{system_time: ...}          | %{prompt: ..., options: ...}               |
+  | [:claude_agent_sdk, :query, :stop]       | %{duration: ..., cost: ...}  | %{session_id: ...}                         |
+  | [:claude_agent_sdk, :query, :exception]  | %{duration: ...}             | %{kind: ..., reason: ..., stacktrace: ...} |
+  | [:claude_agent_sdk, :session, :start]    | %{timestamp: ...}            | %{session_id: ..., model: ...}             |
+  | [:claude_agent_sdk, :message, :received] | %{size: ..., timestamp: ...} | %{type: ..., session_id: ...}              |
 
   🔌 User-Side Integration
 
@@ -132,13 +132,13 @@
 
   :telemetry.attach(
     "my-app-claude-metrics",
-    [:claude_code_sdk, :query, :stop],
+    [:claude_agent_sdk, :query, :stop],
     &MyApp.Metrics.handle_event/4,
     nil
   )
 
   defmodule MyApp.Metrics do
-    def handle_event([:claude_code_sdk, :query, :stop], measurements, metadata, _config) do
+    def handle_event([:claude_agent_sdk, :query, :stop], measurements, metadata, _config) do
       # Log to metrics system
       Logger.info("Claude query completed in #{measurements.duration}ms, cost: $#{measurements.cost}")
 
@@ -153,7 +153,7 @@
   1. AppSignal Integration:
   :telemetry.attach(
     "appsignal-claude-metrics",
-    [:claude_code_sdk, :query, :stop],
+    [:claude_agent_sdk, :query, :stop],
     fn event, measurements, metadata, _config ->
       Appsignal.increment_counter("claude_queries", 1)
       Appsignal.add_distribution_value("claude_query_duration", measurements.duration)
@@ -182,10 +182,10 @@
 
     defp metrics do
       [
-        counter("claude_code_sdk.query.stop.count"),
-        distribution("claude_code_sdk.query.stop.duration", unit: {:native, :millisecond}),
-        distribution("claude_code_sdk.query.stop.cost", unit: :usd),
-        last_value("claude_code_sdk.session.active_count")
+        counter("claude_agent_sdk.query.stop.count"),
+        distribution("claude_agent_sdk.query.stop.duration", unit: {:native, :millisecond}),
+        distribution("claude_agent_sdk.query.stop.cost", unit: :usd),
+        last_value("claude_agent_sdk.session.active_count")
       ]
     end
   end
@@ -199,14 +199,14 @@
     def init(_) do
       :telemetry.attach(
         "cost-tracker",
-        [:claude_code_sdk, :query, :stop],
+        [:claude_agent_sdk, :query, :stop],
         &__MODULE__.handle_event/4,
         nil
       )
       {:ok, %{total_cost: 0.0, query_count: 0}}
     end
 
-    def handle_event([:claude_code_sdk, :query, :stop], %{cost: cost}, _metadata, _config) do
+    def handle_event([:claude_agent_sdk, :query, :stop], %{cost: cost}, _metadata, _config) do
       GenServer.cast(__MODULE__, {:record_cost, cost})
     end
 
@@ -247,10 +247,10 @@
   🚀 Implementation Location
 
   Events would be emitted from:
-  - ClaudeCodeSDK - Main API entry points (query/2, continue/2, resume/3)
-  - ClaudeCodeSDK.Process - Subprocess lifecycle events
-  - ClaudeCodeSDK.Message - Message parsing and delivery
-  - ClaudeCodeSDK.Orchestrator - Concurrent query orchestration (when implemented)
+  - ClaudeAgentSDK - Main API entry points (query/2, continue/2, resume/3)
+  - ClaudeAgentSDK.Process - Subprocess lifecycle events
+  - ClaudeAgentSDK.Message - Message parsing and delivery
+  - ClaudeAgentSDK.Orchestrator - Concurrent query orchestration (when implemented)
 
   💡 Value Proposition
 
@@ -350,10 +350,10 @@
   💻 Proposed API
 
   # Start interactive session
-  {:ok, session} = ClaudeCodeSDK.Streaming.start_session()
+  {:ok, session} = ClaudeAgentSDK.Streaming.start_session()
 
   # Send message, get immediate response stream
-  stream = ClaudeCodeSDK.Streaming.send_message(session, "Hello")
+  stream = ClaudeAgentSDK.Streaming.send_message(session, "Hello")
 
   # See partial responses as they arrive (typewriter effect)
   stream |> Stream.each(fn partial ->
@@ -361,10 +361,10 @@
   end) |> Stream.run()
 
   # Send follow-up immediately (without waiting)
-  ClaudeCodeSDK.Streaming.send_message(session, "Tell me more")
+  ClaudeAgentSDK.Streaming.send_message(session, "Tell me more")
 
   # Close session
-  ClaudeCodeSDK.Streaming.close_session(session)
+  ClaudeAgentSDK.Streaming.close_session(session)
 
   🎨 Use Cases
 
@@ -376,14 +376,14 @@
 
   2. Terminal UI:
   # Typewriter effect in terminal
-  ClaudeCodeSDK.Streaming.send_message(session, prompt)
+  ClaudeAgentSDK.Streaming.send_message(session, prompt)
   |> Stream.each(fn chunk -> IO.write(chunk.delta) end)
   |> Stream.run()
 
   3. Streaming API Endpoints:
   # Server-Sent Events for web clients
   conn = Plug.Conn.send_chunked(conn, 200)
-  ClaudeCodeSDK.Streaming.send_message(session, prompt)
+  ClaudeAgentSDK.Streaming.send_message(session, prompt)
   |> Stream.each(fn chunk ->
     Plug.Conn.chunk(conn, "data: #{Jason.encode!(chunk)}\n\n")
   end)
@@ -461,11 +461,11 @@
   On October 7, the WIP commit added 1,353 lines across 5 files:
 
   ✅ Completed:
-  - lib/claude_code_sdk/streaming.ex - Main API (150 lines)
-  - lib/claude_code_sdk/streaming/session.ex - GenServer (385 lines)
-  - lib/claude_code_sdk/streaming/event_parser.ex - text_delta parsing (104 lines)
+  - lib/claude_agent_sdk/streaming.ex - Main API (150 lines)
+  - lib/claude_agent_sdk/streaming/session.ex - GenServer (385 lines)
+  - lib/claude_agent_sdk/streaming/event_parser.ex - text_delta parsing (104 lines)
   - test_streaming_live.exs - Proof of concept test (102 lines)
-  - CLAUDE_CODE_2_0_FEATURE_COVERAGE.md - Feature analysis (612 lines)
+  - CLAUDE_AGENT_2_0_FEATURE_COVERAGE.md - Feature analysis (612 lines)
 
   ✅ Working:
   - Character-by-character streaming verified working
@@ -490,20 +490,20 @@ later.
 
 ● I'll examine the WIP implementation approach and then start fresh. Let me check what was done:
 
-● Bash(git show bad2294:lib/claude_code_sdk/streaming.ex)
-  ⎿  defmodule ClaudeCodeSDK.Streaming do
+● Bash(git show bad2294:lib/claude_agent_sdk/streaming.ex)
+  ⎿  defmodule ClaudeAgentSDK.Streaming do
        @moduledoc """
        Bidirectional streaming for interactive Claude conversations.
      … +147 lines (ctrl+o to expand)
 
-● Bash(git show bad2294:lib/claude_code_sdk/streaming/session.ex | head -150)
-  ⎿  defmodule ClaudeCodeSDK.Streaming.Session do
+● Bash(git show bad2294:lib/claude_agent_sdk/streaming/session.ex | head -150)
+  ⎿  defmodule ClaudeAgentSDK.Streaming.Session do
        @moduledoc """
        GenServer managing a persistent bidirectional streaming session with Claude.
      … +147 lines (ctrl+o to expand)
 
-● Bash(git show bad2294:lib/claude_code_sdk/streaming/event_parser.ex)
-  ⎿  defmodule ClaudeCodeSDK.Streaming.EventParser do
+● Bash(git show bad2294:lib/claude_agent_sdk/streaming/event_parser.ex)
+  ⎿  defmodule ClaudeAgentSDK.Streaming.EventParser do
        @moduledoc """
        Parses streaming events from Claude API.
      … +101 lines (ctrl+o to expand)
@@ -518,9 +518,9 @@ later.
 
 ● Now let me start implementing from scratch. I'll begin with the EventParser since it's self-contained:
 
-● Write(lib/claude_code_sdk/streaming/event_parser.ex)
-  ⎿  Wrote 275 lines to lib/claude_code_sdk/streaming/event_parser.ex
-     defmodule ClaudeCodeSDK.Streaming.EventParser do
+● Write(lib/claude_agent_sdk/streaming/event_parser.ex)
+  ⎿  Wrote 275 lines to lib/claude_agent_sdk/streaming/event_parser.ex
+     defmodule ClaudeAgentSDK.Streaming.EventParser do
        @moduledoc """
        Parses streaming events from Claude CLI's `--include-partial-messages` output.
        Handles all Server-Sent Events (SSE) types from the Anthropic Messages API:
@@ -531,9 +531,9 @@ later.
          - `input_json_delta` - Tool input JSON being built
      … +265 lines (ctrl+o to expand)
 
-● Write(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Wrote 419 lines to lib/claude_code_sdk/streaming/session.ex
-     defmodule ClaudeCodeSDK.Streaming.Session do
+● Write(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Wrote 419 lines to lib/claude_agent_sdk/streaming/session.ex
+     defmodule ClaudeAgentSDK.Streaming.Session do
        @moduledoc """
        GenServer managing a persistent bidirectional streaming session with Claude.
        Maintains a long-lived subprocess with stdin/stdout pipes for interactive
@@ -542,17 +542,17 @@ later.
        ```
      … +409 lines (ctrl+o to expand)
 
-● Search(pattern: "def build_claude_command", path: "lib/claude_code_sdk/process.ex", output_mode: "content")
+● Search(pattern: "def build_claude_command", path: "lib/claude_agent_sdk/process.ex", output_mode: "content")
   ⎿  Found 0 lines
 
-● Search(pattern: "defp.*command|cmd", path: "lib/claude_code_sdk/process.ex", output_mode: "content")
+● Search(pattern: "defp.*command|cmd", path: "lib/claude_agent_sdk/process.ex", output_mode: "content")
   ⎿  Found 6 lines (ctrl+o to expand)
 
-● Read(lib/claude_code_sdk/process.ex)
+● Read(lib/claude_agent_sdk/process.ex)
   ⎿  Read 50 lines
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 42 additions and 4 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 42 additions and 4 removals
        369      end
        370
        371      defp spawn_subprocess(args) do
@@ -597,7 +597,7 @@ later.
        396 +    defp build_env_vars do
        397 +      # Pass authentication environment variables to subprocess
        398 +      []
-       399 +      |> add_env_var("CLAUDE_CODE_OAUTH_TOKEN")
+       399 +      |> add_env_var("CLAUDE_AGENT_OAUTH_TOKEN")
        400 +      |> add_env_var("ANTHROPIC_API_KEY")
        401 +      |> add_env_var("PATH")
        402 +      |> add_env_var("HOME")
@@ -614,9 +614,9 @@ later.
        413        # Look for session ID in system message (if present)
        414        # Note: Claude CLI may not emit session_id in all events
 
-● Write(lib/claude_code_sdk/streaming.ex)
-  ⎿  Wrote 356 lines to lib/claude_code_sdk/streaming.ex
-     defmodule ClaudeCodeSDK.Streaming do
+● Write(lib/claude_agent_sdk/streaming.ex)
+  ⎿  Wrote 356 lines to lib/claude_agent_sdk/streaming.ex
+     defmodule ClaudeAgentSDK.Streaming do
        @moduledoc """
        Bidirectional streaming for interactive Claude conversations.
        Enables real-time, character-by-character streaming with persistent sessions
@@ -631,7 +631,7 @@ later.
      # Live test script for bidirectional streaming
      # Tests TRUE character-by-character streaming with --include-partial-messages
      Mix.install([{:jason, "~> 1.4"}])
-     Application.put_env(:claude_code_sdk, :use_mock, false)
+     Application.put_env(:claude_agent_sdk, :use_mock, false)
      # Add lib to code path
      … +165 lines (ctrl+o to expand)
 
@@ -645,19 +645,19 @@ later.
 
 ● Good! The code compiled. Let me fix the warnings:
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 1 addition and 1 removal
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 1 addition and 1 removal
        42      use GenServer
        43      require Logger
        44
-       45 -    alias ClaudeCodeSDK.{Options, Process, Message}
-       45 +    alias ClaudeCodeSDK.{Options, Process}
-       46      alias ClaudeCodeSDK.Streaming.EventParser
+       45 -    alias ClaudeAgentSDK.{Options, Process, Message}
+       45 +    alias ClaudeAgentSDK.{Options, Process}
+       46      alias ClaudeAgentSDK.Streaming.EventParser
        47
        48      @type subscriber_ref :: reference()
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 15 additions and 21 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 15 additions and 21 removals
        291            # Parse streaming JSON events
        292            new_buffer = state.message_buffer <> data
        293
@@ -705,8 +705,8 @@ later.
        314          {:stderr, ^os_pid, data} ->
        315            # Log stderr but continue
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 3 additions and 3 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 3 additions and 3 removals
        382        # Spawn subprocess
        383        case :exec.run(cmd, exec_opts) do
        384          {:ok, pid, os_pid} ->
@@ -726,14 +726,14 @@ later.
          │
      … +6 lines (ctrl+o to expand)
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 1 addition and 1 removal
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 1 addition and 1 removal
        42      use GenServer
        43      require Logger
        44
-       45 -    alias ClaudeCodeSDK.{Options, Process}
-       45 +    alias ClaudeCodeSDK.Options
-       46      alias ClaudeCodeSDK.Streaming.EventParser
+       45 -    alias ClaudeAgentSDK.{Options, Process}
+       45 +    alias ClaudeAgentSDK.Options
+       46      alias ClaudeAgentSDK.Streaming.EventParser
        47
        48      @type subscriber_ref :: reference()
 
@@ -746,19 +746,19 @@ later.
 
   Files Created (3 new modules)
 
-  1. lib/claude_code_sdk/streaming/event_parser.ex (300+ lines)
+  1. lib/claude_agent_sdk/streaming/event_parser.ex (300+ lines)
     - Parses all SSE event types from Claude CLI
     - Handles text_delta, message_start, message_stop, tool events, thinking deltas
     - Includes parse_buffer/2 for newline-delimited JSON parsing
     - Accumulates text across deltas
-  2. lib/claude_code_sdk/streaming/session.ex (420+ lines)
+  2. lib/claude_agent_sdk/streaming/session.ex (420+ lines)
     - GenServer managing persistent bidirectional subprocess
     - stdin/stdout pipes via erlexec with :monitor flag
     - Subscriber pattern for concurrent stream consumers
     - Clean lifecycle: spawn → read loop → broadcast → terminate
     - Multi-turn conversation support (context preserved)
     - Full error handling and graceful shutdown
-  3. lib/claude_code_sdk/streaming.ex (260+ lines)
+  3. lib/claude_agent_sdk/streaming.ex (260+ lines)
     - Clean public API facade
     - Comprehensive documentation with examples
     - Phoenix LiveView integration examples
@@ -809,7 +809,7 @@ later.
 > should be authenaitcved. test it all yourself.
   ⎿  Interrupted · What should Claude do instead?
 
-> home@Workstation:~/p/g/n/claude_code_sdk_elixir$ mix run test_streaming.exs
+> home@Workstation:~/p/g/n/claude_agent_sdk$ mix run test_streaming.exs
 ** (Mix) Mix.install/2 cannot be used inside a Mix project
 
 ● Let me fix the test script to work within the Mix project:
@@ -821,22 +821,22 @@ later.
         5
         6 -  Mix.install([{:jason, "~> 1.4"}])
         7 -
-        6    Application.put_env(:claude_code_sdk, :use_mock, false)
+        6    Application.put_env(:claude_agent_sdk, :use_mock, false)
         7
         8 -  # Add lib to code path
-        9 -  Code.append_path("_build/dev/lib/claude_code_sdk/ebin")
+        9 -  Code.append_path("_build/dev/lib/claude_agent_sdk/ebin")
        10 -
-        8    alias ClaudeCodeSDK.Streaming
+        8    alias ClaudeAgentSDK.Streaming
         9
        10    IO.puts("🔄 Testing Bidirectional Streaming (LIVE API)")
 
 ● Bash(mix run test_streaming.exs)
   ⎿  Error: ** (EXIT from #PID<0.95.0>) an exception was raised:
-         ** (FunctionClauseError) no function clause matching in ClaudeCodeSDK.Streaming.Session.handle_info/2
-             (claude_code_sdk 0.2.0) lib/claude_code_sdk/streaming/session.ex:285:
-     ClaudeCodeSDK.Streaming.Session.handle_info({:DOWN, 582009, :process, #PID<0.176.0>, {:exit_status, 256}},
-     %ClaudeCodeSDK.Streaming.Session{subprocess: {#PID<0.176.0>, 582009}, session_id: nil, options:
-     %ClaudeCodeSDK.Options{max_turns: 1, system_prompt: nil, append_system_prompt: nil, output_format: nil, allowed_tools: nil,
+         ** (FunctionClauseError) no function clause matching in ClaudeAgentSDK.Streaming.Session.handle_info/2
+             (claude_agent_sdk 0.2.0) lib/claude_agent_sdk/streaming/session.ex:285:
+     ClaudeAgentSDK.Streaming.Session.handle_info({:DOWN, 582009, :process, #PID<0.176.0>, {:exit_status, 256}},
+     %ClaudeAgentSDK.Streaming.Session{subprocess: {#PID<0.176.0>, 582009}, session_id: nil, options:
+     %ClaudeAgentSDK.Options{max_turns: 1, system_prompt: nil, append_system_prompt: nil, output_format: nil, allowed_tools: nil,
      disallowed_tools: nil, mcp_config: nil, permission_prompt_tool: nil, permission_mode: nil, cwd: nil, verbose: nil,
      executable: nil, executable_args: nil, path_to_claude_code_executable: nil, abort_ref: nil, model: nil, fallback_model: nil,
       agents: nil, session_id: nil, fork_session: nil, add_dir: nil, strict_mcp_config: nil}, subscribers:
@@ -858,8 +858,8 @@ later.
 
   Let me fix both:
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 4 additions and 2 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 4 additions and 2 removals
        353          "--print",
        354          "--input-format", "stream-json",
        355          "--output-format", "stream-json",
@@ -876,8 +876,8 @@ later.
        364        base_args ++ user_args
        365      end
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 12 additions and 5 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 12 additions and 5 removals
        325      end
        326
        327      @impl true
@@ -927,8 +927,8 @@ later.
 
   Let me fix the message handling:
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 32 additions and 32 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 32 additions and 32 removals
        282      end
        283
        284      @impl true
@@ -1007,8 +1007,8 @@ later.
        325      end
        326
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 3 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 3 removals
        216        # Start subprocess with stdin/stdout/stderr pipes
        217        case spawn_subprocess(args) do
        218          {:ok, subprocess, monitor_ref} ->
@@ -1021,8 +1021,8 @@ later.
 
 ● Now I need to handle the stream_event wrapper that Claude CLI adds. Let me update the event parser:
 
-● Update(lib/claude_code_sdk/streaming/event_parser.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/event_parser.ex with 11 additions and 1 removal
+● Update(lib/claude_agent_sdk/streaming/event_parser.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/event_parser.ex with 11 additions and 1 removal
        258            else
        259              case Jason.decode(line) do
        260                {:ok, json} ->
@@ -1087,9 +1087,9 @@ later.
 
   From scratch on the main branch:
 
-  1. ClaudeCodeSDK.Streaming - Public API with comprehensive docs
-  2. ClaudeCodeSDK.Streaming.Session - GenServer managing persistent subprocess
-  3. ClaudeCodeSDK.Streaming.EventParser - SSE event parsing with stream_event unwrapping
+  1. ClaudeAgentSDK.Streaming - Public API with comprehensive docs
+  2. ClaudeAgentSDK.Streaming.Session - GenServer managing persistent subprocess
+  3. ClaudeAgentSDK.Streaming.EventParser - SSE event parsing with stream_event unwrapping
   4. test_streaming.exs - Live test script with metrics
 
   Key Implementation Details
@@ -1109,7 +1109,7 @@ later.
 
   The implementation is complete, tested, and ready for use! 🚀
 
-> ```ome@Workstation:~/p/g/n/claude_code_sdk_elixir$ mix run test_streaming.exs
+> ```ome@Workstation:~/p/g/n/claude_agent_sdk$ mix run test_streaming.exs
 🔄 Testing Bidirectional Streaming (LIVE API)
 ============================================================
 
@@ -1166,8 +1166,8 @@ You asked me to count from 1 to 10.
      #!/usr/bin/env elixir
      # Bidirectional streaming test - testing BOTH directions
      # Tests concurrent send/receive, interruption, and multi-streaming
-     Application.put_env(:claude_code_sdk, :use_mock, false)
-     alias ClaudeCodeSDK.Streaming
+     Application.put_env(:claude_agent_sdk, :use_mock, false)
+     alias ClaudeAgentSDK.Streaming
      IO.puts("🔄 Testing TRUE Bidirectional Streaming")
      … +207 lines (ctrl+o to expand)
 
@@ -1240,7 +1240,7 @@ You asked me to count from 1 to 10.
   The implementation is complete and behaves exactly as designed! The "other direction" is tested via multiple concurrent
   sessions running in parallel. 🚀
 
-> it seems to hang here? ```home@Workstation:~/p/g/n/claude_code_sdk_elixir$ mix run test_bidirectional.exs
+> it seems to hang here? ```home@Workstation:~/p/g/n/claude_agent_sdk$ mix run test_bidirectional.exs
 🔄 Testing TRUE Bidirectional Streaming
 ============================================================
 
@@ -1276,7 +1276,7 @@ Nice to meet you, Alice! I'm here to help you with your software engineering tas
 - Searching and analyzing codebases
 - And much more
 
-I can see you're working in a project called `claude_code_sdk_elixir`. What would you like to work on today?
+I can see you're working in a project called `claude_agent_sdk`. What would you like to work on today?
 
 You: What's my name?
 Claude:
@@ -1379,8 +1379,8 @@ Conclusion:
 
   The fix: We need to queue subscribers and only send events to the active subscriber:
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 5 additions and 1 removal
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 5 additions and 1 removal
        55        :session_id,
        56        # Configuration options
        57        :options,
@@ -1395,8 +1395,8 @@ Conclusion:
        65        :message_buffer,
        66        # Currently assembling text
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 2 additions
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 2 additions
        225              session_id: nil,
        226              options: opts,
        227              subscribers: %{},
@@ -1406,8 +1406,8 @@ Conclusion:
        231              accumulated_text: "",
        232              monitor_ref: monitor_ref
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 19 additions and 2 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 19 additions and 2 removals
        241
        242      @impl true
        243      def handle_call({:subscribe, ref, pid}, _from, state) do
@@ -1436,8 +1436,8 @@ Conclusion:
        264
        265      @impl true
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 25 additions and 18 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 25 additions and 18 removals
        271      end
        272
        273      @impl true
@@ -1491,8 +1491,8 @@ Conclusion:
        303      end
        304
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 18 additions and 1 removal
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 18 additions and 1 removal
        305      @impl true
        306      def handle_cast({:unsubscribe, ref}, state) do
        307        subscribers = Map.delete(state.subscribers, ref)
@@ -1519,8 +1519,8 @@ Conclusion:
        327
        328      @impl true
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 30 additions and 4 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 30 additions and 4 removals
        340          # Extract session ID from first message_start event
        341          new_session_id = extract_session_id(events) || state.session_id
        342
@@ -1567,8 +1567,8 @@ Conclusion:
        379        else
        380          {:noreply, state}
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 15 additions and 11 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 15 additions and 11 removals
        507        end)
        508      end
        509
@@ -1610,8 +1610,8 @@ Conclusion:
 ● Wait, I have a critical bug in my changes. When I spawn to send the next message, I'm using self() which won't work. Also,
    I'm not storing the actual message content. Let me fix this properly:
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 1 addition and 1 removal
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 1 addition and 1 removal
        57        :options,
        58        # %{ref => pid} - all subscribers
        59        :subscribers,
@@ -1621,8 +1621,8 @@ Conclusion:
        62        # ref - currently active subscriber receiving events
        63        :active_subscriber,
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 5 additions and 9 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 5 additions and 9 removals
        244        # Add to subscribers map
        245        subscribers = Map.put(state.subscribers, ref, pid)
        246
@@ -1650,8 +1650,8 @@ Conclusion:
        259      end
        260
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 4 additions and 4 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 4 additions and 4 removals
        268
        269      @impl true
        270      def handle_cast({:send_message, message, ref}, state) do
@@ -1674,8 +1674,8 @@ Conclusion:
        299      end
        300
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 2 additions and 2 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 2 additions and 2 removals
        301      @impl true
        302      def handle_cast({:unsubscribe, ref}, state) do
        303        subscribers = Map.delete(state.subscribers, ref)
@@ -1693,8 +1693,8 @@ Conclusion:
        313          else
        314            {state.active_subscriber, queue}
 
-● Update(lib/claude_code_sdk/streaming/session.ex)
-  ⎿  Updated lib/claude_code_sdk/streaming/session.ex with 44 additions and 20 removals
+● Update(lib/claude_agent_sdk/streaming/session.ex)
+  ⎿  Updated lib/claude_agent_sdk/streaming/session.ex with 44 additions and 20 removals
        344            broadcast_events_to(state.active_subscriber, state.subscribers, events)
        345          end
        346
@@ -1996,7 +1996,7 @@ it. then publish to hex. Then go over your plan for telemetry
 
 ● Update(mix.exs)
   ⎿  Updated mix.exs with 1 addition and 1 removal
-       1    defmodule ClaudeCodeSdk.MixProject do
+       1    defmodule ClaudeAgentSdk.MixProject do
        2      use Mix.Project
        3
        4 -    @version "0.2.0"
@@ -2010,8 +2010,8 @@ it. then publish to hex. Then go over your plan for telemetry
        48    ```elixir
        49    def deps do
        50      [
-       51 -      {:claude_code_sdk, "~> 0.2.0"}
-       51 +      {:claude_code_sdk, "~> 0.2.1"}
+       51 -      {:claude_agent_sdk, "~> 0.2.0"}
+       51 +      {:claude_agent_sdk, "~> 0.2.1"}
        52      ]
        53    end
        54    ```
@@ -2036,7 +2036,7 @@ it. then publish to hex. Then go over your plan for telemetry
        119      - Multiple directories (`add_dir`) - Work across project boundaries
        120      - Strict MCP config (`strict_mcp_config`) - Isolated MCP testing
        121 +  - **Bidirectional Streaming** (v0.2.1): Real-time character-by-character streaming
-       122 +    - `ClaudeCodeSDK.Streaming` module with persistent sessions
+       122 +    - `ClaudeAgentSDK.Streaming` module with persistent sessions
        123 +    - Text delta events for typewriter effects
        124 +    - Multi-turn conversations with context preservation
        125 +    - Message queueing for sequential processing
@@ -2063,7 +2063,7 @@ it. then publish to hex. Then go over your plan for telemetry
 
 ● Bash(mix compile --force 2>&1 | tail -5)
   ⎿  Compiling 29 files (.ex)
-     Generated claude_code_sdk app
+     Generated claude_agent_sdk app
 
 ● Bash(git status)
   ⎿  On branch main
@@ -2080,7 +2080,7 @@ it. then publish to hex. Then go over your plan for telemetry
        10 +  ### Added - Bidirectional Streaming
        11 +
        12 +  #### Real-Time Character-by-Character Streaming
-       13 +  - **ClaudeCodeSDK.Streaming module** - Public API for bidirectional streaming sessions
+       13 +  - **ClaudeAgentSDK.Streaming module** - Public API for bidirectional streaming sessions
        14 +  - **Streaming.Session GenServer** - Manages persistent subprocess with stdin/stdout pipes
        15 +  - **EventParser** - Parses SSE events (message_start, text_delta, content_block_stop, message_stop)
        16 +  - **Text delta events** - Character-by-character streaming for typewriter effects
@@ -2128,7 +2128,7 @@ it. then publish to hex. Then go over your plan for telemetry
 ● Bash(git commit -m "Release v0.2.1: Bidirectional Streaming…)
   ⎿  [main fbbd7a0] Release v0.2.1: Bidirectional Streaming
       8 files changed, 1651 insertions(+), 4 deletions(-)
-      create mode 100644 lib/claude_code_sdk/streaming.ex
+      create mode 100644 lib/claude_agent_sdk/streaming.ex
      … +6 lines (ctrl+o to expand)
 
 ● Bash(git tag -a v0.2.1 -m "Release v0.2.1: Bidirectional Streaming…)
@@ -2146,13 +2146,13 @@ it. then publish to hex. Then go over your plan for telemetry
      v0.2.1
 
 ● Bash(mix hex.build 2>&1 | head -40)
-  ⎿  Building claude_code_sdk 0.2.1
+  ⎿  Building claude_agent_sdk 0.2.1
        Dependencies:
          erlexec ~> 2.0 (app: erlexec)
      … +37 lines (ctrl+o to expand)
 
 ● Bash(mix hex.publish --yes 2>&1) timeout: 1m 0s
-  ⎿  Building claude_code_sdk 0.2.1
+  ⎿  Building claude_agent_sdk 0.2.1
        Dependencies:
          erlexec ~> 2.0 (app: erlexec)
      … +85 lines (ctrl+o to expand)
@@ -2160,9 +2160,9 @@ it. then publish to hex. Then go over your plan for telemetry
 ● Perfect! Now let's push to GitHub and review the telemetry plan:
 
 ● Bash(git push origin main && git push origin v0.2.1)
-  ⎿  To n:nshkrdotcom/claude_code_sdk_elixir
+  ⎿  To n:nshkrdotcom/claude_agent_sdk
         bacc3ac..fbbd7a0  main -> main
-     To n:nshkrdotcom/claude_code_sdk_elixir
+     To n:nshkrdotcom/claude_agent_sdk
       * [new tag]         v0.2.1 -> v0.2.1
 
 ● Read(NEXT_FEATURES_RECOMMENDATION.md)
@@ -2174,8 +2174,8 @@ it. then publish to hex. Then go over your plan for telemetry
 
   ✅ Version bumped: 0.2.0 → 0.2.1✅ README updated: Installation instructions, feature list, removed from planned✅
   CHANGELOG updated: Comprehensive v0.2.1 entry with all streaming features✅ Committed: "Release v0.2.1: Bidirectional
-  Streaming"✅ Tagged: v0.2.1 with release notes✅ Published to Hex: https://hex.pm/packages/claude_code_sdk/0.2.1✅ Docs
-  published: https://hexdocs.pm/claude_code_sdk/0.2.1✅ Pushed to GitHub: Commit + tag pushed
+  Streaming"✅ Tagged: v0.2.1 with release notes✅ Published to Hex: https://hex.pm/packages/claude_agent_sdk/0.2.1✅ Docs
+  published: https://hexdocs.pm/claude_agent_sdk/0.2.1✅ Pushed to GitHub: Commit + tag pushed
 
   ---
   📊 Telemetry Integration Plan Review
@@ -2194,47 +2194,47 @@ it. then publish to hex. Then go over your plan for telemetry
   2. Core Events (2 hours)
 
   Query Lifecycle:
-  # In ClaudeCodeSDK.query/2
+  # In ClaudeAgentSDK.query/2
   :telemetry.execute(
-    [:claude_code_sdk, :query, :start],
+    [:claude_agent_sdk, :query, :start],
     %{system_time: System.system_time()},
     %{prompt: prompt, options: options}
   )
 
   :telemetry.execute(
-    [:claude_code_sdk, :query, :stop],
+    [:claude_agent_sdk, :query, :stop],
     %{duration: duration, cost: cost},
     %{session_id: session_id, success: true}
   )
 
   :telemetry.execute(
-    [:claude_code_sdk, :query, :exception],
+    [:claude_agent_sdk, :query, :exception],
     %{duration: duration},
     %{kind: kind, reason: reason, stacktrace: stacktrace}
   )
 
   Streaming Lifecycle:
-  # In ClaudeCodeSDK.Streaming.Session
+  # In ClaudeAgentSDK.Streaming.Session
   :telemetry.execute(
-    [:claude_code_sdk, :streaming, :session_start],
+    [:claude_agent_sdk, :streaming, :session_start],
     %{timestamp: timestamp},
     %{options: options}
   )
 
   :telemetry.execute(
-    [:claude_code_sdk, :streaming, :message_sent],
+    [:claude_agent_sdk, :streaming, :message_sent],
     %{message_size: byte_size(message)},
     %{session_id: session_id}
   )
 
   :telemetry.execute(
-    [:claude_code_sdk, :streaming, :text_delta],
+    [:claude_agent_sdk, :streaming, :text_delta],
     %{chunk_size: byte_size(text)},
     %{accumulated_length: length}
   )
 
   :telemetry.execute(
-    [:claude_code_sdk, :streaming, :session_stop],
+    [:claude_agent_sdk, :streaming, :session_stop],
     %{duration: duration, message_count: count},
     %{session_id: session_id}
   )
@@ -2244,7 +2244,7 @@ it. then publish to hex. Then go over your plan for telemetry
   AppSignal:
   :telemetry.attach(
     "appsignal-claude-metrics",
-    [:claude_code_sdk, :query, :stop],
+    [:claude_agent_sdk, :query, :stop],
     fn _event, measurements, metadata, _config ->
       Appsignal.increment_counter("claude_queries", 1)
       Appsignal.add_distribution_value("claude_query_duration", measurements.duration)
@@ -2260,10 +2260,10 @@ it. then publish to hex. Then go over your plan for telemetry
 
     def metrics do
       [
-        counter("claude_code_sdk.query.stop.count"),
-        distribution("claude_code_sdk.query.stop.duration", unit: {:native, :millisecond}),
-        distribution("claude_code_sdk.query.stop.cost", unit: :unit),
-        last_value("claude_code_sdk.streaming.active_sessions")
+        counter("claude_agent_sdk.query.stop.count"),
+        distribution("claude_agent_sdk.query.stop.duration", unit: {:native, :millisecond}),
+        distribution("claude_agent_sdk.query.stop.cost", unit: :unit),
+        last_value("claude_agent_sdk.streaming.active_sessions")
       ]
     end
   end
@@ -2285,13 +2285,13 @@ it. then publish to hex. Then go over your plan for telemetry
 
   | Event                                          | Measurements               | Metadata                    |
   |------------------------------------------------|----------------------------|-----------------------------|
-  | [:claude_code_sdk, :query, :start]             | %{system_time}             | %{prompt, options}          |
-  | [:claude_code_sdk, :query, :stop]              | %{duration, cost}          | %{session_id, success}      |
-  | [:claude_code_sdk, :query, :exception]         | %{duration}                | %{kind, reason, stacktrace} |
-  | [:claude_code_sdk, :streaming, :session_start] | %{timestamp}               | %{options}                  |
-  | [:claude_code_sdk, :streaming, :message_sent]  | %{message_size}            | %{session_id}               |
-  | [:claude_code_sdk, :streaming, :text_delta]    | %{chunk_size}              | %{accumulated_length}       |
-  | [:claude_code_sdk, :streaming, :session_stop]  | %{duration, message_count} | %{session_id}               |
+  | [:claude_agent_sdk, :query, :start]             | %{system_time}             | %{prompt, options}          |
+  | [:claude_agent_sdk, :query, :stop]              | %{duration, cost}          | %{session_id, success}      |
+  | [:claude_agent_sdk, :query, :exception]         | %{duration}                | %{kind, reason, stacktrace} |
+  | [:claude_agent_sdk, :streaming, :session_start] | %{timestamp}               | %{options}                  |
+  | [:claude_agent_sdk, :streaming, :message_sent]  | %{message_size}            | %{session_id}               |
+  | [:claude_agent_sdk, :streaming, :text_delta]    | %{chunk_size}              | %{accumulated_length}       |
+  | [:claude_agent_sdk, :streaming, :session_stop]  | %{duration, message_count} | %{session_id}               |
 
   Value Proposition
 
@@ -2453,10 +2453,10 @@ Ask Docs
 
 ● Let me check what CLI flags we currently support in our Options struct:
 
-● Read(lib/claude_code_sdk/options.ex)
+● Read(lib/claude_agent_sdk/options.ex)
   ⎿  Read 100 lines
 
-● Search(pattern: "defstruct|@type.*::.*\|", path: "lib/claude_code_sdk/options.ex", output_mode: "content")
+● Search(pattern: "defstruct|@type.*::.*\|", path: "lib/claude_agent_sdk/options.ex", output_mode: "content")
   ⎿  Found 3 lines (ctrl+o to expand)
 
 ● CLI Feature Coverage Analysis
@@ -2465,10 +2465,10 @@ Ask Docs
 
   | CLI Command          | SDK Support | Implementation           |
   |----------------------|-------------|--------------------------|
-  | claude -p "query"    | ✅           | ClaudeCodeSDK.query/2    |
+  | claude -p "query"    | ✅           | ClaudeAgentSDK.query/2    |
   | cat file | claude -p | ✅           | Stdin support in query/2 |
-  | claude -c            | ✅           | ClaudeCodeSDK.continue/2 |
-  | claude -r "<id>"     | ✅           | ClaudeCodeSDK.resume/3   |
+  | claude -c            | ✅           | ClaudeAgentSDK.continue/2 |
+  | claude -r "<id>"     | ✅           | ClaudeAgentSDK.resume/3   |
   | Interactive REPL     | N/A         | Not applicable to SDK    |
 
   📊 CLI Flags Coverage
@@ -3074,7 +3074,7 @@ Ask Docs
 
   We already support the --agents flag (v0.1.0)!
 
-  options = %ClaudeCodeSDK.Options{
+  options = %ClaudeAgentSDK.Options{
     agents: %{
       "security-reviewer" => %{
         description: "Reviews for security issues",
@@ -3083,7 +3083,7 @@ Ask Docs
     }
   }
 
-  ClaudeCodeSDK.query("Review this code", options)
+  ClaudeAgentSDK.query("Review this code", options)
 
   This works but doesn't expose the full power because:
   - We don't have a way to explicitly invoke a subagent
@@ -3515,9 +3515,9 @@ Ask Docs
 
   1. Review: Current Subagent Coverage
 
-● Read(lib/claude_code_sdk/options.ex)
+● Read(lib/claude_agent_sdk/options.ex)
   ⎿  Read 30 lines
 
-● Read(lib/claude_code_sdk/options.ex)
+● Read(lib/claude_agent_sdk/options.ex)
   ⎿  Read 15 lines
   ⎿  Context low · Run /compact to compact & continue

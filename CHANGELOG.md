@@ -5,12 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2025-10-10
+
+### Changed
+- **Repository Rename**: Migrated from `claude_code_sdk_elixir` to `claude_agent_sdk` for consistency
+- Updated all documentation, URLs, and references to reflect new repository name
+- GitHub repository URL: https://github.com/nshkrdotcom/claude_agent_sdk
+
+### Fixed
+- Documentation cleanup and standardization across all markdown files
+- Internal path references updated to match new repository structure
+
 ## [0.2.1] - 2025-10-09
 
 ### Added - Bidirectional Streaming
 
 #### Real-Time Character-by-Character Streaming
-- **ClaudeCodeSDK.Streaming module** - Public API for bidirectional streaming sessions
+- **ClaudeAgentSDK.Streaming module** - Public API for bidirectional streaming sessions
 - **Streaming.Session GenServer** - Manages persistent subprocess with stdin/stdout pipes
 - **EventParser** - Parses SSE events (message_start, text_delta, content_block_stop, message_stop)
 - **Text delta events** - Character-by-character streaming for typewriter effects
@@ -86,7 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Multi-provider support** - Anthropic OAuth, AWS Bedrock, GCP Vertex AI
 - **Mix task** - `mix claude.setup_token` for easy authentication setup
 - **Auto-refresh** - Tokens automatically refresh before expiry (1 year validity)
-- **Environment variable support** - `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY`
+- **Environment variable support** - `CLAUDE_AGENT_OAUTH_TOKEN` and `ANTHROPIC_API_KEY`
 
 #### Model Selection & Custom Agents
 - **Model selection** - Choose Opus, Sonnet, Haiku, or specific model versions
@@ -127,8 +138,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release of Claude Code SDK for Elixir
 - Core functionality for interacting with Claude Code CLI
 - Support for synchronous and streaming queries
-- Authentication management via `ClaudeCodeSDK.AuthChecker`
-- Process management with `ClaudeCodeSDK.Process`
+- Authentication management via `ClaudeAgentSDK.AuthChecker`
+- Process management with `ClaudeAgentSDK.Process`
 - Message handling and formatting
 - Mock support for testing without API calls
 - Mix tasks:
@@ -148,4 +159,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[0.0.1]: https://github.com/nshkrdotcom/claude_code_sdk_elixir/releases/tag/v0.0.1
+[0.0.1]: https://github.com/nshkrdotcom/claude_agent_sdk/releases/tag/v0.0.1

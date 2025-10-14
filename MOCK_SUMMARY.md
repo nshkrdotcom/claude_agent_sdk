@@ -6,13 +6,13 @@ A comprehensive mocking system has been implemented for the Claude Code SDK that
 
 ## Components
 
-### 1. Mock Server (ClaudeCodeSDK.Mock)
+### 1. Mock Server (ClaudeAgentSDK.Mock)
 - GenServer that stores mock responses
 - Pattern matching for prompts using `String.contains?`
 - Default response handling
 - Full state reset with `clear_responses/0`
 
-### 2. Mock Process (ClaudeCodeSDK.Mock.Process)
+### 2. Mock Process (ClaudeAgentSDK.Mock.Process)
 - Intercepts CLI calls when mocking is enabled
 - Converts mock data to proper Message structs
 - Maintains stream interface compatibility
@@ -31,18 +31,18 @@ A comprehensive mocking system has been implemented for the Claude Code SDK that
 
 ```elixir
 # Enable mocking
-Application.put_env(:claude_code_sdk, :use_mock, true)
+Application.put_env(:claude_agent_sdk, :use_mock, true)
 
 # Start mock server
-{:ok, _} = ClaudeCodeSDK.Mock.start_link()
+{:ok, _} = ClaudeAgentSDK.Mock.start_link()
 
 # Set a mock response
-ClaudeCodeSDK.Mock.set_response("hello", [
+ClaudeAgentSDK.Mock.set_response("hello", [
   %{"type" => "assistant", "message" => %{"content" => "Hello!"}}
 ])
 
 # Query will return mock response
-ClaudeCodeSDK.query("say hello") |> Enum.to_list()
+ClaudeAgentSDK.query("say hello") |> Enum.to_list()
 ```
 
 ## Benefits
@@ -55,9 +55,9 @@ ClaudeCodeSDK.query("say hello") |> Enum.to_list()
 
 ## Files Added/Modified
 
-- `lib/claude_code_sdk/mock.ex` - Mock server
-- `lib/claude_code_sdk/mock/process.ex` - Mock process handler
-- `lib/claude_code_sdk/process.ex` - Added mock support
+- `lib/claude_agent_sdk/mock.ex` - Mock server
+- `lib/claude_agent_sdk/mock/process.ex` - Mock process handler
+- `lib/claude_agent_sdk/process.ex` - Added mock support
 - `lib/mix/tasks/test.live.ex` - Mix task for live testing
 - `config/*.exs` - Environment configurations
 - `test/test_helper.exs` - Mock initialization

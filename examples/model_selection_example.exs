@@ -3,11 +3,11 @@
 # Example: Using different Claude models
 # Demonstrates model selection and fallback features
 
-alias ClaudeCodeSDK.{OptionBuilder, ContentExtractor}
+alias ClaudeAgentSDK.{OptionBuilder, ContentExtractor}
 
 # Enable mocking for this example (no API costs)
-Application.put_env(:claude_code_sdk, :use_mock, true)
-{:ok, _} = ClaudeCodeSDK.Mock.start_link()
+Application.put_env(:claude_agent_sdk, :use_mock, true)
+{:ok, _} = ClaudeAgentSDK.Mock.start_link()
 
 IO.puts("🤖 Claude Model Selection Example")
 IO.puts("=" |> String.duplicate(50))
@@ -58,7 +58,7 @@ IO.puts("📊 Example 5: Actual Query with Model Selection")
 IO.puts("")
 
 # Set up a mock response
-ClaudeCodeSDK.Mock.set_response("hello", [
+ClaudeAgentSDK.Mock.set_response("hello", [
   %{
     "type" => "system",
     "subtype" => "init",
@@ -83,7 +83,7 @@ ClaudeCodeSDK.Mock.set_response("hello", [
 ])
 
 result =
-  ClaudeCodeSDK.query("Say hello", opus_options)
+  ClaudeAgentSDK.query("Say hello", opus_options)
   |> Enum.to_list()
 
 # Extract model info

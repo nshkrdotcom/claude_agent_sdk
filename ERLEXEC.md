@@ -36,11 +36,11 @@ end
 ### Architecture Changes
 
 ```
-ClaudeCodeSDK.query/2
+ClaudeAgentSDK.query/2
     ↓
-ClaudeCodeSDK.Query.run/2
+ClaudeAgentSDK.Query.run/2
     ↓
-ClaudeCodeSDK.Process.stream_erlexec/2  ← NEW
+ClaudeAgentSDK.Process.stream_erlexec/2  ← NEW
     ↓
 :exec.run/2 (erlexec)
     ↓
@@ -50,7 +50,7 @@ claude CLI subprocess
 ### New Process Module Design
 
 ```elixir
-defmodule ClaudeCodeSDK.Process do
+defmodule ClaudeAgentSDK.Process do
   @doc """
   Execute claude CLI using erlexec for robust process management
   """
@@ -151,7 +151,7 @@ defmodule ClaudeCodeSDK.Process do
     }
     
     # Check if we have a final result message
-    final_msg = Enum.find(messages, &ClaudeCodeSDK.Message.final?/1)
+    final_msg = Enum.find(messages, &ClaudeAgentSDK.Message.final?/1)
     if final_msg do
       {messages, %{new_state | done: true}}
     else
@@ -160,7 +160,7 @@ defmodule ClaudeCodeSDK.Process do
   end
   
   defp parse_json_message(line) do
-    case ClaudeCodeSDK.Message.from_json(line) do
+    case ClaudeAgentSDK.Message.from_json(line) do
       {:ok, message} -> message
       {:error, _} -> nil
     end
@@ -173,7 +173,7 @@ defmodule ClaudeCodeSDK.Process do
   
   defp handle_process_exit(reason, state) do
     # Process failed - create error message
-    error_msg = %ClaudeCodeSDK.Message{
+    error_msg = %ClaudeAgentSDK.Message{
       type: :result,
       subtype: :error_during_execution,
       data: %{
@@ -206,13 +206,13 @@ end
 1. **Add Erlexec Dependency**: Update mix.exs
 2. **Implement New Process Module**: Replace Port-based implementation
 3. **Update Tests**: Ensure all tests pass with new implementation
-4. **Maintain API Compatibility**: Keep existing ClaudeCodeSDK interface unchanged
+4. **Maintain API Compatibility**: Keep existing ClaudeAgentSDK interface unchanged
 
 ### Example Usage After Migration
 
 ```elixir
 # Same API, better implementation
-ClaudeCodeSDK.query("Say hello")
+ClaudeAgentSDK.query("Say hello")
 |> Enum.each(fn msg ->
   case msg.type do
     :assistant -> IO.puts(msg.data.message["content"])

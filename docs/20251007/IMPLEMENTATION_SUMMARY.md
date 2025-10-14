@@ -221,7 +221,7 @@ Implementing these plans teaches:
 ```elixir
 # Before
 $ claude login  # Manual!
-iex> ClaudeCodeSDK.query("Hello")  # Single query
+iex> ClaudeAgentSDK.query("Hello")  # Single query
 
 # After
 $ mix claude.setup_token  # Once!

@@ -31,7 +31,7 @@
 
 ```bash
 # Set your OAuth token (from earlier when you ran `claude setup-token`)
-export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-MvxhX-8pnRRnRsmaf...
+export CLAUDE_AGENT_OAUTH_TOKEN=sk-ant-oat01-MvxhX-8pnRRnRsmaf...
 
 # Or source your bashrc if you saved it there
 source ~/.bashrc
@@ -90,7 +90,7 @@ mix run test_live_v0_1_0.exs
 
 ```bash
 # Make sure your OAuth token is set
-export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-MvxhX...
+export CLAUDE_AGENT_OAUTH_TOKEN=sk-ant-oat01-MvxhX...
 
 # Run live test
 mix run test_live_v0_1_0.exs
@@ -184,7 +184,7 @@ Run these commands and confirm they work:
 
 ```bash
 # 1. Authentication
-export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-your-token-here
+export CLAUDE_AGENT_OAUTH_TOKEN=sk-ant-oat01-your-token-here
 mix claude.setup_token --force  # Should work and show status
 
 # 2. Live test suite

@@ -12,26 +12,26 @@ The Claude Code SDK for Elixir is a wrapper around the Claude Code CLI tool. It 
 
 ## Key Components
 
-### ClaudeCodeSDK (Main Module)
+### ClaudeAgentSDK (Main Module)
 - Public API for users
 - Functions: `query/2`, `continue/2`, `resume/3`
 - Returns Streams of Messages
 
-### ClaudeCodeSDK.Options
+### ClaudeAgentSDK.Options
 - Configuration struct for requests
 - Converts options to CLI arguments via `to_args/1`
 
-### ClaudeCodeSDK.Message
+### ClaudeAgentSDK.Message
 - Represents messages from Claude
 - Types: `:system`, `:user`, `:assistant`, `:result`
 - Parses JSON messages from the CLI
 
-### ClaudeCodeSDK.Query
+### ClaudeAgentSDK.Query
 - Orchestrates query execution
 - Builds command line arguments
 - Handles continue/resume logic
 
-### ClaudeCodeSDK.Process
+### ClaudeAgentSDK.Process
 - Manages subprocess lifecycle
 - Spawns claude CLI via Port
 - Streams and parses JSON output
@@ -40,7 +40,7 @@ The Claude Code SDK for Elixir is a wrapper around the Claude Code CLI tool. It 
 ## Message Flow
 
 ```
-User Code -> ClaudeCodeSDK.query/2
+User Code -> ClaudeAgentSDK.query/2
           -> Query.run/2
           -> Process.stream/2
           -> Port.open (spawns claude CLI)
@@ -64,8 +64,8 @@ claude --print --output-format stream-json "Your prompt here"
 
 Authentication is handled by the Claude CLI itself through environment variables:
 - `ANTHROPIC_API_KEY` - For direct Anthropic API access
-- `CLAUDE_CODE_USE_BEDROCK=1` - For AWS Bedrock
-- `CLAUDE_CODE_USE_VERTEX=1` - For Google Vertex AI
+- `CLAUDE_AGENT_USE_BEDROCK=1` - For AWS Bedrock
+- `CLAUDE_AGENT_USE_VERTEX=1` - For Google Vertex AI
 
 ## Stream Processing
 

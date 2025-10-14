@@ -6,10 +6,10 @@
 # ⚠️ WARNING: This makes REAL API calls and incurs costs!
 # Estimated cost: ~$0.05-0.10 for full test suite
 
-alias ClaudeCodeSDK.{OptionBuilder, Orchestrator, ContentExtractor, AuthManager}
+alias ClaudeAgentSDK.{OptionBuilder, Orchestrator, ContentExtractor, AuthManager}
 
 # Disable mocking - use real API
-Application.put_env(:claude_code_sdk, :use_mock, false)
+Application.put_env(:claude_agent_sdk, :use_mock, false)
 
 # Start AuthManager
 {:ok, _} = AuthManager.start_link()
@@ -48,7 +48,7 @@ case AuthManager.ensure_authenticated() do
     IO.puts("   ❌ Authentication: FAIL - #{inspect(reason)}")
     IO.puts("")
     IO.puts("   Please run: mix claude.setup_token")
-    IO.puts("   Or set: export CLAUDE_CODE_OAUTH_TOKEN=<your-token>")
+    IO.puts("   Or set: export CLAUDE_AGENT_OAUTH_TOKEN=<your-token>")
     System.halt(1)
 end
 
@@ -60,7 +60,7 @@ IO.puts("TEST 2: Basic Query (No model specified)")
 IO.puts("─" |> String.duplicate(60))
 
 result =
-  ClaudeCodeSDK.query("Say exactly: Hello from v0.1.0")
+  ClaudeAgentSDK.query("Say exactly: Hello from v0.1.0")
   |> Enum.to_list()
 
 assistant_msg = Enum.find(result, &(&1.type == :assistant))
@@ -75,8 +75,8 @@ cond do
     IO.puts("   ❌ Basic Query: FAIL - Authentication error")
     IO.puts("   Error: #{response_text}")
     IO.puts("")
-    IO.puts("   💡 The CLAUDE_CODE_OAUTH_TOKEN environment variable may not be set correctly")
-    IO.puts("   💡 Try: export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-oat01-...' (in single quotes)")
+    IO.puts("   💡 The CLAUDE_AGENT_OAUTH_TOKEN environment variable may not be set correctly")
+    IO.puts("   💡 Try: export CLAUDE_AGENT_OAUTH_TOKEN='sk-ant-oat01-...' (in single quotes)")
     System.halt(1)
 
   assistant_msg && result_msg && result_msg.subtype == :success ->
@@ -103,7 +103,7 @@ model_opts = OptionBuilder.with_sonnet()
 IO.puts("   Using model: #{model_opts.model}")
 
 result =
-  ClaudeCodeSDK.query("What is 2+2?", model_opts)
+  ClaudeAgentSDK.query("What is 2+2?", model_opts)
   |> Enum.to_list()
 
 system_msg = Enum.find(result, &(&1.type == :system))
@@ -125,7 +125,7 @@ IO.puts("")
 IO.puts("TEST 4: Custom Agent")
 IO.puts("─" |> String.duplicate(60))
 
-agent_opts = %ClaudeCodeSDK.Options{
+agent_opts = %ClaudeAgentSDK.Options{
   agents: %{
     "math_helper" => %{
       description: "Math expert",
@@ -136,7 +136,7 @@ agent_opts = %ClaudeCodeSDK.Options{
 }
 
 result =
-  ClaudeCodeSDK.query("What is 5 * 7?", agent_opts)
+  ClaudeAgentSDK.query("What is 5 * 7?", agent_opts)
   |> Enum.to_list()
 
 assistant_msg = Enum.find(result, &(&1.type == :assistant))
@@ -175,9 +175,9 @@ IO.puts("Press Enter to continue or Ctrl+C to skip...")
 IO.gets("")
 
 queries = [
-  {"What is 1+1?", %ClaudeCodeSDK.Options{max_turns: 1}},
-  {"What is 2+2?", %ClaudeCodeSDK.Options{max_turns: 1}},
-  {"What is 3+3?", %ClaudeCodeSDK.Options{max_turns: 1}}
+  {"What is 1+1?", %ClaudeAgentSDK.Options{max_turns: 1}},
+  {"What is 2+2?", %ClaudeAgentSDK.Options{max_turns: 1}},
+  {"What is 3+3?", %ClaudeAgentSDK.Options{max_turns: 1}}
 ]
 
 start_time = System.monotonic_time(:millisecond)
@@ -210,7 +210,7 @@ IO.puts("─" |> String.duplicate(60))
 {:ok, retry_result} =
   Orchestrator.query_with_retry(
     "Say: Retry test successful",
-    %ClaudeCodeSDK.Options{max_turns: 1},
+    %ClaudeAgentSDK.Options{max_turns: 1},
     max_retries: 2,
     backoff_ms: 500
   )

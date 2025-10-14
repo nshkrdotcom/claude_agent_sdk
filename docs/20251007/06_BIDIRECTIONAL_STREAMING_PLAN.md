@@ -20,7 +20,7 @@ Enable interactive, real-time Claude conversations with:
 **Current**: Request-response only
 ```elixir
 # Must wait for complete response
-messages = ClaudeCodeSDK.query("Long task...") |> Enum.to_list()
+messages = ClaudeAgentSDK.query("Long task...") |> Enum.to_list()
 # No way to see partial results
 # No way to send follow-up without waiting
 ```
@@ -28,10 +28,10 @@ messages = ClaudeCodeSDK.query("Long task...") |> Enum.to_list()
 **Desired**: Interactive streaming
 ```elixir
 # Start interactive session
-{:ok, session} = ClaudeCodeSDK.Streaming.start_session()
+{:ok, session} = ClaudeAgentSDK.Streaming.start_session()
 
 # Send message, get immediate response stream
-stream = ClaudeCodeSDK.Streaming.send_message(session, "Hello")
+stream = ClaudeAgentSDK.Streaming.send_message(session, "Hello")
 
 # See partial responses as they arrive
 stream |> Stream.each(fn partial ->
@@ -39,7 +39,7 @@ stream |> Stream.each(fn partial ->
 end) |> Stream.run()
 
 # Send follow-up immediately
-ClaudeCodeSDK.Streaming.send_message(session, "Tell me more")
+ClaudeAgentSDK.Streaming.send_message(session, "Tell me more")
 ```
 
 ---
@@ -72,7 +72,7 @@ ClaudeCodeSDK.Streaming.send_message(session, "Tell me more")
 ### StreamingSession Module
 
 ```elixir
-defmodule ClaudeCodeSDK.Streaming do
+defmodule ClaudeAgentSDK.Streaming do
   @moduledoc """
   Bidirectional streaming for interactive Claude conversations.
 
@@ -276,7 +276,7 @@ end
 ## 🧪 Testing
 
 ```elixir
-defmodule ClaudeCodeSDK.StreamingTest do
+defmodule ClaudeAgentSDK.StreamingTest do
   use ExUnit.Case
 
   @tag :integration
@@ -324,7 +324,7 @@ defmodule MyAppWeb.ClaudeChatLive do
   use MyAppWeb, :live_view
 
   def mount(_params, _session, socket) do
-    {:ok, session} = ClaudeCodeSDK.Streaming.start_session()
+    {:ok, session} = ClaudeAgentSDK.Streaming.start_session()
 
     {:ok, assign(socket,
       claude_session: session,
@@ -339,7 +339,7 @@ defmodule MyAppWeb.ClaudeChatLive do
 
     # Start streaming response
     spawn_link(fn ->
-      ClaudeCodeSDK.Streaming.send_message(socket.assigns.claude_session, message)
+      ClaudeAgentSDK.Streaming.send_message(socket.assigns.claude_session, message)
       |> Stream.each(fn chunk ->
         send(self(), {:claude_chunk, chunk})
       end)

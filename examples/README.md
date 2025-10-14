@@ -274,7 +274,7 @@ end
 Add debug output to any example:
 
 ```elixir
-# In any example, add this before ClaudeCodeSDK.query:
+# In any example, add this before ClaudeAgentSDK.query:
 IO.puts("🔧 Debug: Sending prompt: #{inspect(prompt)}")
 ```
 

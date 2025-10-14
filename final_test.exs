@@ -11,7 +11,7 @@ IO.puts("   Prompt: \"Say exactly: Hello from Elixir!\"")
 IO.puts("   Using authenticated Claude CLI...")
 
 try do
-  ClaudeCodeSDK.query("Say exactly: Hello from Elixir!")
+  ClaudeAgentSDK.query("Say exactly: Hello from Elixir!")
   |> Enum.each(fn msg ->
     case msg.type do
       :system ->
@@ -24,11 +24,13 @@ try do
 
       :assistant ->
         # Extract the actual text content
-        content = case msg.data.message do
-          %{"content" => text} when is_binary(text) -> text
-          %{"content" => [%{"text" => text}]} -> text
-          _ -> inspect(msg.data.message)
-        end
+        content =
+          case msg.data.message do
+            %{"content" => text} when is_binary(text) -> text
+            %{"content" => [%{"text" => text}]} -> text
+            _ -> inspect(msg.data.message)
+          end
+
         IO.puts("\n🤖 Claude API Response:")
         IO.puts("   #{content}")
 
@@ -48,7 +50,6 @@ try do
         IO.puts("   Other: #{msg.type}")
     end
   end)
-
 rescue
   e ->
     IO.puts("❌ Error: #{inspect(e)}")

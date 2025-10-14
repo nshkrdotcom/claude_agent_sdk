@@ -3,11 +3,11 @@
 # Simple example of using the Claude Code SDK
 # Uses current application environment (mock by default, live in production)
 
-alias ClaudeCodeSDK.{ContentExtractor, OptionBuilder}
+alias ClaudeAgentSDK.{ContentExtractor, OptionBuilder}
 
 # Start mock if needed
-if Application.get_env(:claude_code_sdk, :use_mock, false) do
-  {:ok, _} = ClaudeCodeSDK.Mock.start_link()
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
   IO.puts("🎭 Mock mode enabled")
 else
   IO.puts("🔴 Live mode enabled")
@@ -18,8 +18,9 @@ IO.puts("=" |> String.duplicate(50))
 
 # Simple query
 IO.puts("\n1. Simple query example:")
+
 try do
-  ClaudeCodeSDK.query("Write a hello world function in Elixir")
+  ClaudeAgentSDK.query("Write a hello world function in Elixir")
   |> Enum.each(fn message ->
     case message do
       %{type: :system, subtype: :init} ->
@@ -46,6 +47,7 @@ try do
       %{type: :result} ->
         IO.puts("\n❌ Error (#{message.subtype}):")
         error = message.data[:error] || message.data["error"]
+
         if error do
           IO.puts(error)
         else
@@ -64,18 +66,22 @@ end
 
 # Query with options
 IO.puts("\n\n2. Query with options:")
+
 try do
   # Use smart preset configuration
   options = OptionBuilder.build_chat_options()
 
-  messages = ClaudeCodeSDK.query("Explain GenServers in 2 sentences", options)
-  |> Enum.to_list()
+  messages =
+    ClaudeAgentSDK.query("Explain GenServers in 2 sentences", options)
+    |> Enum.to_list()
 
   # Check for errors first
-  error_msg = Enum.find(messages, & &1.type == :result and &1.subtype != :success)
+  error_msg = Enum.find(messages, &(&1.type == :result and &1.subtype != :success))
+
   if error_msg do
     IO.puts("❌ Error (#{error_msg.subtype}):")
     error = error_msg.data[:error] || error_msg.data["error"]
+
     if error do
       IO.puts(error)
     else
@@ -84,7 +90,7 @@ try do
   else
     # Show assistant responses using ContentExtractor
     messages
-    |> Enum.filter(& &1.type == :assistant)
+    |> Enum.filter(&(&1.type == :assistant))
     |> Enum.each(fn message ->
       content = ContentExtractor.extract_text(message) || "[no content]"
       IO.puts(content)

@@ -17,27 +17,27 @@ Enable concurrent Claude query orchestration with rate limiting, error recovery,
 ```elixir
 # Can't do this efficiently
 queries = ["Query 1", "Query 2", "Query 3"]
-results = Enum.map(queries, &ClaudeCodeSDK.query/1)  # Sequential, slow
+results = Enum.map(queries, &ClaudeAgentSDK.query/1)  # Sequential, slow
 ```
 
 **Desired**: Parallel execution with control
 ```elixir
 # Run multiple queries concurrently
-results = ClaudeCodeSDK.Orchestrator.query_parallel([
+results = ClaudeAgentSDK.Orchestrator.query_parallel([
   {"Analyze file1.ex", analysis_opts},
   {"Analyze file2.ex", analysis_opts},
   {"Analyze file3.ex", analysis_opts}
 ], max_concurrent: 3)
 
 # Pipeline queries (output → input)
-{:ok, final_result} = ClaudeCodeSDK.Orchestrator.query_pipeline([
+{:ok, final_result} = ClaudeAgentSDK.Orchestrator.query_pipeline([
   {"Analyze code", analysis_opts},
   {"Suggest refactorings", refactor_opts},
   {"Generate tests", test_opts}
 ])
 
 # Retry with backoff
-{:ok, result} = ClaudeCodeSDK.Orchestrator.query_with_retry(
+{:ok, result} = ClaudeAgentSDK.Orchestrator.query_with_retry(
   prompt,
   options,
   max_retries: 3,
@@ -51,7 +51,7 @@ results = ClaudeCodeSDK.Orchestrator.query_parallel([
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ ClaudeCodeSDK.Orchestrator (GenServer)               │
+│ ClaudeAgentSDK.Orchestrator (GenServer)               │
 ├──────────────────────────────────────────────────────┤
 │ • Rate limiting (queries/minute)                     │
 │ • Concurrent execution management                    │
@@ -72,10 +72,10 @@ results = ClaudeCodeSDK.Orchestrator.query_parallel([
 
 ### Core Module
 
-**File**: `lib/claude_code_sdk/orchestrator.ex`
+**File**: `lib/claude_agent_sdk/orchestrator.ex`
 
 ```elixir
-defmodule ClaudeCodeSDK.Orchestrator do
+defmodule ClaudeAgentSDK.Orchestrator do
   use GenServer
   require Logger
 
@@ -93,7 +93,7 @@ defmodule ClaudeCodeSDK.Orchestrator do
   ## Usage
 
       # Start orchestrator
-      {:ok, _pid} = ClaudeCodeSDK.Orchestrator.start_link()
+      {:ok, _pid} = ClaudeAgentSDK.Orchestrator.start_link()
 
       # Parallel queries
       results = Orchestrator.query_parallel([
@@ -144,7 +144,7 @@ defmodule ClaudeCodeSDK.Orchestrator do
         :ok = check_budget()
 
         # Execute query
-        result = ClaudeCodeSDK.query(prompt, options) |> Enum.to_list()
+        result = ClaudeAgentSDK.query(prompt, options) |> Enum.to_list()
 
         # Track usage
         track_usage(result)
@@ -179,7 +179,7 @@ defmodule ClaudeCodeSDK.Orchestrator do
         prompt
       end
 
-      result = ClaudeCodeSDK.query(enhanced_prompt, options) |> Enum.to_list()
+      result = ClaudeAgentSDK.query(enhanced_prompt, options) |> Enum.to_list()
 
       case extract_errors(result) do
         [] -> {:cont, {:ok, result}}
@@ -199,7 +199,7 @@ defmodule ClaudeCodeSDK.Orchestrator do
 
       :ok = check_rate_limit()
 
-      result = ClaudeCodeSDK.query(prompt, options) |> Enum.to_list()
+      result = ClaudeAgentSDK.query(prompt, options) |> Enum.to_list()
 
       case extract_errors(result) do
         [] ->
@@ -367,7 +367,7 @@ defmodule ClaudeCodeSDK.Orchestrator do
   defp append_context(prompt, previous_messages) do
     context = previous_messages
     |> List.last()
-    |> ClaudeCodeSDK.ContentExtractor.extract_text()
+    |> ClaudeAgentSDK.ContentExtractor.extract_text()
 
     """
     Context from previous step:
@@ -387,11 +387,11 @@ end
 ### Unit Tests
 
 ```elixir
-defmodule ClaudeCodeSDK.OrchestratorTest do
+defmodule ClaudeAgentSDK.OrchestratorTest do
   use ExUnit.Case
 
   setup do
-    start_supervised!(ClaudeCodeSDK.Orchestrator)
+    start_supervised!(ClaudeAgentSDK.Orchestrator)
     :ok
   end
 

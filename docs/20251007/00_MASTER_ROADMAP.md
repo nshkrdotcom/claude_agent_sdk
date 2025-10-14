@@ -6,7 +6,7 @@
 
 ## 📋 Executive Summary
 
-This roadmap details the implementation plan for transforming `claude_code_sdk_elixir` from a solid foundation (v0.0.1) into a production-ready orchestration platform (v1.0.0).
+This roadmap details the implementation plan for transforming `claude_agent_sdk` from a solid foundation (v0.0.1) into a production-ready orchestration platform (v1.0.0).
 
 **Current State**: 9.2/10 - Excellent foundation, missing orchestration features
 **Target State**: 10/10 - Industry-leading Claude orchestration SDK
@@ -94,11 +94,11 @@ NOW (v0.0.1)
 ```elixir
 # Before v0.1.0
 $ claude login  # Manual step required
-iex> ClaudeCodeSDK.query("Hello")
+iex> ClaudeAgentSDK.query("Hello")
 
 # After v0.1.0
 $ mix claude.setup_token  # One-time setup
-iex> ClaudeCodeSDK.query("Hello")  # Just works
+iex> ClaudeAgentSDK.query("Hello")  # Just works
 
 # New capabilities
 options = %Options{
@@ -200,14 +200,14 @@ Orchestrator.query_parallel([
    ```
 
 2. **Telemetry Events**
-   - `[:claude_code_sdk, :query, :start]`
-   - `[:claude_code_sdk, :query, :stop]`
-   - `[:claude_code_sdk, :query, :exception]`
+   - `[:claude_agent_sdk, :query, :start]`
+   - `[:claude_agent_sdk, :query, :stop]`
+   - `[:claude_agent_sdk, :query, :exception]`
 
 3. **Integration Modules**
-   - `ClaudeCodeSDK.ALTAR` - Tool arbitration
-   - `ClaudeCodeSDK.DSPex` - Prompt optimization
-   - `ClaudeCodeSDK.Structured` - Schema validation
+   - `ClaudeAgentSDK.ALTAR` - Tool arbitration
+   - `ClaudeAgentSDK.DSPex` - Prompt optimization
+   - `ClaudeAgentSDK.Structured` - Schema validation
 
 ---
 
@@ -279,7 +279,7 @@ Orchestrator.query_parallel([
 - Mock integration tests
 
 # Example:
-defmodule ClaudeCodeSDK.AuthManagerTest do
+defmodule ClaudeAgentSDK.AuthManagerTest do
   test "acquires token successfully"
   test "handles CLI failure gracefully"
   test "refreshes token before expiry"
@@ -347,7 +347,7 @@ Orchestrator ─────────────► RateLimiter
     │                       CircuitBreaker
     │                       SessionStore
     │
-    └─► ClaudeCodeSDK.query/2 (uses Process.ex)
+    └─► ClaudeAgentSDK.query/2 (uses Process.ex)
 
 Bidirectional Streaming ──► New Streaming module
                              Separate from Process.ex

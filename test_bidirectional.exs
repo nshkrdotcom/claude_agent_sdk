@@ -3,9 +3,9 @@
 # Bidirectional streaming test - testing BOTH directions
 # Tests concurrent send/receive, interruption, and multi-streaming
 
-Application.put_env(:claude_code_sdk, :use_mock, false)
+Application.put_env(:claude_agent_sdk, :use_mock, false)
 
-alias ClaudeCodeSDK.Streaming
+alias ClaudeAgentSDK.Streaming
 
 IO.puts("🔄 Testing TRUE Bidirectional Streaming")
 IO.puts("=" |> String.duplicate(60))
@@ -25,7 +25,7 @@ IO.puts("")
 IO.puts("📋 Test 1: Sequential Multi-Turn (Current Implementation)")
 IO.puts("=" |> String.duplicate(60))
 
-{:ok, session} = Streaming.start_session(%ClaudeCodeSDK.Options{max_turns: 5})
+{:ok, session} = Streaming.start_session(%ClaudeAgentSDK.Options{max_turns: 5})
 IO.puts("✅ Session started")
 
 # Message 1
@@ -67,7 +67,7 @@ IO.puts("📋 Test 2: Rapid Sequential Messages")
 IO.puts("=" |> String.duplicate(60))
 IO.puts("Sending multiple messages in quick succession...")
 
-{:ok, session2} = Streaming.start_session(%ClaudeCodeSDK.Options{max_turns: 5})
+{:ok, session2} = Streaming.start_session(%ClaudeAgentSDK.Options{max_turns: 5})
 
 messages = [
   "Say just the number 1",
@@ -101,7 +101,7 @@ IO.puts("📋 Test 3: Attempting Concurrent Message Sends")
 IO.puts("=" |> String.duplicate(60))
 IO.puts("Testing if we can send while receiving...")
 
-{:ok, session3} = Streaming.start_session(%ClaudeCodeSDK.Options{max_turns: 10})
+{:ok, session3} = Streaming.start_session(%ClaudeAgentSDK.Options{max_turns: 10})
 
 # Start a long-running response
 IO.puts("\n1. Starting long response (write a story)...")
@@ -165,7 +165,7 @@ IO.puts("test multiple independent sessions in parallel...")
 # Start 3 separate sessions
 sessions =
   Enum.map(1..3, fn i ->
-    {:ok, session} = Streaming.start_session(%ClaudeCodeSDK.Options{max_turns: 1})
+    {:ok, session} = Streaming.start_session(%ClaudeAgentSDK.Options{max_turns: 1})
     {i, session}
   end)
 

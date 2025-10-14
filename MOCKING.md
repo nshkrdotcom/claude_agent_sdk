@@ -22,17 +22,17 @@ The mocking system allows you to:
 
 ```elixir
 # Enable mocking
-Application.put_env(:claude_code_sdk, :use_mock, true)
+Application.put_env(:claude_agent_sdk, :use_mock, true)
 
 # Start the mock server
-{:ok, _} = ClaudeCodeSDK.Mock.start_link()
+{:ok, _} = ClaudeAgentSDK.Mock.start_link()
 ```
 
 ### Set Mock Responses
 
 ```elixir
 # Set a response for prompts containing "hello"
-ClaudeCodeSDK.Mock.set_response("hello", [
+ClaudeAgentSDK.Mock.set_response("hello", [
   %{
     "type" => "assistant",
     "message" => %{"content" => "Hello from mock!"},
@@ -41,7 +41,7 @@ ClaudeCodeSDK.Mock.set_response("hello", [
 ])
 
 # Now any query containing "hello" will return this response
-ClaudeCodeSDK.query("say hello") |> Enum.to_list()
+ClaudeAgentSDK.query("say hello") |> Enum.to_list()
 ```
 
 ### Default Responses
@@ -50,13 +50,13 @@ The mock provides default responses for unmatched prompts:
 
 ```elixir
 # This will get a default response
-ClaudeCodeSDK.query("unmatched prompt") |> Enum.to_list()
+ClaudeAgentSDK.query("unmatched prompt") |> Enum.to_list()
 ```
 
 ### Custom Default Response
 
 ```elixir
-ClaudeCodeSDK.Mock.set_default_response([
+ClaudeAgentSDK.Mock.set_default_response([
   %{
     "type" => "assistant",
     "message" => %{"content" => "Custom default response"}
@@ -87,23 +87,23 @@ MIX_ENV=test mix test.live test/specific_test.exs
 
 ### Test Environment (config/test.exs)
 ```elixir
-config :claude_code_sdk,
+config :claude_agent_sdk,
   use_mock: true  # Mocks enabled by default in tests
 ```
 
 ### Development Environment (config/dev.exs)
 ```elixir
-config :claude_code_sdk,
+config :claude_agent_sdk,
   use_mock: false  # Real API calls in development
 ```
 
 ### Runtime Toggle
 ```elixir
 # Enable mocking at runtime
-Application.put_env(:claude_code_sdk, :use_mock, true)
+Application.put_env(:claude_agent_sdk, :use_mock, true)
 
 # Disable mocking at runtime
-Application.put_env(:claude_code_sdk, :use_mock, false)
+Application.put_env(:claude_agent_sdk, :use_mock, false)
 ```
 
 ## Mock Response Format
@@ -152,7 +152,7 @@ Mock responses should match the Claude CLI JSON format:
 ```elixir
 defmodule MyAppTest do
   use ExUnit.Case
-  alias ClaudeCodeSDK.Mock
+  alias ClaudeAgentSDK.Mock
 
   setup do
     Mock.clear_responses()
@@ -170,7 +170,7 @@ defmodule MyAppTest do
       }
     ])
     
-    # Your code that uses ClaudeCodeSDK
+    # Your code that uses ClaudeAgentSDK
     result = MyApp.analyze_code("def hello, do: :world")
     
     # Assertions
@@ -209,11 +209,11 @@ mix run demo_mock.exs
 
 ```elixir
 # Verify mock is enabled
-Application.get_env(:claude_code_sdk, :use_mock)
+Application.get_env(:claude_agent_sdk, :use_mock)
 # Should return true
 
 # Verify mock server is running
-Process.whereis(ClaudeCodeSDK.Mock)
+Process.whereis(ClaudeAgentSDK.Mock)
 # Should return a PID
 ```
 

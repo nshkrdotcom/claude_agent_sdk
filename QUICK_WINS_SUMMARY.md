@@ -6,7 +6,7 @@ Successfully implemented four high-impact modules that dramatically improve the 
 
 ## Implemented Modules
 
-### 1. ContentExtractor (`lib/claude_code_sdk/content_extractor.ex`)
+### 1. ContentExtractor (`lib/claude_agent_sdk/content_extractor.ex`)
 
 **Purpose**: Simplifies extracting text from Claude messages
 
@@ -17,11 +17,11 @@ Successfully implemented four high-impact modules that dramatically improve the 
 
 **Usage**:
 ```elixir
-message = %ClaudeCodeSDK.Message{
+message = %ClaudeAgentSDK.Message{
   type: :assistant,
   data: %{message: %{"content" => "Hello, world!"}}
 }
-ClaudeCodeSDK.ContentExtractor.extract_text(message)
+ClaudeAgentSDK.ContentExtractor.extract_text(message)
 # => "Hello, world!"
 ```
 
@@ -30,7 +30,7 @@ ClaudeCodeSDK.ContentExtractor.extract_text(message)
 - Handles all content formats (strings, arrays, tool use)
 - Graceful handling of malformed content
 
-### 2. AuthChecker (`lib/claude_code_sdk/auth_checker.ex`)
+### 2. AuthChecker (`lib/claude_agent_sdk/auth_checker.ex`)
 
 **Purpose**: Verifies Claude CLI installation and authentication status
 
@@ -44,12 +44,12 @@ ClaudeCodeSDK.ContentExtractor.extract_text(message)
 **Usage**:
 ```elixir
 # Quick check
-if ClaudeCodeSDK.AuthChecker.authenticated?() do
+if ClaudeAgentSDK.AuthChecker.authenticated?() do
   # Proceed with queries
 end
 
 # Full diagnosis
-diagnosis = ClaudeCodeSDK.AuthChecker.diagnose()
+diagnosis = ClaudeAgentSDK.AuthChecker.diagnose()
 # => %{
 #   cli_installed: true,
 #   authenticated: true,
@@ -63,7 +63,7 @@ diagnosis = ClaudeCodeSDK.AuthChecker.diagnose()
 - Helpful recommendations for fixing issues
 - Prevents confusing authentication errors
 
-### 3. OptionBuilder (`lib/claude_code_sdk/option_builder.ex`)
+### 3. OptionBuilder (`lib/claude_agent_sdk/option_builder.ex`)
 
 **Purpose**: Pre-configured option sets for common use cases
 
@@ -81,19 +81,19 @@ diagnosis = ClaudeCodeSDK.AuthChecker.diagnose()
 **Usage**:
 ```elixir
 # Simple presets
-options = ClaudeCodeSDK.OptionBuilder.build_development_options()
+options = ClaudeAgentSDK.OptionBuilder.build_development_options()
 
 # Environment-based
-options = ClaudeCodeSDK.OptionBuilder.for_environment()
+options = ClaudeAgentSDK.OptionBuilder.for_environment()
 
 # Custom combinations
-options = ClaudeCodeSDK.OptionBuilder.merge(:production, %{max_turns: 5})
+options = ClaudeAgentSDK.OptionBuilder.merge(:production, %{max_turns: 5})
 
 # Chaining
 options = 
-  ClaudeCodeSDK.OptionBuilder.build_development_options()
-  |> ClaudeCodeSDK.OptionBuilder.with_working_directory("/project")
-  |> ClaudeCodeSDK.OptionBuilder.with_system_prompt("Be helpful")
+  ClaudeAgentSDK.OptionBuilder.build_development_options()
+  |> ClaudeAgentSDK.OptionBuilder.with_working_directory("/project")
+  |> ClaudeAgentSDK.OptionBuilder.with_system_prompt("Be helpful")
 ```
 
 **Benefits**:
@@ -101,7 +101,7 @@ options =
 - Safe defaults for each environment
 - Easy customization of presets
 
-### 4. DebugMode (`lib/claude_code_sdk/debug_mode.ex`)
+### 4. DebugMode (`lib/claude_agent_sdk/debug_mode.ex`)
 
 **Purpose**: Comprehensive debugging and troubleshooting tools
 
@@ -115,15 +115,15 @@ options =
 **Usage**:
 ```elixir
 # Debug a query
-ClaudeCodeSDK.DebugMode.debug_query("Hello")
+ClaudeAgentSDK.DebugMode.debug_query("Hello")
 # Outputs timing, auth status, message details
 
 # Run diagnostics
-ClaudeCodeSDK.DebugMode.run_diagnostics()
+ClaudeAgentSDK.DebugMode.run_diagnostics()
 # Checks CLI, auth, connectivity, provides recommendations
 
 # Benchmark performance
-results = ClaudeCodeSDK.DebugMode.benchmark("Test query", nil, 3)
+results = ClaudeAgentSDK.DebugMode.benchmark("Test query", nil, 3)
 # => %{
 #   avg_duration_ms: 1523,
 #   avg_cost_usd: 0.015,

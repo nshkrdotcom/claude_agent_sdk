@@ -119,11 +119,11 @@ Focus on features CLI doesn't have:
 #### 1. Telemetry Integration (1 day)
 ```elixir
 # Emit events for observability
-:telemetry.execute([:claude_code_sdk, :query, :start], %{...}, %{...})
-:telemetry.execute([:claude_code_sdk, :query, :stop], %{duration: ..., cost: ...})
+:telemetry.execute([:claude_agent_sdk, :query, :start], %{...}, %{...})
+:telemetry.execute([:claude_agent_sdk, :query, :stop], %{duration: ..., cost: ...})
 
 # Users can attach handlers
-:telemetry.attach("my-handler", [:claude_code_sdk, :query, :stop], &MyApp.Metrics.handle/4, nil)
+:telemetry.attach("my-handler", [:claude_agent_sdk, :query, :stop], &MyApp.Metrics.handle/4, nil)
 ```
 
 **Value**: Production observability, metrics collection
@@ -131,14 +131,14 @@ Focus on features CLI doesn't have:
 #### 2. Plugin System (2 days)
 ```elixir
 # Define plugin behavior
-defmodule ClaudeCodeSDK.Plugin do
+defmodule ClaudeAgentSDK.Plugin do
   @callback before_query(prompt, options) :: {:ok, {prompt, options}} | {:halt, reason}
   @callback after_query(messages) :: {:ok, messages} | {:error, term()}
 end
 
 # Users implement plugins
 defmodule MyApp.CostTracker do
-  @behaviour ClaudeCodeSDK.Plugin
+  @behaviour ClaudeAgentSDK.Plugin
 
   def after_query(messages) do
     cost = Session.calculate_cost(messages)
@@ -148,7 +148,7 @@ defmodule MyApp.CostTracker do
 end
 
 # Register plugins
-ClaudeCodeSDK.register_plugin(MyApp.CostTracker)
+ClaudeAgentSDK.register_plugin(MyApp.CostTracker)
 ```
 
 **Value**: Extensibility, ecosystem growth
@@ -156,7 +156,7 @@ ClaudeCodeSDK.register_plugin(MyApp.CostTracker)
 #### 3. Enhanced MCP Support (2 days)
 ```elixir
 # MCP configuration helpers
-defmodule ClaudeCodeSDK.MCP do
+defmodule ClaudeAgentSDK.MCP do
   def configure_server(name, config)
   def list_servers()
   def test_server(name)

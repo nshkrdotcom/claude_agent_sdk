@@ -1,7 +1,7 @@
 import Config
 
 # Default configuration
-config :claude_code_sdk,
+config :claude_agent_sdk,
   use_mock: false
 
 # Import environment specific config

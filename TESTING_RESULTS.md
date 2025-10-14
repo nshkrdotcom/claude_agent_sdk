@@ -47,11 +47,11 @@ From batch processing test (5 files):
 ### 🔍 **Test Coverage**
 
 #### Core SDK Components Tested:
-- ✅ `ClaudeCodeSDK` - Main API interface
-- ✅ `ClaudeCodeSDK.Options` - Configuration handling
-- ✅ `ClaudeCodeSDK.Process` - Subprocess management
-- ✅ `ClaudeCodeSDK.Message` - Message parsing
-- ✅ `ClaudeCodeSDK.JSON` - JSON parsing utilities
+- ✅ `ClaudeAgentSDK` - Main API interface
+- ✅ `ClaudeAgentSDK.Options` - Configuration handling
+- ✅ `ClaudeAgentSDK.Process` - Subprocess management
+- ✅ `ClaudeAgentSDK.Message` - Message parsing
+- ✅ `ClaudeAgentSDK.JSON` - JSON parsing utilities
 
 #### Use Cases Tested:
 - ✅ **Single queries** with prompts
@@ -73,7 +73,7 @@ From batch processing test (5 files):
 #### Code Analysis Example:
 ```
 🔍 Simple Code Analyzer
-Analyzing: lib/claude_code_sdk.ex
+Analyzing: lib/claude_agent_sdk.ex
 📝 File size: 2918 characters
 📡 Sending to Claude...
 
@@ -101,7 +101,7 @@ Directory: lib/
 Operation: analyze
 Found 5 Elixir files
 📡 Processing files...
-1/5: claude_code_sdk.ex
+1/5: claude_agent_sdk.ex
 2/5: json.ex
 3/5: message.ex
 4/5: options.ex
@@ -151,14 +151,14 @@ The Claude Code SDK for Elixir is **production-ready** with:
 
 ```elixir
 # Quick analysis
-ClaudeCodeSDK.query("Analyze this code") |> Enum.to_list()
+ClaudeAgentSDK.query("Analyze this code") |> Enum.to_list()
 
 # With options
-options = %ClaudeCodeSDK.Options{max_turns: 3, verbose: true}
-ClaudeCodeSDK.query("Complex task", options) |> Enum.to_list()
+options = %ClaudeAgentSDK.Options{max_turns: 3, verbose: true}
+ClaudeAgentSDK.query("Complex task", options) |> Enum.to_list()
 
 # Stream processing
-ClaudeCodeSDK.query("Generate report")
+ClaudeAgentSDK.query("Generate report")
 |> Stream.filter(&(&1.type == :assistant))
 |> Stream.map(&extract_content/1)
 |> Enum.join("\n")

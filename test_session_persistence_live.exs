@@ -3,9 +3,9 @@
 # Live test of session persistence
 # Demonstrates saving, loading, searching, and resuming sessions
 
-Application.put_env(:claude_code_sdk, :use_mock, false)
+Application.put_env(:claude_agent_sdk, :use_mock, false)
 
-alias ClaudeCodeSDK.{SessionStore, Session}
+alias ClaudeAgentSDK.{SessionStore, Session}
 
 IO.puts("💾 Testing Session Persistence (LIVE API)")
 IO.puts("=" |> String.duplicate(60))
@@ -21,7 +21,7 @@ IO.puts("TEST 1: Save Session")
 IO.puts("─" |> String.duplicate(60))
 
 messages =
-  ClaudeCodeSDK.query("What is 5*5?", %ClaudeCodeSDK.Options{max_turns: 1})
+  ClaudeAgentSDK.query("What is 5*5?", %ClaudeAgentSDK.Options{max_turns: 1})
   |> Enum.to_list()
 
 session_id = Session.extract_session_id(messages)
@@ -55,7 +55,7 @@ IO.puts("─" |> String.duplicate(60))
 
 # Save another session for search testing
 messages2 =
-  ClaudeCodeSDK.query("What is 10*10?", %ClaudeCodeSDK.Options{max_turns: 1})
+  ClaudeAgentSDK.query("What is 10*10?", %ClaudeAgentSDK.Options{max_turns: 1})
   |> Enum.to_list()
 
 session_id2 = Session.extract_session_id(messages2)
@@ -93,10 +93,10 @@ IO.puts("   Resuming to add more context...")
 
 # Resume the first session
 resume_messages =
-  ClaudeCodeSDK.resume(session_id, "Now multiply that by 2")
+  ClaudeAgentSDK.resume(session_id, "Now multiply that by 2")
   |> Enum.to_list()
 
-response = ClaudeCodeSDK.ContentExtractor.extract_all_text(resume_messages) |> String.trim()
+response = ClaudeAgentSDK.ContentExtractor.extract_all_text(resume_messages) |> String.trim()
 IO.puts("   ✅ Resumed and got response: #{response}")
 IO.puts("")
 

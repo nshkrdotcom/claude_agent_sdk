@@ -6,7 +6,7 @@
 
 ## 🎯 The Core Question
 
-**Should `claude_code_sdk_elixir` implement rate limiting and circuit breaking, or is this application-level concern?**
+**Should `claude_agent_sdk` implement rate limiting and circuit breaking, or is this application-level concern?**
 
 ---
 
@@ -16,7 +16,7 @@
 ```elixir
 # Developer mistake - rapid loop
 1..1000 |> Enum.each(fn i ->
-  ClaudeCodeSDK.query("Query #{i}")  # ← Could hit API limits!
+  ClaudeAgentSDK.query("Query #{i}")  # ← Could hit API limits!
 end
 ```
 
@@ -126,7 +126,7 @@ end
 # Integration:
 {:ex_rated, "~> 2.0"}
 
-defmodule ClaudeCodeSDK.RateLimiter do
+defmodule ClaudeAgentSDK.RateLimiter do
   def check_limit(identifier) do
     case ExRated.check_rate(identifier, 60_000, 60) do  # 60/min
       {:ok, _count} -> :ok
@@ -151,7 +151,7 @@ end
 # Integration:
 {:hammer, "~> 6.0"}
 
-defmodule ClaudeCodeSDK.RateLimiter do
+defmodule ClaudeAgentSDK.RateLimiter do
   def check_limit do
     case Hammer.check_rate("claude_api", 60_000, 60) do
       {:allow, _count} -> :ok
@@ -175,7 +175,7 @@ end
 ❌ Reinventing wheel
 
 # From our plan:
-defmodule ClaudeCodeSDK.RateLimiter do
+defmodule ClaudeAgentSDK.RateLimiter do
   use GenServer
   # Token bucket with ETS
 end
@@ -221,7 +221,7 @@ end
 {:breaker, "~> 0.1"}
 
 Breaker.call(:claude_api, fn ->
-  ClaudeCodeSDK.query(prompt)
+  ClaudeAgentSDK.query(prompt)
 end)
 ```
 
@@ -247,7 +247,7 @@ end)
 
 ```elixir
 # 1. SDK provides OPTIONAL integration
-defmodule ClaudeCodeSDK.RateLimiting do
+defmodule ClaudeAgentSDK.RateLimiting do
   @moduledoc """
   Optional rate limiting integration.
 
@@ -269,7 +269,7 @@ defmodule ClaudeCodeSDK.RateLimiting do
 end
 
 # 2. Application configures it
-config :claude_code_sdk,
+config :claude_agent_sdk,
   rate_limiting: :ex_rated,  # or :none, :hammer, MyApp.CustomLimiter
   rate_limit_config: [
     queries_per_minute: 60,
@@ -277,7 +277,7 @@ config :claude_code_sdk,
   ]
 
 # 3. SDK checks before executing
-defmodule ClaudeCodeSDK.Process do
+defmodule ClaudeAgentSDK.Process do
   defp stream_real(args, options, stdin) do
     # Check rate limit if configured
     case check_rate_limit() do
@@ -314,10 +314,10 @@ def deps do
   ]
 end
 
-# lib/claude_code_sdk/rate_limiter.ex
-defmodule ClaudeCodeSDK.RateLimiter do
+# lib/claude_agent_sdk/rate_limiter.ex
+defmodule ClaudeAgentSDK.RateLimiter do
   def check_limit do
-    case Application.get_env(:claude_code_sdk, :rate_limiting) do
+    case Application.get_env(:claude_agent_sdk, :rate_limiting) do
       nil -> :ok  # No limiting
       :disabled -> :ok
 
@@ -366,9 +366,9 @@ def deps do
   ]
 end
 
-defmodule ClaudeCodeSDK.CircuitBreaker do
+defmodule ClaudeAgentSDK.CircuitBreaker do
   def call(fun) do
-    case Application.get_env(:claude_code_sdk, :circuit_breaker) do
+    case Application.get_env(:claude_agent_sdk, :circuit_breaker) do
       nil -> fun.()  # No circuit breaking
 
       config ->
@@ -411,12 +411,12 @@ end
 **Example**:
 ```elixir
 # Option A: SDK implements, apps configure
-config :claude_code_sdk,
+config :claude_agent_sdk,
   rate_limit: %{queries_per_minute: 60},
   circuit_breaker: %{failure_threshold: 5}
 
 # Option B: SDK provides hooks, apps implement
-config :claude_code_sdk,
+config :claude_agent_sdk,
   before_query: &MyApp.RateLimiter.check/0,
   on_error: &MyApp.CircuitBreaker.record_failure/1
 ```
@@ -439,14 +439,14 @@ config :claude_code_sdk,
 ### Minimal SDK Code (~200 lines total)
 
 ```elixir
-# lib/claude_code_sdk/middleware.ex
-defmodule ClaudeCodeSDK.Middleware do
+# lib/claude_agent_sdk/middleware.ex
+defmodule ClaudeAgentSDK.Middleware do
   @moduledoc """
   Optional middleware for rate limiting and circuit breaking.
 
   Configure in config.exs:
 
-      config :claude_code_sdk,
+      config :claude_agent_sdk,
         rate_limiting: [
           backend: :hammer,  # or :ex_rated, or YourModule
           queries_per_minute: 60
@@ -475,17 +475,17 @@ defmodule ClaudeCodeSDK.Middleware do
   # Delegates to configured backends...
 end
 
-# lib/claude_code_sdk/process.ex (integration)
+# lib/claude_agent_sdk/process.ex (integration)
 defp stream_real(args, options, stdin) do
   # Only check if middleware configured
   if middleware_enabled?() do
-    :ok = ClaudeCodeSDK.Middleware.before_query()
+    :ok = ClaudeAgentSDK.Middleware.before_query()
   end
 
   result = Stream.resource(...)
 
   if middleware_enabled?() do
-    ClaudeCodeSDK.Middleware.after_query(result)
+    ClaudeAgentSDK.Middleware.after_query(result)
   end
 
   result
@@ -580,7 +580,7 @@ end
 
 2. **Create integration module** (~200 lines):
 ```elixir
-# lib/claude_code_sdk/middleware.ex
+# lib/claude_agent_sdk/middleware.ex
 # - Checks if libraries are loaded
 # - Delegates to them if present
 # - Skips if not configured
@@ -600,14 +600,14 @@ The SDK supports optional rate limiting via popular Elixir libraries.
 {:hammer, "~> 6.0"}
 
 # 2. Configure
-config :claude_code_sdk,
+config :claude_agent_sdk,
   rate_limiting: [
     backend: :hammer,
     queries_per_minute: 60
   ]
 
 # 3. SDK automatically enforces limits
-ClaudeCodeSDK.query(...)  # Rate limited!
+ClaudeAgentSDK.query(...)  # Rate limited!
 ```
 
 ### Without Rate Limiting
@@ -656,8 +656,8 @@ end
 
 ### Phase 2: Middleware Module
 ```elixir
-# lib/claude_code_sdk/middleware.ex (~200 lines)
-defmodule ClaudeCodeSDK.Middleware do
+# lib/claude_agent_sdk/middleware.ex (~200 lines)
+defmodule ClaudeAgentSDK.Middleware do
   # Rate limiting integration
   def check_rate_limit
   def supports_rate_limiting?
@@ -674,10 +674,10 @@ end
 
 ### Phase 3: Integration Point
 ```elixir
-# lib/claude_code_sdk/process.ex
+# lib/claude_agent_sdk/process.ex
 defp stream_real(args, options, stdin) do
-  if ClaudeCodeSDK.Middleware.enabled?() do
-    ClaudeCodeSDK.Middleware.call_with_protection(fn ->
+  if ClaudeAgentSDK.Middleware.enabled?() do
+    ClaudeAgentSDK.Middleware.call_with_protection(fn ->
       Stream.resource(...)
     end)
   else

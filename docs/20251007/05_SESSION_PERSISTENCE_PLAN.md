@@ -19,7 +19,7 @@ Implement SDK-level session management for:
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ ClaudeCodeSDK.SessionStore (GenServer)               │
+│ ClaudeAgentSDK.SessionStore (GenServer)               │
 ├──────────────────────────────────────────────────────┤
 │ • In-memory cache (ETS)                              │
 │ • Persistent storage (file/DB)                       │
@@ -35,7 +35,7 @@ Implement SDK-level session management for:
 ### SessionStore Module
 
 ```elixir
-defmodule ClaudeCodeSDK.SessionStore do
+defmodule ClaudeAgentSDK.SessionStore do
   use GenServer
 
   @moduledoc """
@@ -60,7 +60,7 @@ defmodule ClaudeCodeSDK.SessionStore do
       sessions = SessionStore.search(tags: ["security"], after: ~D[2025-01-01])
 
       # Resume session
-      ClaudeCodeSDK.resume(session_id, "Continue from where we left off")
+      ClaudeAgentSDK.resume(session_id, "Continue from where we left off")
   """
 
   defstruct [
@@ -146,7 +146,7 @@ end
 ### Helper Functions
 
 ```elixir
-defmodule ClaudeCodeSDK.Session do
+defmodule ClaudeAgentSDK.Session do
   @moduledoc """
   Session helper functions.
   """
@@ -200,11 +200,11 @@ end
 ## 🧪 Testing
 
 ```elixir
-defmodule ClaudeCodeSDK.SessionStoreTest do
+defmodule ClaudeAgentSDK.SessionStoreTest do
   use ExUnit.Case
 
   setup do
-    start_supervised!(ClaudeCodeSDK.SessionStore)
+    start_supervised!(ClaudeAgentSDK.SessionStore)
     :ok
   end
 

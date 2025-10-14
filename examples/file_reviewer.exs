@@ -18,24 +18,25 @@ defmodule FileReviewer do
     IO.puts("📝 File size: #{String.length(content)} characters")
     IO.puts("📡 Analyzing with Claude...")
 
-    review = ClaudeCodeSDK.query("""
-    Please review this code file and provide feedback:
+    review =
+      ClaudeAgentSDK.query("""
+      Please review this code file and provide feedback:
 
-    File: #{file_path}
-    ```
-    #{String.slice(content, 0, 2000)}#{if String.length(content) > 2000, do: "\n... (truncated)", else: ""}
-    ```
+      File: #{file_path}
+      ```
+      #{String.slice(content, 0, 2000)}#{if String.length(content) > 2000, do: "\n... (truncated)", else: ""}
+      ```
 
-    Focus on:
-    1. Code quality and best practices
-    2. Potential bugs or issues
-    3. Security concerns
-    4. Performance implications
-    5. One specific improvement suggestion
+      Focus on:
+      1. Code quality and best practices
+      2. Potential bugs or issues
+      3. Security concerns
+      4. Performance implications
+      5. One specific improvement suggestion
 
-    Keep feedback actionable and specific.
-    """)
-    |> extract_assistant_content()
+      Keep feedback actionable and specific.
+      """)
+      |> extract_assistant_content()
 
     IO.puts("\n📝 Code Review Results:")
     IO.puts("=" |> String.duplicate(50))
@@ -65,14 +66,17 @@ defmodule FileReviewer do
     messages = Enum.to_list(stream)
 
     # Check for errors first
-    error_msg = Enum.find(messages, & &1.type == :result and &1.subtype != :success)
+    error_msg = Enum.find(messages, &(&1.type == :result and &1.subtype != :success))
+
     if error_msg do
       IO.puts("\n❌ Error (#{error_msg.subtype}):")
+
       if Map.has_key?(error_msg.data, :error) do
         IO.puts(error_msg.data.error)
       else
-                 IO.puts(inspect(error_msg.data))
+        IO.puts(inspect(error_msg.data))
       end
+
       System.halt(1)
     end
 
@@ -96,7 +100,7 @@ case System.argv() do
 
   [] ->
     # Default to reviewing the main SDK file
-    FileReviewer.review_file("lib/claude_code_sdk.ex")
+    FileReviewer.review_file("lib/claude_agent_sdk.ex")
 
   _ ->
     IO.puts("Usage: mix run examples/file_reviewer.exs [file_path]")

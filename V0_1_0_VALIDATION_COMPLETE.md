@@ -59,14 +59,14 @@ ALL TESTS PASSED! ✅
 **Problem**: erlexec wasn't passing auth env vars to Claude CLI subprocess
 
 **Fix**: Added `build_env_vars/0` function in `Process.ex` that passes:
-- `CLAUDE_CODE_OAUTH_TOKEN`
+- `CLAUDE_AGENT_OAUTH_TOKEN`
 - `ANTHROPIC_API_KEY`
 - `PATH`
 - `HOME` (for ~/.claude session access)
 
 **Result**: All 3 auth methods now work:
 1. Stored OAuth token from `mix claude.setup_token`
-2. Environment variable (`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`)
+2. Environment variable (`CLAUDE_AGENT_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`)
 3. Existing `claude login` session
 
 ### Issue 2: Orchestrator Incorrectly Detecting Failure ✅ FIXED
@@ -110,23 +110,23 @@ Time: 0.2 seconds
 ## 📝 Files Changed for v0.1.0
 
 ### New Files (11)
-1. `lib/claude_code_sdk/auth_manager.ex` - AuthManager GenServer
-2. `lib/claude_code_sdk/auth/token_store.ex` - Token persistence
-3. `lib/claude_code_sdk/auth/provider.ex` - Provider abstraction
-4. `lib/claude_code_sdk/auth/providers/anthropic.ex` - Anthropic OAuth
-5. `lib/claude_code_sdk/auth/providers/bedrock.ex` - AWS Bedrock
-6. `lib/claude_code_sdk/auth/providers/vertex.ex` - GCP Vertex
-7. `lib/claude_code_sdk/orchestrator.ex` - Concurrent orchestration
+1. `lib/claude_agent_sdk/auth_manager.ex` - AuthManager GenServer
+2. `lib/claude_agent_sdk/auth/token_store.ex` - Token persistence
+3. `lib/claude_agent_sdk/auth/provider.ex` - Provider abstraction
+4. `lib/claude_agent_sdk/auth/providers/anthropic.ex` - Anthropic OAuth
+5. `lib/claude_agent_sdk/auth/providers/bedrock.ex` - AWS Bedrock
+6. `lib/claude_agent_sdk/auth/providers/vertex.ex` - GCP Vertex
+7. `lib/claude_agent_sdk/orchestrator.ex` - Concurrent orchestration
 8. `lib/mix/tasks/claude.setup_token.ex` - Mix task for token setup
-9. `test/claude_code_sdk/auth_manager_test.exs` - AuthManager tests
+9. `test/claude_agent_sdk/auth_manager_test.exs` - AuthManager tests
 10. `examples/model_selection_example.exs` - Model examples
 11. `examples/custom_agents_example.exs` - Agent examples
 12. `examples/week_1_2_showcase.exs` - Feature showcase
 
 ### Modified Files (4)
-1. `lib/claude_code_sdk/options.ex` - Added model, agents, session_id fields
-2. `lib/claude_code_sdk/option_builder.ex` - Added model/agent helpers
-3. `lib/claude_code_sdk/process.ex` - Added env var passing to subprocess
+1. `lib/claude_agent_sdk/options.ex` - Added model, agents, session_id fields
+2. `lib/claude_agent_sdk/option_builder.ex` - Added model/agent helpers
+3. `lib/claude_agent_sdk/process.ex` - Added env var passing to subprocess
 4. `README.md` - Added v0.1.0 feature documentation
 5. `CHANGELOG.md` - Added v0.1.0 entry
 6. `mix.exs` - Version bump
@@ -147,7 +147,7 @@ Time: 0.2 seconds
 $ claude login
 
 # Single queries only
-ClaudeCodeSDK.query("Hello")
+ClaudeAgentSDK.query("Hello")
 
 # No model control
 # No concurrent execution

@@ -24,7 +24,7 @@ defmodule Mix.Tasks.Test.Live do
     System.put_env("LIVE_TESTS", "true")
 
     # Start the application in test mode but with live API
-    Application.put_env(:claude_code_sdk, :use_mock, false)
+    Application.put_env(:claude_agent_sdk, :use_mock, false)
 
     IO.puts("🔴 Running tests with LIVE API calls...")
     IO.puts("⚠️  Warning: This will make real API calls and may incur costs!")

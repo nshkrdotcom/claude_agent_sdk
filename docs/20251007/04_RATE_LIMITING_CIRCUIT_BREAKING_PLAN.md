@@ -19,7 +19,7 @@ Implement production-grade resilience patterns:
 ### 1. RateLimiter GenServer
 
 ```elixir
-defmodule ClaudeCodeSDK.RateLimiter do
+defmodule ClaudeAgentSDK.RateLimiter do
   @moduledoc """
   Token bucket rate limiter.
   
@@ -40,7 +40,7 @@ end
 ### 2. CircuitBreaker Pattern
 
 ```elixir
-defmodule ClaudeCodeSDK.CircuitBreaker do
+defmodule ClaudeAgentSDK.CircuitBreaker do
   @moduledoc """
   Circuit breaker with three states:
   - :closed - Normal operation
@@ -80,7 +80,7 @@ end
 
 ```elixir
 # config/config.exs
-config :claude_code_sdk,
+config :claude_agent_sdk,
   rate_limit: [
     queries_per_minute: 60,
     queries_per_hour: 1000,

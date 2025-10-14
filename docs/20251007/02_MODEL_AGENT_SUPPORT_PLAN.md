@@ -19,7 +19,7 @@ Expose Claude Code CLI's `--model`, `--fallback-model`, and `--agents` flags in 
 ### Current State
 ```elixir
 # SDK doesn't expose model selection
-ClaudeCodeSDK.query("Complex task")  # Uses default model (Sonnet)
+ClaudeAgentSDK.query("Complex task")  # Uses default model (Sonnet)
 
 # Can't define custom agents
 # Can't fallback automatically when model is busy
@@ -47,7 +47,7 @@ options = %Options{
   }
 }
 
-ClaudeCodeSDK.query("Review this auth function", options)
+ClaudeAgentSDK.query("Review this auth function", options)
 ```
 
 ---
@@ -57,9 +57,9 @@ ClaudeCodeSDK.query("Review this auth function", options)
 ### Changes to Options Module
 
 ```elixir
-# lib/claude_code_sdk/options.ex
+# lib/claude_agent_sdk/options.ex
 
-defmodule ClaudeCodeSDK.Options do
+defmodule ClaudeAgentSDK.Options do
   defstruct [
     # ... existing fields
     :model,           # NEW: String - model name or alias
@@ -92,7 +92,7 @@ end
 ### CLI Argument Mapping
 
 ```elixir
-# lib/claude_code_sdk/options.ex (to_args/1 updates)
+# lib/claude_agent_sdk/options.ex (to_args/1 updates)
 
 defp add_model_args(args, %{model: nil}), do: args
 defp add_model_args(args, %{model: model}) do
@@ -133,14 +133,14 @@ end
 ## 📁 File Structure
 
 ```
-lib/claude_code_sdk/
+lib/claude_agent_sdk/
   options.ex              # Update: Add new fields
   option_builder.ex       # Update: Add model/agent helpers
   agents/                 # New: Agent utilities
     builder.ex            # New: Agent definition builder
     presets.ex            # New: Pre-built agents
 
-test/claude_code_sdk/
+test/claude_agent_sdk/
   options_test.exs        # Update: Test new fields
   option_builder_test.exs # Update: Test new helpers
   agents/
@@ -157,7 +157,7 @@ examples/
 
 ### Phase 1: Update Options Module
 
-**File**: `lib/claude_code_sdk/options.ex`
+**File**: `lib/claude_agent_sdk/options.ex`
 
 Add to `defstruct`:
 ```elixir
@@ -203,7 +203,7 @@ end
 
 ### Phase 2: Enhance OptionBuilder
 
-**File**: `lib/claude_code_sdk/option_builder.ex`
+**File**: `lib/claude_agent_sdk/option_builder.ex`
 
 Add model selection helpers:
 ```elixir
@@ -219,8 +219,8 @@ Higher cost but better results.
 
 ## Examples
 
-    options = ClaudeCodeSDK.OptionBuilder.with_opus()
-    ClaudeCodeSDK.query("Architect a complex system", options)
+    options = ClaudeAgentSDK.OptionBuilder.with_opus()
+    ClaudeAgentSDK.query("Architect a complex system", options)
 """
 @spec with_opus() :: Options.t()
 def with_opus do
@@ -241,7 +241,7 @@ Best for:
 
 ## Examples
 
-    options = ClaudeCodeSDK.OptionBuilder.with_sonnet()
+    options = ClaudeAgentSDK.OptionBuilder.with_sonnet()
 """
 @spec with_sonnet() :: Options.t()
 def with_sonnet do
@@ -262,7 +262,7 @@ Best for:
 
 ## Examples
 
-    options = ClaudeCodeSDK.OptionBuilder.with_haiku()
+    options = ClaudeAgentSDK.OptionBuilder.with_haiku()
 """
 @spec with_haiku() :: Options.t()
 def with_haiku do
@@ -347,10 +347,10 @@ end
 
 ### Phase 3: Agent Builder Utility
 
-**File**: `lib/claude_code_sdk/agents/builder.ex`
+**File**: `lib/claude_agent_sdk/agents/builder.ex`
 
 ```elixir
-defmodule ClaudeCodeSDK.Agents.Builder do
+defmodule ClaudeAgentSDK.Agents.Builder do
   @moduledoc """
   Builder for custom Claude agents.
 
@@ -466,16 +466,16 @@ end
 
 ### Phase 4: Pre-built Agent Library
 
-**File**: `lib/claude_code_sdk/agents/presets.ex`
+**File**: `lib/claude_agent_sdk/agents/presets.ex`
 
 ```elixir
-defmodule ClaudeCodeSDK.Agents.Presets do
+defmodule ClaudeAgentSDK.Agents.Presets do
   @moduledoc """
   Pre-built agent definitions for common use cases.
 
   ## Usage
 
-      alias ClaudeCodeSDK.Agents.Presets
+      alias ClaudeAgentSDK.Agents.Presets
 
       options = %Options{
         agents: Presets.security_agents()
@@ -680,13 +680,13 @@ end
 
 ### Unit Tests
 
-**File**: `test/claude_code_sdk/options_test.exs`
+**File**: `test/claude_agent_sdk/options_test.exs`
 
 ```elixir
-defmodule ClaudeCodeSDK.OptionsTest do
+defmodule ClaudeAgentSDK.OptionsTest do
   use ExUnit.Case
 
-  alias ClaudeCodeSDK.Options
+  alias ClaudeAgentSDK.Options
 
   describe "model support" do
     test "converts model to CLI args" do
@@ -758,13 +758,13 @@ defmodule ClaudeCodeSDK.OptionsTest do
 end
 ```
 
-**File**: `test/claude_code_sdk/agents/builder_test.exs`
+**File**: `test/claude_agent_sdk/agents/builder_test.exs`
 
 ```elixir
-defmodule ClaudeCodeSDK.Agents.BuilderTest do
+defmodule ClaudeAgentSDK.Agents.BuilderTest do
   use ExUnit.Case
 
-  alias ClaudeCodeSDK.Agents.Builder
+  alias ClaudeAgentSDK.Agents.Builder
 
   test "builds basic agent" do
     {name, definition} = Builder.new("test_agent")
@@ -798,17 +798,17 @@ end
 ### Integration Tests
 
 ```elixir
-defmodule ClaudeCodeSDK.ModelIntegrationTest do
+defmodule ClaudeAgentSDK.ModelIntegrationTest do
   use ExUnit.Case
 
   @tag :integration
   test "queries with specific model" do
-    options = %ClaudeCodeSDK.Options{
+    options = %ClaudeAgentSDK.Options{
       model: "sonnet",
       max_turns: 1
     }
 
-    messages = ClaudeCodeSDK.query("Hello", options)
+    messages = ClaudeAgentSDK.query("Hello", options)
     |> Enum.to_list()
 
     # Verify model was used (check system message)
@@ -825,9 +825,9 @@ defmodule ClaudeCodeSDK.ModelIntegrationTest do
       }
     }
 
-    options = %ClaudeCodeSDK.Options{agents: agents}
+    options = %ClaudeAgentSDK.Options{agents: agents}
 
-    messages = ClaudeCodeSDK.query("What is 2+2?", options)
+    messages = ClaudeAgentSDK.query("What is 2+2?", options)
     |> Enum.to_list()
 
     assert Enum.any?(messages, &(&1.type == :assistant))
@@ -863,13 +863,13 @@ Add model selection section:
 
 ```elixir
 # Opus - Most capable, higher cost
-options = ClaudeCodeSDK.OptionBuilder.with_opus()
+options = ClaudeAgentSDK.OptionBuilder.with_opus()
 
 # Sonnet - Balanced (default)
-options = ClaudeCodeSDK.OptionBuilder.with_sonnet()
+options = ClaudeAgentSDK.OptionBuilder.with_sonnet()
 
 # Haiku - Fastest, lowest cost
-options = ClaudeCodeSDK.OptionBuilder.with_haiku()
+options = ClaudeAgentSDK.OptionBuilder.with_haiku()
 ```
 
 ### Automatic Fallback
@@ -884,7 +884,7 @@ options = %Options{
 ### Custom Agents
 
 ```elixir
-alias ClaudeCodeSDK.Agents.{Builder, Presets}
+alias ClaudeAgentSDK.Agents.{Builder, Presets}
 
 # Use pre-built agents
 options = %Options{

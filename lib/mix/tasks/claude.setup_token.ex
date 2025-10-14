@@ -65,10 +65,10 @@ defmodule Mix.Tasks.Claude.SetupToken do
 
   defp ensure_auth_manager_started do
     # Check if AuthManager is already running
-    case Process.whereis(ClaudeCodeSDK.AuthManager) do
+    case Process.whereis(ClaudeAgentSDK.AuthManager) do
       nil ->
         # Start it manually
-        {:ok, _pid} = ClaudeCodeSDK.AuthManager.start_link()
+        {:ok, _pid} = ClaudeAgentSDK.AuthManager.start_link()
         :ok
 
       _pid ->
@@ -78,7 +78,7 @@ defmodule Mix.Tasks.Claude.SetupToken do
   end
 
   defp token_exists? do
-    case ClaudeCodeSDK.AuthManager.get_token() do
+    case ClaudeAgentSDK.AuthManager.get_token() do
       {:ok, _token} -> true
       _ -> false
     end
@@ -95,7 +95,7 @@ defmodule Mix.Tasks.Claude.SetupToken do
     Mix.shell().info("⚠️  This requires an active Claude subscription")
     Mix.shell().info("")
 
-    case ClaudeCodeSDK.AuthManager.setup_token() do
+    case ClaudeAgentSDK.AuthManager.setup_token() do
       {:ok, token} ->
         Mix.shell().info("✅ Authentication successful!")
         Mix.shell().info("")
@@ -105,7 +105,7 @@ defmodule Mix.Tasks.Claude.SetupToken do
         # Show how to use the token
         if String.starts_with?(token, "sk-ant-oat01-") do
           Mix.shell().info("💡 To use this token manually, set:")
-          Mix.shell().info("   export CLAUDE_CODE_OAUTH_TOKEN=#{token}")
+          Mix.shell().info("   export CLAUDE_AGENT_OAUTH_TOKEN=#{token}")
         end
 
         show_status()
@@ -123,7 +123,7 @@ defmodule Mix.Tasks.Claude.SetupToken do
         Mix.shell().error("  • Check that you're in an interactive terminal")
         Mix.shell().error("")
         Mix.shell().error("Alternative: Set environment variable manually:")
-        Mix.shell().error("  export CLAUDE_CODE_OAUTH_TOKEN=<your-token>")
+        Mix.shell().error("  export CLAUDE_AGENT_OAUTH_TOKEN=<your-token>")
         Mix.shell().error("  or")
         Mix.shell().error("  export ANTHROPIC_API_KEY=<your-api-key>")
         Mix.raise("Authentication setup failed")
@@ -132,12 +132,12 @@ defmodule Mix.Tasks.Claude.SetupToken do
 
   defp clear_auth do
     Mix.shell().info("🗑️  Clearing authentication...")
-    :ok = ClaudeCodeSDK.AuthManager.clear_auth()
+    :ok = ClaudeAgentSDK.AuthManager.clear_auth()
     Mix.shell().info("✅ Authentication cleared")
   end
 
   defp show_status do
-    status = ClaudeCodeSDK.AuthManager.status()
+    status = ClaudeAgentSDK.AuthManager.status()
 
     Mix.shell().info("")
     Mix.shell().info("📊 Authentication Status:")
@@ -150,6 +150,6 @@ defmodule Mix.Tasks.Claude.SetupToken do
     end
 
     Mix.shell().info("")
-    Mix.shell().info("✅ Ready to use ClaudeCodeSDK.query/2")
+    Mix.shell().info("✅ Ready to use ClaudeAgentSDK.query/2")
   end
 end

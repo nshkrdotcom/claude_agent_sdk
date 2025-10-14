@@ -21,21 +21,21 @@
 ### What Was Built
 
 **Files Created** (5 new files):
-1. `lib/claude_code_sdk/auth_manager.ex` (374 lines)
-2. `lib/claude_code_sdk/auth/token_store.ex` (112 lines)
-3. `lib/claude_code_sdk/auth/provider.ex` (24 lines)
-4. `lib/claude_code_sdk/auth/providers/anthropic.ex` (100 lines)
-5. `lib/claude_code_sdk/auth/providers/bedrock.ex` (40 lines)
-6. `lib/claude_code_sdk/auth/providers/vertex.ex` (40 lines)
+1. `lib/claude_agent_sdk/auth_manager.ex` (374 lines)
+2. `lib/claude_agent_sdk/auth/token_store.ex` (112 lines)
+3. `lib/claude_agent_sdk/auth/provider.ex` (24 lines)
+4. `lib/claude_agent_sdk/auth/providers/anthropic.ex` (100 lines)
+5. `lib/claude_agent_sdk/auth/providers/bedrock.ex` (40 lines)
+6. `lib/claude_agent_sdk/auth/providers/vertex.ex` (40 lines)
 7. `lib/mix/tasks/claude.setup_token.ex` (130 lines)
-8. `test/claude_code_sdk/auth_manager_test.exs` (245 lines)
+8. `test/claude_agent_sdk/auth_manager_test.exs` (245 lines)
 
 **Key Features**:
 - ✅ Automatic token acquisition via `claude setup-token`
 - ✅ Token persistence to `~/.claude_sdk/token.json`
 - ✅ Automatic refresh before expiry (1 year for OAuth tokens)
 - ✅ Multi-provider support (Anthropic/Bedrock/Vertex)
-- ✅ Fallback to environment variables (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`)
+- ✅ Fallback to environment variables (`CLAUDE_AGENT_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`)
 - ✅ Mix task: `mix claude.setup_token` with --force and --clear flags
 - ✅ Comprehensive testing (14 tests, 13 passing, 1 integration skipped)
 
@@ -47,10 +47,10 @@ $ mix claude.setup_token
 # Opens browser → sign in → token stored automatically
 
 # Or manually set environment variable
-$ export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+$ export CLAUDE_AGENT_OAUTH_TOKEN=sk-ant-oat01-...
 
 # Then just use the SDK
-iex> ClaudeCodeSDK.query("Hello")  # ✅ Automatically authenticated
+iex> ClaudeAgentSDK.query("Hello")  # ✅ Automatically authenticated
 ```
 
 ### Token Format Discovery
@@ -59,7 +59,7 @@ Based on testing with actual CLI (`claude setup-token`):
 - **Token Format**: `sk-ant-oat01-...` (OAuth token, not API key)
 - **Length**: ~118 characters
 - **Validity**: 1 year (365 days)
-- **Environment Variable**: `CLAUDE_CODE_OAUTH_TOKEN`
+- **Environment Variable**: `CLAUDE_AGENT_OAUTH_TOKEN`
 
 ---
 
@@ -68,8 +68,8 @@ Based on testing with actual CLI (`claude setup-token`):
 ### What Was Built
 
 **Files Modified**:
-1. `lib/claude_code_sdk/options.ex` - Added model, fallback_model, agents, session_id fields
-2. `lib/claude_code_sdk/option_builder.ex` - Added model helpers and agent helpers
+1. `lib/claude_agent_sdk/options.ex` - Added model, fallback_model, agents, session_id fields
+2. `lib/claude_agent_sdk/option_builder.ex` - Added model helpers and agent helpers
 
 **New API Surface**:
 
@@ -123,7 +123,7 @@ All new options correctly map to Claude CLI arguments:
 ### What Was Built
 
 **Files Created**:
-1. `lib/claude_code_sdk/orchestrator.ex` (231 lines)
+1. `lib/claude_agent_sdk/orchestrator.ex` (231 lines)
 
 **Key Functions**:
 
@@ -212,7 +212,7 @@ Skipped: 28 (integration tests requiring live API)
 $ claude login
 
 # Single queries only
-ClaudeCodeSDK.query("Hello")
+ClaudeAgentSDK.query("Hello")
 
 # No model control
 # No concurrent execution
@@ -255,7 +255,7 @@ Orchestrator.query_pipeline([
 ```elixir
 # Multi-file security audit workflow
 defmodule MyApp.SecurityAuditor do
-  alias ClaudeCodeSDK.{Orchestrator, OptionBuilder}
+  alias ClaudeAgentSDK.{Orchestrator, OptionBuilder}
 
   def audit_codebase(files) do
     # Define security agent
@@ -359,7 +359,7 @@ end
 - CLI now uses OAuth tokens (not API keys)
 - Token format: `sk-ant-oat01-...`
 - Valid for 1 year (not 30 days!)
-- Environment variable: `CLAUDE_CODE_OAUTH_TOKEN`
+- Environment variable: `CLAUDE_AGENT_OAUTH_TOKEN`
 
 This required updating parsing logic to match actual CLI output.
 

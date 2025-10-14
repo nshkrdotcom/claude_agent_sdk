@@ -4,11 +4,11 @@
 # Usage: mix run examples/simple_analyzer.exs <file_path>
 # Uses current application environment (mock by default, live in production)
 
-alias ClaudeCodeSDK.{ContentExtractor, OptionBuilder}
+alias ClaudeAgentSDK.{ContentExtractor, OptionBuilder}
 
 # Start mock if needed
-if Application.get_env(:claude_code_sdk, :use_mock, false) do
-  {:ok, _} = ClaudeCodeSDK.Mock.start_link()
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
   IO.puts("🎭 Mock mode enabled")
 else
   IO.puts("🔴 Live mode enabled")
@@ -32,22 +32,26 @@ defmodule SimpleAnalyzer do
     # Use analysis-specific options
     options = OptionBuilder.build_analysis_options()
 
-    analysis = ClaudeCodeSDK.query("""
-    Analyze this code file and provide a brief summary:
+    analysis =
+      ClaudeAgentSDK.query(
+        """
+        Analyze this code file and provide a brief summary:
 
-    File: #{file_path}
-    ```
-    #{String.slice(content, 0, 1500)}#{if String.length(content) > 1500, do: "\n... (truncated)", else: ""}
-    ```
+        File: #{file_path}
+        ```
+        #{String.slice(content, 0, 1500)}#{if String.length(content) > 1500, do: "\n... (truncated)", else: ""}
+        ```
 
-    Provide:
-    1. What this code does (1-2 sentences)
-    2. Main functions or components
-    3. One key improvement suggestion
+        Provide:
+        1. What this code does (1-2 sentences)
+        2. Main functions or components
+        3. One key improvement suggestion
 
-    Keep it concise.
-    """, options)
-    |> extract_assistant_content()
+        Keep it concise.
+        """,
+        options
+      )
+      |> extract_assistant_content()
 
     IO.puts("\n📋 Analysis:")
     IO.puts("=" |> String.duplicate(40))
@@ -59,14 +63,17 @@ defmodule SimpleAnalyzer do
     messages = Enum.to_list(stream)
 
     # Check for errors first
-    error_msg = Enum.find(messages, & &1.type == :result and &1.subtype != :success)
+    error_msg = Enum.find(messages, &(&1.type == :result and &1.subtype != :success))
+
     if error_msg do
       IO.puts("\n❌ Error (#{error_msg.subtype}):")
+
       if Map.has_key?(error_msg.data, :error) do
         IO.puts(error_msg.data.error)
       else
         IO.puts(inspect(error_msg.data))
       end
+
       System.halt(1)
     end
 
@@ -86,7 +93,7 @@ case System.argv() do
 
   [] ->
     # Default to analyzing the main SDK file
-    SimpleAnalyzer.analyze_file("lib/claude_code_sdk.ex")
+    SimpleAnalyzer.analyze_file("lib/claude_agent_sdk.ex")
 
   _ ->
     IO.puts("Usage: mix run examples/simple_analyzer.exs [file_path]")

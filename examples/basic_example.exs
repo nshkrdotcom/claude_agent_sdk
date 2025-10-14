@@ -3,11 +3,11 @@
 # Basic Example - Simple Claude SDK usage
 # Usage: mix run.live examples/basic_example.exs
 
-alias ClaudeCodeSDK.{ContentExtractor, OptionBuilder}
+alias ClaudeAgentSDK.{ContentExtractor, OptionBuilder}
 
 # Check if we're in live mode
-if Application.get_env(:claude_code_sdk, :use_mock, false) do
-  {:ok, _} = ClaudeCodeSDK.Mock.start_link()
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
   IO.puts("🎭 Mock mode enabled")
 else
   IO.puts("🔴 Live mode enabled")
@@ -22,12 +22,16 @@ defmodule BasicExample do
     options = OptionBuilder.merge(:development, %{max_turns: 10})
 
     # Make a simple query
-    response = ClaudeCodeSDK.query("""
-    Write a simple Elixir function that calculates the factorial of a number.
-    Include proper documentation and a basic example of how to use it.
-    Keep it concise and clear.
-    """, options)
-    |> extract_response()
+    response =
+      ClaudeAgentSDK.query(
+        """
+        Write a simple Elixir function that calculates the factorial of a number.
+        Include proper documentation and a basic example of how to use it.
+        Keep it concise and clear.
+        """,
+        options
+      )
+      |> extract_response()
 
     IO.puts("\n📝 Claude's Response:")
     IO.puts("=" |> String.duplicate(60))
@@ -40,14 +44,17 @@ defmodule BasicExample do
     messages = Enum.to_list(stream)
 
     # Check for errors first
-    error_msg = Enum.find(messages, & &1.type == :result and &1.subtype != :success)
+    error_msg = Enum.find(messages, &(&1.type == :result and &1.subtype != :success))
+
     if error_msg do
       IO.puts("\n❌ Error (#{error_msg.subtype}):")
+
       if Map.has_key?(error_msg.data, :error) do
         IO.puts(error_msg.data.error)
       else
         IO.puts(inspect(error_msg.data))
       end
+
       System.halt(1)
     end
 
