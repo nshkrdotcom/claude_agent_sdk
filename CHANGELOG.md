@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comparison with Python SDK
   - Control protocol message examples
 
-- **User Guide** (25KB): `docs/HOOKS_GUIDE.md`
+- **User Guide** (25KB): `HOOKS_GUIDE.md`
   - Quick start with examples
   - All hook events documented
   - Hook output reference
@@ -170,7 +170,7 @@ Five complete, working examples in `examples/hooks/`:
 - Existing code works without changes
 - Hooks are optional (nil by default)
 - Add `Client` for bidirectional communication with hooks
-- See `docs/HOOKS_GUIDE.md` for usage patterns
+- See `HOOKS_GUIDE.md` for usage patterns
 
 ## [0.2.2] - 2025-10-10
 

@@ -1,14 +1,29 @@
 defmodule ClaudeAgentSDK.Hooks.Registry do
-  @moduledoc false
-  # Internal module for managing hook callback registration.
-  #
-  # Maintains bidirectional mapping between callback functions and unique IDs:
-  # - callbacks: ID -> callback function
-  # - reverse_map: callback function -> ID
-  #
-  # This allows:
-  # - Registering callbacks and getting IDs for CLI initialization
-  # - Looking up callbacks by ID when CLI triggers hooks
+  @moduledoc """
+  Hook callback registration and ID management.
+
+  Maintains bidirectional mapping between callback functions and unique IDs
+  for use with the Claude Code CLI hooks system.
+
+  ## Purpose
+
+  - Assigns unique IDs to callback functions for CLI initialization
+  - Enables lookup of callbacks by ID when CLI triggers hooks
+  - Provides idempotent registration (re-registering same callback returns same ID)
+
+  ## Usage
+
+  This module is primarily used internally by `ClaudeAgentSDK.Client`, but can
+  be used directly for testing hooks or building custom integrations.
+
+      registry = Registry.new()
+      callback = fn _input, _id, _ctx -> Output.allow() end
+
+      registry = Registry.register(registry, callback)
+      id = Registry.get_id(registry, callback)  # => "hook_0"
+
+      {:ok, ^callback} = Registry.get_callback(registry, id)
+  """
 
   alias ClaudeAgentSDK.Hooks
 

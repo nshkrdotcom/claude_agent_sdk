@@ -679,7 +679,7 @@ Client.stop(client)
 - Complete type safety with 102 passing tests
 - Error handling with timeouts
 
-See [HOOKS_GUIDE.md](docs/HOOKS_GUIDE.md) for complete documentation, examples, and API reference.
+See [HOOKS_GUIDE.md](HOOKS_GUIDE.md) for complete documentation, examples, and API reference.
 
 ### Working Examples
 

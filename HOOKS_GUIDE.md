@@ -793,9 +793,9 @@ options = %Options{
 ## Further Reading
 
 - [Claude Code Hooks Reference](https://docs.anthropic.com/en/docs/claude-code/hooks)
-- [Design Document](../design/hooks_implementation.md)
-- [Examples Directory](../../examples/hooks/)
-- [Test Suite](../../test/claude_agent_sdk/hooks/)
+- Design Document: `docs/design/hooks_implementation.md` (available in source repository)
+- Examples: See `examples/hooks/` directory in the source repository
+- Test Suite: See `test/claude_agent_sdk/hooks/` directory in the source repository
 
 ---
 

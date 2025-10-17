@@ -48,7 +48,8 @@ defmodule ClaudeAgentSdk.MixProject do
         "Claude Code" => "https://claude.ai/code"
       },
       maintainers: [{"NSHkr", "ZeroTrust@NSHkr.com"}],
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs assets)
+      files:
+        ~w(lib mix.exs README.md HOOKS_GUIDE.md LICENSE CHANGELOG.md .formatter.exs assets docs/design examples/hooks test/claude_agent_sdk/hooks)
     ]
   end
 
@@ -63,13 +64,14 @@ defmodule ClaudeAgentSdk.MixProject do
       logo: "assets/claude_agent_sdk.svg",
       extras: [
         "README.md",
+        "HOOKS_GUIDE.md",
         "COMPREHENSIVE_MANUAL.md",
         "MOCKING.md",
         "CHANGELOG.md",
         "LICENSE"
       ],
       groups_for_extras: [
-        Guides: ["README.md"],
+        Guides: ["README.md", "HOOKS_GUIDE.md"],
         Documentation: ["COMPREHENSIVE_MANUAL.md", "MOCKING.md"],
         "Release Notes": ["CHANGELOG.md", "LICENSE"]
       ],
