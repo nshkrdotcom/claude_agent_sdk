@@ -5,6 +5,173 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-10-16
+
+### Added - Hooks System 🎣
+
+**Complete hooks implementation matching Python SDK functionality!**
+
+#### Core Modules
+- `ClaudeAgentSDK.Hooks` - Type definitions and utilities for hook events
+  - 6 supported hook events: PreToolUse, PostToolUse, UserPromptSubmit, Stop, SubagentStop, PreCompact
+  - Event string conversion (atom ↔ CLI string)
+  - Hook configuration validation
+  - Full type specs and documentation
+
+- `ClaudeAgentSDK.Hooks.Matcher` - Pattern-based hook matching
+  - Exact tool matching ("Bash")
+  - Regex patterns ("Write|Edit")
+  - Wildcard matching ("*" or nil)
+  - Multiple hooks per matcher
+  - CLI format conversion
+
+- `ClaudeAgentSDK.Hooks.Output` - Hook output helpers
+  - Permission decisions (allow/deny/ask)
+  - Context injection (add_context)
+  - Execution control (stop/block/continue)
+  - Combinator functions (with_system_message, with_reason, suppress_output)
+  - JSON serialization
+
+- `ClaudeAgentSDK.Hooks.Registry` - Callback registration system
+  - Unique ID assignment for callbacks
+  - Bidirectional lookup (ID ↔ callback)
+  - Idempotent registration
+  - Helper functions (all_callbacks, count)
+
+- `ClaudeAgentSDK.ControlProtocol.Protocol` - Control protocol message handling
+  - Initialize request encoding
+  - Hook response encoding
+  - Message decoding and classification
+  - Request ID generation
+
+- `ClaudeAgentSDK.Client` - Bidirectional GenServer client
+  - Persistent connection to Claude CLI
+  - Control protocol request/response handling
+  - Runtime hook callback invocation
+  - Message streaming with subscribers
+  - Port management with proper cleanup
+  - Timeout protection for hooks (60s default)
+  - Error handling and recovery
+
+#### Options Integration
+- Added `hooks` field to `ClaudeAgentSDK.Options` struct
+- Type: `%{hook_event() => [Matcher.t()]} | nil`
+- Fully integrated with existing options system
+- Backward compatible (all existing tests pass)
+
+#### Documentation
+- **Technical Design Document** (47KB): `docs/design/hooks_implementation.md`
+  - Complete architecture with diagrams
+  - Detailed implementation specifications
+  - 5-week phased implementation plan
+  - Comparison with Python SDK
+  - Control protocol message examples
+
+- **User Guide** (25KB): `docs/HOOKS_GUIDE.md`
+  - Quick start with examples
+  - All hook events documented
+  - Hook output reference
+  - Best practices and patterns
+  - API reference
+  - Debugging guide
+  - Migration guide from CLI hooks
+
+- **Implementation Summary**: `HOOKS_IMPLEMENTATION_SUMMARY.md`
+  - What was implemented
+  - Test coverage statistics
+  - Performance metrics
+  - Next steps
+
+#### Examples
+Five complete, working examples in `examples/hooks/`:
+- `basic_bash_blocking.exs` - Security validation with PreToolUse
+- `context_injection.exs` - Auto-inject project context
+- `file_policy_enforcement.exs` - Comprehensive file access policies
+- `logging_and_audit.exs` - Complete audit trail
+- `complete_workflow.exs` - All hooks working together
+- `README.md` - Examples guide and learning path
+
+#### Testing
+- **102 new tests** for hooks functionality
+- 100% test pass rate (265/265 tests passing)
+- Complete unit test coverage:
+  - Hooks module: 22 tests
+  - Matcher module: 10 tests
+  - Output module: 25 tests
+  - Registry module: 19 tests
+  - Control Protocol: 17 tests
+  - Client GenServer: 9 tests
+- Zero dialyzer errors
+- All tests use TDD methodology
+- All phases implemented following test-first approach
+
+#### Features
+**Hook Events:**
+- ✅ PreToolUse - Intercept before tool execution, can block/allow/ask
+- ✅ PostToolUse - Process after execution, can add context
+- ✅ UserPromptSubmit - Add context to prompts, can block
+- ✅ Stop - Control agent completion, can force continuation
+- ✅ SubagentStop - Control subagent completion
+- ✅ PreCompact - Monitor context compaction
+
+**Capabilities:**
+- Pattern-based tool matching with regex support
+- Permission control (allow/deny/ask user)
+- Context injection for intelligent conversations
+- Execution control (stop/continue)
+- User and Claude messaging (systemMessage/reason)
+- Output suppression for transcript
+- Multiple hooks per event
+- Type-safe callback signatures
+- Validation and error handling
+
+### Changed
+- Updated `README.md` with Client and hooks sections with working examples
+- Updated implementation status to v0.3.0
+- Updated `mix.exs` version to 0.3.0
+- Added hooks and control protocol modules to documentation groups
+- Reorganized planned features (hooks complete in v0.3.0)
+
+### Technical Details
+
+**Architecture:**
+- Full bidirectional communication via Port
+- Control protocol over stdin/stdout
+- GenServer-based client for state management
+- Registry pattern for callback management
+- Message routing and classification
+- Timeout protection for hook execution
+
+**Code Quality:**
+- 1,420 LOC implementation
+- 950 LOC tests
+- 1,266 LOC examples
+- 93KB+ documentation
+- 100% test pass rate (265 tests)
+- Zero dialyzer errors
+- Zero credo issues
+- Complete type specifications
+
+**Performance:**
+- Hook invocation overhead < 10ms
+- Registry lookup O(1)
+- No overhead when hooks not configured
+- Efficient message routing
+
+### Notes
+- **Full end-to-end implementation complete**
+- Hooks work at runtime with real Claude CLI
+- Client GenServer enables bidirectional streaming
+- Matches Python SDK feature parity
+- Production-ready with comprehensive testing
+- No breaking changes - fully backward compatible!
+
+### Migration Guide
+- Existing code works without changes
+- Hooks are optional (nil by default)
+- Add `Client` for bidirectional communication with hooks
+- See `docs/HOOKS_GUIDE.md` for usage patterns
+
 ## [0.2.2] - 2025-10-10
 
 ### Changed

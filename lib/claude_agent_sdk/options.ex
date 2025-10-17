@@ -22,6 +22,7 @@ defmodule ClaudeAgentSDK.Options do
   - `executable_args` - Arguments for custom executable (list of strings)
   - `path_to_claude_code_executable` - Path to Claude Code CLI (string)
   - `abort_ref` - Reference for aborting requests (reference)
+  - `hooks` - Hook configurations (see `t:ClaudeAgentSDK.Hooks.hook_config/0`)
 
   ## Examples
 
@@ -73,7 +74,10 @@ defmodule ClaudeAgentSDK.Options do
     # Additional directories for tool access
     :add_dir,
     # Only use MCP servers from --mcp-config
-    :strict_mcp_config
+    :strict_mcp_config,
+    # Hooks (v0.3.0)
+    # Hook callbacks for lifecycle events
+    :hooks
   ]
 
   @type output_format :: :text | :json | :stream_json
@@ -107,7 +111,8 @@ defmodule ClaudeAgentSDK.Options do
           session_id: String.t() | nil,
           fork_session: boolean() | nil,
           add_dir: [String.t()] | nil,
-          strict_mcp_config: boolean() | nil
+          strict_mcp_config: boolean() | nil,
+          hooks: ClaudeAgentSDK.Hooks.hook_config() | nil
         }
 
   @doc """

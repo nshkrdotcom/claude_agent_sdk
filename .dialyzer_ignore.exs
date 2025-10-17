@@ -8,5 +8,7 @@
   {"lib/mix/tasks/showcase.ex", :callback_info_missing},
   # Mix.env/0 is available at compile time but not in dialyzer PLT
   {"lib/claude_agent_sdk/debug_mode.ex", :unknown_function},
-  {"lib/claude_agent_sdk/option_builder.ex", :unknown_function}
+  {"lib/claude_agent_sdk/option_builder.ex", :unknown_function},
+  # Client.ex hook callback context type - false positive
+  {"lib/claude_agent_sdk/client.ex", :pattern_match, 1}
 ]

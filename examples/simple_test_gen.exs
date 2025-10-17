@@ -3,6 +3,10 @@
 # Simple Test Generator - Generate basic test templates
 # Usage: mix run examples/simple_test_gen.exs <module_file>
 
+# Enable mocking
+Application.put_env(:claude_agent_sdk, :use_mock, true)
+{:ok, _} = ClaudeAgentSDK.Mock.start_link()
+
 defmodule SimpleTestGen do
   def generate_tests(module_file) do
     IO.puts("🧪 Simple Test Generator")

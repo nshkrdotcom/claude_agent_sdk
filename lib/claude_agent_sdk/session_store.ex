@@ -271,7 +271,17 @@ defmodule ClaudeAgentSDK.SessionStore do
       :ets.tab2list(state.cache)
       |> Enum.map(fn {_id, metadata} -> metadata end)
       |> filter_by_criteria(criteria)
-      |> Enum.sort_by(& &1.updated_at, {:desc, DateTime})
+      |> Enum.sort_by(
+        fn session ->
+          # Handle both atom and string keys
+          updated_at = session[:updated_at] || session["updated_at"]
+
+          if is_binary(updated_at),
+            do: DateTime.from_iso8601(updated_at) |> elem(1),
+            else: updated_at
+        end,
+        {:desc, DateTime}
+      )
 
     {:reply, results, state}
   end
@@ -281,7 +291,17 @@ defmodule ClaudeAgentSDK.SessionStore do
     sessions =
       :ets.tab2list(state.cache)
       |> Enum.map(fn {_id, metadata} -> metadata end)
-      |> Enum.sort_by(& &1.updated_at, {:desc, DateTime})
+      |> Enum.sort_by(
+        fn session ->
+          # Handle both atom and string keys
+          updated_at = session[:updated_at] || session["updated_at"]
+
+          if is_binary(updated_at),
+            do: DateTime.from_iso8601(updated_at) |> elem(1),
+            else: updated_at
+        end,
+        {:desc, DateTime}
+      )
 
     {:reply, sessions, state}
   end
@@ -454,7 +474,9 @@ defmodule ClaudeAgentSDK.SessionStore do
 
   defp filter_by_tags(sessions, tags) do
     Enum.filter(sessions, fn session ->
-      Enum.any?(tags, fn tag -> tag in session.tags end)
+      # Handle both atom and string keys for backward compatibility
+      session_tags = session[:tags] || session["tags"] || []
+      Enum.any?(tags, fn tag -> tag in session_tags end)
     end)
   end
 
@@ -464,7 +486,15 @@ defmodule ClaudeAgentSDK.SessionStore do
     date = to_datetime(date)
 
     Enum.filter(sessions, fn session ->
-      DateTime.compare(session.created_at, date) in [:gt, :eq]
+      # Handle both atom and string keys
+      created_at = session[:created_at] || session["created_at"]
+
+      created_at =
+        if is_binary(created_at),
+          do: DateTime.from_iso8601(created_at) |> elem(1),
+          else: created_at
+
+      DateTime.compare(created_at, date) in [:gt, :eq]
     end)
   end
 
@@ -474,7 +504,15 @@ defmodule ClaudeAgentSDK.SessionStore do
     date = to_datetime(date)
 
     Enum.filter(sessions, fn session ->
-      DateTime.compare(session.created_at, date) in [:lt, :eq]
+      # Handle both atom and string keys
+      created_at = session[:created_at] || session["created_at"]
+
+      created_at =
+        if is_binary(created_at),
+          do: DateTime.from_iso8601(created_at) |> elem(1),
+          else: created_at
+
+      DateTime.compare(created_at, date) in [:lt, :eq]
     end)
   end
 
@@ -482,7 +520,9 @@ defmodule ClaudeAgentSDK.SessionStore do
 
   defp filter_by_min_cost(sessions, min_cost) do
     Enum.filter(sessions, fn session ->
-      session.total_cost >= min_cost
+      # Handle both atom and string keys
+      total_cost = session[:total_cost] || session["total_cost"] || 0
+      total_cost >= min_cost
     end)
   end
 
@@ -490,7 +530,9 @@ defmodule ClaudeAgentSDK.SessionStore do
 
   defp filter_by_max_cost(sessions, max_cost) do
     Enum.filter(sessions, fn session ->
-      session.total_cost <= max_cost
+      # Handle both atom and string keys
+      total_cost = session[:total_cost] || session["total_cost"] || 0
+      total_cost <= max_cost
     end)
   end
 

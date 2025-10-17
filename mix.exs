@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
-  @version "0.2.2"
+  @version "0.3.0"
 
   def project do
     [
@@ -76,6 +76,7 @@ defmodule ClaudeAgentSdk.MixProject do
       groups_for_modules: [
         "Core API": [
           ClaudeAgentSDK,
+          ClaudeAgentSDK.Client,
           ClaudeAgentSDK.Orchestrator,
           ClaudeAgentSDK.Query
         ],
@@ -108,6 +109,15 @@ defmodule ClaudeAgentSdk.MixProject do
         Testing: [
           ClaudeAgentSDK.Mock,
           ClaudeAgentSDK.Mock.Process
+        ],
+        Hooks: [
+          ClaudeAgentSDK.Hooks,
+          ClaudeAgentSDK.Hooks.Matcher,
+          ClaudeAgentSDK.Hooks.Output,
+          ClaudeAgentSDK.Hooks.Registry
+        ],
+        "Control Protocol": [
+          ClaudeAgentSDK.ControlProtocol.Protocol
         ],
         Utilities: [
           ClaudeAgentSDK.JSON,

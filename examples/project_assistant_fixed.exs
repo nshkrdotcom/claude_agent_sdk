@@ -27,9 +27,17 @@ defmodule ProjectAssistant do
   end
 
   defp interactive_loop do
-    input = IO.gets("🤖 > ") |> String.trim()
+    input = IO.gets("🤖 > ")
 
-    case parse_command(input) do
+    # Handle EOF (Ctrl+D) gracefully
+    command_str =
+      case input do
+        :eof -> "quit"
+        input when is_binary(input) -> String.trim(input)
+        _ -> "quit"
+      end
+
+    case parse_command(command_str) do
       {:quit} ->
         IO.puts("👋 Goodbye!")
 

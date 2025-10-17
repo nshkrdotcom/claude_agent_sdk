@@ -57,7 +57,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.2.2"}
+    {:claude_agent_sdk, "~> 0.3.0"}
   ]
 end
 ```
@@ -98,7 +98,7 @@ mix deps.get
 
 ## Implementation Status
 
-### ✅ **Currently Implemented (v0.2.1)**
+### ✅ **Currently Implemented (v0.3.0)**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
@@ -133,6 +133,23 @@ mix deps.get
   - Multi-turn conversations with context preservation
   - Message queueing for sequential processing
   - Multiple concurrent sessions for parallelism
+- **Hooks System** (v0.3.0): Lifecycle callbacks for security and monitoring
+  - 6 hook events: PreToolUse, PostToolUse, UserPromptSubmit, Stop, SubagentStop, PreCompact
+  - Pattern-based matching with regex support
+  - Permission control (allow/deny/ask)
+  - Context injection and execution control
+  - Complete type safety with 102 passing tests
+  - 5 working examples and comprehensive documentation
+- **Control Protocol** (v0.3.0): Bidirectional CLI communication
+  - Message encoding/decoding for control messages
+  - Initialize requests with hooks configuration
+  - Hook callback request/response handling
+  - JSON protocol over stdin/stdout
+- **Client GenServer** (v0.3.0): Persistent bidirectional connection
+  - Port-based CLI process management
+  - Message streaming with subscriber pattern
+  - Runtime hook callback invocation
+  - Graceful shutdown and error recovery
 - **Error Handling**: Improved error detection and timeout handling
 - **Stream Processing**: Lazy evaluation with Elixir Streams
 - **Mocking System**: Comprehensive testing without API calls (supports stdin workflows)
@@ -140,7 +157,7 @@ mix deps.get
 - **Developer Tools**: ContentExtractor, AuthChecker, OptionBuilder, DebugMode, AuthManager
 - **Smart Configuration**: Environment-aware defaults and preset configurations
 
-### 🔮 **Planned Features (v0.3.0+)**
+### 🔮 **Planned Features (v0.4.0+)**
 - **Telemetry Integration**: Production observability with :telemetry events
 - **Performance Optimization**: Caching, memory optimization
 - **Integration Patterns**: Phoenix LiveView examples, OTP applications, worker pools
@@ -561,6 +578,152 @@ options = OptionBuilder.build_analysis_options()
   prompt: "Review for OWASP Top 10 vulnerabilities"
 })
 ```
+
+## Bidirectional Client (v0.3.0+)
+
+The `Client` GenServer provides bidirectional streaming communication with Claude Code, enabling hooks and interactive conversations:
+
+```elixir
+alias ClaudeAgentSDK.{Client, Options}
+
+# Start client
+{:ok, client} = Client.start_link(%Options{
+  allowed_tools: ["Bash", "Write", "Read"]
+})
+
+# Send message
+Client.send_message(client, "Create a hello.ex file")
+
+# Receive messages as stream
+Client.stream_messages(client)
+|> Stream.filter(&(&1.type == :assistant))
+|> Enum.each(&IO.inspect/1)
+
+# Stop client
+Client.stop(client)
+```
+
+**Features:**
+- Persistent bidirectional connection
+- Message streaming with backpressure
+- Control protocol support
+- Hook integration
+- Automatic cleanup
+
+## Hooks (v0.3.0+)
+
+Hooks are callback functions that execute at specific lifecycle events during Claude's execution, enabling security policies, context injection, and monitoring:
+
+```elixir
+alias ClaudeAgentSDK.{Client, Options}
+alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+
+# Define a hook callback
+def check_bash_command(input, _tool_use_id, _context) do
+  case input do
+    %{"tool_name" => "Bash", "tool_input" => %{"command" => cmd}} ->
+      if String.contains?(cmd, "rm -rf") do
+        Output.deny("Dangerous command blocked")
+        |> Output.with_system_message("🔒 Security policy violation")
+      else
+        Output.allow()
+      end
+    _ -> %{}
+  end
+end
+
+# Configure hooks
+options = %Options{
+  allowed_tools: ["Bash", "Write", "Read"],
+  hooks: %{
+    # Block dangerous commands before execution
+    pre_tool_use: [
+      Matcher.new("Bash", [&check_bash_command/3])
+    ],
+    # Add context after operations
+    post_tool_use: [
+      Matcher.new("*", [&log_tool_usage/3])
+    ],
+    # Inject project context automatically
+    user_prompt_submit: [
+      Matcher.new(nil, [&add_project_context/3])
+    ]
+  }
+}
+
+# Start client with hooks
+{:ok, client} = Client.start_link(options)
+
+# Hooks automatically invoke when CLI triggers them
+Client.send_message(client, "Run a bash command")
+
+# The check_bash_command hook will be called before execution!
+Client.stream_messages(client) |> Enum.to_list()
+Client.stop(client)
+```
+
+**Supported Hook Events:**
+- `pre_tool_use` - Before tool execution (can block)
+- `post_tool_use` - After tool execution (can add context)
+- `user_prompt_submit` - When user submits prompt (can add context)
+- `stop` - When agent finishes (can force continuation)
+- `subagent_stop` - When subagent finishes
+- `pre_compact` - Before context compaction
+
+**Hook Capabilities:**
+- Permission control (allow/deny/ask)
+- Context injection for intelligent conversations
+- Execution control (stop/continue)
+- Pattern-based tool matching with regex
+- Multiple hooks per event
+- Complete type safety with 102 passing tests
+- Error handling with timeouts
+
+See [HOOKS_GUIDE.md](docs/HOOKS_GUIDE.md) for complete documentation, examples, and API reference.
+
+### Working Examples
+
+The SDK includes 5 complete hook examples demonstrating real-world patterns:
+
+```bash
+# 1. Basic command blocking with live CLI
+mix run examples/hooks/basic_bash_blocking.exs
+
+# 2. Auto-inject context into conversations
+mix run examples/hooks/context_injection.exs
+
+# 3. File access policy enforcement (tests hook logic)
+mix run examples/hooks/file_policy_enforcement.exs
+
+# 4. Comprehensive audit logging
+mix run examples/hooks/logging_and_audit.exs
+
+# 5. Complete workflow (all hooks together)
+mix run examples/hooks/complete_workflow.exs
+```
+
+**Example Output:**
+- Shows hooks intercepting real tool usage
+- Demonstrates security policies in action
+- Displays audit logs and context injection
+- All examples include clear explanations
+
+## Control Protocol (v0.3.0+)
+
+The Control Protocol enables bidirectional communication between the Elixir SDK and Claude Code CLI for advanced features like hooks:
+
+**Protocol Messages:**
+- `control_request` - CLI requesting hook callback execution
+- `control_response` - Responses to control requests (success/error)
+- `initialize` - Setup with hooks configuration
+- `hook_callback` - Runtime hook invocation with context
+
+**Implemented in:**
+- `ClaudeAgentSDK.ControlProtocol.Protocol` - Message encoding/decoding
+- `ClaudeAgentSDK.Client` - Protocol handler and message router
+- `ClaudeAgentSDK.Hooks.Registry` - Callback ID management
+
+The protocol runs over the same stdin/stdout channel as regular messages, using JSON with type discrimination to route messages appropriately.
 
 ## Concurrent Orchestration (v0.1.0+)
 

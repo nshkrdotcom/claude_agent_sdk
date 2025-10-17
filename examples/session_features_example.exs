@@ -98,10 +98,16 @@ all_sessions = SessionStore.list_sessions()
 IO.puts("   Total sessions: #{length(all_sessions)}")
 
 Enum.each(all_sessions, fn meta ->
-  IO.puts("   • #{meta.session_id |> String.slice(0, 12)}...")
-  IO.puts("     Tags: #{inspect(meta.tags)}")
-  IO.puts("     Cost: $#{meta.total_cost}")
-  IO.puts("     Description: #{meta.description}")
+  # Handle both atom and string keys for backward compatibility
+  session_id = meta[:session_id] || meta["session_id"]
+  tags = meta[:tags] || meta["tags"]
+  total_cost = meta[:total_cost] || meta["total_cost"]
+  description = meta[:description] || meta["description"]
+
+  IO.puts("   • #{session_id |> String.slice(0, 12)}...")
+  IO.puts("     Tags: #{inspect(tags)}")
+  IO.puts("     Cost: $#{total_cost}")
+  IO.puts("     Description: #{description}")
 end)
 
 IO.puts("")
