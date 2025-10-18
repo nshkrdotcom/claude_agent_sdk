@@ -2,6 +2,11 @@
 
 # Final test of the Claude Code SDK with proper JSON parsing
 
+# Check if we're in mock mode and start Mock server if needed
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
+end
+
 IO.puts("🚀 Claude Code SDK - Final Test")
 IO.puts("=" |> String.duplicate(40))
 

@@ -3,6 +3,11 @@
 # File Reviewer - Simple code review for individual files
 # Usage: mix run examples/file_reviewer.exs <file_path>
 
+# Check if we're in mock mode and start Mock server if needed
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
+end
+
 defmodule FileReviewer do
   def review_file(file_path) do
     IO.puts("🔍 File Reviewer")

@@ -3,6 +3,11 @@
 # Simple Batch Processor - Process multiple files with Claude
 # Usage: mix run examples/simple_batch.exs <directory> <operation>
 
+# Check if we're in mock mode and start Mock server if needed
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
+end
+
 defmodule SimpleBatch do
   def process_directory(directory, operation) do
     IO.puts("📁 Simple Batch Processor")

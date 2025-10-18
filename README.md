@@ -397,22 +397,32 @@ mix run examples/test_auth_detection.exs
 
 ---
 
-### 📋 Running All Examples by Group
+### 📋 Running All Examples
 
-Use the included test script to run entire groups of examples:
+**Quick Scripts:**
 
 ```bash
-# Run all mock mode examples (FREE - no API costs)
+# Run ALL examples in mock mode (FREE - no API costs, ~30 examples)
+./run_all_examples.sh
+
+# Run ALL examples in LIVE mode (⚠️ EXPENSIVE - requires confirmation, default: N)
+./run_all_examples.sh live
+```
+
+**Or run by specific groups:**
+
+```bash
+# Run all mock mode examples by group (FREE - no API costs)
 ./test_all_examples.sh all
 
 # Run specific groups
 ./test_all_examples.sh getting-started  # Quick start examples
 ./test_all_examples.sh mcp              # MCP tools
-./test_all_examples.sh agents           # v0.4.0 Agents & Permissions
-./test_all_examples.sh hooks            # v0.3.0 Hooks system
+./test_all_examples.sh agents           # Agents & Permissions
+./test_all_examples.sh hooks            # Hooks system
 ./test_all_examples.sh core             # Core/basic examples
 
-# ⚠️  DANGEROUS: Run live examples (costs money!)
+# ⚠️  DANGEROUS: Run live examples by group (costs money!)
 ./test_all_examples.sh live
 ```
 

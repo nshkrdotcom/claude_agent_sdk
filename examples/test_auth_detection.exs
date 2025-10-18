@@ -3,6 +3,11 @@
 # Test script to verify challenge URL detection
 # This script attempts to trigger authentication to see if we can detect the challenge URL
 
+# Check if we're in mock mode and start Mock server if needed
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
+end
+
 alias ClaudeAgentSDK.Options
 
 IO.puts("🧪 Testing Challenge URL Detection")

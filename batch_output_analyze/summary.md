@@ -1,19 +1,19 @@
 # Batch Processing Summary
 
-**Generated:** 2025-10-18T05:38:43.652586Z
+**Generated:** 2025-10-18T06:18:07.838595Z
 
 ## Statistics
 - Total files: 5
 - Successful: 5
 - Failed: 0
-- Total duration: 53.94s
+- Total duration: 0.01s
 
 ## Results
-✅ claude_agent_sdk.ex (9065ms)
-✅ agent.ex (13372ms)
-✅ provider.ex (10103ms)
-✅ anthropic.ex (12421ms)
-✅ bedrock.ex (8978ms)
+✅ claude_agent_sdk.ex (8ms)
+✅ agent.ex (0ms)
+✅ provider.ex (1ms)
+✅ anthropic.ex (0ms)
+✅ bedrock.ex (0ms)
 
 ## Files Processed
 - lib/claude_agent_sdk.ex → batch_output_analyze/claude_agent_sdk_analyze.txt

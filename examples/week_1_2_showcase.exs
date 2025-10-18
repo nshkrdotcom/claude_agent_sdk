@@ -201,13 +201,6 @@ review_queries =
     {
       "Review #{file} for security issues",
       OptionBuilder.build_analysis_options()
-      |> OptionBuilder.with_agents(%{
-        "security_reviewer" => %{
-          description: "Security expert",
-          prompt: "Review for OWASP Top 10 vulnerabilities"
-        }
-      })
-      # Use most capable model
       |> OptionBuilder.with_model("opus")
     }
   end)

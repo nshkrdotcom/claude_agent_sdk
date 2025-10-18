@@ -3,6 +3,11 @@
 # Project Assistant - Interactive development helper (Fixed version)
 # Usage: mix run examples/project_assistant_fixed.exs
 
+# Check if we're in mock mode and start Mock server if needed
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
+end
+
 defmodule ProjectAssistant do
   @moduledoc """
   Interactive development assistant for Elixir projects.
