@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
 
   alias ClaudeAgentSDK.ControlProtocol.Protocol
 
-  describe "encode_initialize_request/2" do
+  describe "encode_initialize_request/3" do
     test "encodes initialize request with hooks" do
       hooks_config = %{
         "PreToolUse" => [
@@ -14,7 +14,7 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
         ]
       }
 
-      {request_id, json} = Protocol.encode_initialize_request(hooks_config, "req_123")
+      {request_id, json} = Protocol.encode_initialize_request(hooks_config, nil, "req_123")
 
       assert request_id == "req_123"
       decoded = Jason.decode!(json)
@@ -26,7 +26,7 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
     end
 
     test "generates request ID when not provided" do
-      {request_id, json} = Protocol.encode_initialize_request(nil, nil)
+      {request_id, json} = Protocol.encode_initialize_request(nil, nil, nil)
 
       assert is_binary(request_id)
       assert String.starts_with?(request_id, "req_")
@@ -36,10 +36,37 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
     end
 
     test "encodes with nil hooks" do
-      {_request_id, json} = Protocol.encode_initialize_request(nil, "req_456")
+      {_request_id, json} = Protocol.encode_initialize_request(nil, nil, "req_456")
 
       decoded = Jason.decode!(json)
       assert decoded["request"]["hooks"] == nil
+    end
+
+    test "encodes with SDK MCP servers" do
+      hooks_config = %{
+        "PreToolUse" => [
+          %{
+            "matcher" => "Bash",
+            "hookCallbackIds" => ["hook_0"]
+          }
+        ]
+      }
+
+      sdk_mcp_servers = %{
+        "math-tools" => %{"name" => "math-tools", "version" => "1.0.0"}
+      }
+
+      {request_id, json} =
+        Protocol.encode_initialize_request(hooks_config, sdk_mcp_servers, "req_789")
+
+      assert request_id == "req_789"
+      decoded = Jason.decode!(json)
+
+      assert decoded["type"] == "control_request"
+      assert decoded["request_id"] == "req_789"
+      assert decoded["request"]["subtype"] == "initialize"
+      assert decoded["request"]["hooks"] == hooks_config
+      assert decoded["request"]["sdkMcpServers"] == sdk_mcp_servers
     end
   end
 

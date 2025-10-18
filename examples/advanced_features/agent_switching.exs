@@ -4,7 +4,7 @@
 # Demonstrates defining and switching between multiple agent profiles
 #
 # Usage:
-#   mix run examples/v0_4_0/agent_switching.exs
+#   mix run examples/advanced_features/agent_switching.exs
 
 alias ClaudeAgentSDK.{Agent, Options}
 
@@ -87,7 +87,7 @@ IO.puts("Current agent: #{options.agent}")
 IO.puts("Available agents: #{inspect(Map.keys(options.agents))}")
 
 IO.puts("\n💡 Note: This is a configuration demo (no CLI started)")
-IO.puts("   For live agent switching with real queries, see: examples/v0_4_0/agents_live.exs\n")
+IO.puts("   For live agent switching with real queries, see: examples/advanced_features/agents_live.exs\n")
 
 # Demonstrate agent configurations
 IO.puts("\n🔄 Agent switching workflow:\n")

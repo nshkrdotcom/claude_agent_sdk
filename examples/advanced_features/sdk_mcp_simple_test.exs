@@ -3,7 +3,7 @@
 # Tests that SDK MCP server is created correctly and tools are registered
 #
 # Usage:
-#   mix run examples/v0_5_0/sdk_mcp_simple_test.exs
+#   mix run examples/advanced_features/sdk_mcp_simple_test.exs
 
 defmodule SimpleTools do
   use ClaudeAgentSDK.Tool

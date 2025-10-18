@@ -11,19 +11,19 @@ Examples demonstrating the three major features added in v0.4.0:
 
 ```bash
 # Shows feature setup and structure (no real Claude calls)
-mix run examples/v0_4_0/mcp_calculator_tool.exs
-mix run examples/v0_4_0/agent_switching.exs
-mix run examples/v0_4_0/permission_control.exs
-mix run examples/v0_4_0/full_feature_showcase.exs
+mix run examples/advanced_features/mcp_calculator_tool.exs
+mix run examples/advanced_features/agent_switching.exs
+mix run examples/advanced_features/permission_control.exs
+mix run examples/advanced_features/full_feature_showcase.exs
 ```
 
 ### Live Mode (Real API calls - Costs money!)
 
 ```bash
 # Makes REAL calls to Claude CLI (requires: claude login)
-mix run.live examples/v0_4_0/mcp_tools_live.exs
-mix run.live examples/v0_4_0/agents_live.exs
-mix run.live examples/v0_4_0/permissions_live.exs
+mix run.live examples/advanced_features/mcp_tools_live.exs
+mix run.live examples/advanced_features/agents_live.exs
+mix run.live examples/advanced_features/permissions_live.exs
 ```
 
 ⚠️ **Live examples require authentication and will incur API costs!**
@@ -35,7 +35,7 @@ mix run.live examples/v0_4_0/permissions_live.exs
 Demonstrates creating in-process MCP tools using the `deftool` macro.
 
 ```bash
-mix run examples/v0_4_0/mcp_calculator_tool.exs
+mix run examples/advanced_features/mcp_calculator_tool.exs
 ```
 
 **What it shows:**
@@ -59,7 +59,7 @@ mix run examples/v0_4_0/mcp_calculator_tool.exs
 Demonstrates defining multiple agent profiles and switching between them at runtime.
 
 ```bash
-mix run examples/v0_4_0/agent_switching.exs
+mix run examples/advanced_features/agent_switching.exs
 ```
 
 **What it shows:**
@@ -84,7 +84,7 @@ mix run examples/v0_4_0/agent_switching.exs
 Demonstrates fine-grained tool permission control using callbacks.
 
 ```bash
-mix run examples/v0_4_0/permission_control.exs
+mix run examples/advanced_features/permission_control.exs
 ```
 
 **What it shows:**
@@ -111,7 +111,7 @@ mix run examples/v0_4_0/permission_control.exs
 Demonstrates all three features working together in a realistic workflow.
 
 ```bash
-mix run examples/v0_4_0/full_feature_showcase.exs
+mix run examples/advanced_features/full_feature_showcase.exs
 ```
 
 **What it shows:**

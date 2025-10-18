@@ -212,7 +212,10 @@ defmodule ClaudeAgentSDK.Tool.Registry do
       tool.module.execute(input)
     rescue
       error ->
-        Logger.error("Tool execution error: #{inspect(error)}")
+        # Only log in non-test environments (tests verify error handling works)
+        if Mix.env() != :test do
+          Logger.error("Tool execution error: #{inspect(error)}")
+        end
 
         {:error,
          %{

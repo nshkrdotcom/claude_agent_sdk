@@ -3,7 +3,7 @@
 # Demonstrates permission system with REAL Claude CLI usage
 #
 # Usage:
-#   MIX_ENV=test mix run.live examples/v0_4_0/permissions_live.exs
+#   MIX_ENV=test mix run.live examples/advanced_features/permissions_live.exs
 #
 # Prerequisites:
 #   - Claude CLI installed and authenticated (claude login)
@@ -15,9 +15,9 @@ alias ClaudeAgentSDK.Permission.{Context, Result}
 if Application.get_env(:claude_agent_sdk, :use_mock, false) do
   IO.puts("\n🎭 This is a LIVE example - it requires real API calls")
   IO.puts("   For permission configuration demo (mock mode), see:")
-  IO.puts("   mix run examples/v0_4_0/permission_control.exs\n")
+  IO.puts("   mix run examples/advanced_features/permission_control.exs\n")
   IO.puts("💡 To run this live example:")
-  IO.puts("   MIX_ENV=test mix run.live examples/v0_4_0/permissions_live.exs\n")
+  IO.puts("   MIX_ENV=test mix run.live examples/advanced_features/permissions_live.exs\n")
   System.halt(0)
 end
 

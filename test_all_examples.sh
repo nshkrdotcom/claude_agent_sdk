@@ -64,7 +64,7 @@ test_getting_started() {
     echo -e "${GREEN}═══════════════════════════════════════════${NC}\n"
 
     skip_example "Showcase" "Interactive - run manually with 'mix showcase'"
-    run_example "SDK MCP Simple Test" "mix run examples/v0_5_0/sdk_mcp_simple_test.exs"
+    run_example "SDK MCP Simple Test" "mix run examples/advanced_features/sdk_mcp_simple_test.exs"
 }
 
 # v0.5.0 MCP Examples
@@ -73,9 +73,9 @@ test_mcp() {
     echo -e "${GREEN}  🌟 v0.5.0 MCP Tools Examples${NC}"
     echo -e "${GREEN}═══════════════════════════════════════════${NC}\n"
 
-    run_example "MCP Calculator Tool" "mix run examples/v0_4_0/mcp_calculator_tool.exs"
-    run_example "SDK MCP Simple Test" "mix run examples/v0_5_0/sdk_mcp_simple_test.exs"
-    skip_example "SDK MCP Live Demo" "Requires real API - use 'MIX_ENV=test mix run.live examples/v0_5_0/sdk_mcp_live_demo.exs'"
+    run_example "MCP Calculator Tool" "mix run examples/advanced_features/mcp_calculator_tool.exs"
+    run_example "SDK MCP Simple Test" "mix run examples/advanced_features/sdk_mcp_simple_test.exs"
+    skip_example "SDK MCP Live Demo" "Requires real API - use 'MIX_ENV=test mix run.live examples/advanced_features/sdk_mcp_live_demo.exs'"
 }
 
 # v0.4.0 Agents & Permissions Examples
@@ -84,9 +84,9 @@ test_agents() {
     echo -e "${GREEN}  🤖 v0.4.0 Agents & Permissions Examples${NC}"
     echo -e "${GREEN}═══════════════════════════════════════════${NC}\n"
 
-    run_example "Agent Switching" "mix run examples/v0_4_0/agent_switching.exs"
-    run_example "Permission Control" "mix run examples/v0_4_0/permission_control.exs"
-    run_example "Full Feature Showcase" "mix run examples/v0_4_0/full_feature_showcase.exs"
+    run_example "Agent Switching" "mix run examples/advanced_features/agent_switching.exs"
+    run_example "Permission Control" "mix run examples/advanced_features/permission_control.exs"
+    run_example "Full Feature Showcase" "mix run examples/advanced_features/full_feature_showcase.exs"
     skip_example "Agents Live" "Requires real API"
     skip_example "Permissions Live" "Requires real API"
 }
@@ -135,9 +135,9 @@ test_live() {
     echo -e "${YELLOW}Press Ctrl+C within 5 seconds to cancel...${NC}\n"
     sleep 5
 
-    run_example "SDK MCP Live Demo" "MIX_ENV=test mix run.live examples/v0_5_0/sdk_mcp_live_demo.exs"
-    run_example "Agents Live" "MIX_ENV=test mix run.live examples/v0_4_0/agents_live.exs"
-    run_example "Permissions Live" "MIX_ENV=test mix run.live examples/v0_4_0/permissions_live.exs"
+    run_example "SDK MCP Live Demo" "MIX_ENV=test mix run.live examples/advanced_features/sdk_mcp_live_demo.exs"
+    run_example "Agents Live" "MIX_ENV=test mix run.live examples/advanced_features/agents_live.exs"
+    run_example "Permissions Live" "MIX_ENV=test mix run.live examples/advanced_features/permissions_live.exs"
     run_example "Simple Analyzer" "mix run.live examples/simple_analyzer.exs lib/claude_agent_sdk.ex"
 
     echo -e "${YELLOW}⚠️  Stopping live tests early to avoid excessive costs${NC}"

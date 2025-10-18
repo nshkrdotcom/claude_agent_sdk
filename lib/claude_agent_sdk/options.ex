@@ -267,7 +267,8 @@ defmodule ClaudeAgentSDK.Options do
     cond do
       # Priority 1: mcp_servers (new programmatic API)
       options.mcp_servers != nil and map_size(options.mcp_servers) > 0 ->
-        # Filter out SDK servers - they're handled via control protocol, not CLI args
+        # Filter out SDK servers - they require Client with control protocol
+        # Only external servers can be passed via --mcp-config
         external_servers_only =
           options.mcp_servers
           |> Enum.filter(fn {_name, config} -> config.type != :sdk end)
@@ -279,6 +280,7 @@ defmodule ClaudeAgentSDK.Options do
           args ++ ["--mcp-config", json_config]
         else
           # Only SDK servers - nothing to pass to CLI
+          # (SDK servers require Client with bidirectional control protocol)
           args
         end
 

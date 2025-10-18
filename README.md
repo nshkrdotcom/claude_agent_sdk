@@ -57,7 +57,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.5.0"}
+    {:claude_agent_sdk, "~> 0.4.0"}
   ]
 end
 ```
@@ -98,7 +98,7 @@ mix deps.get
 
 ## Implementation Status
 
-### ✅ **Currently Implemented (v0.5.0)**
+### ✅ **Currently Implemented (v0.4.0)**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
@@ -150,18 +150,18 @@ mix deps.get
   - Message streaming with subscriber pattern
   - Runtime hook callback invocation
   - Graceful shutdown and error recovery
-- **MCP Tool System** (v0.5.0): In-process MCP tools with deftool macro
+- **MCP Tool System** (v0.4.0): In-process MCP tools with deftool macro
   - `deftool` macro for declarative tool definition
   - `create_sdk_mcp_server/1` for SDK-based MCP servers
   - Tool.Registry GenServer for tool management
-  - No subprocess overhead, full integration with Claude
   - 42 tests covering all tool scenarios
-- **Agent Definitions** (v0.5.0): Multi-agent support with runtime switching
+  - **Note:** SDK MCP infrastructure complete, awaiting CLI support (see `docs/SDK_MCP_STATUS.md`)
+- **Agent Definitions** (v0.4.0): Multi-agent support with runtime switching
   - Define agent profiles with custom prompts, tools, and models
   - `Client.set_agent/2` for runtime agent switching
   - Context preservation across agent switches
   - 38 tests covering agent workflows
-- **Permission System** (v0.5.0): Fine-grained tool permission control
+- **Permission System** (v0.4.0): Fine-grained tool permission control
   - Permission callbacks for security control
   - 4 permission modes (default, accept_edits, plan, bypass_permissions)
   - Tool input modification and execution interrupts
@@ -174,9 +174,12 @@ mix deps.get
 - **Developer Tools**: ContentExtractor, AuthChecker, OptionBuilder, DebugMode, AuthManager
 - **Smart Configuration**: Environment-aware defaults and preset configurations
 
-### 🎉 **v0.5.0 Milestone: 95%+ Feature Parity with Python SDK**
+### 🎉 **v0.4.0 Milestone: 95%+ Feature Parity with Python SDK**
 
 All three critical features now implemented with full test coverage!
+- MCP Tool System (infrastructure ready, awaiting CLI support)
+- Agent Definitions (fully working)
+- Permission System (fully working)
 
 ### 🔮 **Planned Features (v0.5.0+)**
 - **Telemetry Integration**: Production observability with :telemetry events
@@ -270,57 +273,57 @@ mix showcase
 # 2. Live showcase - same with real API calls (costs money)
 mix showcase --live
 
-# 3. Simple SDK MCP test - verify v0.5.0 MCP integration (FREE)
-mix run examples/v0_5_0/sdk_mcp_simple_test.exs
+# 3. Simple SDK MCP test - verify MCP integration (FREE)
+mix run examples/advanced_features/sdk_mcp_simple_test.exs
 ```
 
 ---
 
-### 🌟 v0.5.0 Features - MCP Tools (SDK MCP Servers)
+### 🌟 MCP Tools (SDK MCP Servers)
 
 **Mock Mode (FREE - No API costs):**
 ```bash
 # MCP Calculator - Tool definition and direct execution
-mix run examples/v0_4_0/mcp_calculator_tool.exs
+mix run examples/advanced_features/mcp_calculator_tool.exs
 
 # SDK MCP Simple Test - Comprehensive validation
-mix run examples/v0_5_0/sdk_mcp_simple_test.exs
+mix run examples/advanced_features/sdk_mcp_simple_test.exs
 ```
 
 **Live Mode (Real API calls - costs money):**
 ```bash
 # SDK MCP Live Demo - Real Claude using SDK tools
-MIX_ENV=test mix run.live examples/v0_5_0/sdk_mcp_live_demo.exs
+MIX_ENV=test mix run.live examples/advanced_features/sdk_mcp_live_demo.exs
 ```
 
 ---
 
-### 🤖 v0.4.0 Features - Agents & Permissions
+### 🤖 Agents & Permissions
 
 **Mock Mode (FREE):**
 ```bash
 # Agent Switching - Multi-agent workflows
-mix run examples/v0_4_0/agent_switching.exs
+mix run examples/advanced_features/agent_switching.exs
 
 # Permission Control - Security callbacks
-mix run examples/v0_4_0/permission_control.exs
+mix run examples/advanced_features/permission_control.exs
 
 # Full Feature Showcase - All three features together
-mix run examples/v0_4_0/full_feature_showcase.exs
+mix run examples/advanced_features/full_feature_showcase.exs
 ```
 
 **Live Mode (Real API calls - costs money):**
 ```bash
 # Agents Live - Real agent switching with multi-turn workflow
-MIX_ENV=test mix run.live examples/v0_4_0/agents_live.exs
+MIX_ENV=test mix run.live examples/advanced_features/agents_live.exs
 
 # Permissions Live - Real permission checks and auditing
-MIX_ENV=test mix run.live examples/v0_4_0/permissions_live.exs
+MIX_ENV=test mix run.live examples/advanced_features/permissions_live.exs
 ```
 
 ---
 
-### 🪝 v0.3.0 Features - Hooks System
+### 🪝 Hooks System
 
 **All hook examples (FREE - mock mode):**
 ```bash
@@ -404,7 +407,7 @@ Use the included test script to run entire groups of examples:
 
 # Run specific groups
 ./test_all_examples.sh getting-started  # Quick start examples
-./test_all_examples.sh mcp              # v0.5.0 MCP tools
+./test_all_examples.sh mcp              # MCP tools
 ./test_all_examples.sh agents           # v0.4.0 Agents & Permissions
 ./test_all_examples.sh hooks            # v0.3.0 Hooks system
 ./test_all_examples.sh core             # Core/basic examples
@@ -416,17 +419,17 @@ Use the included test script to run entire groups of examples:
 **Manual Group Commands:**
 
 ```bash
-# v0.5.0 MCP Tools (Mock Mode)
-for f in examples/v0_5_0/sdk_mcp_simple_test.exs examples/v0_4_0/mcp_calculator_tool.exs; do
+# MCP Tools (Mock Mode)
+for f in examples/advanced_features/sdk_mcp_simple_test.exs examples/advanced_features/mcp_calculator_tool.exs; do
   echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
 done
 
-# v0.4.0 Agents & Permissions (Mock Mode)
-for f in examples/v0_4_0/{agent_switching,permission_control,full_feature_showcase}.exs; do
+# Agents & Permissions (Mock Mode)
+for f in examples/advanced_features/{agent_switching,permission_control,full_feature_showcase}.exs; do
   echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
 done
 
-# v0.3.0 Hooks (Mock Mode)
+# Hooks (Mock Mode)
 for f in examples/hooks/*.exs; do
   echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
 done
@@ -891,7 +894,9 @@ mix run examples/hooks/complete_workflow.exs
 
 ---
 
-## MCP Tool System (v0.5.0+)
+## MCP Tool System (v0.4.0+)
+
+> **⚠️ Important:** SDK MCP servers require Claude Code CLI support (not yet available as of CLI v2.0.22). Our infrastructure is complete and will work automatically when CLI adds support. See [`docs/SDK_MCP_STATUS.md`](docs/SDK_MCP_STATUS.md) for details. Use external MCP servers for now.
 
 Create in-process MCP tools without subprocess overhead using the `deftool` macro.
 
@@ -939,12 +944,12 @@ options = Options.new(
 
 **Example:**
 ```bash
-mix run examples/v0_4_0/mcp_calculator_tool.exs
+mix run examples/advanced_features/mcp_calculator_tool.exs
 ```
 
 ---
 
-## Agent Definitions (v0.5.0+)
+## Agent Definitions (v0.4.0+)
 
 Define multiple agent profiles and switch between them at runtime.
 
@@ -997,12 +1002,12 @@ Client.set_agent(client, :researcher)
 
 **Example:**
 ```bash
-mix run examples/v0_4_0/agent_switching.exs
+mix run examples/advanced_features/agent_switching.exs
 ```
 
 ---
 
-## Permission System (v0.5.0+)
+## Permission System (v0.4.0+)
 
 Control tool execution with fine-grained permission callbacks.
 
@@ -1056,7 +1061,7 @@ Client.set_permission_mode(client, :bypass_permissions)  # Allow all
 
 **Example:**
 ```bash
-mix run examples/v0_4_0/permission_control.exs
+mix run examples/advanced_features/permission_control.exs
 ```
 
 ---

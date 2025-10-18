@@ -110,7 +110,7 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
       assert prepared["external"]["type"] == "stdio"
     end
 
-    test "Options.to_args includes mcp_servers as JSON config" do
+    test "Options.to_args does NOT include SDK servers in --mcp-config" do
       sdk_server =
         ClaudeAgentSDK.create_sdk_mcp_server(
           name: "test",
@@ -121,14 +121,60 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
       options = Options.new(mcp_servers: %{"test" => sdk_server})
       args = Options.to_args(options)
 
-      # Should have --mcp-config with JSON
+      # SDK servers should NOT be passed to CLI via --mcp-config
+      # They are handled via control protocol in Client
+      refute "--mcp-config" in args
+    end
+
+    test "Options.to_args includes external servers in --mcp-config" do
+      external_server = %{
+        type: :stdio,
+        command: "uvx",
+        args: ["mcp-server-time"]
+      }
+
+      options = Options.new(mcp_servers: %{"time" => external_server})
+      args = Options.to_args(options)
+
+      # External servers should be passed to CLI via --mcp-config
       assert "--mcp-config" in args
       config_index = Enum.find_index(args, &(&1 == "--mcp-config"))
       json_config = Enum.at(args, config_index + 1)
 
       # Should be valid JSON
       servers = Jason.decode!(json_config)
-      assert servers["test"]["type"] == "sdk"
+      assert servers["time"]["type"] == "stdio"
+      assert servers["time"]["command"] == "uvx"
+    end
+
+    test "Options.to_args includes only external servers when mixed with SDK servers" do
+      sdk_server =
+        ClaudeAgentSDK.create_sdk_mcp_server(
+          name: "sdk-server",
+          version: "1.0.0",
+          tools: []
+        )
+
+      external_server = %{
+        type: :stdio,
+        command: "test",
+        args: []
+      }
+
+      options =
+        Options.new(mcp_servers: %{"sdk" => sdk_server, "external" => external_server})
+
+      args = Options.to_args(options)
+
+      # Should have --mcp-config with only external server
+      assert "--mcp-config" in args
+      config_index = Enum.find_index(args, &(&1 == "--mcp-config"))
+      json_config = Enum.at(args, config_index + 1)
+
+      servers = Jason.decode!(json_config)
+      # Only external server should be in config
+      assert Map.has_key?(servers, "external")
+      refute Map.has_key?(servers, "sdk")
     end
   end
 

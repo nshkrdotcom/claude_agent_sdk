@@ -496,7 +496,9 @@ defmodule ClaudeAgentSDK.Client do
 
   @impl true
   def terminate(reason, %{port: port}) when is_port(port) do
-    Logger.debug("Terminating client", reason: reason)
+    if Mix.env() != :test do
+      Logger.debug("Terminating client", reason: reason)
+    end
 
     # Graceful shutdown to avoid EPIPE errors in Claude CLI
     #
@@ -516,7 +518,11 @@ defmodule ClaudeAgentSDK.Client do
       after
         200 ->
           # If CLI doesn't exit within 200ms, force close
-          Logger.debug("CLI didn't exit within timeout, forcing close")
+          # Don't log in test env - this is expected behavior when stopping quickly
+          if Mix.env() != :test do
+            Logger.debug("CLI didn't exit within timeout, forcing close")
+          end
+
           :ok
       end
 
@@ -532,7 +538,10 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   def terminate(reason, _state) do
-    Logger.debug("Terminating client (no port)", reason: reason)
+    if Mix.env() != :test do
+      Logger.debug("Terminating client (no port)", reason: reason)
+    end
+
     :ok
   end
 
@@ -595,13 +604,21 @@ defmodule ClaudeAgentSDK.Client do
             :hide
           ])
 
-        # Send initialize request
+        # Send initialize request with hooks and SDK MCP servers
         hooks_config = build_hooks_config(registry, state.options.hooks)
-        {request_id, init_json} = Protocol.encode_initialize_request(hooks_config, nil)
+        sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
+
+        {request_id, init_json} =
+          Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil)
 
         Port.command(port, init_json <> "\n")
 
-        Logger.debug("Sent initialize request", request_id: request_id)
+        if Mix.env() != :test do
+          Logger.debug("Sent initialize request",
+            request_id: request_id,
+            sdk_servers: Map.keys(sdk_mcp_info || %{})
+          )
+        end
 
         {:ok,
          %{
@@ -1048,35 +1065,24 @@ defmodule ClaudeAgentSDK.Client do
 
       "tools/list" ->
         # List all tools from registry
-        case ClaudeAgentSDK.Tool.Registry.list_tools(registry_pid) do
-          {:ok, tools} ->
-            tools_data =
-              Enum.map(tools, fn tool ->
-                %{
-                  "name" => to_string(tool.name),
-                  "description" => tool.description,
-                  "inputSchema" => tool.input_schema
-                }
-              end)
+        {:ok, tools} = ClaudeAgentSDK.Tool.Registry.list_tools(registry_pid)
 
+        tools_data =
+          Enum.map(tools, fn tool ->
             %{
-              "jsonrpc" => "2.0",
-              "id" => message_id,
-              "result" => %{
-                "tools" => tools_data
-              }
+              "name" => to_string(tool.name),
+              "description" => tool.description,
+              "inputSchema" => tool.input_schema
             }
+          end)
 
-          {:error, reason} ->
-            %{
-              "jsonrpc" => "2.0",
-              "id" => message_id,
-              "error" => %{
-                "code" => -32603,
-                "message" => "Failed to list tools: #{inspect(reason)}"
-              }
-            }
-        end
+        %{
+          "jsonrpc" => "2.0",
+          "id" => message_id,
+          "result" => %{
+            "tools" => tools_data
+          }
+        }
 
       "tools/call" ->
         # Execute tool
@@ -1129,5 +1135,31 @@ defmodule ClaudeAgentSDK.Client do
     Port.command(port, json <> "\n")
     Logger.debug("Sent SDK MCP response", request_id: request_id)
     :ok
+  end
+
+  @doc false
+  @spec build_sdk_mcp_info(%{String.t() => pid()}, map() | nil) :: map() | nil
+  defp build_sdk_mcp_info(sdk_mcp_servers, _mcp_servers_option)
+       when map_size(sdk_mcp_servers) == 0 do
+    nil
+  end
+
+  defp build_sdk_mcp_info(sdk_mcp_servers, mcp_servers_option) do
+    # Build SDK MCP server info for initialization
+    # We need to map server names to their metadata (name, version)
+    for {server_name, _registry_pid} <- sdk_mcp_servers, into: %{} do
+      # Look up server config from options to get name and version
+      case Map.get(mcp_servers_option || %{}, server_name) do
+        %{type: :sdk, name: name, version: version} ->
+          {server_name, %{"name" => name, "version" => version}}
+
+        %{type: :sdk, name: name} ->
+          {server_name, %{"name" => name, "version" => "1.0.0"}}
+
+        _ ->
+          # Fallback if config not found
+          {server_name, %{"name" => server_name, "version" => "1.0.0"}}
+      end
+    end
   end
 end

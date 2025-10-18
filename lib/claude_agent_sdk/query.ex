@@ -7,12 +7,25 @@ defmodule ClaudeAgentSDK.Query do
   resumptions) and delegating to the Process module for execution.
 
   All functions in this module return a Stream of `ClaudeAgentSDK.Message` structs.
+
+  ## SDK MCP Server Support
+
+  When SDK MCP servers are detected in options, the query automatically uses
+  the Client GenServer (which supports bidirectional control protocol) instead
+  of the simpler Process.stream approach. This is transparent to the caller -
+  you still get the same Stream interface.
   """
 
   alias ClaudeAgentSDK.{Options, Process}
+  alias ClaudeAgentSDK.Query.ClientStream
 
   @doc """
   Runs a new query with the given prompt and options.
+
+  Automatically detects if SDK MCP servers are present in options and routes
+  to the appropriate backend:
+  - SDK MCP servers present → Uses Client GenServer (bidirectional control protocol)
+  - No SDK MCP servers → Uses Process.stream (simple unidirectional streaming)
 
   ## Parameters
 
@@ -25,13 +38,25 @@ defmodule ClaudeAgentSDK.Query do
 
   ## Examples
 
+      # Simple query (no SDK MCP)
       ClaudeAgentSDK.Query.run("Write a hello world function", %ClaudeAgentSDK.Options{})
+
+      # With SDK MCP servers (auto-uses Client)
+      server = ClaudeAgentSDK.create_sdk_mcp_server(name: "math", tools: [Add])
+      options = %Options{mcp_servers: %{"math" => server}}
+      ClaudeAgentSDK.Query.run("What is 2+2?", options)
 
   """
   @spec run(String.t(), Options.t()) :: Enumerable.t(ClaudeAgentSDK.Message.t())
   def run(prompt, %Options{} = options) do
-    {args, stdin_prompt} = build_args(prompt, options)
-    Process.stream(args, options, stdin_prompt)
+    if has_sdk_mcp_servers?(options) do
+      # Use Client GenServer for SDK MCP support
+      ClientStream.stream(prompt, options)
+    else
+      # Use simple Process.stream for non-SDK-MCP queries
+      {args, stdin_prompt} = build_args(prompt, options)
+      Process.stream(args, options, stdin_prompt)
+    end
   end
 
   @doc """
@@ -102,5 +127,16 @@ defmodule ClaudeAgentSDK.Query do
     # Add --print to run non-interactively
     # The prompt needs to be passed separately since --print expects stdin input
     {["--print"] ++ Options.to_args(options), prompt}
+  end
+
+  # Check if options contain SDK MCP servers
+  @doc false
+  @spec has_sdk_mcp_servers?(Options.t()) :: boolean()
+  defp has_sdk_mcp_servers?(%Options{mcp_servers: nil}), do: false
+
+  defp has_sdk_mcp_servers?(%Options{mcp_servers: servers}) when is_map(servers) do
+    Enum.any?(servers, fn {_name, config} ->
+      is_map(config) and Map.get(config, :type) == :sdk
+    end)
   end
 end

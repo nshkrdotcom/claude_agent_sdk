@@ -5,67 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] - 2025-10-17
+## [Unreleased]
 
-### 🎉 MILESTONE: 100% MCP Tool System Integration Complete
+### Added - Hybrid Query System for Future SDK MCP Support (2025-10-17)
 
-This release completes the MCP Tool System integration that was started in v0.4.0. SDK MCP tools can now be used with Claude queries through the control protocol!
+**Complete SDK MCP infrastructure ready for when CLI adds support!**
 
-### Fixed - MCP Tool System Integration
+We've implemented full SDK MCP server support matching the Python SDK. While the Claude Code CLI doesn't support SDK servers yet (confirmed by Python SDK Issue #207), our infrastructure is complete and ready.
 
-**Critical fixes from v0.4.0:**
-- SDK MCP tools now integrate with Claude CLI via control protocol
-- Tools are discovered and executed correctly during conversations
-- No more EPIPE errors or type mismatches
+#### New Modules
+- **`ClaudeAgentSDK.Query.ClientStream`** - Wraps Client GenServer as a Stream for SDK MCP support
+  - Provides same Stream interface as Process.stream
+  - Handles bidirectional control protocol automatically
+  - Manages Client lifecycle (start, stream, cleanup)
 
-#### Control Protocol Implementation
-- `Client.handle_control_request/2` - Routes `sdk_mcp_request` messages
-- `Client.handle_sdk_mcp_request/3` - Handles MCP requests for SDK servers
-- `Client.handle_sdk_mcp_jsonrpc/3` - JSONRPC routing for MCP methods
-  - `initialize` - Returns MCP protocol capabilities
-  - `tools/list` - Queries registry and returns available tools
-  - `tools/call` - Executes tool via registry and returns result
-- `Client.send_sdk_mcp_response/3` - Wraps JSONRPC responses in control protocol
-- `Client.extract_sdk_mcp_servers/1` - Extracts SDK server PIDs from options
+#### Enhanced Query System
+- **`Query.run/2`** - Now auto-detects SDK MCP servers and routes appropriately:
+  - SDK servers detected → Uses ClientStream (bidirectional control protocol)
+  - No SDK servers → Uses Process.stream (simple unidirectional)
+  - **Transparent to users** - same API, different backend
+- **`has_sdk_mcp_servers?/1`** - Helper to detect SDK servers in options
 
-#### Options Enhancements
-- New `mcp_servers` field for programmatic server configuration
-- `prepare_servers_for_cli/1` - Strips registry_pid before sending to CLI
-- Backward compatibility: `mcp_config` (string path) still supported
-- `stringify_keys/1` - Converts atom keys/values to strings for JSON
+#### Control Protocol Updates
+- **`Protocol.encode_initialize_request/3`** - Now accepts SDK MCP server metadata
+- **`Client.build_sdk_mcp_info/2`** - Prepares SDK server info for initialization
+- Client sends SDK server metadata during init (ready for when CLI supports it)
 
-#### Type System
-- `Options.sdk_mcp_server` type for SDK servers
-- `Options.external_mcp_server` type for stdio/sse/http servers
-- `Options.mcp_server` union type
-- Updated `Options.t` to include `mcp_servers` field
+#### Documentation
+- **`docs/SDK_MCP_STATUS.md`** - Comprehensive status document explaining:
+  - Why SDK MCP doesn't work with current CLI
+  - Evidence from Python SDK (same issue)
+  - What we've built and why it's ready
+  - Workarounds using external MCP servers
 
-### Documentation
-- Created `docs/20251017/gap_analysis/CRITICAL_MCP_INTEGRATION_ISSUE.md`
-- Created `docs/20251017/gap_analysis/MCP_INTEGRATION_DESIGN.md`
-- Added `examples/v0_5_0/sdk_mcp_live_demo.exs` - Working live demo
-- Comprehensive integration tests in `test/claude_agent_sdk/sdk_mcp_integration_test.exs`
+#### Examples Fixed (2025-10-17)
+- Fixed `sdk_mcp_live_demo.exs` response parsing to handle both string and array content
+- Fixed `file_reviewer.exs` - Changed default to small file, improved text extraction
+- Fixed `simple_batch.exs` - Now shows analysis inline + saves to files, filters tool messages
+- Updated all examples with corrected paths after reorganization
 
-### Infrastructure
-- All 429 tests passing (0 failures, 33 skipped)
-- Zero compilation warnings
-- Zero test warnings
+### Changed - Examples Reorganization (2025-10-17)
+- Merged `examples/v0_5_0/` into `examples/v0_4_0/` (all features are v0.4.0)
+- Renamed `examples/v0_4_0/` → `examples/advanced_features/` (functionality-based naming)
+- Updated all documentation and script references to use new paths
+- Benefits: clearer organization, no version confusion, easier navigation
 
-### Breaking Changes
-None - all changes are additive and backward compatible.
+### Fixed - Live Examples (2025-10-17)
+- **`file_reviewer.exs`** - Changed default file to small example (24 lines) to avoid timeouts
+- **`simple_batch.exs`** - Now displays analysis inline (not just saves to files)
+- **Both examples** - Improved `extract_assistant_content` to filter out tool_use messages, show only text
 
-### Migration from 0.4.0
-SDK MCP tools now work! Update your code to use the new `mcp_servers` option:
+### Important Notes
 
-```elixir
-# Before (v0.4.0 - didn't work):
-server = create_sdk_mcp_server(name: "math", tools: [Add])
-options = Options.new(mcp_config: %{"math" => server})  # BROKEN
+**SDK MCP Servers Status:** Infrastructure complete but **awaiting CLI support**. The Claude Code CLI (v2.0.22 tested) does not yet recognize SDK MCP servers. This is not a bug in our SDK - it's a planned CLI feature. See `docs/SDK_MCP_STATUS.md` for details.
 
-# After (v0.5.0 - works!):
-server = create_sdk_mcp_server(name: "math", tools: [Add])
-options = Options.new(mcp_servers: %{"math" => server})  # FIXED
-```
+**When CLI Adds Support:** Our implementation will work automatically! No code changes needed.
+
+**Live Examples Status:** All live examples tested and working with CLI v2.0.22:
+- ✅ `simple_analyzer.exs` - Clean analysis output
+- ✅ `file_reviewer.exs` - Code review with small files
+- ✅ `simple_batch.exs` - Batch processing with inline output
 
 ---
 

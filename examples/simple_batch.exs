@@ -33,7 +33,8 @@ defmodule SimpleBatch do
     results =
       Enum.with_index(files, 1)
       |> Enum.map(fn {file, index} ->
-        IO.puts("#{index}/#{length(files)}: #{Path.basename(file)}")
+        IO.puts("\n#{index}/#{length(files)}: #{Path.basename(file)}")
+        IO.puts(String.duplicate("─", 60))
         process_file(file, operation, output_dir)
       end)
 
@@ -164,16 +165,35 @@ defmodule SimpleBatch do
   end
 
   defp extract_assistant_content(stream) do
-    stream
-    |> Stream.filter(&(&1.type == :assistant))
-    |> Stream.map(fn msg ->
-      case msg.data.message do
-        %{"content" => text} when is_binary(text) -> text
-        %{"content" => [%{"text" => text}]} -> text
-        other -> inspect(other)
-      end
-    end)
-    |> Enum.join("\n")
+    text_content =
+      stream
+      |> Stream.filter(&(&1.type == :assistant))
+      |> Stream.flat_map(fn msg ->
+        content = msg.data.message["content"]
+
+        cond do
+          is_binary(content) ->
+            # Direct text content
+            [content]
+
+          is_list(content) ->
+            # Array of content blocks - extract only text blocks
+            content
+            |> Enum.filter(&(is_map(&1) and Map.get(&1, "type") == "text"))
+            |> Enum.map(&Map.get(&1, "text", ""))
+
+          true ->
+            []
+        end
+      end)
+      |> Enum.join("\n")
+
+    # Print to console
+    IO.puts(text_content)
+    IO.puts("")
+
+    # Return for file saving
+    text_content
   end
 
   defp generate_summary(results, output_dir) do

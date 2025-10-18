@@ -4,7 +4,7 @@
 # Demonstrates creating in-process MCP tools using the deftool macro
 #
 # Usage:
-#   mix run examples/v0_4_0/mcp_calculator_tool.exs
+#   mix run examples/advanced_features/mcp_calculator_tool.exs
 
 defmodule CalculatorTools do
   @moduledoc """

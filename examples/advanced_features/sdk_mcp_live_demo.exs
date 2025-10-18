@@ -3,7 +3,7 @@
 # Demonstrates SDK MCP tools with actual Claude CLI integration
 #
 # Usage:
-#   MIX_ENV=test mix run.live examples/v0_5_0/sdk_mcp_live_demo.exs
+#   MIX_ENV=test mix run.live examples/advanced_features/sdk_mcp_live_demo.exs
 #
 # Prerequisites:
 #   - Claude CLI installed and authenticated (claude login)
@@ -75,7 +75,7 @@ if Application.get_env(:claude_agent_sdk, :use_mock, false) do
   IO.puts("\n🎭 This is a LIVE example - it requires real API calls")
   IO.puts("   Mock mode cannot demonstrate SDK MCP tool integration properly\n")
   IO.puts("💡 To run this example:")
-  IO.puts("   MIX_ENV=test mix run.live examples/v0_5_0/sdk_mcp_live_demo.exs\n")
+  IO.puts("   MIX_ENV=test mix run.live examples/advanced_features/sdk_mcp_live_demo.exs\n")
   IO.puts("   Prerequisites:")
   IO.puts("   - Claude CLI installed: claude --version")
   IO.puts("   - Authenticated: claude login\n")
@@ -133,9 +133,29 @@ try do
   |> Enum.each(fn msg ->
     case msg do
       %{type: :assistant, data: %{message: message}} ->
-        content = message["content"] || []
+        content = message["content"]
 
-        for block <- content do
+        # Handle both string content and array of content blocks
+        blocks =
+          cond do
+            is_binary(content) ->
+              # Plain text response - wrap in text block
+              [%{"type" => "text", "text" => content}]
+
+            is_list(content) ->
+              # Array of content blocks
+              content
+
+            is_nil(content) ->
+              []
+
+            true ->
+              # Unknown format
+              IO.puts("⚠️  Unexpected content format: #{inspect(content)}\n")
+              []
+          end
+
+        for block <- blocks do
           case block do
             %{"type" => "text", "text" => text} ->
               IO.puts("Claude: #{text}\n")

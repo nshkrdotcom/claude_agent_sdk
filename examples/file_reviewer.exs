@@ -82,11 +82,22 @@ defmodule FileReviewer do
 
     messages
     |> Enum.filter(&(&1.type == :assistant))
-    |> Enum.map(fn msg ->
-      case msg.data.message do
-        %{"content" => text} when is_binary(text) -> text
-        %{"content" => [%{"text" => text}]} -> text
-        other -> inspect(other)
+    |> Enum.flat_map(fn msg ->
+      content = msg.data.message["content"]
+
+      cond do
+        is_binary(content) ->
+          # Direct text content
+          [content]
+
+        is_list(content) ->
+          # Array of content blocks - extract only text blocks (skip tool_use)
+          content
+          |> Enum.filter(&(is_map(&1) and Map.get(&1, "type") == "text"))
+          |> Enum.map(&Map.get(&1, "text", ""))
+
+        true ->
+          []
       end
     end)
     |> Enum.join("\n")
@@ -99,8 +110,8 @@ case System.argv() do
     FileReviewer.review_file(file_path)
 
   [] ->
-    # Default to reviewing the main SDK file
-    FileReviewer.review_file("lib/claude_agent_sdk.ex")
+    # Default to reviewing a small example file
+    FileReviewer.review_file("examples/factorial_example.exs")
 
   _ ->
     IO.puts("Usage: mix run examples/file_reviewer.exs [file_path]")

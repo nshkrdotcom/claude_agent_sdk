@@ -4,7 +4,7 @@
 # Demonstrates fine-grained tool permission control
 #
 # Usage:
-#   mix run examples/v0_4_0/permission_control.exs
+#   mix run examples/advanced_features/permission_control.exs
 
 alias ClaudeAgentSDK.{Options, Client}
 alias ClaudeAgentSDK.Permission.{Context, Result}

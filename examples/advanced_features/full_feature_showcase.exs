@@ -4,7 +4,7 @@
 # Demonstrates MCP tools, agents, and permissions working together
 #
 # Usage:
-#   mix run examples/v0_4_0/full_feature_showcase.exs
+#   mix run examples/advanced_features/full_feature_showcase.exs
 
 alias ClaudeAgentSDK.{Agent, Options}
 alias ClaudeAgentSDK.Permission.Result

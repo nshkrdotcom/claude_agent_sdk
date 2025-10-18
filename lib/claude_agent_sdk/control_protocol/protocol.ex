@@ -35,14 +35,15 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   @type message_type :: :control_request | :control_response | :sdk_message
 
   @doc """
-  Encodes an initialize request with hooks configuration.
+  Encodes an initialize request with hooks configuration and SDK MCP servers.
 
-  Sends hooks configuration to CLI during initialization so it knows
-  which callbacks to invoke.
+  Sends hooks configuration and SDK MCP server info to CLI during initialization
+  so it knows which callbacks to invoke and which SDK servers are available.
 
   ## Parameters
 
   - `hooks_config` - Hooks configuration map (from build_hooks_config)
+  - `sdk_mcp_servers` - Map of server_name => server_info for SDK servers (optional)
   - `request_id` - Optional request ID (generated if nil)
 
   ## Returns
@@ -57,20 +58,34 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
         ]
       }
 
-      {id, json} = Protocol.encode_initialize_request(hooks, nil)
+      sdk_servers = %{
+        "math-tools" => %{"name" => "math-tools", "version" => "1.0.0"}
+      }
+
+      {id, json} = Protocol.encode_initialize_request(hooks, sdk_servers, nil)
   """
-  @spec encode_initialize_request(map() | nil, request_id() | nil) ::
+  @spec encode_initialize_request(map() | nil, map() | nil, request_id() | nil) ::
           {request_id(), String.t()}
-  def encode_initialize_request(hooks_config, request_id \\ nil) do
+  def encode_initialize_request(hooks_config, sdk_mcp_servers \\ nil, request_id \\ nil) do
     req_id = request_id || generate_request_id()
+
+    request_data = %{
+      "subtype" => "initialize",
+      "hooks" => hooks_config
+    }
+
+    # Add SDK MCP servers if provided
+    request_data =
+      if sdk_mcp_servers && map_size(sdk_mcp_servers) > 0 do
+        Map.put(request_data, "sdkMcpServers", sdk_mcp_servers)
+      else
+        request_data
+      end
 
     request = %{
       "type" => "control_request",
       "request_id" => req_id,
-      "request" => %{
-        "subtype" => "initialize",
-        "hooks" => hooks_config
-      }
+      "request" => request_data
     }
 
     json = Jason.encode!(request)
