@@ -43,7 +43,12 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp use_mock? do
-    Application.get_env(:claude_agent_sdk, :use_mock, false)
+    # Check LIVE_MODE environment variable first (set by mix run.live)
+    # This overrides the Application config (even when MIX_ENV=test)
+    case System.get_env("LIVE_MODE") do
+      "true" -> false
+      _ -> Application.get_env(:claude_agent_sdk, :use_mock, false)
+    end
   end
 
   defp stream_real(args, options, stdin_input) do

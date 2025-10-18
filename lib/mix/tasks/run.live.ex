@@ -40,11 +40,12 @@ defmodule Mix.Tasks.Run.Live do
           System.halt(1)
         end
 
-        # Mark that we're running in live mode
-        System.put_env("LIVE_TESTS", "true")
+        # Mark that we're running in live mode (checked by Process.use_mock?)
+        System.put_env("LIVE_MODE", "true")
 
         # Configure the application for live API
-        Application.put_env(:claude_agent_sdk, :use_mock, false)
+        # Note: This must be done BEFORE the script runs
+        Application.put_env(:claude_agent_sdk, :use_mock, false, persistent: true)
 
         IO.puts("🔴 Running script with LIVE API calls...")
         IO.puts("⚠️  Warning: This will make real API calls and may incur costs!")

@@ -267,9 +267,20 @@ defmodule ClaudeAgentSDK.Options do
     cond do
       # Priority 1: mcp_servers (new programmatic API)
       options.mcp_servers != nil and map_size(options.mcp_servers) > 0 ->
-        servers_for_cli = prepare_servers_for_cli(options.mcp_servers)
-        json_config = Jason.encode!(servers_for_cli)
-        args ++ ["--mcp-config", json_config]
+        # Filter out SDK servers - they're handled via control protocol, not CLI args
+        external_servers_only =
+          options.mcp_servers
+          |> Enum.filter(fn {_name, config} -> config.type != :sdk end)
+          |> Map.new()
+
+        if map_size(external_servers_only) > 0 do
+          servers_for_cli = prepare_servers_for_cli(external_servers_only)
+          json_config = Jason.encode!(servers_for_cli)
+          args ++ ["--mcp-config", json_config]
+        else
+          # Only SDK servers - nothing to pass to CLI
+          args
+        end
 
       # Priority 2: mcp_config file path (backward compat)
       is_binary(options.mcp_config) ->
