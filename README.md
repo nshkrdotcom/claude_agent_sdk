@@ -287,10 +287,9 @@ mix run examples/v0_4_0/mcp_calculator_tool.exs
 mix run examples/v0_5_0/sdk_mcp_simple_test.exs
 ```
 
-**Live Mode (⚠️ Experimental - needs testing):**
+**Live Mode (Real API calls - costs money):**
 ```bash
 # SDK MCP Live Demo - Real Claude using SDK tools
-# Note: Not yet fully tested with real CLI
 MIX_ENV=test mix run.live examples/v0_5_0/sdk_mcp_live_demo.exs
 ```
 
@@ -310,16 +309,13 @@ mix run examples/v0_4_0/permission_control.exs
 mix run examples/v0_4_0/full_feature_showcase.exs
 ```
 
-**Live Mode (⚠️ Experimental - known issues):**
+**Live Mode (Real API calls - costs money):**
 ```bash
-# Agents Live - Real agent switching (⚠️ CLI exits with error - needs fix)
-# MIX_ENV=test mix run.live examples/v0_4_0/agents_live.exs
+# Agents Live - Real agent switching with multi-turn workflow
+MIX_ENV=test mix run.live examples/v0_4_0/agents_live.exs
 
-# Permissions Live - Real permission checks (⚠️ Hangs - needs rewrite)
-# MIX_ENV=test mix run.live examples/v0_4_0/permissions_live.exs
-
-# Note: These examples have bugs and need fixes for v0.6.0
-# See docs/20251017/LIVE_EXAMPLES_STATUS.md for details
+# Permissions Live - Real permission checks and auditing
+MIX_ENV=test mix run.live examples/v0_4_0/permissions_live.exs
 ```
 
 ---
