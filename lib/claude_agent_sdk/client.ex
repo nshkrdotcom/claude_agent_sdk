@@ -289,12 +289,13 @@ defmodule ClaudeAgentSDK.Client do
   def init(%Options{} = options) do
     # Validate hooks and permission callback configuration before starting
     with :ok <- validate_hooks(options.hooks),
-         :ok <- validate_permission_callback(options.can_use_tool) do
+         :ok <- validate_permission_callback(options.can_use_tool),
+         {:ok, updated_options} <- apply_agent_settings(options) do
       # Initialize state without starting CLI yet
       # CLI will be started in handle_continue
       state = %{
         port: nil,
-        options: options,
+        options: updated_options,
         registry: Registry.new(),
         subscribers: [],
         pending_requests: %{},
@@ -305,6 +306,12 @@ defmodule ClaudeAgentSDK.Client do
 
       {:ok, state, {:continue, :start_cli}}
     else
+      {:error, {:agent_not_found, _} = reason} ->
+        {:stop, {:agents_validation_failed, reason}}
+
+      {:error, {:invalid_agent, _, _} = reason} ->
+        {:stop, {:agents_validation_failed, reason}}
+
       {:error, reason} ->
         {:stop, {:validation_failed, reason}}
     end
@@ -369,9 +376,17 @@ defmodule ClaudeAgentSDK.Client do
     else
       # Check if agent exists in the map
       if Map.has_key?(agents, agent_name) do
-        # Update options with new active agent (just the name)
+        # Update options with new active agent
         new_options = %{state.options | agent: agent_name}
-        {:reply, :ok, %{state | options: new_options}}
+
+        # Apply the agent's settings to options
+        case apply_agent_settings(new_options) do
+          {:ok, updated_options} ->
+            {:reply, :ok, %{state | options: updated_options}}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
       else
         {:reply, {:error, :agent_not_found}, state}
       end
@@ -379,9 +394,17 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   def handle_call(:get_agent, _from, state) do
-    case state.options.agent do
-      nil -> {:reply, {:error, :no_agent_configured}, state}
-      agent_name when is_atom(agent_name) -> {:reply, {:ok, agent_name}, state}
+    agents = state.options.agents || %{}
+
+    case {agents, state.options.agent} do
+      {agents, _} when agents == %{} ->
+        {:reply, {:error, :no_agents_configured}, state}
+
+      {_, nil} ->
+        {:reply, {:error, :no_agent_configured}, state}
+
+      {_, agent_name} when is_atom(agent_name) ->
+        {:reply, {:ok, agent_name}, state}
     end
   end
 
@@ -497,6 +520,37 @@ defmodule ClaudeAgentSDK.Client do
   defp validate_permission_callback(callback) do
     ClaudeAgentSDK.Permission.validate_callback(callback)
   end
+
+  # Apply agent settings to options
+  defp apply_agent_settings(%Options{agent: nil} = options), do: {:ok, options}
+
+  defp apply_agent_settings(%Options{agent: agent_name, agents: agents} = options)
+       when is_map(agents) and is_atom(agent_name) do
+    case Map.get(agents, agent_name) do
+      nil ->
+        {:error, {:agent_not_found, agent_name}}
+
+      agent ->
+        # Validate the agent
+        case ClaudeAgentSDK.Agent.validate(agent) do
+          :ok ->
+            # Apply agent's settings to options
+            updated_options = %{
+              options
+              | system_prompt: agent.prompt,
+                allowed_tools: agent.allowed_tools,
+                model: agent.model
+            }
+
+            {:ok, updated_options}
+
+          {:error, reason} ->
+            {:error, {:invalid_agent, agent_name, reason}}
+        end
+    end
+  end
+
+  defp apply_agent_settings(options), do: {:ok, options}
 
   defp start_cli_process(state) do
     # Register hooks and build configuration

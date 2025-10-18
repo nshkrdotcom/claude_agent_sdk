@@ -1,3 +1,45 @@
+defmodule ClaudeAgentSDK.ToolTest.TestTools do
+  use ClaudeAgentSDK.Tool
+
+  deftool :add,
+          "Add two numbers",
+          %{
+            type: "object",
+            properties: %{
+              a: %{type: "number"},
+              b: %{type: "number"}
+            },
+            required: ["a", "b"]
+          } do
+    def execute(%{"a" => a, "b" => b}) do
+      result = a + b
+      {:ok, %{"content" => [%{"type" => "text", "text" => "#{a} + #{b} = #{result}"}]}}
+    end
+  end
+
+  deftool :greet,
+          "Greets a user",
+          %{
+            type: "object",
+            properties: %{
+              name: %{type: "string"}
+            },
+            required: ["name"]
+          } do
+    def execute(%{"name" => name}) do
+      {:ok, %{"content" => [%{"type" => "text", "text" => "Hello, #{name}!"}]}}
+    end
+  end
+
+  deftool :error_tool,
+          "Always fails",
+          %{type: "object"} do
+    def execute(_args) do
+      {:error, "Expected error"}
+    end
+  end
+end
+
 defmodule ClaudeAgentSDK.ToolTest do
   @moduledoc """
   Unit tests for the Tool system.
@@ -8,50 +50,9 @@ defmodule ClaudeAgentSDK.ToolTest do
   use ExUnit.Case, async: true
 
   alias ClaudeAgentSDK.Tool
+  alias ClaudeAgentSDK.ToolTest.TestTools
 
   describe "deftool macro" do
-    defmodule TestTools do
-      use ClaudeAgentSDK.Tool
-
-      deftool :add,
-              "Add two numbers",
-              %{
-                type: "object",
-                properties: %{
-                  a: %{type: "number"},
-                  b: %{type: "number"}
-                },
-                required: ["a", "b"]
-              } do
-        def execute(%{"a" => a, "b" => b}) do
-          result = a + b
-          {:ok, %{"content" => [%{"type" => "text", "text" => "#{a} + #{b} = #{result}"}]}}
-        end
-      end
-
-      deftool :greet,
-              "Greets a user",
-              %{
-                type: "object",
-                properties: %{
-                  name: %{type: "string"}
-                },
-                required: ["name"]
-              } do
-        def execute(%{"name" => name}) do
-          {:ok, %{"content" => [%{"type" => "text", "text" => "Hello, #{name}!"}]}}
-        end
-      end
-
-      deftool :error_tool,
-              "Always fails",
-              %{type: "object"} do
-        def execute(_args) do
-          {:error, "Expected error"}
-        end
-      end
-    end
-
     test "defines tool with correct metadata" do
       assert function_exported?(TestTools.Add, :__tool_metadata__, 0)
 
@@ -93,6 +94,13 @@ defmodule ClaudeAgentSDK.ToolTest do
     test "tools are discoverable" do
       # The Tool module should be able to list all tools defined in a module
       tools = Tool.list_tools(TestTools)
+
+      IO.inspect(tools, label: "DEBUG: tools")
+      IO.inspect(function_exported?(TestTools, :__tools__, 0), label: "DEBUG: has __tools__?")
+
+      if function_exported?(TestTools, :__tools__, 0) do
+        IO.inspect(TestTools.__tools__(), label: "DEBUG: TestTools.__tools__()")
+      end
 
       assert length(tools) == 3
       assert :add in Enum.map(tools, & &1.name)

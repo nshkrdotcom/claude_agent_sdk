@@ -95,63 +95,50 @@ defmodule ClaudeAgentSDK.Tool do
         end
       end
   """
-  defmacro deftool(name, description, input_schema, do: _block) when is_atom(name) do
+  defmacro deftool(name, description, input_schema, do: block) when is_atom(name) do
     # Generate module name from tool name (e.g., :my_tool -> MyTool)
     module_name = name |> Atom.to_string() |> Macro.camelize() |> String.to_atom()
 
     quote location: :keep do
-      # Build the full module name at compile time
-      tool_module = Module.concat(__MODULE__, unquote(module_name))
-
-      # Store tool metadata for discovery
-      @tools %{
+      # Register tool metadata for discovery BEFORE defining the module
+      Module.put_attribute(__MODULE__, :tools, %{
         name: unquote(name),
         description: unquote(description),
-        input_schema: unquote(Macro.escape(input_schema)),
-        module: tool_module
-      }
+        input_schema: unquote(input_schema),
+        module: Module.concat(__MODULE__, unquote(module_name))
+      })
 
-      # Bind variables for use in nested module
-      tool_name_val = unquote(name)
-      desc = unquote(description)
-      schema = unquote(Macro.escape(input_schema))
+      # Define the nested tool module using defmodule
+      defmodule Module.concat(__MODULE__, unquote(module_name)) do
+        @moduledoc """
+        Tool: #{unquote(description)}
 
-      # Define the nested tool module using fully qualified name
-      Module.create(
-        tool_module,
-        quote do
-          @moduledoc """
-          Tool: #{unquote(desc)}
+        ## Input Schema
 
-          ## Input Schema
+        ```elixir
+        #{inspect(unquote(input_schema), pretty: true)}
+        ```
+        """
 
-          ```elixir
-          #{inspect(unquote(schema), pretty: true)}
-          ```
-          """
+        @tool_name unquote(name)
+        @tool_description unquote(description)
+        @tool_input_schema unquote(input_schema)
 
-          @tool_name unquote(tool_name_val)
-          @tool_description unquote(desc)
-          @tool_input_schema unquote(schema)
+        @doc """
+        Returns metadata about this tool.
+        """
+        def __tool_metadata__ do
+          %{
+            name: @tool_name,
+            description: @tool_description,
+            input_schema: @tool_input_schema,
+            module: __MODULE__
+          }
+        end
 
-          @doc """
-          Returns metadata about this tool.
-          """
-          def __tool_metadata__ do
-            %{
-              name: @tool_name,
-              description: @tool_description,
-              input_schema: @tool_input_schema,
-              module: __MODULE__
-            }
-          end
-
-          # TODO: Inject the execute function from the do block
-          # This requires AST manipulation for proper implementation
-          # unquote(block)
-        end,
-        Macro.Env.location(__ENV__)
-      )
+        # Inject the execute function from the do block
+        unquote(block)
+      end
     end
   end
 

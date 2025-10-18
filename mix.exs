@@ -8,6 +8,7 @@ defmodule ClaudeAgentSdk.MixProject do
       app: :claude_agent_sdk,
       version: @version,
       elixir: "~> 1.14",
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: "An Elixir SDK for Claude Code - Build AI-powered CLI tools with Claude",
@@ -27,6 +28,9 @@ defmodule ClaudeAgentSdk.MixProject do
       extra_applications: [:logger]
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
     [

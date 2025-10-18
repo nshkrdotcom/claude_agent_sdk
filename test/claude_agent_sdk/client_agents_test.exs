@@ -60,7 +60,7 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
 
       # Verify the state was updated
       state = :sys.get_state(client)
-      assert state.current_agent == :writer
+      assert state.options.agent == :writer
 
       Client.stop(client)
     end
@@ -193,17 +193,17 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
       # Switch to writer
       assert :ok = Client.set_agent(client, :writer)
       state1 = :sys.get_state(client)
-      assert state1.current_agent == :writer
+      assert state1.options.agent == :writer
 
       # Switch to researcher
       assert :ok = Client.set_agent(client, :researcher)
       state2 = :sys.get_state(client)
-      assert state2.current_agent == :researcher
+      assert state2.options.agent == :researcher
 
       # Switch back to coder
       assert :ok = Client.set_agent(client, :coder)
       state3 = :sys.get_state(client)
-      assert state3.current_agent == :coder
+      assert state3.options.agent == :coder
 
       Client.stop(client)
     end
@@ -341,6 +341,8 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
     end
 
     test "fails to start with invalid agent configuration" do
+      Process.flag(:trap_exit, true)
+
       invalid_agent =
         Agent.new(
           # Invalid
@@ -354,18 +356,21 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
           agent: :invalid
         )
 
-      assert {:error, {:agents_validation_failed, _reason}} = Client.start_link(options)
+      {:error, {:agents_validation_failed, {:invalid_agent, :invalid, :description_required}}} =
+        Client.start_link(options)
     end
 
     test "fails to start when active agent not in agents map", %{code_agent: code_agent} do
+      Process.flag(:trap_exit, true)
+
       options =
         Options.new(
           agents: %{coder: code_agent},
           agent: :nonexistent
         )
 
-      assert {:error, {:agents_validation_failed, {:agent_not_found, :nonexistent}}} =
-               Client.start_link(options)
+      {:error, {:agents_validation_failed, {:agent_not_found, :nonexistent}}} =
+        Client.start_link(options)
     end
 
     test "starts successfully with nil agents and nil agent" do
