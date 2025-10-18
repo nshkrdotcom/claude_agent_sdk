@@ -11,6 +11,8 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
 
   use ExUnit.Case, async: false
 
+  @moduletag :requires_cli
+
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.Permission.Result
 

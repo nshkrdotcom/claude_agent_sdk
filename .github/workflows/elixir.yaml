@@ -54,7 +54,7 @@ jobs:
     #   run: mix credo --strict
 
     - name: Run tests
-      run: mix test
+      run: mix test --exclude requires_cli
       env:
         SHELL: /bin/bash
         MIX_ENV: test

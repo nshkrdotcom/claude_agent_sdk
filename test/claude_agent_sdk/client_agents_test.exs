@@ -7,6 +7,8 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
   """
   use ExUnit.Case, async: false
 
+  @moduletag :requires_cli
+
   alias ClaudeAgentSDK.{Agent, Client, Options}
 
   setup do

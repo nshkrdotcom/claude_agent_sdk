@@ -5,6 +5,7 @@ defmodule ClaudeAgentSDK.ClientTest do
   alias ClaudeAgentSDK.Hooks.{Matcher, Output}
 
   @moduletag :client
+  @moduletag :requires_cli
 
   describe "start_link/1" do
     test "starts client with valid options" do
