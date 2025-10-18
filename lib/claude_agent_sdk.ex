@@ -179,6 +179,9 @@ defmodule ClaudeAgentSDK do
 
     # Register all tools
     for tool_module <- tools do
+      # Ensure module is loaded before checking exports
+      Code.ensure_loaded!(tool_module)
+
       if function_exported?(tool_module, :__tool_metadata__, 0) do
         metadata = tool_module.__tool_metadata__()
         ClaudeAgentSDK.Tool.Registry.register_tool(registry_pid, metadata)

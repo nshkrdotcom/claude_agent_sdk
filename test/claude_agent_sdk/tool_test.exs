@@ -95,13 +95,6 @@ defmodule ClaudeAgentSDK.ToolTest do
       # The Tool module should be able to list all tools defined in a module
       tools = Tool.list_tools(TestTools)
 
-      IO.inspect(tools, label: "DEBUG: tools")
-      IO.inspect(function_exported?(TestTools, :__tools__, 0), label: "DEBUG: has __tools__?")
-
-      if function_exported?(TestTools, :__tools__, 0) do
-        IO.inspect(TestTools.__tools__(), label: "DEBUG: TestTools.__tools__()")
-      end
-
       assert length(tools) == 3
       assert :add in Enum.map(tools, & &1.name)
       assert :greet in Enum.map(tools, & &1.name)
