@@ -13,7 +13,8 @@ defmodule ClaudeAgentSDK.Options do
   - `output_format` - Output format (`:text`, `:json`, or `:stream_json`)
   - `allowed_tools` - List of allowed tool names (list of strings)
   - `disallowed_tools` - List of disallowed tool names (list of strings)
-  - `mcp_config` - Path to MCP configuration file (string)
+  - `mcp_servers` - Map of MCP server configurations (SDK and external servers) (v0.5.0+)
+  - `mcp_config` - Path to MCP configuration file (string, backward compat)
   - `permission_prompt_tool` - Tool for permission prompts (string)
   - `permission_mode` - Permission handling mode (see `t:permission_mode/0`)
   - `cwd` - Working directory for the CLI (string)
@@ -50,6 +51,10 @@ defmodule ClaudeAgentSDK.Options do
     :output_format,
     :allowed_tools,
     :disallowed_tools,
+    # MCP Configuration (v0.5.0+)
+    # Programmatic MCP server definitions (SDK and external)
+    :mcp_servers,
+    # File path to MCP config (backward compat with earlier versions)
     :mcp_config,
     :permission_prompt_tool,
     :permission_mode,
@@ -91,6 +96,30 @@ defmodule ClaudeAgentSDK.Options do
   @type agent_name :: atom()
   @type agent_definition :: ClaudeAgentSDK.Agent.t()
 
+  @typedoc """
+  SDK MCP server configuration (in-process)
+  """
+  @type sdk_mcp_server :: %{
+          type: :sdk,
+          name: String.t(),
+          version: String.t(),
+          registry_pid: pid()
+        }
+
+  @typedoc """
+  External MCP server configuration (subprocess)
+  """
+  @type external_mcp_server :: %{
+          type: :stdio | :sse | :http,
+          command: String.t(),
+          args: [String.t()]
+        }
+
+  @typedoc """
+  MCP server (either SDK or external)
+  """
+  @type mcp_server :: sdk_mcp_server() | external_mcp_server()
+
   @type t :: %__MODULE__{
           max_turns: integer() | nil,
           system_prompt: String.t() | nil,
@@ -98,6 +127,7 @@ defmodule ClaudeAgentSDK.Options do
           output_format: output_format() | nil,
           allowed_tools: [String.t()] | nil,
           disallowed_tools: [String.t()] | nil,
+          mcp_servers: %{String.t() => mcp_server()} | nil,
           mcp_config: String.t() | nil,
           permission_prompt_tool: String.t() | nil,
           permission_mode: permission_mode() | nil,
@@ -174,7 +204,7 @@ defmodule ClaudeAgentSDK.Options do
     |> add_append_system_prompt_args(options)
     |> add_allowed_tools_args(options)
     |> add_disallowed_tools_args(options)
-    |> add_mcp_config_args(options)
+    |> add_mcp_args(options)
     |> add_permission_prompt_tool_args(options)
     |> add_permission_mode_args(options)
     |> add_verbose_args(options)
@@ -232,8 +262,68 @@ defmodule ClaudeAgentSDK.Options do
   defp add_disallowed_tools_args(args, %{disallowed_tools: tools}),
     do: args ++ ["--disallowedTools", Enum.join(tools, " ")]
 
-  defp add_mcp_config_args(args, %{mcp_config: nil}), do: args
-  defp add_mcp_config_args(args, %{mcp_config: config}), do: args ++ ["--mcp-config", config]
+  # MCP Configuration - handles both mcp_servers (v0.5.0+) and mcp_config (backward compat)
+  defp add_mcp_args(args, options) do
+    cond do
+      # Priority 1: mcp_servers (new programmatic API)
+      options.mcp_servers != nil and map_size(options.mcp_servers) > 0 ->
+        servers_for_cli = prepare_servers_for_cli(options.mcp_servers)
+        json_config = Jason.encode!(servers_for_cli)
+        args ++ ["--mcp-config", json_config]
+
+      # Priority 2: mcp_config file path (backward compat)
+      is_binary(options.mcp_config) ->
+        args ++ ["--mcp-config", options.mcp_config]
+
+      # No MCP configuration
+      true ->
+        args
+    end
+  end
+
+  @doc """
+  Prepares MCP server configurations for the Claude CLI.
+
+  SDK servers: Strips the registry_pid field (CLI doesn't need it)
+  External servers: Passed through as-is
+
+  ## Parameters
+
+  - `servers` - Map of server name to server configuration
+
+  ## Returns
+
+  Map ready to be JSON-encoded for --mcp-config argument
+  """
+  @spec prepare_servers_for_cli(%{String.t() => mcp_server()}) :: %{String.t() => map()}
+  def prepare_servers_for_cli(servers) do
+    for {name, config} <- servers, into: %{} do
+      case config do
+        %{type: :sdk} = sdk_server ->
+          # Strip registry_pid - CLI doesn't need internal PID
+          {name,
+           %{
+             "type" => "sdk",
+             "name" => sdk_server.name,
+             "version" => sdk_server.version || "1.0.0"
+           }}
+
+        external_server ->
+          # Convert external server to string keys for JSON
+          {name, stringify_keys(external_server)}
+      end
+    end
+  end
+
+  # Helper to convert atom keys and values to strings for JSON serialization
+  defp stringify_keys(map) when is_map(map) do
+    for {k, v} <- map, into: %{} do
+      {to_string(k), stringify_value(v)}
+    end
+  end
+
+  defp stringify_value(v) when is_atom(v) and not is_nil(v), do: Atom.to_string(v)
+  defp stringify_value(v), do: v
 
   defp add_permission_prompt_tool_args(args, %{permission_prompt_tool: nil}), do: args
 
