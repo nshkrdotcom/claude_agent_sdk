@@ -195,29 +195,118 @@ defmodule ClaudeAgentSDK.Client do
     GenServer.stop(client, :normal, 5000)
   end
 
+  @doc """
+  Sets the permission mode at runtime.
+
+  Changes how tool permissions are handled for subsequent tool uses.
+
+  ## Parameters
+
+  - `client` - Client PID
+  - `mode` - Permission mode atom (`:default`, `:accept_edits`, `:plan`, `:bypass_permissions`)
+
+  ## Returns
+
+  - `:ok` - Successfully changed mode
+  - `{:error, :invalid_permission_mode}` - Invalid mode provided
+
+  ## Examples
+
+      Client.set_permission_mode(pid, :plan)
+      Client.set_permission_mode(pid, :accept_edits)
+      Client.set_permission_mode(pid, :bypass_permissions)
+  """
+  @spec set_permission_mode(pid(), ClaudeAgentSDK.Permission.permission_mode()) ::
+          :ok | {:error, :invalid_permission_mode}
+  def set_permission_mode(client, mode) when is_pid(client) do
+    GenServer.call(client, {:set_permission_mode, mode})
+  end
+
+  @doc """
+  Switches to a different agent configuration.
+
+  ## Parameters
+
+    * `client` - The client PID
+    * `agent_name` - The name of the agent to switch to (atom)
+
+  ## Returns
+
+  `:ok` or `{:error, reason}`
+
+  ## Examples
+
+      Client.set_agent(client, :researcher)
+  """
+  @spec set_agent(pid(), atom()) :: :ok | {:error, term()}
+  def set_agent(client, agent_name) when is_pid(client) and is_atom(agent_name) do
+    GenServer.call(client, {:set_agent, agent_name})
+  end
+
+  @doc """
+  Gets the currently active agent.
+
+  ## Parameters
+
+    * `client` - The client PID
+
+  ## Returns
+
+  `{:ok, agent_name}` or `{:error, reason}`
+
+  ## Examples
+
+      {:ok, :coder} = Client.get_agent(client)
+  """
+  @spec get_agent(pid()) :: {:ok, atom()} | {:error, term()}
+  def get_agent(client) when is_pid(client) do
+    GenServer.call(client, :get_agent)
+  end
+
+  @doc """
+  Gets the list of available agent names.
+
+  ## Parameters
+
+    * `client` - The client PID
+
+  ## Returns
+
+  `{:ok, [agent_name]}` or `{:error, reason}`
+
+  ## Examples
+
+      {:ok, [:coder, :researcher]} = Client.get_available_agents(client)
+  """
+  @spec get_available_agents(pid()) :: {:ok, [atom()]} | {:error, term()}
+  def get_available_agents(client) when is_pid(client) do
+    GenServer.call(client, :get_available_agents)
+  end
+
   ## GenServer Callbacks
 
   @impl true
   def init(%Options{} = options) do
-    # Validate hooks configuration before starting
-    case validate_hooks(options.hooks) do
-      :ok ->
-        # Initialize state without starting CLI yet
-        # CLI will be started in handle_continue
-        state = %{
-          port: nil,
-          options: options,
-          registry: Registry.new(),
-          subscribers: [],
-          pending_requests: %{},
-          initialized: false,
-          buffer: ""
-        }
+    # Validate hooks and permission callback configuration before starting
+    with :ok <- validate_hooks(options.hooks),
+         :ok <- validate_permission_callback(options.can_use_tool) do
+      # Initialize state without starting CLI yet
+      # CLI will be started in handle_continue
+      state = %{
+        port: nil,
+        options: options,
+        registry: Registry.new(),
+        subscribers: [],
+        pending_requests: %{},
+        initialized: false,
+        buffer: "",
+        session_id: nil
+      }
 
-        {:ok, state, {:continue, :start_cli}}
-
+      {:ok, state, {:continue, :start_cli}}
+    else
       {:error, reason} ->
-        {:stop, {:hooks_validation_failed, reason}}
+        {:stop, {:validation_failed, reason}}
     end
   end
 
@@ -258,6 +347,48 @@ defmodule ClaudeAgentSDK.Client do
   def handle_call({:subscribe}, from, state) do
     {pid, _ref} = from
     {:reply, :ok, %{state | subscribers: [pid | state.subscribers]}}
+  end
+
+  def handle_call({:set_permission_mode, mode}, _from, state) do
+    # Validate permission mode
+    if ClaudeAgentSDK.Permission.valid_mode?(mode) do
+      # Update options with new permission mode
+      new_options = %{state.options | permission_mode: mode}
+      {:reply, :ok, %{state | options: new_options}}
+    else
+      {:reply, {:error, :invalid_permission_mode}, state}
+    end
+  end
+
+  def handle_call({:set_agent, agent_name}, _from, state) do
+    # Check if agents are configured
+    agents = state.options.agents || %{}
+
+    if agents == %{} do
+      {:reply, {:error, :no_agents_configured}, state}
+    else
+      # Check if agent exists in the map
+      if Map.has_key?(agents, agent_name) do
+        # Update options with new active agent (just the name)
+        new_options = %{state.options | agent: agent_name}
+        {:reply, :ok, %{state | options: new_options}}
+      else
+        {:reply, {:error, :agent_not_found}, state}
+      end
+    end
+  end
+
+  def handle_call(:get_agent, _from, state) do
+    case state.options.agent do
+      nil -> {:reply, {:error, :no_agent_configured}, state}
+      agent_name when is_atom(agent_name) -> {:reply, {:ok, agent_name}, state}
+    end
+  end
+
+  def handle_call(:get_available_agents, _from, state) do
+    agents = state.options.agents || %{}
+    agent_names = Map.keys(agents)
+    {:reply, {:ok, agent_names}, state}
   end
 
   @impl true
@@ -360,6 +491,12 @@ defmodule ClaudeAgentSDK.Client do
 
   defp validate_hooks(nil), do: :ok
   defp validate_hooks(hooks), do: Hooks.validate_config(hooks)
+
+  defp validate_permission_callback(nil), do: :ok
+
+  defp validate_permission_callback(callback) do
+    ClaudeAgentSDK.Permission.validate_callback(callback)
+  end
 
   defp start_cli_process(state) do
     # Register hooks and build configuration
@@ -482,6 +619,9 @@ defmodule ClaudeAgentSDK.Client do
       "hook_callback" ->
         handle_hook_callback(request_id, request, state)
 
+      "can_use_tool" ->
+        handle_can_use_tool_request(request_id, request, state)
+
       other ->
         Logger.warning("Unsupported control request subtype", subtype: other)
         send_error_response(state.port, request_id, "Unsupported request: #{other}")
@@ -582,6 +722,133 @@ defmodule ClaudeAgentSDK.Client do
         Logger.error("Hook callback not found", callback_id: callback_id)
         state
     end
+  end
+
+  defp handle_can_use_tool_request(request_id, request, state) do
+    tool_name = request["tool_name"]
+    tool_input = request["input"]
+    suggestions = request["permission_suggestions"] || []
+
+    Logger.debug("Permission request for tool",
+      request_id: request_id,
+      tool: tool_name
+    )
+
+    # Check if we have a permission callback
+    case state.options.can_use_tool do
+      nil ->
+        # No callback, default to allow
+        json = encode_permission_response(request_id, :allow, nil)
+        Port.command(state.port, json <> "\n")
+        Logger.debug("No permission callback, allowing tool", tool: tool_name)
+        state
+
+      callback when is_function(callback, 1) ->
+        # Build permission context
+        context =
+          ClaudeAgentSDK.Permission.Context.new(
+            tool_name: tool_name,
+            tool_input: tool_input,
+            session_id: state.session_id || "unknown",
+            suggestions: suggestions
+          )
+
+        # Invoke callback with timeout protection
+        task =
+          Task.async(fn ->
+            try do
+              result = callback.(context)
+
+              # Validate result
+              case ClaudeAgentSDK.Permission.Result.validate(result) do
+                :ok -> {:ok, result}
+                {:error, reason} -> {:error, "Invalid result: #{reason}"}
+              end
+            rescue
+              e ->
+                {:error, "Permission callback exception: #{Exception.message(e)}"}
+            end
+          end)
+
+        result =
+          case Task.yield(task, 60_000) || Task.shutdown(task) do
+            {:ok, {:ok, permission_result}} ->
+              {:ok, permission_result}
+
+            {:ok, {:error, reason}} ->
+              {:error, reason}
+
+            nil ->
+              {:error, "Permission callback timeout after 60s"}
+          end
+
+        case result do
+          {:ok, permission_result} ->
+            json =
+              encode_permission_response(
+                request_id,
+                permission_result.behavior,
+                permission_result
+              )
+
+            Port.command(state.port, json <> "\n")
+
+            Logger.debug("Sent permission response",
+              request_id: request_id,
+              behavior: permission_result.behavior
+            )
+
+          {:error, reason} ->
+            # On error, deny by default
+            json = encode_permission_error_response(request_id, reason)
+            Port.command(state.port, json <> "\n")
+            Logger.error("Permission callback failed", request_id: request_id, reason: reason)
+        end
+
+        state
+    end
+  end
+
+  defp encode_permission_response(request_id, :allow, result) do
+    response = %{
+      "type" => "control_response",
+      "response" => %{
+        "request_id" => request_id,
+        "subtype" => "success",
+        "result" =>
+          ClaudeAgentSDK.Permission.Result.to_json_map(
+            result || ClaudeAgentSDK.Permission.Result.allow()
+          )
+      }
+    }
+
+    Jason.encode!(response)
+  end
+
+  defp encode_permission_response(request_id, :deny, result) do
+    response = %{
+      "type" => "control_response",
+      "response" => %{
+        "request_id" => request_id,
+        "subtype" => "success",
+        "result" => ClaudeAgentSDK.Permission.Result.to_json_map(result)
+      }
+    }
+
+    Jason.encode!(response)
+  end
+
+  defp encode_permission_error_response(request_id, error_message) do
+    response = %{
+      "type" => "control_response",
+      "response" => %{
+        "request_id" => request_id,
+        "subtype" => "error",
+        "error" => error_message
+      }
+    }
+
+    Jason.encode!(response)
   end
 
   defp send_error_response(port, request_id, error_message) do

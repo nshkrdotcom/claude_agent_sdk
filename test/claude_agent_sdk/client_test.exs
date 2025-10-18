@@ -35,13 +35,13 @@ defmodule ClaudeAgentSDK.ClientTest do
       result = Client.start_link(options)
 
       case result do
-        {:error, {:hooks_validation_failed, msg}} ->
+        {:error, {:validation_failed, msg}} ->
           assert msg =~ "Invalid hook event"
 
         {:ok, pid} ->
           # Wait for EXIT message
           receive do
-            {:EXIT, ^pid, {:hooks_validation_failed, msg}} ->
+            {:EXIT, ^pid, {:validation_failed, msg}} ->
               assert msg =~ "Invalid hook event"
           after
             100 ->
@@ -70,7 +70,7 @@ defmodule ClaudeAgentSDK.ClientTest do
           Client.stop(pid)
           assert true
 
-        {:error, {:hooks_validation_failed, _}} ->
+        {:error, {:validation_failed, _}} ->
           flunk("Hooks validation should have passed")
 
         {:error, _other_reason} ->

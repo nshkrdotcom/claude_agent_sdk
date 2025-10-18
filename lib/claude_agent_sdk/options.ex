@@ -66,6 +66,8 @@ defmodule ClaudeAgentSDK.Options do
     :fallback_model,
     # Custom agent definitions
     :agents,
+    # Active agent (atom key from agents map)
+    :agent,
     # Explicit session ID (UUID)
     :session_id,
     # Quick wins (v0.2.0)
@@ -77,17 +79,17 @@ defmodule ClaudeAgentSDK.Options do
     :strict_mcp_config,
     # Hooks (v0.3.0)
     # Hook callbacks for lifecycle events
-    :hooks
+    :hooks,
+    # Permission System (v0.4.0)
+    # Permission callback function
+    :can_use_tool
   ]
 
   @type output_format :: :text | :json | :stream_json
   @type permission_mode :: :default | :accept_edits | :bypass_permissions | :plan
   @type model_name :: String.t()
-  @type agent_name :: String.t()
-  @type agent_definition :: %{
-          description: String.t(),
-          prompt: String.t()
-        }
+  @type agent_name :: atom()
+  @type agent_definition :: ClaudeAgentSDK.Agent.t()
 
   @type t :: %__MODULE__{
           max_turns: integer() | nil,
@@ -108,11 +110,13 @@ defmodule ClaudeAgentSDK.Options do
           model: model_name() | nil,
           fallback_model: model_name() | nil,
           agents: %{agent_name() => agent_definition()} | nil,
+          agent: agent_name() | nil,
           session_id: String.t() | nil,
           fork_session: boolean() | nil,
           add_dir: [String.t()] | nil,
           strict_mcp_config: boolean() | nil,
-          hooks: ClaudeAgentSDK.Hooks.hook_config() | nil
+          hooks: ClaudeAgentSDK.Hooks.hook_config() | nil,
+          can_use_tool: ClaudeAgentSDK.Permission.callback() | nil
         }
 
   @doc """
@@ -177,6 +181,7 @@ defmodule ClaudeAgentSDK.Options do
     |> add_model_args(options)
     |> add_fallback_model_args(options)
     |> add_agents_args(options)
+    |> add_agent_args(options)
     |> add_session_id_args(options)
     |> add_fork_session_args(options)
     |> add_dir_args(options)
@@ -262,10 +267,24 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_agents_args(args, %{agents: nil}), do: args
 
-  defp add_agents_args(args, %{agents: agents}) do
+  defp add_agents_args(args, %{agents: agents}) when is_map(agents) do
     # Convert agents map to JSON format expected by CLI
-    json = Jason.encode!(agents)
-    args ++ ["--agents", json]
+    # Transform %{atom_name => Agent.t()} to %{"string_name" => cli_map}
+    agents_json =
+      agents
+      |> Enum.map(fn {name, agent} ->
+        {to_string(name), ClaudeAgentSDK.Agent.to_cli_map(agent)}
+      end)
+      |> Map.new()
+      |> Jason.encode!()
+
+    args ++ ["--agents", agents_json]
+  end
+
+  defp add_agent_args(args, %{agent: nil}), do: args
+
+  defp add_agent_args(args, %{agent: agent}) when is_atom(agent) do
+    args ++ ["--agent", to_string(agent)]
   end
 
   defp add_session_id_args(args, %{session_id: nil}), do: args
@@ -282,4 +301,79 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_strict_mcp_args(args, %{strict_mcp_config: true}), do: args ++ ["--strict-mcp-config"]
   defp add_strict_mcp_args(args, _), do: args
+
+  @doc """
+  Validates agent configuration in Options.
+
+  Ensures that:
+  - All agents in the agents map are valid Agent structs
+  - If an active agent is specified, it exists in the agents map
+  - Agents and agent fields have correct types
+
+  ## Parameters
+
+  - `options` - Options struct to validate
+
+  ## Returns
+
+  - `:ok` if validation succeeds
+  - `{:error, reason}` if validation fails
+
+  ## Examples
+
+      options = Options.new(
+        agents: %{test: Agent.new(description: "Test", prompt: "Test")},
+        agent: :test
+      )
+      Options.validate_agents(options)
+      #=> :ok
+
+      invalid = Options.new(
+        agents: %{test: Agent.new(description: "Test", prompt: "Test")},
+        agent: :nonexistent
+      )
+      Options.validate_agents(invalid)
+      #=> {:error, {:agent_not_found, :nonexistent}}
+  """
+  @spec validate_agents(t()) :: :ok | {:error, term()}
+  def validate_agents(%__MODULE__{agents: nil, agent: nil}), do: :ok
+  def validate_agents(%__MODULE__{agents: nil, agent: _}), do: {:error, :no_agents_configured}
+
+  def validate_agents(%__MODULE__{agents: agents, agent: active_agent}) when is_map(agents) do
+    # Validate all agents in the map
+    with :ok <- validate_agents_map(agents),
+         :ok <- validate_active_agent(agents, active_agent) do
+      :ok
+    end
+  end
+
+  def validate_agents(%__MODULE__{agents: agents}) when not is_map(agents) do
+    {:error, :agents_must_be_map}
+  end
+
+  defp validate_agents_map(agents) when is_map(agents) do
+    Enum.reduce_while(agents, :ok, fn {name, agent}, _acc ->
+      case ClaudeAgentSDK.Agent.validate(agent) do
+        :ok ->
+          {:cont, :ok}
+
+        {:error, reason} ->
+          {:halt, {:error, {:invalid_agent, name, reason}}}
+      end
+    end)
+  end
+
+  defp validate_active_agent(_agents, nil), do: :ok
+
+  defp validate_active_agent(agents, active_agent) when is_atom(active_agent) do
+    if Map.has_key?(agents, active_agent) do
+      :ok
+    else
+      {:error, {:agent_not_found, active_agent}}
+    end
+  end
+
+  defp validate_active_agent(_agents, _active_agent) do
+    {:error, :agent_must_be_atom}
+  end
 end
