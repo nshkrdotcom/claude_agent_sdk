@@ -6,7 +6,7 @@
 # Usage:
 #   mix run examples/v0_4_0/agent_switching.exs
 
-alias ClaudeAgentSDK.{Agent, Options, Client}
+alias ClaudeAgentSDK.{Agent, Options}
 
 IO.puts("\n=== Agent Switching Example ===\n")
 
@@ -82,48 +82,49 @@ options =
     max_turns: 2
   )
 
-IO.puts("\n📋 Starting client with code_expert as active agent...\n")
+IO.puts("\n📋 Configured with code_expert as active agent\n")
+IO.puts("Current agent: #{options.agent}")
+IO.puts("Available agents: #{inspect(Map.keys(options.agents))}")
 
-{:ok, client} = Client.start_link(options)
+IO.puts("\n💡 Note: This is a configuration demo (no CLI started)")
+IO.puts("   For live agent switching with real queries, see: examples/v0_4_0/agents_live.exs\n")
 
-# Get initial agent
-{:ok, current_agent} = Client.get_agent(client)
-IO.puts("Current agent: #{current_agent}")
+# Demonstrate agent configurations
+IO.puts("\n🔄 Agent switching workflow:\n")
 
-# Get available agents
-{:ok, available} = Client.get_available_agents(client)
-IO.puts("Available agents: #{inspect(available)}")
+IO.puts("1. Researcher agent configuration:")
+IO.puts("   Agent: #{research_agent.name}")
+IO.puts("   Model: #{research_agent.model}")
+IO.puts("   Allowed tools: #{inspect(research_agent.allowed_tools)}")
+IO.puts("   Use case: Research and information gathering")
 
-# Demonstrate agent switching
-IO.puts("\n🔄 Switching agents...\n")
+IO.puts("\n2. Technical Writer agent configuration:")
+IO.puts("   Agent: #{documentation_agent.name}")
+IO.puts("   Model: #{documentation_agent.model}")
+IO.puts("   Allowed tools: #{inspect(documentation_agent.allowed_tools)}")
+IO.puts("   Use case: Documentation and technical writing")
 
-IO.puts("1. Switching to researcher agent")
-:ok = Client.set_agent(client, :researcher)
-{:ok, agent} = Client.get_agent(client)
-IO.puts("   Active agent: #{agent}")
-state = :sys.get_state(client)
-IO.puts("   Model: #{state.options.model}")
-IO.puts("   Allowed tools: #{inspect(state.options.allowed_tools)}")
+IO.puts("\n3. Code Expert agent configuration:")
+IO.puts("   Agent: #{code_agent.name}")
+IO.puts("   Model: #{code_agent.model}")
+IO.puts("   Allowed tools: #{inspect(code_agent.allowed_tools)}")
+IO.puts("   Use case: Code implementation and debugging")
 
-IO.puts("\n2. Switching to technical_writer agent")
-:ok = Client.set_agent(client, :technical_writer)
-{:ok, agent} = Client.get_agent(client)
-IO.puts("   Active agent: #{agent}")
-state = :sys.get_state(client)
-IO.puts("   Model: #{state.options.model}")
-IO.puts("   Allowed tools: #{inspect(state.options.allowed_tools)}")
+IO.puts("\n🔧 How to use in practice:")
 
-IO.puts("\n3. Switching back to code_expert")
-:ok = Client.set_agent(client, :code_expert)
-{:ok, agent} = Client.get_agent(client)
-IO.puts("   Active agent: #{agent}")
-state = :sys.get_state(client)
-IO.puts("   Model: #{state.options.model}")
-IO.puts("   Allowed tools: #{inspect(state.options.allowed_tools)}")
+IO.puts("""
+  # Start client with agents
+  {:ok, client} = Client.start_link(options)
 
-# Clean up (wait a bit for any pending operations)
-Process.sleep(100)
-Client.stop(client)
+  # Switch between agents during conversation
+  Client.set_agent(client, :researcher)  # Switch to researcher
+  Client.send_message(client, "Find info about Elixir GenServers")
+
+  Client.set_agent(client, :code_expert)  # Switch to coder
+  Client.send_message(client, "Implement a GenServer")
+
+  Client.stop(client)
+""")
 
 IO.puts("\n✅ Agent Switching example complete!")
 IO.puts("\nKey takeaways:")

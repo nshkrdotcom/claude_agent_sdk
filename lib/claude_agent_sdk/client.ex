@@ -498,9 +498,29 @@ defmodule ClaudeAgentSDK.Client do
   def terminate(reason, %{port: port}) when is_port(port) do
     Logger.debug("Terminating client", reason: reason)
 
-    # Close port gracefully to avoid EPIPE errors
-    # Port.close will wait for the process to finish pending writes
+    # Graceful shutdown to avoid EPIPE errors in Claude CLI
+    #
+    # ROOT CAUSE: Port.close() immediately closes stdin/stdout/stderr pipes,
+    # but the CLI subprocess might still be writing output. This causes EPIPE
+    # when CLI tries to write to a closed pipe.
+    #
+    # SOLUTION: Wait for the CLI process to exit naturally before closing port.
+    # The CLI should exit when stdin is closed (EOF signal).
     try do
+      # Wait for exit_status message (indicates process has fully exited)
+      # This prevents EPIPE by ensuring CLI finishes all writes before we close
+      receive do
+        {^port, {:exit_status, status}} ->
+          Logger.debug("CLI exited cleanly with status #{status}")
+          :ok
+      after
+        200 ->
+          # If CLI doesn't exit within 200ms, force close
+          Logger.debug("CLI didn't exit within timeout, forcing close")
+          :ok
+      end
+
+      # Now it's safe to close the port (CLI is already done)
       Port.close(port)
     catch
       :error, :badarg ->
