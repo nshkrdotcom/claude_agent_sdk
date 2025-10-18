@@ -63,53 +63,37 @@ server =
 
 IO.puts("✅ Created MCP server with 2 math tools\n")
 
-# Configure options with MCP tools
-options =
-  ClaudeAgentSDK.Options.new(
-    mcp_config: %{"math-tools" => server},
-    max_turns: 5
-  )
+# NOTE: SDK MCP servers are in-process tools
+# Full integration with Claude CLI requires additional plumbing
+# For now, demonstrate the tools can execute directly
 
-# Query Claude with tool access
-prompt = """
-Please solve these math problems using the math tools I've provided:
+IO.puts("📝 Note: Full Claude CLI integration for SDK MCP servers coming in v0.5.0")
+IO.puts("For now, tools can be tested directly:\n")
 
-1. What is 156 + 284?
-2. What is 23 × 17?
-3. Calculate 999 + 1
+# Demonstrate direct tool execution that Claude would use
+test_cases = [
+  {:add, %{"a" => 156, "b" => 284}},
+  {:multiply, %{"a" => 23, "b" => 17}},
+  {:add, %{"a" => 999, "b" => 1}}
+]
 
-Use the add and multiply tools for each calculation.
-"""
+IO.puts("Simulating Claude tool usage:\n")
 
-IO.puts("📤 Sending query to Claude...\n")
-IO.puts("Prompt: #{String.slice(prompt, 0..100)}...\n")
+for {tool_name, input} <- test_cases do
+  tool_module =
+    case tool_name do
+      :add -> MathTools.Add
+      :multiply -> MathTools.Multiply
+    end
 
-# Stream messages and display
-ClaudeAgentSDK.query(prompt, options)
-|> Stream.each(fn msg ->
-  case msg do
-    %{"type" => "assistant", "content" => content} when is_list(content) ->
-      for block <- content do
-        case block do
-          %{"type" => "text", "text" => text} ->
-            IO.puts("💬 Claude: #{text}")
+  {:ok, result} = tool_module.execute(input)
+  text = hd(result["content"])["text"]
+  IO.puts("  🛠️  #{tool_name}(#{inspect(input)}) → #{text}")
+end
 
-          %{"type" => "tool_use", "name" => name, "input" => input} ->
-            IO.puts("🛠️  Claude wants to use: #{name}(#{inspect(input)})")
-
-          _ ->
-            :ok
-        end
-      end
-
-    %{"type" => "result"} ->
-      IO.puts("\n✅ Query complete!")
-
-    _ ->
-      :ok
-  end
-end)
-|> Stream.run()
+# The tools are registered and ready for when SDK MCP integration is complete
+IO.puts("\n💡 These tools are registered in the MCP server (#{server.name})")
+IO.puts("   Once integrated, Claude will be able to call them automatically")
 
 IO.puts("\n✅ MCP Tools Live Example complete!")
 IO.puts("\nWhat happened:")
