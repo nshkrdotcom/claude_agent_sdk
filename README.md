@@ -259,45 +259,183 @@ mix run demo_mock.exs
 
 For detailed documentation about the mocking system, see [MOCKING.md](MOCKING.md).
 
-## Available Files to Run
+## Available Examples - Organized by Feature
 
-### 🌟 v0.5.0 Feature Examples
-
-**New in v0.5.0 - demonstrates MCP tools, agents, and permissions:**
+### 🎯 Getting Started (Start Here!)
 
 ```bash
-# MCP Tool System - In-process tools with deftool macro
+# 1. Quick showcase - demonstrates all features in mock mode (FREE)
+mix showcase
+
+# 2. Live showcase - same with real API calls (costs money)
+mix showcase --live
+
+# 3. Simple SDK MCP test - verify v0.5.0 MCP integration (FREE)
+mix run examples/v0_5_0/sdk_mcp_simple_test.exs
+```
+
+---
+
+### 🌟 v0.5.0 Features - MCP Tools (SDK MCP Servers)
+
+**Mock Mode (FREE - No API costs):**
+```bash
+# MCP Calculator - Tool definition and direct execution
 mix run examples/v0_4_0/mcp_calculator_tool.exs
 
-# Agent Definitions - Multi-agent workflows with runtime switching
+# SDK MCP Simple Test - Comprehensive validation
+mix run examples/v0_5_0/sdk_mcp_simple_test.exs
+```
+
+**Live Mode (Costs money - requires `claude login`):**
+```bash
+# SDK MCP Live Demo - Real Claude using SDK tools
+MIX_ENV=test mix run.live examples/v0_5_0/sdk_mcp_live_demo.exs
+```
+
+---
+
+### 🤖 v0.4.0 Features - Agents & Permissions
+
+**Mock Mode (FREE):**
+```bash
+# Agent Switching - Multi-agent workflows
 mix run examples/v0_4_0/agent_switching.exs
 
-# Permission System - Fine-grained security control
+# Permission Control - Security callbacks
 mix run examples/v0_4_0/permission_control.exs
 
-# Full Integration - All three features together
+# Full Feature Showcase - All three features together
 mix run examples/v0_4_0/full_feature_showcase.exs
 ```
 
-All examples run in mock mode (no API costs) and include detailed explanations.
-
-### 🎯 Showcase (Recommended Starting Point)
+**Live Mode (Costs money):**
 ```bash
-# Safe demo with mocks (no API costs)  
-mix showcase
+# Agents Live - Real agent switching
+MIX_ENV=test mix run.live examples/v0_4_0/agents_live.exs
 
-# Live demo with real API calls (requires authentication)
-mix showcase --live
+# Permissions Live - Real permission checks
+MIX_ENV=test mix run.live examples/v0_4_0/permissions_live.exs
 ```
 
-### Additional Examples & Tests
-- `mix run final_test.exs` - Complete test showing message parsing and interaction
-- `mix run example.exs` - Basic usage example
-- `mix run demo_mock.exs` - Mock system demonstration
-- `mix run test_full.exs` - Alternative test format
-- `mix run test_mix.exs` - Basic erlexec functionality test
+---
 
-**🌟 Start with `mix showcase` for a complete overview of all features!**
+### 🪝 v0.3.0 Features - Hooks System
+
+**All hook examples (FREE - mock mode):**
+```bash
+# Basic Bash Blocking - Simple hook to block dangerous commands
+mix run examples/hooks/basic_bash_blocking.exs
+
+# Complete Workflow - Full hook lifecycle demonstration
+mix run examples/hooks/complete_workflow.exs
+
+# Context Injection - Adding context to prompts
+mix run examples/hooks/context_injection.exs
+
+# File Policy Enforcement - Controlling file operations
+mix run examples/hooks/file_policy_enforcement.exs
+
+# Logging and Audit - Tracking all tool usage
+mix run examples/hooks/logging_and_audit.exs
+```
+
+---
+
+### 📚 Core Examples - Basic Usage
+
+**Mock Mode (FREE):**
+```bash
+# Basic usage - Simple query example
+mix run examples/basic_example.exs
+
+# Factorial - Function generation
+mix run examples/factorial_example.exs
+
+# Custom Agents - Define specialized agents
+mix run examples/custom_agents_example.exs
+
+# Model Selection - Choose different Claude models
+mix run examples/model_selection_example.exs
+
+# Session Features - Save and resume sessions
+mix run examples/session_features_example.exs
+
+# Week 1-2 Showcase - Early features demonstration
+mix run examples/week_1_2_showcase.exs
+```
+
+**Live Mode (Costs money):**
+```bash
+# Simple Analyzer - Code analysis
+mix run.live examples/simple_analyzer.exs lib/claude_agent_sdk.ex
+
+# File Reviewer - Review any file
+mix run.live examples/file_reviewer.exs README.md
+
+# Simple Batch - Batch processing
+mix run.live examples/simple_batch.exs
+
+# Test Generator - Generate tests (experimental)
+mix run.live examples/simple_test_gen.exs
+
+# Project Assistant - Fixed version with better features
+mix run.live examples/project_assistant_fixed.exs
+```
+
+---
+
+### 🧪 Testing & Utilities
+
+```bash
+# Auth Detection Test - Verify authentication setup
+mix run examples/test_auth_detection.exs
+```
+
+---
+
+### 📋 Running All Examples by Group
+
+Use the included test script to run entire groups of examples:
+
+```bash
+# Run all mock mode examples (FREE - no API costs)
+./test_all_examples.sh all
+
+# Run specific groups
+./test_all_examples.sh getting-started  # Quick start examples
+./test_all_examples.sh mcp              # v0.5.0 MCP tools
+./test_all_examples.sh agents           # v0.4.0 Agents & Permissions
+./test_all_examples.sh hooks            # v0.3.0 Hooks system
+./test_all_examples.sh core             # Core/basic examples
+
+# ⚠️  DANGEROUS: Run live examples (costs money!)
+./test_all_examples.sh live
+```
+
+**Manual Group Commands:**
+
+```bash
+# v0.5.0 MCP Tools (Mock Mode)
+for f in examples/v0_5_0/sdk_mcp_simple_test.exs examples/v0_4_0/mcp_calculator_tool.exs; do
+  echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
+done
+
+# v0.4.0 Agents & Permissions (Mock Mode)
+for f in examples/v0_4_0/{agent_switching,permission_control,full_feature_showcase}.exs; do
+  echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
+done
+
+# v0.3.0 Hooks (Mock Mode)
+for f in examples/hooks/*.exs; do
+  echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
+done
+
+# Core Examples (Mock Mode)
+for f in examples/{basic_example,factorial_example,custom_agents_example,model_selection_example,session_features_example,week_1_2_showcase,test_auth_detection}.exs; do
+  echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
+done
+```
 
 ## Live Script Runner
 
