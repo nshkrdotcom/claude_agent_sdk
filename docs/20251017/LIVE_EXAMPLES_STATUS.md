@@ -96,3 +96,44 @@ The v0.5.0 release is **production ready** for the core functionality:
 The live examples were created for demonstration but never fully tested. They can be fixed incrementally in future releases. The core SDK functionality is solid.
 
 **Recommendation:** Ship v0.5.0 as-is, mark live examples as experimental, fix in v0.5.1.
+
+---
+
+## Update After Further Investigation
+
+### Additional Issues Found
+
+After attempting to fix the live examples:
+
+1. **All three live examples hang indefinitely**
+   - Not just syntax errors
+   - Client streaming API usage is incorrect
+   - Examples were never actually tested with real CLI
+
+2. **Fundamental design issues:**
+   - Using Client API incorrectly (mixing query/continue with Client.send_message)
+   - Stream processing expects different message format
+   - Mock mode behavior differs from live mode
+
+### Recommendation: Rewrite Live Examples
+
+The live examples need complete rewrites, not just patches:
+- Use the correct API pattern (query/continue OR Client bidirectional, not mixed)
+- Test with real Claude CLI during development
+- Follow working examples like basic_example.exs
+
+### Immediate Action
+
+**Mark live examples as broken/experimental in v0.5.0:**
+- Add warnings to example files
+- Update README to show they're not yet working
+- Plan proper rewrites for v0.6.0
+
+**What works (verified):**
+- All mock mode examples ✅
+- Core MCP integration ✅  
+- Test suite ✅
+
+**What needs work:**
+- Live example rewrites ❌
+- E2E testing with real CLI ❌

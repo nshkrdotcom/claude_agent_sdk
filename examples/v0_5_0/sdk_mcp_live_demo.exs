@@ -127,7 +127,9 @@ try do
   ClaudeAgentSDK.query(prompt, options)
   |> Stream.each(fn msg ->
     case msg do
-      %{"type" => "assistant", "content" => content} when is_list(content) ->
+      %{type: :assistant, data: %{message: message}} ->
+        content = message["content"] || []
+
         for block <- content do
           case block do
             %{"type" => "text", "text" => text} ->
@@ -142,7 +144,7 @@ try do
           end
         end
 
-      %{"type" => "result"} ->
+      %{type: :result} ->
         IO.puts("\n✅ Query complete!")
 
       _ ->

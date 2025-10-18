@@ -59,11 +59,11 @@ Client.send_message(
 )
 
 Client.stream_messages(client)
-|> Stream.take_while(fn msg -> msg["type"] != "result" end)
+|> Stream.take_while(fn msg -> msg.type != :result end)
 |> Stream.each(fn msg ->
   case msg do
-    %{"type" => "assistant", "content" => content} when is_list(content) ->
-      text = ContentExtractor.extract_content_text([msg])
+    %{type: :assistant} = message ->
+      text = ContentExtractor.extract_content_text([message.raw])
       if text != "", do: IO.puts("💬 Coder: #{String.slice(text, 0..200)}...")
 
     _ ->
@@ -87,11 +87,11 @@ Client.send_message(
 )
 
 Client.stream_messages(client)
-|> Stream.take_while(fn msg -> msg["type"] != "result" end)
+|> Stream.take_while(fn msg -> msg.type != :result end)
 |> Stream.each(fn msg ->
   case msg do
-    %{"type" => "assistant", "content" => content} when is_list(content) ->
-      text = ContentExtractor.extract_content_text([msg])
+    %{type: :assistant} = message ->
+      text = ContentExtractor.extract_content_text([message.raw])
       if text != "", do: IO.puts("💬 Analyst: #{String.slice(text, 0..200)}...")
 
     _ ->

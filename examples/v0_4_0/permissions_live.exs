@@ -61,10 +61,12 @@ Client.send_message(
 )
 
 Client.stream_messages(client)
-|> Stream.take_while(fn msg -> msg["type"] != "result" end)
+|> Stream.take_while(fn msg -> msg.type != :result end)
 |> Stream.each(fn msg ->
   case msg do
-    %{"type" => "assistant", "content" => content} when is_list(content) ->
+    %{type: :assistant, data: %{message: message}} ->
+      content = message["content"] || []
+
       for block <- content do
         case block do
           %{"type" => "text", "text" => text} ->
