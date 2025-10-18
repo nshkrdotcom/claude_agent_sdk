@@ -155,7 +155,7 @@ mix deps.get
   - `create_sdk_mcp_server/1` for SDK-based MCP servers
   - Tool.Registry GenServer for tool management
   - 42 tests covering all tool scenarios
-  - **Note:** SDK MCP infrastructure complete, awaiting CLI support (see `docs/SDK_MCP_STATUS.md`)
+  - **Note:** SDK MCP infrastructure complete, awaiting CLI support
 - **Agent Definitions** (v0.4.0): Multi-agent support with runtime switching
   - Define agent profiles with custom prompts, tools, and models
   - `Client.set_agent/2` for runtime agent switching
@@ -906,7 +906,7 @@ mix run examples/hooks/complete_workflow.exs
 
 ## MCP Tool System (v0.4.0+)
 
-> **⚠️ Important:** SDK MCP servers require Claude Code CLI support (not yet available as of CLI v2.0.22). Our infrastructure is complete and will work automatically when CLI adds support. See [`docs/SDK_MCP_STATUS.md`](docs/SDK_MCP_STATUS.md) for details. Use external MCP servers for now.
+> **⚠️ Important:** SDK MCP servers require Claude Code CLI support (not yet available as of CLI v2.0.22). Our infrastructure is complete and will work automatically when CLI adds support. Use external MCP servers for now.
 
 Create in-process MCP tools without subprocess overhead using the `deftool` macro.
 

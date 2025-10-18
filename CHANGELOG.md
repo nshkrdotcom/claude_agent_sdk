@@ -27,16 +27,16 @@ We've implemented full SDK MCP server support matching the Python SDK. While the
 - **`has_sdk_mcp_servers?/1`** - Helper to detect SDK servers in options
 
 #### Control Protocol Updates
-- **`Protocol.encode_initialize_request/3`** - Now accepts SDK MCP server metadata
-- **`Client.build_sdk_mcp_info/2`** - Prepares SDK server info for initialization
-- Client sends SDK server metadata during init (ready for when CLI supports it)
+- Enhanced initialize request to include SDK MCP server metadata
+- Client prepares and sends SDK server info during initialization
+- Infrastructure ready for when CLI adds SDK MCP support
 
 #### Documentation
-- **`docs/SDK_MCP_STATUS.md`** - Comprehensive status document explaining:
-  - Why SDK MCP doesn't work with current CLI
-  - Evidence from Python SDK (same issue)
-  - What we've built and why it's ready
+- Added comprehensive SDK MCP status document explaining:
+  - Why SDK MCP doesn't work with current CLI (Python SDK has same issue)
+  - Infrastructure we've built and why it's ready
   - Workarounds using external MCP servers
+  - Will work automatically when CLI adds support
 
 #### Examples Fixed (2025-10-17)
 - Fixed `sdk_mcp_live_demo.exs` response parsing to handle both string and array content
