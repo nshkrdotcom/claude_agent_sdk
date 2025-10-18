@@ -57,7 +57,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.4.0"}
+    {:claude_agent_sdk, "~> 0.5.0"}
   ]
 end
 ```
@@ -98,7 +98,7 @@ mix deps.get
 
 ## Implementation Status
 
-### ✅ **Currently Implemented (v0.4.0)**
+### ✅ **Currently Implemented (v0.5.0)**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
@@ -150,18 +150,18 @@ mix deps.get
   - Message streaming with subscriber pattern
   - Runtime hook callback invocation
   - Graceful shutdown and error recovery
-- **MCP Tool System** (v0.4.0): In-process MCP tools with deftool macro
+- **MCP Tool System** (v0.5.0): In-process MCP tools with deftool macro
   - `deftool` macro for declarative tool definition
   - `create_sdk_mcp_server/1` for SDK-based MCP servers
   - Tool.Registry GenServer for tool management
   - No subprocess overhead, full integration with Claude
   - 42 tests covering all tool scenarios
-- **Agent Definitions** (v0.4.0): Multi-agent support with runtime switching
+- **Agent Definitions** (v0.5.0): Multi-agent support with runtime switching
   - Define agent profiles with custom prompts, tools, and models
   - `Client.set_agent/2` for runtime agent switching
   - Context preservation across agent switches
   - 38 tests covering agent workflows
-- **Permission System** (v0.4.0): Fine-grained tool permission control
+- **Permission System** (v0.5.0): Fine-grained tool permission control
   - Permission callbacks for security control
   - 4 permission modes (default, accept_edits, plan, bypass_permissions)
   - Tool input modification and execution interrupts
@@ -174,7 +174,7 @@ mix deps.get
 - **Developer Tools**: ContentExtractor, AuthChecker, OptionBuilder, DebugMode, AuthManager
 - **Smart Configuration**: Environment-aware defaults and preset configurations
 
-### 🎉 **v0.4.0 Milestone: 95%+ Feature Parity with Python SDK**
+### 🎉 **v0.5.0 Milestone: 95%+ Feature Parity with Python SDK**
 
 All three critical features now implemented with full test coverage!
 
@@ -261,9 +261,9 @@ For detailed documentation about the mocking system, see [MOCKING.md](MOCKING.md
 
 ## Available Files to Run
 
-### 🌟 v0.4.0 Feature Examples
+### 🌟 v0.5.0 Feature Examples
 
-**New in v0.4.0 - demonstrates MCP tools, agents, and permissions:**
+**New in v0.5.0 - demonstrates MCP tools, agents, and permissions:**
 
 ```bash
 # MCP Tool System - In-process tools with deftool macro
@@ -753,7 +753,7 @@ mix run examples/hooks/complete_workflow.exs
 
 ---
 
-## MCP Tool System (v0.4.0+)
+## MCP Tool System (v0.5.0+)
 
 Create in-process MCP tools without subprocess overhead using the `deftool` macro.
 
@@ -806,7 +806,7 @@ mix run examples/v0_4_0/mcp_calculator_tool.exs
 
 ---
 
-## Agent Definitions (v0.4.0+)
+## Agent Definitions (v0.5.0+)
 
 Define multiple agent profiles and switch between them at runtime.
 
@@ -864,7 +864,7 @@ mix run examples/v0_4_0/agent_switching.exs
 
 ---
 
-## Permission System (v0.4.0+)
+## Permission System (v0.5.0+)
 
 Control tool execution with fine-grained permission callbacks.
 

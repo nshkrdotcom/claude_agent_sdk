@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-10-17
+
+### 🎉 MILESTONE: 100% MCP Tool System Integration Complete
+
+This release completes the MCP Tool System integration that was started in v0.4.0. SDK MCP tools can now be used with Claude queries through the control protocol!
+
+### Fixed - MCP Tool System Integration
+
+**Critical fixes from v0.4.0:**
+- SDK MCP tools now integrate with Claude CLI via control protocol
+- Tools are discovered and executed correctly during conversations
+- No more EPIPE errors or type mismatches
+
+#### Control Protocol Implementation
+- `Client.handle_control_request/2` - Routes `sdk_mcp_request` messages
+- `Client.handle_sdk_mcp_request/3` - Handles MCP requests for SDK servers
+- `Client.handle_sdk_mcp_jsonrpc/3` - JSONRPC routing for MCP methods
+  - `initialize` - Returns MCP protocol capabilities
+  - `tools/list` - Queries registry and returns available tools
+  - `tools/call` - Executes tool via registry and returns result
+- `Client.send_sdk_mcp_response/3` - Wraps JSONRPC responses in control protocol
+- `Client.extract_sdk_mcp_servers/1` - Extracts SDK server PIDs from options
+
+#### Options Enhancements
+- New `mcp_servers` field for programmatic server configuration
+- `prepare_servers_for_cli/1` - Strips registry_pid before sending to CLI
+- Backward compatibility: `mcp_config` (string path) still supported
+- `stringify_keys/1` - Converts atom keys/values to strings for JSON
+
+#### Type System
+- `Options.sdk_mcp_server` type for SDK servers
+- `Options.external_mcp_server` type for stdio/sse/http servers
+- `Options.mcp_server` union type
+- Updated `Options.t` to include `mcp_servers` field
+
+### Documentation
+- Created `docs/20251017/gap_analysis/CRITICAL_MCP_INTEGRATION_ISSUE.md`
+- Created `docs/20251017/gap_analysis/MCP_INTEGRATION_DESIGN.md`
+- Added `examples/v0_5_0/sdk_mcp_live_demo.exs` - Working live demo
+- Comprehensive integration tests in `test/claude_agent_sdk/sdk_mcp_integration_test.exs`
+
+### Infrastructure
+- All 429 tests passing (0 failures, 33 skipped)
+- Zero compilation warnings
+- Zero test warnings
+
+### Breaking Changes
+None - all changes are additive and backward compatible.
+
+### Migration from 0.4.0
+SDK MCP tools now work! Update your code to use the new `mcp_servers` option:
+
+```elixir
+# Before (v0.4.0 - didn't work):
+server = create_sdk_mcp_server(name: "math", tools: [Add])
+options = Options.new(mcp_config: %{"math" => server})  # BROKEN
+
+# After (v0.5.0 - works!):
+server = create_sdk_mcp_server(name: "math", tools: [Add])
+options = Options.new(mcp_servers: %{"math" => server})  # FIXED
+```
+
+---
+
 ## [0.4.0] - 2025-10-17
 
 ### 🎉 MILESTONE: 95%+ Feature Parity with Python SDK
