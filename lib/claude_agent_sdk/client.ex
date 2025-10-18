@@ -79,6 +79,7 @@ defmodule ClaudeAgentSDK.Client do
   - `pending_requests` - Map of request_id => {from, ref}
   - `initialized` - Whether initialization handshake completed
   - `buffer` - Incomplete JSON buffer
+  - `sdk_mcp_servers` - Map of server_name => registry_pid for SDK MCP servers
   """
   @type state :: %{
           port: port() | nil,
@@ -87,7 +88,8 @@ defmodule ClaudeAgentSDK.Client do
           subscribers: [pid()],
           pending_requests: %{String.t() => {GenServer.from(), reference()}},
           initialized: boolean(),
-          buffer: String.t()
+          buffer: String.t(),
+          sdk_mcp_servers: %{String.t() => pid()}
         }
 
   ## Public API
@@ -291,6 +293,9 @@ defmodule ClaudeAgentSDK.Client do
     with :ok <- validate_hooks(options.hooks),
          :ok <- validate_permission_callback(options.can_use_tool),
          {:ok, updated_options} <- apply_agent_settings(options) do
+      # Extract SDK MCP server registry PIDs
+      sdk_mcp_servers = extract_sdk_mcp_servers(updated_options)
+
       # Initialize state without starting CLI yet
       # CLI will be started in handle_continue
       state = %{
@@ -301,7 +306,8 @@ defmodule ClaudeAgentSDK.Client do
         pending_requests: %{},
         initialized: false,
         buffer: "",
-        session_id: nil
+        session_id: nil,
+        sdk_mcp_servers: sdk_mcp_servers
       }
 
       {:ok, state, {:continue, :start_cli}}
@@ -676,6 +682,9 @@ defmodule ClaudeAgentSDK.Client do
       "can_use_tool" ->
         handle_can_use_tool_request(request_id, request, state)
 
+      "sdk_mcp_request" ->
+        handle_sdk_mcp_request(request_id, request, state)
+
       other ->
         Logger.warning("Unsupported control request subtype", subtype: other)
         send_error_response(state.port, request_id, "Unsupported request: #{other}")
@@ -942,5 +951,163 @@ defmodule ClaudeAgentSDK.Client do
           {:halt, client}
         end
     end
+  end
+
+  ## SDK MCP Server Support
+
+  @doc false
+  @spec extract_sdk_mcp_servers(Options.t()) :: %{String.t() => pid()}
+  defp extract_sdk_mcp_servers(%Options{mcp_servers: nil}), do: %{}
+
+  defp extract_sdk_mcp_servers(%Options{mcp_servers: servers}) do
+    for {name, %{type: :sdk, registry_pid: pid}} <- servers, into: %{} do
+      {name, pid}
+    end
+  end
+
+  @doc false
+  @spec handle_sdk_mcp_request(String.t(), map(), state()) :: state()
+  defp handle_sdk_mcp_request(request_id, request, state) do
+    server_name = request["serverName"]
+    message = request["message"]
+
+    Logger.debug("SDK MCP request",
+      request_id: request_id,
+      server: server_name,
+      method: message["method"]
+    )
+
+    # Look up server registry PID
+    case Map.get(state.sdk_mcp_servers, server_name) do
+      nil ->
+        # Server not found
+        error_response = %{
+          "jsonrpc" => "2.0",
+          "id" => message["id"],
+          "error" => %{
+            "code" => -32601,
+            "message" => "Server '#{server_name}' not found"
+          }
+        }
+
+        send_sdk_mcp_response(state.port, request_id, error_response)
+        state
+
+      registry_pid ->
+        # Route to JSONRPC handler
+        response = handle_sdk_mcp_jsonrpc(registry_pid, server_name, message)
+        send_sdk_mcp_response(state.port, request_id, response)
+        state
+    end
+  end
+
+  @doc false
+  @spec handle_sdk_mcp_jsonrpc(pid(), String.t(), map()) :: map()
+  defp handle_sdk_mcp_jsonrpc(registry_pid, server_name, message) do
+    method = message["method"]
+    params = message["params"] || %{}
+    message_id = message["id"]
+
+    case method do
+      "initialize" ->
+        # MCP initialization - return capabilities
+        %{
+          "jsonrpc" => "2.0",
+          "id" => message_id,
+          "result" => %{
+            "protocolVersion" => "2024-11-05",
+            "capabilities" => %{
+              "tools" => %{}
+            },
+            "serverInfo" => %{
+              "name" => server_name,
+              "version" => "1.0.0"
+            }
+          }
+        }
+
+      "tools/list" ->
+        # List all tools from registry
+        case ClaudeAgentSDK.Tool.Registry.list_tools(registry_pid) do
+          {:ok, tools} ->
+            tools_data =
+              Enum.map(tools, fn tool ->
+                %{
+                  "name" => to_string(tool.name),
+                  "description" => tool.description,
+                  "inputSchema" => tool.input_schema
+                }
+              end)
+
+            %{
+              "jsonrpc" => "2.0",
+              "id" => message_id,
+              "result" => %{
+                "tools" => tools_data
+              }
+            }
+
+          {:error, reason} ->
+            %{
+              "jsonrpc" => "2.0",
+              "id" => message_id,
+              "error" => %{
+                "code" => -32603,
+                "message" => "Failed to list tools: #{inspect(reason)}"
+              }
+            }
+        end
+
+      "tools/call" ->
+        # Execute tool
+        tool_name = String.to_atom(params["name"])
+        tool_input = params["arguments"] || %{}
+
+        case ClaudeAgentSDK.Tool.Registry.execute_tool(registry_pid, tool_name, tool_input) do
+          {:ok, result} ->
+            %{
+              "jsonrpc" => "2.0",
+              "id" => message_id,
+              "result" => result
+            }
+
+          {:error, reason} ->
+            %{
+              "jsonrpc" => "2.0",
+              "id" => message_id,
+              "error" => %{
+                "code" => -32603,
+                "message" => "Tool execution failed: #{inspect(reason)}"
+              }
+            }
+        end
+
+      _ ->
+        # Method not found
+        %{
+          "jsonrpc" => "2.0",
+          "id" => message_id,
+          "error" => %{
+            "code" => -32601,
+            "message" => "Method not found: #{method}"
+          }
+        }
+    end
+  end
+
+  @doc false
+  @spec send_sdk_mcp_response(port(), String.t(), map()) :: :ok
+  defp send_sdk_mcp_response(port, request_id, jsonrpc_response) do
+    # Wrap JSONRPC response in control protocol response
+    response = %{
+      "type" => "control_response",
+      "id" => request_id,
+      "response" => jsonrpc_response
+    }
+
+    json = Jason.encode!(response)
+    Port.command(port, json <> "\n")
+    Logger.debug("Sent SDK MCP response", request_id: request_id)
+    :ok
   end
 end
