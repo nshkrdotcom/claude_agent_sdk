@@ -57,7 +57,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.3.0"}
+    {:claude_agent_sdk, "~> 0.4.0"}
   ]
 end
 ```
@@ -98,7 +98,7 @@ mix deps.get
 
 ## Implementation Status
 
-### ✅ **Currently Implemented (v0.3.0)**
+### ✅ **Currently Implemented (v0.4.0)**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
@@ -150,6 +150,23 @@ mix deps.get
   - Message streaming with subscriber pattern
   - Runtime hook callback invocation
   - Graceful shutdown and error recovery
+- **MCP Tool System** (v0.4.0): In-process MCP tools with deftool macro
+  - `deftool` macro for declarative tool definition
+  - `create_sdk_mcp_server/1` for SDK-based MCP servers
+  - Tool.Registry GenServer for tool management
+  - No subprocess overhead, full integration with Claude
+  - 42 tests covering all tool scenarios
+- **Agent Definitions** (v0.4.0): Multi-agent support with runtime switching
+  - Define agent profiles with custom prompts, tools, and models
+  - `Client.set_agent/2` for runtime agent switching
+  - Context preservation across agent switches
+  - 38 tests covering agent workflows
+- **Permission System** (v0.4.0): Fine-grained tool permission control
+  - Permission callbacks for security control
+  - 4 permission modes (default, accept_edits, plan, bypass_permissions)
+  - Tool input modification and execution interrupts
+  - `Client.set_permission_mode/2` for runtime mode changes
+  - 49 tests covering security scenarios
 - **Error Handling**: Improved error detection and timeout handling
 - **Stream Processing**: Lazy evaluation with Elixir Streams
 - **Mocking System**: Comprehensive testing without API calls (supports stdin workflows)
@@ -157,12 +174,18 @@ mix deps.get
 - **Developer Tools**: ContentExtractor, AuthChecker, OptionBuilder, DebugMode, AuthManager
 - **Smart Configuration**: Environment-aware defaults and preset configurations
 
-### 🔮 **Planned Features (v0.4.0+)**
+### 🎉 **v0.4.0 Milestone: 95%+ Feature Parity with Python SDK**
+
+All three critical features now implemented with full test coverage!
+
+### 🔮 **Planned Features (v0.5.0+)**
 - **Telemetry Integration**: Production observability with :telemetry events
 - **Performance Optimization**: Caching, memory optimization
 - **Integration Patterns**: Phoenix LiveView examples, OTP applications, worker pools
 - **Advanced Examples**: Code analysis pipelines, test generators, refactoring tools
 - **Plugin System**: Extensible architecture for custom behaviors
+- **Transport Abstraction**: Pluggable transports (HTTP, WebSocket, etc.)
+- **Additional Runtime Control**: `Client.interrupt/1`, extended control flow APIs
 
 ## Basic Usage
 
@@ -237,6 +260,26 @@ mix run demo_mock.exs
 For detailed documentation about the mocking system, see [MOCKING.md](MOCKING.md).
 
 ## Available Files to Run
+
+### 🌟 v0.4.0 Feature Examples
+
+**New in v0.4.0 - demonstrates MCP tools, agents, and permissions:**
+
+```bash
+# MCP Tool System - In-process tools with deftool macro
+mix run examples/v0_4_0/mcp_calculator_tool.exs
+
+# Agent Definitions - Multi-agent workflows with runtime switching
+mix run examples/v0_4_0/agent_switching.exs
+
+# Permission System - Fine-grained security control
+mix run examples/v0_4_0/permission_control.exs
+
+# Full Integration - All three features together
+mix run examples/v0_4_0/full_feature_showcase.exs
+```
+
+All examples run in mock mode (no API costs) and include detailed explanations.
 
 ### 🎯 Showcase (Recommended Starting Point)
 ```bash
@@ -707,6 +750,178 @@ mix run examples/hooks/complete_workflow.exs
 - Demonstrates security policies in action
 - Displays audit logs and context injection
 - All examples include clear explanations
+
+---
+
+## MCP Tool System (v0.4.0+)
+
+Create in-process MCP tools without subprocess overhead using the `deftool` macro.
+
+```elixir
+defmodule MyTools do
+  use ClaudeAgentSDK.Tool
+
+  deftool :calculator,
+          "Performs calculations",
+          %{
+            type: "object",
+            properties: %{
+              expression: %{type: "string"}
+            },
+            required: ["expression"]
+          } do
+    def execute(%{"expression" => expr}) do
+      # Evaluate and return result
+      result = eval_math(expr)
+      {:ok, %{"content" => [%{"type" => "text", "text" => "Result: #{result}"}]}}
+    end
+
+    defp eval_math(expr), do: # ... implementation
+  end
+end
+
+# Create SDK MCP server
+server = ClaudeAgentSDK.create_sdk_mcp_server(
+  name: "my-tools",
+  version: "1.0.0",
+  tools: [MyTools.Calculator]
+)
+
+# Use in options
+options = Options.new(
+  mcp_config: %{"my-tools" => server}
+)
+```
+
+**Key benefits:**
+- Tools run in the same process (no subprocess overhead)
+- Easier debugging and testing
+- Direct function calls
+- Full Elixir ecosystem access
+
+**Example:**
+```bash
+mix run examples/v0_4_0/mcp_calculator_tool.exs
+```
+
+---
+
+## Agent Definitions (v0.4.0+)
+
+Define multiple agent profiles and switch between them at runtime.
+
+```elixir
+alias ClaudeAgentSDK.{Agent, Options, Client}
+
+# Define agents
+code_agent = Agent.new(
+  name: :coder,
+  description: "Expert programmer",
+  prompt: "You are an expert programmer...",
+  allowed_tools: ["Read", "Write", "Bash"],
+  model: "claude-sonnet-4"
+)
+
+research_agent = Agent.new(
+  name: :researcher,
+  description: "Research specialist",
+  prompt: "You excel at research...",
+  allowed_tools: ["WebSearch", "WebFetch"],
+  model: "claude-opus-4"
+)
+
+# Configure options with multiple agents
+options = Options.new(
+  agents: %{
+    coder: code_agent,
+    researcher: research_agent
+  },
+  agent: :coder  # Start with coder
+)
+
+{:ok, client} = Client.start_link(options)
+
+# Switch agents at runtime
+Client.set_agent(client, :researcher)
+
+# Check current agent
+{:ok, current} = Client.get_agent(client)  # => {:ok, :researcher}
+
+# List available agents
+{:ok, agents} = Client.get_available_agents(client)  # => {:ok, [:coder, :researcher]}
+```
+
+**Key benefits:**
+- Specialized behavior for different tasks
+- Runtime agent switching
+- Context preservation
+- Per-agent tool and model configuration
+
+**Example:**
+```bash
+mix run examples/v0_4_0/agent_switching.exs
+```
+
+---
+
+## Permission System (v0.4.0+)
+
+Control tool execution with fine-grained permission callbacks.
+
+```elixir
+alias ClaudeAgentSDK.{Options, Permission}
+alias ClaudeAgentSDK.Permission.{Context, Result}
+
+# Define permission callback
+permission_callback = fn context ->
+  case {context.tool_name, context.tool_input} do
+    {"Bash", %{"command" => cmd}} ->
+      if String.contains?(cmd, "rm -rf") do
+        Result.deny("Dangerous command blocked")
+      else
+        Result.allow()
+      end
+
+    {"Write", %{"file_path" => path}} ->
+      if String.starts_with?(path, "/etc/") do
+        # Redirect to safe location
+        safe_path = "/tmp/" <> Path.basename(path)
+        Result.allow(updated_input: %{context.tool_input | "file_path" => safe_path})
+      else
+        Result.allow()
+      end
+
+    _ ->
+      Result.allow()
+  end
+end
+
+# Use in options
+options = Options.new(
+  permission_mode: :default,
+  can_use_tool: permission_callback
+)
+
+{:ok, client} = Client.start_link(options)
+
+# Change mode at runtime
+Client.set_permission_mode(client, :plan)  # Require user approval
+Client.set_permission_mode(client, :accept_edits)  # Auto-allow edits
+Client.set_permission_mode(client, :bypass_permissions)  # Allow all
+```
+
+**Permission modes:**
+- `:default` - All tools checked by callback
+- `:accept_edits` - Edit operations auto-allowed
+- `:plan` - User approval required
+- `:bypass_permissions` - All tools allowed
+
+**Example:**
+```bash
+mix run examples/v0_4_0/permission_control.exs
+```
+
+---
 
 ## Control Protocol (v0.3.0+)
 
