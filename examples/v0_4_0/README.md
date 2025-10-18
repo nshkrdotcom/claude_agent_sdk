@@ -7,11 +7,26 @@ Examples demonstrating the three major features added in v0.4.0:
 
 ## Running Examples
 
-All examples can be run with:
+### Mock Mode (No API costs - Demo/Testing)
 
 ```bash
-mix run examples/v0_4_0/EXAMPLE_NAME.exs
+# Shows feature setup and structure (no real Claude calls)
+mix run examples/v0_4_0/mcp_calculator_tool.exs
+mix run examples/v0_4_0/agent_switching.exs
+mix run examples/v0_4_0/permission_control.exs
+mix run examples/v0_4_0/full_feature_showcase.exs
 ```
+
+### Live Mode (Real API calls - Costs money!)
+
+```bash
+# Makes REAL calls to Claude CLI (requires: claude login)
+mix run.live examples/v0_4_0/mcp_tools_live.exs
+mix run.live examples/v0_4_0/agents_live.exs
+mix run.live examples/v0_4_0/permissions_live.exs
+```
+
+⚠️ **Live examples require authentication and will incur API costs!**
 
 ## Examples
 
