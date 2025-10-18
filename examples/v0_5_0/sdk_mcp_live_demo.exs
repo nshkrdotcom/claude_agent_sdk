@@ -29,7 +29,7 @@ defmodule MathTools do
           } do
     def execute(%{"a" => a, "b" => b}) do
       result = a + b
-      IO.puts("  [MathTools] add(#{a}, #{b}) = #{result}")
+      IO.puts("  [MathTools.Add] #{a} + #{b} = #{result}")
 
       {:ok,
        %{
@@ -55,7 +55,7 @@ defmodule MathTools do
           } do
     def execute(%{"a" => a, "b" => b}) do
       result = a * b
-      IO.puts("  [MathTools] multiply(#{a}, #{b}) = #{result}")
+      IO.puts("  [MathTools.Multiply] #{a} × #{b} = #{result}")
 
       {:ok,
        %{
@@ -70,15 +70,20 @@ defmodule MathTools do
   end
 end
 
-# Check if we're in mock mode
+# Check if we're in mock mode - these are LIVE examples only
 if Application.get_env(:claude_agent_sdk, :use_mock, false) do
-  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
-  IO.puts("🎭 Running in MOCK mode (no API costs)")
-  IO.puts("   Use 'mix run.live' for real API calls\n")
-else
-  IO.puts("🔴 Running in LIVE mode (real API calls)")
-  IO.puts("⚠️  Warning: This will make actual API calls and may incur costs!\n")
+  IO.puts("\n🎭 This is a LIVE example - it requires real API calls")
+  IO.puts("   Mock mode cannot demonstrate SDK MCP tool integration properly\n")
+  IO.puts("💡 To run this example:")
+  IO.puts("   MIX_ENV=test mix run.live examples/v0_5_0/sdk_mcp_live_demo.exs\n")
+  IO.puts("   Prerequisites:")
+  IO.puts("   - Claude CLI installed: claude --version")
+  IO.puts("   - Authenticated: claude login\n")
+  System.halt(0)
 end
+
+IO.puts("🔴 Running in LIVE mode (real API calls)")
+IO.puts("⚠️  Warning: This will make actual API calls and may incur costs!\n")
 
 IO.puts("\n=== SDK MCP Live Demo ===\n")
 
@@ -93,14 +98,14 @@ server =
   )
 
 IO.puts("✅ Server created: #{server.name} v#{server.version}")
+IO.puts("   Type: #{server.type}")
 IO.puts("   Registry PID: #{inspect(server.registry_pid)}\n")
 
 # Create options with SDK MCP server
 options =
   ClaudeAgentSDK.Options.new(
     mcp_servers: %{"math-tools" => server},
-    max_turns: 5,
-    verbose: true
+    max_turns: 5
   )
 
 IO.puts("🤖 Configured Claude with SDK MCP server")
@@ -125,7 +130,7 @@ IO.puts("💬 Claude's response:\n")
 
 try do
   ClaudeAgentSDK.query(prompt, options)
-  |> Stream.each(fn msg ->
+  |> Enum.each(fn msg ->
     case msg do
       %{type: :assistant, data: %{message: message}} ->
         content = message["content"] || []
@@ -144,19 +149,24 @@ try do
           end
         end
 
-      %{type: :result} ->
-        IO.puts("\n✅ Query complete!")
+      %{type: :tool_result, data: %{tool_name: tool_name}} ->
+        IO.puts("✅ Tool #{tool_name} completed\n")
+
+      %{type: :result, subtype: :success} ->
+        IO.puts("\n✅ Query completed successfully!")
+
+      %{type: :result, subtype: subtype} ->
+        IO.puts("\n⚠️  Query ended with status: #{subtype}")
 
       _ ->
         :ok
     end
   end)
-  |> Stream.run()
 
   IO.puts("\n🎉 SDK MCP Live Demo completed successfully!")
   IO.puts("\nWhat happened:")
   IO.puts("  1. We created an SDK MCP server with 2 math tools")
-  IO.puts("  2. The server was passed to Claude via the control protocol")
+  IO.puts("  2. The server was passed to Claude via mcp_servers option")
   IO.puts("  3. Claude discovered the tools via MCP 'tools/list' request")
   IO.puts("  4. Claude used the tools via MCP 'tools/call' requests")
   IO.puts("  5. Tool execution happened in-process (no subprocess overhead)")
@@ -168,11 +178,12 @@ try do
 rescue
   e ->
     IO.puts("\n❌ Error: #{Exception.message(e)}")
-    IO.puts("\n#{Exception.format_stacktrace(__STACKTRACE__)}")
+    IO.puts("\nStacktrace:")
+    IO.puts(Exception.format_stacktrace(__STACKTRACE__))
 
     IO.puts("\n💡 Troubleshooting:")
     IO.puts("  - Ensure Claude CLI is installed: claude --version")
     IO.puts("  - Ensure you're authenticated: claude login")
     IO.puts("  - Check API key: echo $ANTHROPIC_API_KEY")
-    IO.puts("  - Try with mock mode first: Options.new(mock: true)")
+    IO.puts("  - Try with mock mode first: mix run (without .live)")
 end

@@ -1,15 +1,29 @@
 #!/usr/bin/env elixir
-
 # Agents Live Example
 # Demonstrates agent switching with REAL Claude CLI usage
 #
 # Usage:
-#   mix run.live examples/v0_4_0/agents_live.exs
+#   MIX_ENV=test mix run.live examples/v0_4_0/agents_live.exs
+#
+# Prerequisites:
+#   - Claude CLI installed and authenticated (claude login)
 
-alias ClaudeAgentSDK.{Agent, Options, Client, ContentExtractor}
+alias ClaudeAgentSDK.{Agent, Options, ContentExtractor}
+
+# Check if we're in mock mode - these are LIVE examples only
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  IO.puts("\n🎭 This is a LIVE example - it requires real API calls")
+  IO.puts("   For agent configuration demo (mock mode), see:")
+  IO.puts("   mix run examples/v0_4_0/agent_switching.exs\n")
+  IO.puts("💡 To run this live example:")
+  IO.puts("   MIX_ENV=test mix run.live examples/v0_4_0/agents_live.exs\n")
+  System.halt(0)
+end
+
+IO.puts("🔴 Running in LIVE mode (real API calls)")
+IO.puts("⚠️  Warning: This will make actual API calls and may incur costs!\n")
 
 IO.puts("\n=== Agents Live Example ===\n")
-IO.puts("⚠️  This will make REAL API calls to Claude\n")
 
 # Define two specialized agents
 coder =
@@ -17,7 +31,7 @@ coder =
     name: :coder,
     description: "Python coding expert",
     prompt:
-      "You are a Python coding expert. Write concise, well-documented code with type hints.",
+      "You are a Python coding expert. Write concise, well-documented code with type hints. Keep responses under 15 lines.",
     allowed_tools: ["Read", "Write"],
     model: "claude-sonnet-4"
   )
@@ -27,7 +41,7 @@ analyst =
     name: :analyst,
     description: "Code analysis expert",
     prompt:
-      "You are a code analysis expert. Provide detailed analysis and suggestions for improvement.",
+      "You are a code analysis expert. Provide concise analysis highlighting 2-3 key points. Keep responses under 10 lines.",
     allowed_tools: ["Read"],
     model: "claude-sonnet-4"
   )
@@ -36,7 +50,9 @@ IO.puts("✅ Defined 2 agents:")
 IO.puts("   - coder: Writes Python code")
 IO.puts("   - analyst: Analyzes code quality\n")
 
-# Start with coder agent
+# Task 1: Generate code with coder agent
+IO.puts("📝 Task 1: Coder agent generates Python code\n")
+
 options =
   Options.new(
     agents: %{
@@ -47,68 +63,77 @@ options =
     max_turns: 5
   )
 
-{:ok, client} = Client.start_link(options)
-IO.puts("✅ Client started with coder agent\n")
+prompt1 =
+  "Write a simple Python function to check if a number is prime. Keep it under 10 lines total."
 
-# Task 1: Generate code
-IO.puts("📝 Task 1: Coder agent generates Python code\n")
+IO.puts("Prompt: #{prompt1}\n")
+IO.puts("🤖 Agent: coder\n")
 
-Client.send_message(
-  client,
-  "Write a simple Python function to check if a number is prime. Keep it under 10 lines."
-)
+# First query with coder
+messages1 =
+  ClaudeAgentSDK.query(prompt1, options)
+  |> Enum.to_list()
 
-Client.stream_messages(client)
-|> Stream.take_while(fn msg -> msg.type != :result end)
-|> Stream.each(fn msg ->
-  case msg do
-    %{type: :assistant} = message ->
-      text = ContentExtractor.extract_content_text([message.raw])
-      if text != "", do: IO.puts("💬 Coder: #{String.slice(text, 0..200)}...")
+# Extract and display response
+text1 = ContentExtractor.extract_content_text(messages1)
 
-    _ ->
-      :ok
+if text1 != "" do
+  IO.puts("💬 Coder's Response:")
+  IO.puts("─" |> String.duplicate(60))
+  IO.puts(String.slice(text1, 0..500))
+  if String.length(text1) > 500, do: IO.puts("... (truncated)")
+  IO.puts("─" |> String.duplicate(60))
+end
+
+# Get session ID from result message
+session_id =
+  case Enum.find(messages1, &(&1.type == :system and &1.subtype == :init)) do
+    %{data: %{session_id: sid}} -> sid
+    _ -> nil
   end
-end)
-|> Stream.run()
 
-IO.puts("\n✅ Code generation complete\n")
+if session_id do
+  IO.puts("\n✅ Code generation complete (Session: #{String.slice(session_id, 0..8)}...)\n")
 
-# Switch to analyst agent
-IO.puts("🔄 Switching to analyst agent...\n")
-Client.set_agent(client, :analyst)
+  # Task 2: Switch to analyst and analyze the code
+  IO.puts("🔄 Switching to analyst agent...\n")
 
-# Task 2: Analyze the code
-IO.puts("📊 Task 2: Analyst agent reviews the code\n")
+  # Update options to use analyst agent
+  options_analyst = %{options | agent: :analyst}
 
-Client.send_message(
-  client,
-  "Analyze the prime number function I just wrote. What are its strengths and weaknesses?"
-)
+  prompt2 =
+    "Analyze the prime number function I just wrote. Give me 2-3 key strengths and weaknesses, be concise."
 
-Client.stream_messages(client)
-|> Stream.take_while(fn msg -> msg.type != :result end)
-|> Stream.each(fn msg ->
-  case msg do
-    %{type: :assistant} = message ->
-      text = ContentExtractor.extract_content_text([message.raw])
-      if text != "", do: IO.puts("💬 Analyst: #{String.slice(text, 0..200)}...")
+  IO.puts("Prompt: #{prompt2}\n")
+  IO.puts("🤖 Agent: analyst\n")
 
-    _ ->
-      :ok
+  # Resume conversation with analyst agent
+  messages2 =
+    ClaudeAgentSDK.resume(session_id, prompt2, options_analyst)
+    |> Enum.to_list()
+
+  # Extract and display response
+  text2 = ContentExtractor.extract_content_text(messages2)
+
+  if text2 != "" do
+    IO.puts("💬 Analyst's Response:")
+    IO.puts("─" |> String.duplicate(60))
+    IO.puts(String.slice(text2, 0..500))
+    if String.length(text2) > 500, do: IO.puts("... (truncated)")
+    IO.puts("─" |> String.duplicate(60))
   end
-end)
-|> Stream.run()
 
-IO.puts("\n✅ Analysis complete\n")
+  IO.puts("\n✅ Analysis complete\n")
 
-Client.stop(client)
-
-IO.puts("\n✅ Agents Live Example complete!")
-IO.puts("\nWhat happened:")
-IO.puts("  1. Started with coder agent")
-IO.puts("  2. Coder generated Python code")
-IO.puts("  3. Switched to analyst agent")
-IO.puts("  4. Analyst reviewed the code")
-IO.puts("  5. Context preserved across agent switch")
-IO.puts("\n💡 This demonstrates multi-agent workflows for complex tasks!")
+  IO.puts("\n✅ Agents Live Example complete!")
+  IO.puts("\nWhat happened:")
+  IO.puts("  1. Started conversation with coder agent")
+  IO.puts("  2. Coder generated Python prime number function")
+  IO.puts("  3. Switched to analyst agent (via resume with new agent)")
+  IO.puts("  4. Analyst analyzed the code from the same session")
+  IO.puts("  5. Context was preserved across agent switch")
+  IO.puts("\n💡 This demonstrates multi-agent workflows for complex tasks!")
+else
+  IO.puts("\n⚠️  Could not extract session ID for continuation")
+  IO.puts("   Agent switching requires session resumption")
+end

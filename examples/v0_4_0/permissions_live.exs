@@ -1,16 +1,30 @@
 #!/usr/bin/env elixir
-
 # Permissions Live Example
 # Demonstrates permission system with REAL Claude CLI usage
 #
 # Usage:
-#   mix run.live examples/v0_4_0/permissions_live.exs
+#   MIX_ENV=test mix run.live examples/v0_4_0/permissions_live.exs
+#
+# Prerequisites:
+#   - Claude CLI installed and authenticated (claude login)
 
-alias ClaudeAgentSDK.{Options, Client, ContentExtractor}
+alias ClaudeAgentSDK.{Options, ContentExtractor}
 alias ClaudeAgentSDK.Permission.{Context, Result}
 
+# Check if we're in mock mode - these are LIVE examples only
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  IO.puts("\n🎭 This is a LIVE example - it requires real API calls")
+  IO.puts("   For permission configuration demo (mock mode), see:")
+  IO.puts("   mix run examples/v0_4_0/permission_control.exs\n")
+  IO.puts("💡 To run this live example:")
+  IO.puts("   MIX_ENV=test mix run.live examples/v0_4_0/permissions_live.exs\n")
+  System.halt(0)
+end
+
+IO.puts("🔴 Running in LIVE mode (real API calls)")
+IO.puts("⚠️  Warning: This will make actual API calls and may incur costs!\n")
+
 IO.puts("\n=== Permissions Live Example ===\n")
-IO.puts("⚠️  This will make REAL API calls to Claude\n")
 
 # Define permission callback with logging
 permission_log = :ets.new(:perm_log, [:public, :bag])
@@ -22,9 +36,9 @@ permission_callback = fn context ->
   case {context.tool_name, context.tool_input} do
     {"Bash", %{"command" => cmd}} ->
       # Block dangerous commands
-      if String.contains?(cmd, "rm -rf") do
-        IO.puts("🚫 BLOCKED dangerous bash: #{cmd}")
-        Result.deny("Dangerous rm -rf command not allowed", interrupt: true)
+      if String.contains?(cmd, ["rm -rf", "dd if=", "mkfs", "> /dev/"]) do
+        IO.puts("🚫 BLOCKED dangerous bash: #{String.slice(cmd, 0..50)}")
+        Result.deny("Dangerous command not allowed for safety", interrupt: true)
       else
         IO.puts("✅ ALLOWED bash: #{String.slice(cmd, 0..50)}")
         Result.allow()
@@ -35,56 +49,50 @@ permission_callback = fn context ->
       IO.puts("📝 LOGGED write to: #{path}")
       Result.allow()
 
-    tool ->
+    {"Read", %{"file_path" => path}} ->
+      IO.puts("📖 LOGGED read from: #{path}")
+      Result.allow()
+
+    {tool, _input} ->
       IO.puts("✅ ALLOWED: #{tool}")
       Result.allow()
   end
 end
 
-# Start client with permissions
+IO.puts("✅ Permission callback configured\n")
+
+# Create options with permissions
 options =
   Options.new(
     permission_mode: :default,
     can_use_tool: permission_callback,
-    max_turns: 10
+    max_turns: 5
   )
 
-{:ok, client} = Client.start_link(options)
-IO.puts("✅ Client started with permission controls\n")
-
 # Task: Ask Claude to list files
-IO.puts("📤 Asking Claude to list files in current directory...\n")
+prompt = """
+Please list the files in the current directory using bash.
+Just run 'ls -la' and show me the output briefly.
+"""
 
-Client.send_message(
-  client,
-  "Please list the files in the current directory using bash. Just run 'ls -la' and show me the output."
-)
+IO.puts("📤 Asking Claude to list files...\n")
+IO.puts("Prompt: #{prompt}\n")
 
-Client.stream_messages(client)
-|> Stream.take_while(fn msg -> msg.type != :result end)
-|> Stream.each(fn msg ->
-  case msg do
-    %{type: :assistant, data: %{message: message}} ->
-      content = message["content"] || []
+# Execute query
+messages =
+  ClaudeAgentSDK.query(prompt, options)
+  |> Enum.to_list()
 
-      for block <- content do
-        case block do
-          %{"type" => "text", "text" => text} ->
-            IO.puts("💬 Claude: #{text}")
+# Extract and display response
+text = ContentExtractor.extract_content_text(messages)
 
-          %{"type" => "tool_use", "name" => name, "input" => input} ->
-            IO.puts("🛠️  Claude using: #{name}(#{inspect(input)})")
-
-          _ ->
-            :ok
-        end
-      end
-
-    _ ->
-      :ok
-  end
-end)
-|> Stream.run()
+if text != "" do
+  IO.puts("💬 Claude's Response:")
+  IO.puts("─" |> String.duplicate(60))
+  IO.puts(String.slice(text, 0..300))
+  if String.length(text) > 300, do: IO.puts("... (truncated)")
+  IO.puts("─" |> String.duplicate(60))
+end
 
 IO.puts("\n✅ Task complete\n")
 
@@ -96,28 +104,26 @@ IO.puts("Total permission checks: #{length(logs)}\n")
 for {timestamp, tool, input} <- logs do
   input_str =
     case input do
-      %{"command" => cmd} -> cmd
-      %{"file_path" => path} -> path
-      other -> inspect(other) |> String.slice(0..50)
+      %{"command" => cmd} -> "command: #{String.slice(cmd, 0..40)}"
+      %{"file_path" => path} -> "file: #{path}"
+      other -> inspect(other) |> String.slice(0..40)
     end
 
-  IO.puts("  [#{timestamp}] #{tool}: #{input_str}")
+  time_short = timestamp |> String.slice(11..18)
+  IO.puts("  [#{time_short}] #{tool}: #{input_str}")
 end
 
 :ets.delete(permission_log)
 
-# Demonstrate mode switching
-IO.puts("\n🔄 Switching to plan mode (would require user approval)...")
-Client.set_permission_mode(client, :plan)
-IO.puts("✅ Mode switched to :plan")
-
-Client.stop(client)
-
 IO.puts("\n✅ Permissions Live Example complete!")
 IO.puts("\nWhat happened:")
 IO.puts("  1. Set up permission callback to log all tool usage")
-IO.puts("  2. Claude tried to use bash to list files")
-IO.puts("  3. Permission callback was invoked")
-IO.puts("  4. Tool usage was logged")
-IO.puts("  5. Command was allowed (safe ls command)")
-IO.puts("\n💡 Permission callbacks let you audit, control, and modify all tool usage!")
+IO.puts("  2. Claude used bash to list files")
+IO.puts("  3. Permission callback was invoked for each tool use")
+IO.puts("  4. Tool usage was logged for audit trail")
+IO.puts("  5. Safe commands were allowed, dangerous would be blocked")
+IO.puts("\n💡 Permission callbacks give you:")
+IO.puts("  - Complete audit trail of all tool usage")
+IO.puts("  - Ability to block dangerous operations")
+IO.puts("  - Ability to redirect file paths to safe locations")
+IO.puts("  - Runtime control over what Claude can do")
