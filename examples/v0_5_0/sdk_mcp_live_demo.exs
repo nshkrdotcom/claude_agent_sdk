@@ -70,9 +70,17 @@ defmodule MathTools do
   end
 end
 
+# Check if we're in mock mode
+if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
+  IO.puts("🎭 Running in MOCK mode (no API costs)")
+  IO.puts("   Use 'mix run.live' for real API calls\n")
+else
+  IO.puts("🔴 Running in LIVE mode (real API calls)")
+  IO.puts("⚠️  Warning: This will make actual API calls and may incur costs!\n")
+end
+
 IO.puts("\n=== SDK MCP Live Demo ===\n")
-IO.puts("This example demonstrates SDK MCP tools with REAL Claude API calls")
-IO.puts("⚠️  Warning: This will make actual API calls and may incur costs!\n")
 
 # Create SDK MCP server with math tools
 IO.puts("📦 Creating SDK MCP server...")
