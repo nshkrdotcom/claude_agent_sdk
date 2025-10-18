@@ -3,11 +3,13 @@
 # Demonstrates SDK MCP tools with actual Claude CLI integration
 #
 # Usage:
-#   mix run.live examples/v0_5_0/sdk_mcp_live_demo.exs
+#   MIX_ENV=test mix run.live examples/v0_5_0/sdk_mcp_live_demo.exs
 #
 # Prerequisites:
 #   - Claude CLI installed and authenticated (claude login)
 #   - ANTHROPIC_API_KEY environment variable set
+#
+# Note: Uses MIX_ENV=test to ensure compiled modules are available
 
 defmodule MathTools do
   @moduledoc """

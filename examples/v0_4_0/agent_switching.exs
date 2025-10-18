@@ -121,7 +121,8 @@ state = :sys.get_state(client)
 IO.puts("   Model: #{state.options.model}")
 IO.puts("   Allowed tools: #{inspect(state.options.allowed_tools)}")
 
-# Clean up
+# Clean up (wait a bit for any pending operations)
+Process.sleep(100)
 Client.stop(client)
 
 IO.puts("\n✅ Agent Switching example complete!")
