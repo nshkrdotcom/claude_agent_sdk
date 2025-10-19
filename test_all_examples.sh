@@ -8,6 +8,7 @@
 # Groups:
 #   getting-started  - Quick start examples
 #   mcp             - v0.5.0 MCP tools (mock mode only)
+#   runtime-control - v0.5.0 runtime control demos
 #   agents          - v0.4.0 Agents & Permissions (mock mode only)
 #   hooks           - v0.3.0 Hooks system
 #   core            - Core/basic examples (mock mode only)
@@ -76,6 +77,17 @@ test_mcp() {
     run_example "MCP Calculator Tool" "mix run examples/advanced_features/mcp_calculator_tool.exs"
     run_example "SDK MCP Simple Test" "mix run examples/advanced_features/sdk_mcp_simple_test.exs"
     skip_example "SDK MCP Live Demo" "Requires real API - use 'MIX_ENV=test mix run.live examples/advanced_features/sdk_mcp_live_demo.exs'"
+}
+
+# v0.5.0 Runtime Control Examples
+test_runtime_control() {
+    echo -e "${GREEN}═══════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  🔄 v0.5.0 Runtime Control Examples${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════════${NC}\n"
+
+    run_example "Runtime Model Switcher" "mix run examples/runtime_control/model_switcher.exs"
+    run_example "Transport Swap Demo" "mix run examples/runtime_control/transport_swap.exs"
+    run_example "Subscriber Broadcast" "mix run examples/runtime_control/subscriber_broadcast.exs"
 }
 
 # v0.4.0 Agents & Permissions Examples
@@ -177,6 +189,9 @@ case "$GROUP" in
     mcp)
         test_mcp
         ;;
+    runtime-control)
+        test_runtime_control
+        ;;
     agents)
         test_agents
         ;;
@@ -189,6 +204,7 @@ case "$GROUP" in
     all)
         test_getting_started
         test_mcp
+        test_runtime_control
         test_agents
         test_hooks
         test_core

@@ -38,6 +38,7 @@ This document helps maintainers upgrade to the runtime-control release. Follow t
    - Use `ClaudeAgentSDK.SupertesterCase` in place of `ExUnit.Case`.
    - Swap fragile timing logic for `SupertesterCase.eventually/2`.
    - Inject `ClaudeAgentSDK.TestSupport.MockTransport` to simulate CLI messages.
+   - Exercise the runtime-control example scripts with `mix run examples/runtime_control/*.exs` to confirm end-to-end behaviour.
 
 6. **Transport Implementers**
    - Implement the new behaviour (`start_link/1`, `send/2`, `subscribe/2`, `close/1`, `status/1`).

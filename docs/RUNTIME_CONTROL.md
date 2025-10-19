@@ -24,6 +24,18 @@ This guide explains how to use the runtime control capabilities introduced in `c
 
 `set_model/2` accepts either short model names (`"opus"`, `"sonnet"`, `"haiku"`) or fully-qualified versions (e.g. `"claude-opus-4-20250514"`). The helper normalises the value and validates that the SDK knows how to talk to the requested model before sending the control protocol request.
 
+### Hands-on Examples
+
+Run the ready-made scripts to see these flows in action:
+
+```bash
+mix run examples/runtime_control/model_switcher.exs
+mix run examples/runtime_control/transport_swap.exs
+mix run examples/runtime_control/subscriber_broadcast.exs
+```
+
+Each script defaults to the deterministic mock transport and accepts `--live` to attempt real CLI interaction once `claude login` has been configured.
+
 ### Handling Errors
 
 ```elixir

@@ -222,6 +222,19 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
       assert {:ok, "claude-opus-4"} = Protocol.decode_set_model_response(response)
     end
 
+    test "decodes success response nested under response key" do
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => "req_1",
+          "subtype" => "success",
+          "response" => %{"model" => "claude-sonnet-4"}
+        }
+      }
+
+      assert {:ok, "claude-sonnet-4"} = Protocol.decode_set_model_response(response)
+    end
+
     test "decodes error response" do
       response = %{
         "type" => "control_response",

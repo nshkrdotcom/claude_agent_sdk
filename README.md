@@ -57,7 +57,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.4.0"}
+    {:claude_agent_sdk, "~> 0.5.0"}
   ]
 end
 ```
@@ -98,7 +98,7 @@ mix deps.get
 
 ## Implementation Status
 
-### ✅ **Currently Implemented (v0.5.0-dev)**
+### ✅ **Currently Implemented (v0.5.0)**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
@@ -236,6 +236,18 @@ To experiment with your own transport or to write deterministic tests, take a lo
 
 - `docs/RUNTIME_CONTROL.md`
 - `docs/CUSTOM_TRANSPORTS.md`
+- `docs/MIGRATION_V0_5.md`
+
+You can try the runtime control examples directly:
+
+```bash
+mix run examples/runtime_control/model_switcher.exs
+mix run examples/runtime_control/transport_swap.exs
+mix run examples/runtime_control/subscriber_broadcast.exs
+```
+
+Pass `--live` to any script to attempt the default CLI transport once `claude login` is configured.
+The model switcher prints the model before and after calling `set_model/2`, making it easy to confirm the change succeeded in real time.
 
 ## Testing with Mocks
 

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-10-24
+
+### Added - Runtime Control & Transport Abstraction (2025-10-24)
+
+- Added `ClaudeAgentSDK.Client.set_model/2` to switch models without restarting the client, including validation, pending request tracking, and broadcast updates for subscribers.
+- Introduced the `ClaudeAgentSDK.Transport` behaviour plus default port implementation; `Client.start_link/2` now accepts `:transport` and `:transport_opts` for custom backends.
+- Expanded the control protocol with `encode_set_model_request/2` and `decode_set_model_response/1` helpers to keep transports lightweight.
+- Documented runtime control workflows and custom transport expectations in `docs/RUNTIME_CONTROL.md` and `docs/CUSTOM_TRANSPORTS.md`.
+
+### Added - Deterministic Supertester Harness (2025-10-24)
+
+- Adopted the `supertester` dependency (test-only) and new `ClaudeAgentSDK.SupertesterCase` to stabilise asynchronous suites.
+- Shipped a mock transport and helper assertions for reproducible CLI message flows in tests.
+- Captured upgrade guidance and new testing patterns in `docs/MIGRATION_V0_5.md`.
+
 ### Added - Hybrid Query System for Future SDK MCP Support (2025-10-17)
 
 **Complete SDK MCP infrastructure ready for when CLI adds support!**

@@ -86,9 +86,27 @@ defmodule ClaudeAgentSDK.Transport.Port do
       |> normalize_payload()
       |> ensure_newline()
 
-    case Port.command(state.port, payload) do
-      true -> {:reply, :ok, state}
-      false -> {:reply, {:error, :send_failed}, state}
+    reply =
+      try do
+        true = Port.command(state.port, payload)
+        :ok
+      rescue
+        MatchError ->
+          {:error, :send_failed}
+
+        ArgumentError ->
+          {:error, :send_failed}
+      catch
+        :error, _reason ->
+          {:error, :send_failed}
+      end
+
+    case reply do
+      :ok ->
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 

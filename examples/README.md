@@ -8,6 +8,20 @@ Run any example with: `mix run examples/<example_name>.exs`
 
 ## 📂 Available Examples
 
+### 🔄 Runtime Control (v0.5.0)
+
+- [`runtime_control/model_switcher.exs`](runtime_control/model_switcher.exs) — demonstrates switching models mid-session with deterministic mock transport responses (`--live` enables CLI transport).
+- [`runtime_control/transport_swap.exs`](runtime_control/transport_swap.exs) — compares custom mock transport configurations, including artificial latency, and prints raw control frames.
+- [`runtime_control/subscriber_broadcast.exs`](runtime_control/subscriber_broadcast.exs) — shows how multiple subscribers receive assistant and control updates in lockstep.
+
+Run them with:
+
+```bash
+mix run examples/runtime_control/model_switcher.exs
+mix run examples/runtime_control/transport_swap.exs
+mix run examples/runtime_control/subscriber_broadcast.exs
+```
+
 ### 🔍 Code Analysis & Review
 
 #### [`code_review_bot.exs`](code_review_bot.exs)

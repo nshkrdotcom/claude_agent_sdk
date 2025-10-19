@@ -169,10 +169,16 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   Decodes a set_model control response.
   """
   @spec decode_set_model_response(map()) :: {:ok, String.t()} | {:error, term()}
-  def decode_set_model_response(%{"response" => %{"subtype" => "success", "result" => result}}) do
-    model = Map.get(result, "model") || Map.get(result, :model)
+  def decode_set_model_response(%{"response" => %{"subtype" => "success"} = response}) do
+    model =
+      response
+      |> extract_model_from_response()
 
-    if is_binary(model), do: {:ok, model}, else: {:error, :invalid_response}
+    if is_binary(model) do
+      {:ok, model}
+    else
+      {:error, :invalid_response}
+    end
   end
 
   def decode_set_model_response(%{"response" => %{"subtype" => "error", "error" => error}}) do
@@ -180,6 +186,22 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   end
 
   def decode_set_model_response(_), do: {:error, :invalid_response}
+
+  defp extract_model_from_response(response) do
+    cond do
+      result = response["result"] || response[:result] ->
+        result["model"] || result[:model]
+
+      inner = response["response"] || response[:response] ->
+        inner["model"] || inner[:model]
+
+      model = response["model"] || response[:model] ->
+        model
+
+      true ->
+        nil
+    end
+  end
 
   @doc """
   Decodes a message from CLI.

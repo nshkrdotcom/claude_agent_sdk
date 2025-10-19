@@ -408,7 +408,7 @@ defmodule ClaudeAgentSDK.Client do
             case send_payload(state, json) do
               :ok ->
                 pending_requests =
-                  Map.put(state.pending_requests, request_id, {:set_model, from})
+                  Map.put(state.pending_requests, request_id, {:set_model, from, normalized})
 
                 new_state = %{
                   state
@@ -864,30 +864,40 @@ defmodule ClaudeAgentSDK.Client do
     updated_state = %{state | pending_requests: pending_requests}
 
     case {pending_entry, response["subtype"]} do
-      {{:set_model, from}, "success"} ->
+      {{:set_model, from, requested_model}, "success"} ->
         case Protocol.decode_set_model_response(response_data) do
           {:ok, model} ->
             Logger.info("Model changed successfully", request_id: request_id, model: model)
             GenServer.reply(from, :ok)
             %{updated_state | current_model: model, pending_model_change: nil}
 
-          {:error, reason} ->
-            Logger.error("Failed to decode set_model response",
+          {:error, :invalid_response} when is_binary(requested_model) ->
+            Logger.info(
+              "Model change acknowledged without explicit model; using requested value",
               request_id: request_id,
-              error: inspect(reason)
+              model: requested_model
+            )
+
+            GenServer.reply(from, :ok)
+            %{updated_state | current_model: requested_model, pending_model_change: nil}
+
+          {:error, reason} ->
+            Logger.error(
+              "Failed to decode set_model response: #{inspect(response_data)} (reason=#{inspect(reason)})",
+              request_id: request_id
             )
 
             GenServer.reply(from, {:error, reason})
             %{updated_state | pending_model_change: nil}
         end
 
-      {{:set_model, from}, "error"} ->
+      {{:set_model, from, _requested_model}, "error"} ->
         error = response["error"] || "set_model_failed"
         Logger.error("Model change rejected", request_id: request_id, error: error)
         GenServer.reply(from, {:error, error})
         %{updated_state | pending_model_change: nil}
 
-      {{:set_model, from}, other} ->
+      {{:set_model, from, _requested_model}, other} ->
         Logger.warning("Unexpected subtype for set_model response",
           request_id: request_id,
           subtype: other

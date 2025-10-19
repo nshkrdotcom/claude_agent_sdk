@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
-  @version "0.4.0"
+  @version "0.5.0"
 
   def project do
     [
@@ -54,7 +54,7 @@ defmodule ClaudeAgentSdk.MixProject do
       },
       maintainers: [{"NSHkr", "ZeroTrust@NSHkr.com"}],
       files:
-        ~w(lib mix.exs README.md HOOKS_GUIDE.md LICENSE CHANGELOG.md .formatter.exs assets docs/design examples/hooks test/claude_agent_sdk/hooks)
+        ~w(lib mix.exs README.md HOOKS_GUIDE.md LICENSE CHANGELOG.md .formatter.exs assets docs/design examples/hooks examples/runtime_control test/claude_agent_sdk/hooks)
     ]
   end
 

@@ -192,6 +192,18 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
   describe "status/0" do
     test "returns authentication status when authenticated via env var" do
+      previous_vertex = System.get_env("CLAUDE_AGENT_USE_VERTEX")
+      previous_bedrock = System.get_env("CLAUDE_AGENT_USE_BEDROCK")
+      previous_anthropic = System.get_env("ANTHROPIC_API_KEY")
+
+      on_exit(fn ->
+        restore_env("CLAUDE_AGENT_USE_VERTEX", previous_vertex)
+        restore_env("CLAUDE_AGENT_USE_BEDROCK", previous_bedrock)
+        restore_env("ANTHROPIC_API_KEY", previous_anthropic)
+      end)
+
+      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
+      System.delete_env("CLAUDE_AGENT_USE_BEDROCK")
       System.put_env("ANTHROPIC_API_KEY", "sk-ant-test-key")
 
       status = AuthManager.status()
@@ -266,4 +278,7 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
       end
     end
   end
+
+  defp restore_env(key, nil), do: System.delete_env(key)
+  defp restore_env(key, value), do: System.put_env(key, value)
 end

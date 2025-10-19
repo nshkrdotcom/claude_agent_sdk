@@ -9,6 +9,11 @@ defmodule ClaudeAgentSDK.TransportTest do
 
   alias ClaudeAgentSDK.Transport
 
+  setup_all do
+    Code.ensure_loaded(Transport)
+    :ok
+  end
+
   describe "behaviour callbacks" do
     test "should_define_start_link_callback_with_arity_1" do
       assert function_exported?(Transport, :behaviour_info, 1)

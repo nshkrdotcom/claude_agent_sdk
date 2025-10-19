@@ -59,7 +59,7 @@ The callbacks should:
 
 ## 3. Testing Strategy
 
-Use the provided mock transport for unit tests and your real transport for an integration smoke test.
+Use the provided mock transport for unit tests and your real transport for an integration smoke test. The `examples/runtime_control/transport_swap.exs` script showcases this pattern end-to-end with both fast and delayed transport configurations.
 
 ```elixir
 defmodule MyApp.Transport.WebSocketTest do
