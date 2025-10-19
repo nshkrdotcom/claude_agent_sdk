@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
-  use ExUnit.Case, async: true
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.ControlProtocol.Protocol
 
@@ -183,6 +183,61 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
     test "returns false for messages without type" do
       msg = %{"data" => "something"}
       assert Protocol.is_control_message?(msg) == false
+    end
+  end
+
+  describe "encode_set_model_request/1" do
+    test "creates control request with set_model subtype" do
+      {request_id, json} = Protocol.encode_set_model_request("claude-opus-4")
+
+      assert is_binary(request_id)
+      decoded = Jason.decode!(json)
+
+      assert decoded["type"] == "control_request"
+      assert decoded["request"]["subtype"] == "set_model"
+      assert decoded["request"]["model"] == "claude-opus-4"
+      assert decoded["request_id"] == request_id
+    end
+
+    test "accepts optional request id" do
+      {request_id, json} = Protocol.encode_set_model_request("opus", "req_custom")
+      assert request_id == "req_custom"
+
+      decoded = Jason.decode!(json)
+      assert decoded["request_id"] == "req_custom"
+    end
+  end
+
+  describe "decode_set_model_response/1" do
+    test "decodes success response" do
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => "req_1",
+          "subtype" => "success",
+          "result" => %{"model" => "claude-opus-4"}
+        }
+      }
+
+      assert {:ok, "claude-opus-4"} = Protocol.decode_set_model_response(response)
+    end
+
+    test "decodes error response" do
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => "req_1",
+          "subtype" => "error",
+          "error" => "invalid_model"
+        }
+      }
+
+      assert {:error, "invalid_model"} = Protocol.decode_set_model_response(response)
+    end
+
+    test "returns error for malformed payload" do
+      assert {:error, :invalid_response} =
+               Protocol.decode_set_model_response(%{"type" => "unknown"})
     end
   end
 end

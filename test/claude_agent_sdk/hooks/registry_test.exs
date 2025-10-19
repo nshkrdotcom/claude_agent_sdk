@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.Hooks.RegistryTest do
-  use ExUnit.Case, async: true
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Hooks.Registry
 

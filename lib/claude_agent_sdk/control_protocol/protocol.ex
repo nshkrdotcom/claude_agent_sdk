@@ -93,6 +93,28 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   end
 
   @doc """
+  Encodes a set_model control request.
+
+  Returns `{request_id, json}`.
+  """
+  @spec encode_set_model_request(String.t(), request_id() | nil) :: {request_id(), String.t()}
+  def encode_set_model_request(model, request_id \\ nil) do
+    model = to_string(model)
+    req_id = request_id || generate_request_id()
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => req_id,
+      "request" => %{
+        "subtype" => "set_model",
+        "model" => model
+      }
+    }
+
+    {req_id, Jason.encode!(request)}
+  end
+
+  @doc """
   Encodes a hook callback response.
 
   Sends the result of a hook callback execution back to CLI.
@@ -142,6 +164,22 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
 
     Jason.encode!(response)
   end
+
+  @doc """
+  Decodes a set_model control response.
+  """
+  @spec decode_set_model_response(map()) :: {:ok, String.t()} | {:error, term()}
+  def decode_set_model_response(%{"response" => %{"subtype" => "success", "result" => result}}) do
+    model = Map.get(result, "model") || Map.get(result, :model)
+
+    if is_binary(model), do: {:ok, model}, else: {:error, :invalid_response}
+  end
+
+  def decode_set_model_response(%{"response" => %{"subtype" => "error", "error" => error}}) do
+    {:error, error}
+  end
+
+  def decode_set_model_response(_), do: {:error, :invalid_response}
 
   @doc """
   Decodes a message from CLI.

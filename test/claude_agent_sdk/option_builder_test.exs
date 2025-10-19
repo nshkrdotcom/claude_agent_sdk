@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.OptionBuilderTest do
-  use ExUnit.Case
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.{OptionBuilder, Options}
 

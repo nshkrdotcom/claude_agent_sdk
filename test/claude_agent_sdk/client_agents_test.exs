@@ -5,7 +5,7 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
   Tests the Client GenServer's ability to switch between agents
   at runtime while preserving conversation context.
   """
-  use ExUnit.Case, async: false
+  use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
   @moduletag :requires_cli
 

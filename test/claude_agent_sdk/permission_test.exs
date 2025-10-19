@@ -12,7 +12,7 @@ defmodule ClaudeAgentSDK.PermissionTest do
   - Error handling in permission callbacks
   """
 
-  use ExUnit.Case, async: true
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Permission.{Context, Result}
 

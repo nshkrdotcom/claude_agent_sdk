@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.MockTest do
-  use ExUnit.Case
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Mock
 

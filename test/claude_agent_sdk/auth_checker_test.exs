@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.AuthCheckerTest do
-  use ExUnit.Case
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.AuthChecker
 

@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.ContentExtractorTest do
-  use ExUnit.Case
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.{ContentExtractor, Message}
 

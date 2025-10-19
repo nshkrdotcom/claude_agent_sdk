@@ -5,7 +5,7 @@ defmodule ClaudeAgentSDK.AgentTest do
   Tests the Agent struct that represents custom agent definitions
   with specific tools, prompts, and models.
   """
-  use ExUnit.Case, async: true
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Agent
 

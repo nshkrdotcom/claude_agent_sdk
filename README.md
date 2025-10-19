@@ -98,7 +98,7 @@ mix deps.get
 
 ## Implementation Status
 
-### ✅ **Currently Implemented (v0.4.0)**
+### ✅ **Currently Implemented (v0.5.0-dev)**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
@@ -167,6 +167,11 @@ mix deps.get
   - Tool input modification and execution interrupts
   - `Client.set_permission_mode/2` for runtime mode changes
   - 49 tests covering security scenarios
+- **Runtime Control** (v0.5.0): Change models and transports without restarting
+  - `Client.set_model/2` to switch models mid-conversation
+  - `Client.get_model/1` to introspect active configuration
+  - Pluggable transports via `ClaudeAgentSDK.Transport`
+  - Mock transport for fully offline test suites
 - **Error Handling**: Improved error detection and timeout handling
 - **Stream Processing**: Lazy evaluation with Elixir Streams
 - **Mocking System**: Comprehensive testing without API calls (supports stdin workflows)
@@ -213,6 +218,24 @@ ClaudeAgentSDK.query("Say exactly: Hello from Elixir!", options)
   end
 end)
 ```
+
+## Runtime Control & Custom Transports
+
+Change models on the fly and plug in alternative transports without restarting your client:
+
+```elixir
+{:ok, client} =
+  ClaudeAgentSDK.Client.start_link(%ClaudeAgentSDK.Options{model: "claude-sonnet-4"},
+    transport: ClaudeAgentSDK.Transport.Port
+  )
+
+:ok = ClaudeAgentSDK.Client.set_model(client, "opus")
+```
+
+To experiment with your own transport or to write deterministic tests, take a look at:
+
+- `docs/RUNTIME_CONTROL.md`
+- `docs/CUSTOM_TRANSPORTS.md`
 
 ## Testing with Mocks
 

@@ -38,7 +38,8 @@ defmodule ClaudeAgentSdk.MixProject do
       {:jason, "~> 1.4"},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
-      {:credo, "~> 1.6", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
+      {:supertester, "~> 0.2.1", only: :test}
     ]
   end
 

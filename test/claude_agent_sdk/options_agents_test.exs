@@ -5,7 +5,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
   Tests the integration of agents into the Options struct,
   including CLI argument generation and validation.
   """
-  use ExUnit.Case, async: true
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.{Agent, Options}
 

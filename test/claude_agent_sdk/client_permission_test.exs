@@ -9,7 +9,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
   - Permission mode behavior in Client
   """
 
-  use ExUnit.Case, async: false
+  use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
   @moduletag :requires_cli
 

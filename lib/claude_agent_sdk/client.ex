@@ -64,7 +64,7 @@ defmodule ClaudeAgentSDK.Client do
   use GenServer
   require Logger
 
-  alias ClaudeAgentSDK.{Options, Hooks, Message}
+  alias ClaudeAgentSDK.{Options, Hooks, Message, Model}
   alias ClaudeAgentSDK.Hooks.Registry
   alias ClaudeAgentSDK.ControlProtocol.Protocol
 
@@ -83,13 +83,18 @@ defmodule ClaudeAgentSDK.Client do
   """
   @type state :: %{
           port: port() | nil,
+          transport: pid() | nil,
+          transport_module: module() | nil,
+          transport_opts: keyword(),
           options: Options.t(),
           registry: Registry.t(),
           subscribers: [pid()],
           pending_requests: %{String.t() => {GenServer.from(), reference()}},
           initialized: boolean(),
           buffer: String.t(),
-          sdk_mcp_servers: %{String.t() => pid()}
+          sdk_mcp_servers: %{String.t() => pid()},
+          current_model: String.t() | nil,
+          pending_model_change: {GenServer.from(), reference()} | nil
         }
 
   ## Public API
@@ -119,9 +124,9 @@ defmodule ClaudeAgentSDK.Client do
 
       {:ok, pid} = Client.start_link(options)
   """
-  @spec start_link(Options.t()) :: GenServer.on_start()
-  def start_link(%Options{} = options) do
-    GenServer.start_link(__MODULE__, options)
+  @spec start_link(Options.t(), keyword()) :: GenServer.on_start()
+  def start_link(%Options{} = options, opts \\ []) when is_list(opts) do
+    GenServer.start_link(__MODULE__, {options, opts})
   end
 
   @doc """
@@ -195,6 +200,25 @@ defmodule ClaudeAgentSDK.Client do
   @spec stop(pid()) :: :ok
   def stop(client) when is_pid(client) do
     GenServer.stop(client, :normal, 5000)
+  end
+
+  @doc """
+  Requests a runtime model switch.
+
+  Returns `:ok` when the CLI confirms the change or `{:error, reason}`
+  when validation fails or the CLI rejects the request.
+  """
+  @spec set_model(pid(), String.t()) :: :ok | {:error, term()}
+  def set_model(client, model) when is_pid(client) do
+    GenServer.call(client, {:set_model, model}, :infinity)
+  end
+
+  @doc """
+  Retrieves the currently active model name.
+  """
+  @spec get_model(pid()) :: {:ok, String.t()} | {:error, :model_not_set}
+  def get_model(client) when is_pid(client) do
+    GenServer.call(client, :get_model)
   end
 
   @doc """
@@ -288,7 +312,19 @@ defmodule ClaudeAgentSDK.Client do
   ## GenServer Callbacks
 
   @impl true
+  def init({%Options{} = options, opts}) when is_list(opts) do
+    do_init(options, opts)
+  end
+
+  @impl true
   def init(%Options{} = options) do
+    do_init(options, [])
+  end
+
+  defp do_init(options, opts) do
+    transport_module = Keyword.get(opts, :transport)
+    transport_opts = Keyword.get(opts, :transport_opts, [])
+
     # Validate hooks and permission callback configuration before starting
     with :ok <- validate_hooks(options.hooks),
          :ok <- validate_permission_callback(options.can_use_tool),
@@ -300,6 +336,9 @@ defmodule ClaudeAgentSDK.Client do
       # CLI will be started in handle_continue
       state = %{
         port: nil,
+        transport: nil,
+        transport_module: transport_module,
+        transport_opts: transport_opts,
         options: updated_options,
         registry: Registry.new(),
         subscribers: [],
@@ -307,7 +346,9 @@ defmodule ClaudeAgentSDK.Client do
         initialized: false,
         buffer: "",
         session_id: nil,
-        sdk_mcp_servers: sdk_mcp_servers
+        sdk_mcp_servers: sdk_mcp_servers,
+        current_model: updated_options.model,
+        pending_model_change: nil
       }
 
       {:ok, state, {:continue, :start_cli}}
@@ -335,25 +376,56 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @impl true
-  def handle_call({:send_message, _message}, _from, %{port: nil} = state) do
-    {:reply, {:error, :not_connected}, state}
+  def handle_call({:send_message, message}, _from, state) do
+    if connected?(state) do
+      json = encode_outgoing_message(message)
+
+      case send_payload(state, json) do
+        :ok ->
+          {:reply, :ok, state}
+
+        {:error, reason} ->
+          Logger.error("Failed to send message", reason: inspect(reason))
+          {:reply, {:error, :send_failed}, state}
+      end
+    else
+      {:reply, {:error, :not_connected}, state}
+    end
   end
 
-  def handle_call({:send_message, message}, _from, %{port: port} = state) do
-    json =
-      if is_binary(message) do
-        Jason.encode!(%{"type" => "user", "message" => %{"role" => "user", "content" => message}})
-      else
-        Jason.encode!(message)
-      end
+  def handle_call({:set_model, model}, from, state) do
+    cond do
+      state.pending_model_change != nil ->
+        {:reply, {:error, :model_change_in_progress}, state}
 
-    try do
-      Port.command(port, json <> "\n")
-      {:reply, :ok, state}
-    rescue
-      e ->
-        Logger.error("Failed to send message: #{Exception.message(e)}")
-        {:reply, {:error, :send_failed}, state}
+      true ->
+        model_string = model |> to_string() |> String.trim()
+
+        case Model.validate(model_string) do
+          {:ok, normalized} ->
+            {request_id, json} = Protocol.encode_set_model_request(normalized)
+
+            case send_payload(state, json) do
+              :ok ->
+                pending_requests =
+                  Map.put(state.pending_requests, request_id, {:set_model, from})
+
+                new_state = %{
+                  state
+                  | pending_requests: pending_requests,
+                    pending_model_change: request_id
+                }
+
+                {:noreply, new_state}
+
+              {:error, reason} ->
+                {:reply, {:error, reason}, state}
+            end
+
+          {:error, :invalid_model} ->
+            suggestions = Model.suggest(model_string)
+            {:reply, {:error, {:invalid_model, suggestions}}, state}
+        end
     end
   end
 
@@ -370,6 +442,13 @@ defmodule ClaudeAgentSDK.Client do
       {:reply, :ok, %{state | options: new_options}}
     else
       {:reply, {:error, :invalid_permission_mode}, state}
+    end
+  end
+
+  def handle_call(:get_model, _from, state) do
+    case state.current_model do
+      nil -> {:reply, {:error, :model_not_set}, state}
+      model -> {:reply, {:ok, model}, state}
     end
   end
 
@@ -418,6 +497,28 @@ defmodule ClaudeAgentSDK.Client do
     agents = state.options.agents || %{}
     agent_names = Map.keys(agents)
     {:reply, {:ok, agent_names}, state}
+  end
+
+  @impl true
+  def handle_info({:transport_message, payload}, state) do
+    case decode_transport_payload(payload) do
+      {:ok, {message_type, message_data}} ->
+        new_state = handle_decoded_message(message_type, message_data, state)
+        {:noreply, new_state}
+
+      {:error, :empty_message} ->
+        {:noreply, state}
+
+      {:error, reason} ->
+        Logger.warning("Failed to decode transport message", reason: inspect(reason))
+        {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_info({:transport_exit, reason}, state) do
+    Logger.info("Transport disconnected", reason: inspect(reason))
+    {:stop, :normal, %{state | transport: nil}}
   end
 
   @impl true
@@ -495,6 +596,17 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @impl true
+  def terminate(reason, %{transport: transport, transport_module: module} = state)
+      when is_pid(transport) do
+    try do
+      module.close(transport)
+    catch
+      :exit, _ -> :ok
+    end
+
+    terminate(reason, %{state | transport: nil})
+  end
+
   def terminate(reason, %{port: port}) when is_port(port) do
     if Mix.env() != :test do
       Logger.debug("Terminating client", reason: reason)
@@ -587,6 +699,31 @@ defmodule ClaudeAgentSDK.Client do
 
   defp apply_agent_settings(options), do: {:ok, options}
 
+  defp start_cli_process(%{transport_module: module} = state) when not is_nil(module) do
+    registry = register_hooks(state.registry, state.options.hooks)
+    hooks_config = build_hooks_config(registry, state.options.hooks)
+    sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
+
+    with {:ok, transport} <- module.start_link(state.transport_opts || []),
+         :ok <- module.subscribe(transport, self()) do
+      {_request_id, init_json} =
+        Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil)
+
+      _ = module.send(transport, ensure_newline(init_json))
+
+      {:ok,
+       %{
+         state
+         | transport: transport,
+           registry: registry,
+           initialized: false
+       }}
+    else
+      {:error, reason} ->
+        {:error, {:transport_failed, reason}}
+    end
+  end
+
   defp start_cli_process(state) do
     # Register hooks and build configuration
     registry = register_hooks(state.registry, state.options.hooks)
@@ -594,7 +731,6 @@ defmodule ClaudeAgentSDK.Client do
     # Build CLI command
     case build_cli_command(state.options) do
       {:ok, cmd} ->
-        # Open port with bidirectional communication
         port =
           Port.open({:spawn, cmd}, [
             :binary,
@@ -604,21 +740,13 @@ defmodule ClaudeAgentSDK.Client do
             :hide
           ])
 
-        # Send initialize request with hooks and SDK MCP servers
         hooks_config = build_hooks_config(registry, state.options.hooks)
         sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
 
-        {request_id, init_json} =
+        {_request_id, init_json} =
           Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil)
 
-        Port.command(port, init_json <> "\n")
-
-        if Mix.env() != :test do
-          Logger.debug("Sent initialize request",
-            request_id: request_id,
-            sdk_servers: Map.keys(sdk_mcp_info || %{})
-          )
-        end
+        Port.command(port, ensure_newline(init_json))
 
         {:ok,
          %{
@@ -724,7 +852,7 @@ defmodule ClaudeAgentSDK.Client do
 
       other ->
         Logger.warning("Unsupported control request subtype", subtype: other)
-        send_error_response(state.port, request_id, "Unsupported request: #{other}")
+        send_error_response(state, request_id, "Unsupported request: #{other}")
         state
     end
   end
@@ -732,27 +860,60 @@ defmodule ClaudeAgentSDK.Client do
   defp handle_control_response(response_data, state) do
     response = response_data["response"]
     request_id = response["request_id"]
+    {pending_entry, pending_requests} = Map.pop(state.pending_requests, request_id)
+    updated_state = %{state | pending_requests: pending_requests}
 
-    case response["subtype"] do
-      "success" ->
-        Logger.debug("Received successful control response", request_id: request_id)
+    case {pending_entry, response["subtype"]} do
+      {{:set_model, from}, "success"} ->
+        case Protocol.decode_set_model_response(response_data) do
+          {:ok, model} ->
+            Logger.info("Model changed successfully", request_id: request_id, model: model)
+            GenServer.reply(from, :ok)
+            %{updated_state | current_model: model, pending_model_change: nil}
 
-        # Mark as initialized if this was initialize response
-        if not state.initialized do
-          Logger.info("Client initialized successfully")
-          %{state | initialized: true}
-        else
-          state
+          {:error, reason} ->
+            Logger.error("Failed to decode set_model response",
+              request_id: request_id,
+              error: inspect(reason)
+            )
+
+            GenServer.reply(from, {:error, reason})
+            %{updated_state | pending_model_change: nil}
         end
 
-      "error" ->
+      {{:set_model, from}, "error"} ->
+        error = response["error"] || "set_model_failed"
+        Logger.error("Model change rejected", request_id: request_id, error: error)
+        GenServer.reply(from, {:error, error})
+        %{updated_state | pending_model_change: nil}
+
+      {{:set_model, from}, other} ->
+        Logger.warning("Unexpected subtype for set_model response",
+          request_id: request_id,
+          subtype: other
+        )
+
+        GenServer.reply(from, {:error, :unexpected_response})
+        %{updated_state | pending_model_change: nil}
+
+      {nil, "success"} ->
+        Logger.debug("Received successful control response", request_id: request_id)
+
+        if not updated_state.initialized do
+          Logger.info("Client initialized successfully")
+          %{updated_state | initialized: true}
+        else
+          updated_state
+        end
+
+      {nil, "error"} ->
         error = response["error"]
         Logger.error("Control response error", request_id: request_id, error: error)
-        state
+        updated_state
 
-      other ->
+      {nil, other} ->
         Logger.warning("Unknown control response subtype", subtype: other)
-        state
+        updated_state
     end
   end
 
@@ -804,12 +965,21 @@ defmodule ClaudeAgentSDK.Client do
         case result do
           {:ok, output} ->
             json = Protocol.encode_hook_response(request_id, output, :success)
-            Port.command(state.port, json <> "\n")
-            Logger.debug("Sent hook callback response", request_id: request_id)
+
+            case send_payload(state, json) do
+              :ok ->
+                Logger.debug("Sent hook callback response", request_id: request_id)
+
+              {:error, reason} ->
+                Logger.error("Failed to send hook callback response",
+                  request_id: request_id,
+                  error: inspect(reason)
+                )
+            end
 
           {:error, reason} ->
             json = Protocol.encode_hook_response(request_id, reason, :error)
-            Port.command(state.port, json <> "\n")
+            _ = send_payload(state, json)
             Logger.error("Hook callback failed", request_id: request_id, reason: reason)
         end
 
@@ -818,7 +988,7 @@ defmodule ClaudeAgentSDK.Client do
       :error ->
         error_msg = "Callback not found: #{callback_id}"
         json = Protocol.encode_hook_response(request_id, error_msg, :error)
-        Port.command(state.port, json <> "\n")
+        _ = send_payload(state, json)
         Logger.error("Hook callback not found", callback_id: callback_id)
         state
     end
@@ -839,7 +1009,7 @@ defmodule ClaudeAgentSDK.Client do
       nil ->
         # No callback, default to allow
         json = encode_permission_response(request_id, :allow, nil)
-        Port.command(state.port, json <> "\n")
+        _ = send_payload(state, json)
         Logger.debug("No permission callback, allowing tool", tool: tool_name)
         state
 
@@ -891,7 +1061,7 @@ defmodule ClaudeAgentSDK.Client do
                 permission_result
               )
 
-            Port.command(state.port, json <> "\n")
+            _ = send_payload(state, json)
 
             Logger.debug("Sent permission response",
               request_id: request_id,
@@ -901,7 +1071,7 @@ defmodule ClaudeAgentSDK.Client do
           {:error, reason} ->
             # On error, deny by default
             json = encode_permission_error_response(request_id, reason)
-            Port.command(state.port, json <> "\n")
+            _ = send_payload(state, json)
             Logger.error("Permission callback failed", request_id: request_id, reason: reason)
         end
 
@@ -951,9 +1121,9 @@ defmodule ClaudeAgentSDK.Client do
     Jason.encode!(response)
   end
 
-  defp send_error_response(port, request_id, error_message) do
+  defp send_error_response(state, request_id, error_message) do
     json = Protocol.encode_hook_response(request_id, error_message, :error)
-    Port.command(port, json <> "\n")
+    _ = send_payload(state, json)
   end
 
   defp broadcast_message(message_data, state) do
@@ -1027,13 +1197,13 @@ defmodule ClaudeAgentSDK.Client do
           }
         }
 
-        send_sdk_mcp_response(state.port, request_id, error_response)
+        send_sdk_mcp_response(state, request_id, error_response)
         state
 
       registry_pid ->
         # Route to JSONRPC handler
         response = handle_sdk_mcp_jsonrpc(registry_pid, server_name, message)
-        send_sdk_mcp_response(state.port, request_id, response)
+        send_sdk_mcp_response(state, request_id, response)
         state
     end
   end
@@ -1122,8 +1292,8 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @doc false
-  @spec send_sdk_mcp_response(port(), String.t(), map()) :: :ok
-  defp send_sdk_mcp_response(port, request_id, jsonrpc_response) do
+  @spec send_sdk_mcp_response(state(), String.t(), map()) :: :ok
+  defp send_sdk_mcp_response(state, request_id, jsonrpc_response) do
     # Wrap JSONRPC response in control protocol response
     response = %{
       "type" => "control_response",
@@ -1132,7 +1302,7 @@ defmodule ClaudeAgentSDK.Client do
     }
 
     json = Jason.encode!(response)
-    Port.command(port, json <> "\n")
+    _ = send_payload(state, json)
     Logger.debug("Sent SDK MCP response", request_id: request_id)
     :ok
   end
@@ -1161,5 +1331,60 @@ defmodule ClaudeAgentSDK.Client do
           {server_name, %{"name" => server_name, "version" => "1.0.0"}}
       end
     end
+  end
+
+  defp encode_outgoing_message(message) do
+    if is_binary(message) do
+      Jason.encode!(%{
+        "type" => "user",
+        "message" => %{"role" => "user", "content" => message}
+      })
+    else
+      Jason.encode!(message)
+    end
+  end
+
+  defp connected?(%{transport: transport}) when is_pid(transport), do: true
+  defp connected?(%{port: port}) when is_port(port), do: true
+  defp connected?(_), do: false
+
+  defp send_payload(%{transport: transport, transport_module: module}, payload)
+       when is_pid(transport) do
+    module.send(transport, ensure_newline(payload))
+  end
+
+  defp send_payload(%{port: port}, payload) when is_port(port) do
+    try do
+      Port.command(port, ensure_newline(payload))
+      :ok
+    rescue
+      e -> {:error, e}
+    end
+  end
+
+  defp send_payload(_state, _payload), do: {:error, :not_connected}
+
+  defp ensure_newline(payload) when is_binary(payload) do
+    if String.ends_with?(payload, "\n") do
+      payload
+    else
+      payload <> "\n"
+    end
+  end
+
+  defp decode_transport_payload(payload) when is_binary(payload) do
+    Protocol.decode_message(payload)
+  end
+
+  defp decode_transport_payload(payload) when is_map(payload) do
+    payload
+    |> Jason.encode!()
+    |> Protocol.decode_message()
+  end
+
+  defp decode_transport_payload(payload) when is_list(payload) do
+    payload
+    |> Jason.encode!()
+    |> Protocol.decode_message()
   end
 end

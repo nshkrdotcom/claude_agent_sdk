@@ -5,7 +5,7 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
   Mirrors the Python test_sdk_mcp_integration.py test patterns.
   """
 
-  use ExUnit.Case, async: false
+  use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
   alias ClaudeAgentSDK.{Tool, Options}
   alias ClaudeAgentSDK.TestSupport.{CalculatorTools, ErrorTools, ImageTools}

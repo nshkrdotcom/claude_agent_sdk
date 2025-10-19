@@ -47,7 +47,7 @@ defmodule ClaudeAgentSDK.ToolTest do
   Tests the `deftool` macro and tool metadata generation.
   """
 
-  use ExUnit.Case, async: true
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Tool
   alias ClaudeAgentSDK.ToolTest.TestTools

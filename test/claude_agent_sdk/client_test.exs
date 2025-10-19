@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.ClientTest do
-  use ExUnit.Case, async: false
+  use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
   alias ClaudeAgentSDK.{Client, Options, Hooks}
   alias ClaudeAgentSDK.Hooks.{Matcher, Output}
@@ -259,6 +259,169 @@ defmodule ClaudeAgentSDK.ClientTest do
         end
 
       assert {:error, "Timeout"} = result
+    end
+  end
+
+  describe "transport integration" do
+    alias ClaudeAgentSDK.TestSupport.MockTransport
+
+    setup do
+      Process.flag(:trap_exit, true)
+      %{options: %Options{}}
+    end
+
+    test "uses provided transport module for initialization messages", %{options: options} do
+      assert {:ok, client} =
+               Client.start_link(options,
+                 transport: MockTransport,
+                 transport_opts: [test_pid: self()]
+               )
+
+      on_exit(fn ->
+        try do
+          Client.stop(client)
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      assert is_pid(transport_pid)
+
+      assert_receive {:mock_transport_send, json}, 200
+      decoded = Jason.decode!(json)
+      assert decoded["type"] == "control_request"
+      assert decoded["request"]["subtype"] == "initialize"
+    end
+
+    test "delivers messages from transport to subscribers", %{options: options} do
+      assert {:ok, client} =
+               Client.start_link(options,
+                 transport: MockTransport,
+                 transport_opts: [test_pid: self()]
+               )
+
+      on_exit(fn ->
+        try do
+          Client.stop(client)
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      assert_receive {:mock_transport_started, transport_pid}, 200
+
+      :ok = GenServer.call(client, {:subscribe})
+
+      payload = %{
+        "type" => "assistant",
+        "message" => %{"content" => "hello", "role" => "assistant"},
+        "session_id" => "test-session"
+      }
+
+      MockTransport.push_message(transport_pid, payload)
+
+      message =
+        SupertesterCase.eventually(fn ->
+          receive do
+            {:claude_message, msg} -> msg
+          after
+            0 -> nil
+          end
+        end)
+
+      assert message.type == :assistant
+      assert message.data[:message]["content"] == "hello"
+    end
+  end
+
+  describe "model switching" do
+    alias ClaudeAgentSDK.TestSupport.MockTransport
+    alias ClaudeAgentSDK.Model
+
+    setup do
+      Process.flag(:trap_exit, true)
+
+      assert {:ok, client} =
+               Client.start_link(%Options{},
+                 transport: MockTransport,
+                 transport_opts: [test_pid: self()]
+               )
+
+      on_exit(fn ->
+        try do
+          Client.stop(client)
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      # consume initialize request
+      assert_receive {:mock_transport_send, _init_json}, 200
+
+      {:ok, %{client: client, transport: transport_pid}}
+    end
+
+    test "set_model sends control request and updates current model", %{
+      client: client,
+      transport: transport
+    } do
+      task = Task.async(fn -> Client.set_model(client, "opus") end)
+
+      assert_receive {:mock_transport_send, json}, 200
+      decoded = Jason.decode!(json)
+      assert decoded["request"]["subtype"] == "set_model"
+      request_id = decoded["request_id"]
+
+      {:ok, normalized} = Model.validate("opus")
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => request_id,
+          "subtype" => "success",
+          "result" => %{"model" => normalized}
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(response))
+
+      assert :ok = Task.await(task, 1_000)
+      assert {:ok, ^normalized} = Client.get_model(client)
+    end
+
+    test "set_model rejects invalid models", %{client: client} do
+      assert {:error, {:invalid_model, suggestions}} = Client.set_model(client, "unknown")
+      assert is_list(suggestions)
+      assert length(suggestions) <= 3
+    end
+
+    test "set_model prevents concurrent requests", %{
+      client: client,
+      transport: transport
+    } do
+      task = Task.async(fn -> Client.set_model(client, "opus") end)
+
+      assert_receive {:mock_transport_send, json}, 200
+      request_id = Jason.decode!(json)["request_id"]
+
+      assert {:error, :model_change_in_progress} = Client.set_model(client, "sonnet")
+
+      {:ok, normalized} = Model.validate("opus")
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => request_id,
+          "subtype" => "success",
+          "result" => %{"model" => normalized}
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(response))
+
+      assert :ok = Task.await(task, 1_000)
     end
   end
 end

@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.Tool.EdgeCasesTest do
   Edge case tests for the Tool system.
   """
 
-  use ExUnit.Case, async: true
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Tool
   alias ClaudeAgentSDK.TestSupport.EdgeCase.MinimalTool

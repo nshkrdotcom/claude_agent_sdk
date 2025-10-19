@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.Hooks.MatcherTest do
-  use ExUnit.Case, async: true
+  use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Hooks.Matcher
 

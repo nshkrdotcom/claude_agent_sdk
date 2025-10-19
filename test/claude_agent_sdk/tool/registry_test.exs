@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.Tool.RegistryTest do
   Tests for Tool.Registry GenServer that manages tool registration and lookup.
   """
 
-  use ExUnit.Case, async: false
+  use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
   alias ClaudeAgentSDK.Tool.Registry
 

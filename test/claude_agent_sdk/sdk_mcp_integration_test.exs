@@ -6,7 +6,7 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
   They demonstrate the intended API and verify the design.
   """
 
-  use ExUnit.Case, async: false
+  use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
   alias ClaudeAgentSDK.{Options, Tool}
   alias ClaudeAgentSDK.TestSupport.CalculatorTools
