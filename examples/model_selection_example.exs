@@ -24,17 +24,17 @@ IO.puts("   Fallback: #{opus_options.fallback_model}")
 IO.puts("")
 
 # Example 2: Using Sonnet (balanced)
-IO.puts("📊 Example 2: Using Sonnet Model (default)")
-IO.puts("   Best for: General tasks, cost-effective")
+IO.puts("📊 Example 2: Using Sonnet Model")
+IO.puts("   Best for: General tasks, balanced performance")
 IO.puts("")
 
 sonnet_options = OptionBuilder.with_sonnet()
 IO.puts("   Model: #{sonnet_options.model}")
 IO.puts("")
 
-# Example 3: Using Haiku (fastest)
-IO.puts("📊 Example 3: Using Haiku Model")
-IO.puts("   Best for: Simple queries, high volume")
+# Example 3: Using Haiku (fastest, default)
+IO.puts("📊 Example 3: Using Haiku Model (default)")
+IO.puts("   Best for: Simple queries, high volume, lowest cost")
 IO.puts("")
 
 haiku_options = OptionBuilder.with_haiku()

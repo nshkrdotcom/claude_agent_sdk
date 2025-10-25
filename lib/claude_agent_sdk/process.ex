@@ -398,18 +398,8 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp parse_json_line(line) do
-    # First try to parse as a Claude CLI result object
+    # Parse as regular message using Message.from_json
     case ClaudeAgentSDK.JSON.decode(line) do
-      {:ok, %{"type" => "result", "result" => result, "session_id" => session_id}} ->
-        # This is a Claude CLI result format
-        %Message{
-          type: :assistant,
-          data: %{
-            message: %{"role" => "assistant", "content" => result},
-            session_id: session_id
-          }
-        }
-
       {:ok, json_obj} when is_map(json_obj) ->
         # Try to parse as a regular message
         case Message.from_json(line) do

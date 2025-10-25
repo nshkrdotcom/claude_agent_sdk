@@ -17,7 +17,7 @@ defmodule Examples.RuntimeControl.ModelSwitcher do
     IO.puts("\n== Runtime Control Demo (Mock Transport) ==")
 
     {:ok, client} =
-      Client.start_link(%Options{model: "claude-sonnet-4"},
+      Client.start_link(%Options{model: "haiku"},
         transport: MockTransport,
         transport_opts: [owner: self()]
       )
@@ -32,7 +32,7 @@ defmodule Examples.RuntimeControl.ModelSwitcher do
 
     initial =
       message_frame("assistant", %{
-        "content" => "Hello! Starting on claude-sonnet-4.",
+        "content" => "Hello! Starting on haiku.",
         "role" => "assistant"
       })
 
@@ -71,7 +71,7 @@ defmodule Examples.RuntimeControl.ModelSwitcher do
     IO.puts("\n== Runtime Control Demo (CLI Transport) ==")
     IO.puts("Attempting to use the Claude CLI. Make sure `claude login` has been executed.\n")
 
-    case Client.start_link(%Options{model: "claude-sonnet-4"}) do
+    case Client.start_link(%Options{model: "haiku"}) do
       {:ok, client} ->
         try do
           live_demo(client)

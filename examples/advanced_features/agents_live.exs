@@ -33,7 +33,7 @@ coder =
     prompt:
       "You are a Python coding expert. Write concise, well-documented code with type hints. Keep responses under 15 lines.",
     allowed_tools: ["Read", "Write"],
-    model: "claude-sonnet-4"
+    model: "haiku"
   )
 
 analyst =
@@ -43,7 +43,7 @@ analyst =
     prompt:
       "You are a code analysis expert. Provide concise analysis highlighting 2-3 key points. Keep responses under 10 lines.",
     allowed_tools: ["Read"],
-    model: "claude-sonnet-4"
+    model: "haiku"
   )
 
 IO.puts("✅ Defined 2 agents:")

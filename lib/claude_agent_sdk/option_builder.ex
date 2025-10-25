@@ -624,12 +624,12 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   end
 
   @doc """
-  Builds options for balanced performance using Sonnet model (default).
+  Builds options for balanced performance using Sonnet model.
 
   Best for:
   - General-purpose tasks
   - Good balance of speed and capability
-  - Most cost-effective for production
+  - Complex reasoning tasks
 
   ## Examples
 
@@ -646,13 +646,14 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   end
 
   @doc """
-  Builds options for fast responses using Haiku model.
+  Builds options for fast responses using Haiku model (default).
 
   Best for:
   - Simple queries
   - Quick responses needed
   - High-volume use cases
   - Lowest cost option
+  - Default for most SDK operations
 
   ## Examples
 

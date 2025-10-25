@@ -22,7 +22,7 @@ ClaudeAgentSDK.Mock.set_response("first", [
     "type" => "system",
     "subtype" => "init",
     "session_id" => "session-123",
-    "model" => "claude-sonnet-4"
+    "model" => "haiku"
   },
   %{"type" => "assistant", "message" => %{"content" => "I'll help with that feature"}},
   %{"type" => "result", "subtype" => "success", "total_cost_usd" => 0.05}

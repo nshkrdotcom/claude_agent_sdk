@@ -56,8 +56,8 @@ IO.puts("")
 # Demonstrate model options
 models = [
   {"Opus", OptionBuilder.with_opus(), "Most capable, higher cost"},
-  {"Sonnet", OptionBuilder.with_sonnet(), "Balanced, default"},
-  {"Haiku", OptionBuilder.with_haiku(), "Fastest, lowest cost"}
+  {"Sonnet", OptionBuilder.with_sonnet(), "Balanced, good performance"},
+  {"Haiku", OptionBuilder.with_haiku(), "Fastest, lowest cost (default)"}
 ]
 
 Enum.each(models, fn {name, opts, desc} ->
@@ -201,7 +201,7 @@ review_queries =
     {
       "Review #{file} for security issues",
       OptionBuilder.build_analysis_options()
-      |> OptionBuilder.with_model("opus")
+      |> OptionBuilder.with_model("haiku")
     }
   end)
 
@@ -209,7 +209,7 @@ review_queries =
 
 IO.puts("   Step 1: Parallel Security Review")
 IO.puts("   • Analyzed #{length(files)} files concurrently")
-IO.puts("   • Model: Opus (most capable)")
+IO.puts("   • Model: Haiku (fastest)")
 IO.puts("   • Agent: Security Reviewer")
 IO.puts("")
 
@@ -222,14 +222,14 @@ Prioritize by severity.
 {:ok, summary} =
   Orchestrator.query_with_retry(
     summary_prompt,
-    # Sonnet is fine for summarization
-    OptionBuilder.with_sonnet(),
+    # Haiku is fine for summarization
+    OptionBuilder.with_haiku(),
     max_retries: 2
   )
 
 IO.puts("   Step 2: Aggregate Findings")
 IO.puts("   • Summarized #{length(review_results)} reviews")
-IO.puts("   • Model: Sonnet (cost-effective)")
+IO.puts("   • Model: Haiku (cost-effective)")
 IO.puts("")
 
 IO.puts("✅ Complete workflow executed successfully!")

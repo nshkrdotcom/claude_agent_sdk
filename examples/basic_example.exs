@@ -16,19 +16,15 @@ end
 defmodule BasicExample do
   def run do
     IO.puts("🚀 Basic Claude SDK Example")
-    IO.puts("Asking Claude to write a simple function...")
+    IO.puts("Asking Claude for a simple response...")
 
-    # Create simple options for basic usage - use development options for more capability
-    options = OptionBuilder.merge(:development, %{max_turns: 10})
+    # Create simple options for basic usage
+    options = OptionBuilder.with_haiku()
 
-    # Make a simple query
+    # Make a simple query - just ask for one word back
     response =
       ClaudeAgentSDK.query(
-        """
-        Write a simple Elixir function that calculates the factorial of a number.
-        Include proper documentation and a basic example of how to use it.
-        Keep it concise and clear.
-        """,
+        "Say exactly one word: hello",
         options
       )
       |> extract_response()
@@ -58,7 +54,7 @@ defmodule BasicExample do
       System.halt(1)
     end
 
-    # Extract assistant content
+    # Extract text from all assistant messages
     messages
     |> Enum.filter(&(&1.type == :assistant))
     |> Enum.map(&ContentExtractor.extract_text/1)

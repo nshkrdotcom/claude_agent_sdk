@@ -8,38 +8,41 @@ defmodule ClaudeAgentSDK.Model do
 
   ## Supported Models
 
-  The module supports both short forms and full model identifiers:
-
-  - Short forms: `"opus"`, `"sonnet"`, `"haiku"`
-  - Full forms: `"claude-opus-4-20250514"`, `"claude-sonnet-4-20250514"`, `"claude-haiku-4-20250514"`
+  - `"opus"` - Claude Opus 4.1 (claude-opus-4-1-20250805)
+  - `"sonnet"` - Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)
+  - `"haiku"` - Claude Haiku 4.5 (claude-haiku-4-5-20251001) - **default**
+  - `"sonnet[1m]"` - Claude Sonnet 4.5 with 1M context (claude-sonnet-4-5-20250929[1m])
 
   ## Examples
 
       iex> ClaudeAgentSDK.Model.validate("opus")
-      {:ok, "claude-opus-4-20250514"}
+      {:ok, "opus"}
 
-      iex> ClaudeAgentSDK.Model.validate("claude-sonnet-4-20250514")
-      {:ok, "claude-sonnet-4-20250514"}
+      iex> ClaudeAgentSDK.Model.validate("claude-sonnet-4-5-20250929")
+      {:ok, "claude-sonnet-4-5-20250929"}
 
       iex> ClaudeAgentSDK.Model.validate("invalid")
       {:error, :invalid_model}
 
       iex> ClaudeAgentSDK.Model.list_models()
-      ["claude-haiku-4-20250514", "claude-opus-4-20250514", ...]
+      ["claude-haiku-4-5-20251001", "claude-opus-4-1-20250805", ...]
 
       iex> ClaudeAgentSDK.Model.suggest("opuss")
-      ["opus", "claude-opus-4-20250514"]
+      ["opus"]
   """
 
   @known_models %{
-    # Short forms
-    "opus" => "claude-opus-4-20250514",
-    "sonnet" => "claude-sonnet-4-20250514",
-    "haiku" => "claude-haiku-4-20250514",
-    # Full forms (pass through)
-    "claude-opus-4-20250514" => "claude-opus-4-20250514",
-    "claude-sonnet-4-20250514" => "claude-sonnet-4-20250514",
-    "claude-haiku-4-20250514" => "claude-haiku-4-20250514"
+    # Short forms (CLI aliases)
+    "opus" => "opus",
+    "sonnet" => "sonnet",
+    "haiku" => "haiku",
+    # 1M context variant - only sonnet[1m] works, not sonnet-1m
+    "sonnet[1m]" => "sonnet[1m]",
+    # Full model IDs (for reference/validation)
+    "claude-opus-4-1-20250805" => "claude-opus-4-1-20250805",
+    "claude-sonnet-4-5-20250929" => "claude-sonnet-4-5-20250929",
+    "claude-haiku-4-5-20251001" => "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929[1m]" => "claude-sonnet-4-5-20250929[1m]"
   }
 
   @doc """

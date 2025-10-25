@@ -24,7 +24,7 @@ defmodule Examples.RuntimeControl.TransportSwap do
     IO.puts("\nPhase #{label}: using MockTransport with delay=#{delay_ms}ms")
 
     {:ok, client} =
-      Client.start_link(%Options{model: "claude-sonnet-4"},
+      Client.start_link(%Options{model: "haiku"},
         transport: MockTransport,
         transport_opts: [owner: self(), delay_ms: delay_ms]
       )
@@ -65,7 +65,7 @@ defmodule Examples.RuntimeControl.TransportSwap do
   end
 
   defp run_live do
-    case Client.start_link(%Options{model: "claude-sonnet-4"}) do
+    case Client.start_link(%Options{model: "haiku"}) do
       {:ok, client} ->
         IO.puts("Started CLI transport client. Attempting model switch to opus...")
 

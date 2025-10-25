@@ -57,7 +57,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.5.0"}
+    {:claude_agent_sdk, "~> 0.5.1"}
   ]
 end
 ```
@@ -98,7 +98,7 @@ mix deps.get
 
 ## Implementation Status
 
-### ✅ **Currently Implemented (v0.5.0)**
+### ✅ **Currently Implemented (v0.5.1)**
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing

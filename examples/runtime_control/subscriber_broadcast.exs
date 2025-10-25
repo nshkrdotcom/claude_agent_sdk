@@ -17,7 +17,7 @@ defmodule Examples.RuntimeControl.SubscriberBroadcast do
     IO.puts("\n== Subscriber Broadcast Demo (Mock Transport) ==")
 
     {:ok, client} =
-      Client.start_link(%Options{model: "claude-sonnet-4"},
+      Client.start_link(%Options{model: "haiku"},
         transport: MockTransport,
         transport_opts: [owner: self()]
       )
@@ -34,7 +34,7 @@ defmodule Examples.RuntimeControl.SubscriberBroadcast do
          end)}
       end)
 
-    initial = assistant_frame("Subscriber demo starting on claude-sonnet-4.")
+    initial = assistant_frame("Subscriber demo starting on haiku.")
     MockTransport.push_json(transport_pid, initial)
 
     switch_task = Task.async(fn -> Client.set_model(client, "opus") end)
@@ -67,7 +67,7 @@ defmodule Examples.RuntimeControl.SubscriberBroadcast do
     IO.puts("\n== Subscriber Broadcast Demo (CLI Transport) ==")
     IO.puts("Subscribe with two local consumers while the CLI runs the session.\n")
 
-    case Client.start_link(%Options{model: "claude-sonnet-4"}) do
+    case Client.start_link(%Options{model: "haiku"}) do
       {:ok, client} ->
         run_live_stream(client)
         Client.stop(client)

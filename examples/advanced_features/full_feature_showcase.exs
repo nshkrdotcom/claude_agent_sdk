@@ -93,7 +93,7 @@ analyst_agent =
     description: "Data analysis specialist",
     prompt: "You are a data analyst. Use the analyze_data tool to compute statistics.",
     allowed_tools: ["Read"],
-    model: "claude-sonnet-4"
+    model: "haiku"
   )
 
 report_agent =
@@ -102,7 +102,7 @@ report_agent =
     description: "Report writing specialist",
     prompt: "You are a report writer. Use the format_report tool to create formatted reports.",
     allowed_tools: ["Write", "Read"],
-    model: "claude-sonnet-4"
+    model: "haiku"
   )
 
 IO.puts("   ✅ Defined 2 specialized agents")

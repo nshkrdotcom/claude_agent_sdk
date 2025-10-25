@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2025-10-24
+
+### Changed - Default Model Switch to Haiku
+
+- **Changed default model from Sonnet to Haiku** across all modules and examples
+  - Updated `Model.ex` to use CLI short forms (opus, sonnet, haiku) with correct model mappings
+  - Updated `OptionBuilder.ex` to reflect Haiku as the default for most operations
+  - Updated all 13 example files to use "haiku" instead of "claude-sonnet-4"
+  - Updated `basic_example.exs` to use simpler query for faster response
+  - Benefits: Lower cost, faster responses, better for simple queries and high-volume use
+
+### Fixed - Model Validation
+
+- Updated `Model.ex` to support both CLI short forms and full model IDs
+- Added support for `sonnet[1m]` variant (1M context)
+- Improved model validation and normalization
+- Fixed documentation to reflect correct model naming conventions
+
+### Documentation
+
+- Updated README.md to reflect Haiku as default model
+- Updated model selection examples to show proper defaults
+- Clarified model capabilities and use cases
+
 ## [0.5.0] - 2025-10-24
 
 ### Added - Runtime Control & Transport Abstraction (2025-10-24)
