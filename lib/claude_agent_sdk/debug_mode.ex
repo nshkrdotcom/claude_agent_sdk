@@ -543,7 +543,7 @@ defmodule ClaudeAgentSDK.DebugMode do
         %ErlangError{original: :timeout} ->
           ["Query timed out - try reducing complexity or increasing timeout"]
 
-        %Jason.DecodeError{} ->
+        error when is_struct(error) and error.__struct__ == Jason.DecodeError ->
           ["JSON parsing error - possible CLI output format issue"]
 
         _ ->

@@ -24,6 +24,7 @@ defmodule ClaudeAgentSDK.Options do
   - `path_to_claude_code_executable` - Path to Claude Code CLI (string)
   - `abort_ref` - Reference for aborting requests (reference)
   - `hooks` - Hook configurations (see `t:ClaudeAgentSDK.Hooks.hook_config/0`)
+  - `timeout_ms` - Command execution timeout in milliseconds (integer, default: 4_500_000)
 
   ## Examples
 
@@ -87,7 +88,9 @@ defmodule ClaudeAgentSDK.Options do
     :hooks,
     # Permission System (v0.4.0)
     # Permission callback function
-    :can_use_tool
+    :can_use_tool,
+    # Timeout for command execution in milliseconds (default: 4_500_000 = 75 minutes)
+    :timeout_ms
   ]
 
   @type output_format :: :text | :json | :stream_json

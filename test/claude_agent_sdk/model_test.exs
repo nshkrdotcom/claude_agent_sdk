@@ -10,22 +10,22 @@ defmodule ClaudeAgentSDK.ModelTest do
   alias ClaudeAgentSDK.Model
 
   describe "validate/1" do
-    test "should_return_full_model_name_when_given_short_form_opus" do
-      assert {:ok, "claude-opus-4-20250514"} = Model.validate("opus")
+    test "should_return_short_form_when_given_short_form_opus" do
+      assert {:ok, "opus"} = Model.validate("opus")
     end
 
-    test "should_return_full_model_name_when_given_short_form_sonnet" do
-      assert {:ok, "claude-sonnet-4-20250514"} = Model.validate("sonnet")
+    test "should_return_short_form_when_given_short_form_sonnet" do
+      assert {:ok, "sonnet"} = Model.validate("sonnet")
     end
 
-    test "should_return_full_model_name_when_given_short_form_haiku" do
-      assert {:ok, "claude-haiku-4-20250514"} = Model.validate("haiku")
+    test "should_return_short_form_when_given_short_form_haiku" do
+      assert {:ok, "haiku"} = Model.validate("haiku")
     end
 
     test "should_return_same_name_when_given_full_form" do
-      assert {:ok, "claude-opus-4-20250514"} = Model.validate("claude-opus-4-20250514")
-      assert {:ok, "claude-sonnet-4-20250514"} = Model.validate("claude-sonnet-4-20250514")
-      assert {:ok, "claude-haiku-4-20250514"} = Model.validate("claude-haiku-4-20250514")
+      assert {:ok, "claude-opus-4-1-20250805"} = Model.validate("claude-opus-4-1-20250805")
+      assert {:ok, "claude-sonnet-4-5-20250929"} = Model.validate("claude-sonnet-4-5-20250929")
+      assert {:ok, "claude-haiku-4-5-20251001"} = Model.validate("claude-haiku-4-5-20251001")
     end
 
     test "should_return_error_when_given_invalid_model" do
@@ -57,9 +57,9 @@ defmodule ClaudeAgentSDK.ModelTest do
       assert "haiku" in models
 
       # Should include full forms
-      assert "claude-opus-4-20250514" in models
-      assert "claude-sonnet-4-20250514" in models
-      assert "claude-haiku-4-20250514" in models
+      assert "claude-opus-4-1-20250805" in models
+      assert "claude-sonnet-4-5-20250929" in models
+      assert "claude-haiku-4-5-20251001" in models
     end
 
     test "should_return_sorted_list" do
@@ -72,13 +72,13 @@ defmodule ClaudeAgentSDK.ModelTest do
     test "should_suggest_opus_when_given_opuss" do
       suggestions = Model.suggest("opuss")
       assert is_list(suggestions)
-      assert "opus" in suggestions or "claude-opus-4-20250514" in suggestions
+      assert "opus" in suggestions or "claude-opus-4-1-20250805" in suggestions
     end
 
     test "should_suggest_sonnet_when_given_sonet" do
       suggestions = Model.suggest("sonet")
       assert is_list(suggestions)
-      assert "sonnet" in suggestions or "claude-sonnet-4-20250514" in suggestions
+      assert "sonnet" in suggestions or "claude-sonnet-4-5-20250929" in suggestions
     end
 
     test "should_return_empty_when_no_similar_models" do

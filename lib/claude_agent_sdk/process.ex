@@ -127,8 +127,11 @@ defmodule ClaudeAgentSDK.Process do
         :exec.send(pid, input)
         :exec.send(pid, :eof)
 
+        # Get timeout from options (default: 75 minutes)
+        timeout_ms = options.timeout_ms || 4_500_000
+
         # Collect output until process exits
-        receive_exec_output(pid, os_pid, [], [])
+        receive_exec_output(pid, os_pid, [], [], timeout_ms)
 
       {:error, reason} ->
         formatted_error = format_error_message(reason, options)
@@ -152,7 +155,7 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp receive_exec_output(pid, os_pid, stdout_acc, stderr_acc) do
+  defp receive_exec_output(pid, os_pid, stdout_acc, stderr_acc, timeout_ms) do
     receive do
       {:stdout, ^os_pid, data} ->
         # Check for challenge URL in the output
@@ -186,7 +189,7 @@ defmodule ClaudeAgentSDK.Process do
             done: false
           }
         else
-          receive_exec_output(pid, os_pid, [data | stdout_acc], stderr_acc)
+          receive_exec_output(pid, os_pid, [data | stdout_acc], stderr_acc, timeout_ms)
         end
 
       {:stderr, ^os_pid, data} ->
@@ -221,7 +224,7 @@ defmodule ClaudeAgentSDK.Process do
             done: false
           }
         else
-          receive_exec_output(pid, os_pid, stdout_acc, [data | stderr_acc])
+          receive_exec_output(pid, os_pid, stdout_acc, [data | stderr_acc], timeout_ms)
         end
 
       {:DOWN, ^os_pid, :process, ^pid, _exit_status} ->
@@ -242,15 +245,25 @@ defmodule ClaudeAgentSDK.Process do
           done: false
         }
     after
-      30_000 ->
-        # Timeout after 30 seconds
+      timeout_ms ->
+        # Timeout - use configured value
         :exec.stop(pid)
+
+        timeout_seconds = div(timeout_ms, 1000)
+        timeout_minutes = div(timeout_seconds, 60)
+
+        timeout_display =
+          if timeout_minutes > 0 do
+            "#{timeout_minutes} minutes"
+          else
+            "#{timeout_seconds} seconds"
+          end
 
         error_msg = %Message{
           type: :result,
           subtype: :error_during_execution,
           data: %{
-            error: "Command timed out after 30 seconds",
+            error: "Command timed out after #{timeout_display}",
             session_id: "error",
             is_error: true
           }

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2025-10-25
+
+### Fixed - Timeout Handling & Error Recovery
+
+- **Configurable timeout for command execution** (`Options.timeout_ms`)
+  - Added `timeout_ms` field to Options struct (default: 4,500,000ms = 75 minutes)
+  - Process module now respects configured timeout value
+  - Timeout error messages display human-readable format (minutes/seconds)
+  - Allows long-running operations to complete without premature termination
+
+- **Improved error handling for Jason dependency**
+  - Fixed `Jason.DecodeError` pattern matching in DebugMode
+  - Changed from direct struct match to struct check with `is_struct/1`
+  - Prevents compilation warnings when Jason is not available
+
+- **Test updates for model validation**
+  - Updated model tests to use CLI short forms (opus, sonnet, haiku)
+  - Tests now verify short form preservation instead of expansion
+  - Updated full model version strings to match current Claude releases
+
+### Changed
+
+- Default timeout increased from 30 seconds to 75 minutes for complex operations
+- Better error messages for timeout scenarios
+- Model test assertions updated to match CLI behavior
+
 ## [0.5.1] - 2025-10-24
 
 ### Changed - Default Model Switch to Haiku
