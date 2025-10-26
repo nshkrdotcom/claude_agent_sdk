@@ -130,6 +130,9 @@ defmodule ClaudeAgentSDK.Process do
         # Get timeout from options (default: 75 minutes)
         timeout_ms = options.timeout_ms || 4_500_000
 
+        # Debug: log what timeout we're using
+        IO.puts("\n[DEBUG] Using timeout: #{timeout_ms}ms (#{div(timeout_ms, 60_000)} minutes)")
+
         # Collect output until process exits
         receive_exec_output(pid, os_pid, [], [], timeout_ms)
 
@@ -290,7 +293,10 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp build_exec_options(options) do
-    base_options = [:sync, :stdout, :stderr]
+    # Get timeout from options (default: 75 minutes)
+    timeout_ms = options.timeout_ms || 4_500_000
+
+    base_options = [:sync, :stdout, :stderr, {:timeout, timeout_ms}]
 
     # Add environment variables (critical for authentication!)
     env_options = build_env_vars()

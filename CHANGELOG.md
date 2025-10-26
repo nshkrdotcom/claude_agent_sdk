@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2025-10-25
+
+### Fixed - Process Timeout Configuration
+
+- **Fixed erlexec timeout propagation**
+  - Added `:timeout` option to erlexec base_options in `build_exec_options/1`
+  - Ensures configured timeout_ms is properly passed to erlexec subprocess
+  - Previously, timeout was only used in receive block, not in erlexec itself
+  - Added debug logging to display configured timeout value
+  - Prevents premature process termination for long-running operations
+
+### Changed
+
+- Improved timeout debugging with runtime logging of configured timeout values
+- Better integration between Options.timeout_ms and erlexec process management
+
 ## [0.5.2] - 2025-10-25
 
 ### Fixed - Timeout Handling & Error Recovery
