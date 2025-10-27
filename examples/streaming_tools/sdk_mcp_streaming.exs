@@ -220,6 +220,5 @@ defmodule SDKMCPStreamingExample do
   end
 end
 
-# Note: Run this example from IEx:
-#   iex -S mix
-#   iex> SDKMCPStreamingExample.run()
+# Auto-run when executed with mix run
+SDKMCPStreamingExample.run()
