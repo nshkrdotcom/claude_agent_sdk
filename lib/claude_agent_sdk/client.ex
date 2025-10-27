@@ -471,40 +471,6 @@ defmodule ClaudeAgentSDK.Client do
     {:reply, :ok, %{state | subscribers: subscribers}}
   end
 
-  @impl true
-  def handle_cast({:unsubscribe, ref}, state) do
-    # Remove from subscribers map
-    subscribers = Map.delete(state.subscribers, ref)
-
-    # Remove from queue if present
-    queue = Enum.reject(state.subscriber_queue, fn {r, _msg} -> r == ref end)
-
-    # If this was the active subscriber, activate next in queue
-    {new_active, new_queue} =
-      if state.active_subscriber == ref do
-        case queue do
-          [{next_ref, next_message} | rest] ->
-            # Send queued message and activate
-            json = encode_outgoing_message(next_message)
-            _ = send_payload(state, json)
-            {next_ref, rest}
-
-          [] ->
-            {nil, []}
-        end
-      else
-        {state.active_subscriber, queue}
-      end
-
-    {:noreply,
-     %{
-       state
-       | subscribers: subscribers,
-         subscriber_queue: new_queue,
-         active_subscriber: new_active
-     }}
-  end
-
   def handle_call({:set_permission_mode, mode}, _from, state) do
     # Validate permission mode
     if ClaudeAgentSDK.Permission.valid_mode?(mode) do
@@ -568,6 +534,40 @@ defmodule ClaudeAgentSDK.Client do
     agents = state.options.agents || %{}
     agent_names = Map.keys(agents)
     {:reply, {:ok, agent_names}, state}
+  end
+
+  @impl true
+  def handle_cast({:unsubscribe, ref}, state) do
+    # Remove from subscribers map
+    subscribers = Map.delete(state.subscribers, ref)
+
+    # Remove from queue if present
+    queue = Enum.reject(state.subscriber_queue, fn {r, _msg} -> r == ref end)
+
+    # If this was the active subscriber, activate next in queue
+    {new_active, new_queue} =
+      if state.active_subscriber == ref do
+        case queue do
+          [{next_ref, next_message} | rest] ->
+            # Send queued message and activate
+            json = encode_outgoing_message(next_message)
+            _ = send_payload(state, json)
+            {next_ref, rest}
+
+          [] ->
+            {nil, []}
+        end
+      else
+        {state.active_subscriber, queue}
+      end
+
+    {:noreply,
+     %{
+       state
+       | subscribers: subscribers,
+         subscriber_queue: new_queue,
+         active_subscriber: new_active
+     }}
   end
 
   @impl true
