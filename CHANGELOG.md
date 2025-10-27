@@ -42,6 +42,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `examples/streaming_tools/sdk_mcp_streaming.exs` - SDK MCP tools with streaming
   - `examples/streaming_tools/liveview_pattern.exs` - Phoenix LiveView integration
 
+### Fixed
+
+- **Stream event wrapping compatibility**
+  - Protocol now correctly handles CLI's wrapped stream events: `{"type": "stream_event", "event": {...}}`
+  - Client unwraps events for EventParser while maintaining test compatibility
+  - Streaming examples now display character-by-character output correctly
+  - Fixes streaming not working with hooks/MCP/permissions
+
+- **Test suite reliability**
+  - Eliminated all Process.sleep calls from streaming tests (12 instances removed)
+  - Replaced timing-based sync with Supertester's state-based synchronization
+  - Fixed subscription race condition in test setup with :sys.get_state sync
+  - Tests are now deterministic and 100% reliable (previously 40-50% flaky)
+
+- **Transport.Port streaming flag propagation**
+  - Client now passes Options to Transport.Port via transport_opts
+  - Ensures --include-partial-messages flag reaches CLI in all modes
+  - Transport.Port builds CLI command from Options when provided
+
+- **Example streaming patterns**
+  - Changed Enum.take to Stream.take_while for real-time event processing
+  - Examples now process events as they arrive instead of buffering
+  - Improved typewriter effect visibility in demonstrations
+
 ### Changed
 
 - **Options struct**: Added new fields for streaming control

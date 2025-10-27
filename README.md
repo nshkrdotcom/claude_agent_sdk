@@ -57,7 +57,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.5.3"}
+    {:claude_agent_sdk, "~> 0.6.0"}
   ]
 end
 ```
