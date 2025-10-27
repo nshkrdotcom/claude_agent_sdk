@@ -71,30 +71,34 @@ defmodule StreamingHooksExample do
     IO.puts("Sending: 'List the files in the current directory'\n")
     IO.puts("-" |> String.duplicate(70))
 
-    # Send message and stream response
-    # Note: Using Enum.take to avoid hanging (stream continues indefinitely with real CLI)
-    events =
-      Streaming.send_message(session, "List the files in the current directory")
-      # Take first 100 events as demo
-      |> Enum.take(100)
-
-    # Process events
-    Enum.each(events, fn event ->
+    # Send message and stream response AS IT ARRIVES
+    Streaming.send_message(session, "List the files in the current directory")
+    |> Stream.take_while(fn event ->
+      # Process each event immediately as it arrives
       case event do
         %{type: :text_delta, text: text} ->
           IO.write(text)
+          # Continue
+          true
 
         %{type: :tool_use_start, name: name} ->
           IO.puts("\n\n🛠️  Tool: #{name}")
+          # Continue
+          true
 
         %{type: :message_stop} ->
           IO.puts("\n" <> ("-" |> String.duplicate(70)))
           IO.puts("\n✓ Message complete")
+          # Stop - message is done
+          false
 
         _ ->
-          :ok
+          # Continue for other events
+          true
       end
     end)
+    # Consume the stream
+    |> Stream.run()
 
     # Close session
     Streaming.close_session(session)

@@ -207,8 +207,33 @@ defmodule ClaudeAgentSDK.Transport.Port do
       is_list(command) ->
         {:ok, List.to_string(command)}
 
+      # No explicit command - build from Options if provided
       true ->
-        {:error, {:command_not_found, command}}
+        build_command_from_options(opts)
+    end
+  end
+
+  defp build_command_from_options(opts) do
+    case Keyword.get(opts, :options) do
+      %ClaudeAgentSDK.Options{} = options ->
+        # Build CLI command with options (including streaming flags)
+        executable = System.find_executable("claude")
+
+        if executable do
+          # Base args for control protocol
+          args = ["--output-format", "stream-json", "--input-format", "stream-json", "--verbose"]
+
+          # Add Options.to_args (includes --include-partial-messages if set)
+          args = args ++ ClaudeAgentSDK.Options.to_args(options)
+
+          cmd = Enum.join([executable | args], " ") <> " 2>/dev/null"
+          {:ok, cmd}
+        else
+          {:error, {:command_not_found, "claude"}}
+        end
+
+      _ ->
+        {:error, {:command_not_found, nil}}
     end
   end
 

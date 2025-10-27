@@ -12,9 +12,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
   alias ClaudeAgentSDK.{Streaming, Options}
 
   alias ClaudeAgentSDK.TestSupport.{
-    MockCLI,
     CLIScriptBuilder,
-    EventAssertions,
     TestFixtures
   }
 
@@ -88,7 +86,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
     @tag :skip
     test "receives text_delta events in sequence" do
       # Build a simple text streaming script
-      script = CLIScriptBuilder.simple_text_scenario("Hello World")
+      _script = CLIScriptBuilder.simple_text_scenario("Hello World")
 
       # This test is skipped because we haven't implemented
       # the Client streaming enhancements yet (Phase 2, Days 4-6)
@@ -106,7 +104,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
     @tag :skip
     test "receives interleaved text and tool events" do
       # Build script with text + tool
-      script =
+      _script =
         CLIScriptBuilder.text_with_tool_scenario(
           "Running command: ",
           "Bash",

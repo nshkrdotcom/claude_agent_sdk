@@ -293,7 +293,10 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   defp classify_message(%{"type" => "control_request"} = _data), do: :control_request
   defp classify_message(%{"type" => "control_response"} = _data), do: :control_response
 
-  # Streaming events (v0.6.0) - from CLI when --include-partial-messages is enabled
+  # Streaming events (v0.6.0) - CLI wraps Anthropic streaming events in stream_event wrapper
+  defp classify_message(%{"type" => "stream_event"} = _data), do: :stream_event
+
+  # Streaming events - unwrapped format (from tests/MockTransport)
   defp classify_message(%{"type" => type} = _data)
        when type in [
               "message_start",

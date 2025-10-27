@@ -775,7 +775,10 @@ defmodule ClaudeAgentSDK.Client do
     hooks_config = build_hooks_config(registry, state.options.hooks)
     sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
 
-    with {:ok, transport} <- module.start_link(state.transport_opts || []),
+    # Pass Options to transport so it can build CLI command with streaming flags
+    transport_opts = Keyword.put(state.transport_opts || [], :options, state.options)
+
+    with {:ok, transport} <- module.start_link(transport_opts),
          :ok <- module.subscribe(transport, self()) do
       {_request_id, init_json} =
         Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil)
@@ -907,8 +910,11 @@ defmodule ClaudeAgentSDK.Client do
     state
   end
 
-  defp handle_decoded_message(:stream_event, event_data, state) do
-    # Streaming event (v0.6.0) - from CLI when --include-partial-messages enabled
+  defp handle_decoded_message(:stream_event, data, state) do
+    # Streaming event (v0.6.0) - handle both wrapped and unwrapped formats
+    # Real CLI: {"type": "stream_event", "event": {"type": "message_start", ...}}
+    # Tests: {"type": "message_start", ...}
+    event_data = if data["type"] == "stream_event", do: data["event"], else: data
     handle_stream_event(event_data, state)
   end
 

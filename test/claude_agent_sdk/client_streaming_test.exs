@@ -7,6 +7,8 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
   """
   use ClaudeAgentSDK.SupertesterCase
 
+  import ClaudeAgentSDK.SupertesterCase, only: [eventually: 2]
+
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.TestSupport.MockTransport
 
@@ -59,10 +61,15 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
           {:mock_transport_started, t} -> t
         end
 
+      # Wait for client to complete subscription before tests run
+      # This ensures MockTransport has the client in its subscribers set
+      # Use a simple ping to ensure handle_continue has completed
+      :sys.get_state(client)
+
       %{client: client, transport: transport}
     end
 
-    test "handles message_start event", %{transport: transport} do
+    test "handles message_start event", %{client: client, transport: transport} do
       event = %{
         "type" => "message_start",
         "message" => %{
@@ -75,11 +82,16 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       # Push event through transport
       MockTransport.push_message(transport, Jason.encode!(event))
 
-      # Event should be processed without error
-      Process.sleep(50)
+      # Event should be processed without error - just verify client is responsive
+      eventually(
+        fn ->
+          Process.alive?(client)
+        end,
+        timeout: 2000
+      )
     end
 
-    test "handles text_delta events", %{transport: transport} do
+    test "handles text_delta events", %{client: client, transport: transport} do
       events = [
         %{
           "type" => "content_block_delta",
@@ -97,20 +109,32 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
         MockTransport.push_message(transport, Jason.encode!(event))
       end
 
-      # Events should be processed and accumulated
-      Process.sleep(50)
+      # Wait for accumulated text to contain both deltas
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.accumulated_text == "Hello World"
+        end,
+        timeout: 2000
+      )
     end
 
-    test "handles message_stop event", %{transport: transport} do
+    test "handles message_stop event", %{client: client, transport: transport} do
       event = %{"type" => "message_stop"}
 
       MockTransport.push_message(transport, Jason.encode!(event))
 
-      # Should trigger stream completion
-      Process.sleep(50)
+      # Wait for stream completion (active_subscriber becomes nil)
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber == nil
+        end,
+        timeout: 2000
+      )
     end
 
-    test "handles tool_use_start event", %{transport: transport} do
+    test "handles tool_use_start event", %{client: client, transport: transport} do
       event = %{
         "type" => "content_block_start",
         "content_block" => %{
@@ -122,10 +146,17 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       }
 
       MockTransport.push_message(transport, Jason.encode!(event))
-      Process.sleep(50)
+
+      # Event is fire-and-forget, just verify client is responsive
+      eventually(
+        fn ->
+          Process.alive?(client)
+        end,
+        timeout: 2000
+      )
     end
 
-    test "handles tool_input_delta events", %{transport: transport} do
+    test "handles tool_input_delta events", %{client: client, transport: transport} do
       event = %{
         "type" => "content_block_delta",
         "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"command\":"},
@@ -133,10 +164,17 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       }
 
       MockTransport.push_message(transport, Jason.encode!(event))
-      Process.sleep(50)
+
+      # Event is fire-and-forget, just verify client is responsive
+      eventually(
+        fn ->
+          Process.alive?(client)
+        end,
+        timeout: 2000
+      )
     end
 
-    test "handles thinking_delta events (Sonnet 4.5+)", %{transport: transport} do
+    test "handles thinking_delta events (Sonnet 4.5+)", %{client: client, transport: transport} do
       event = %{
         "type" => "content_block_delta",
         "delta" => %{"type" => "thinking_delta", "thinking" => "Let me think..."},
@@ -144,10 +182,17 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       }
 
       MockTransport.push_message(transport, Jason.encode!(event))
-      Process.sleep(50)
+
+      # Event is fire-and-forget, just verify client is responsive
+      eventually(
+        fn ->
+          Process.alive?(client)
+        end,
+        timeout: 2000
+      )
     end
 
-    test "accumulates text across multiple deltas", %{transport: transport} do
+    test "accumulates text across multiple deltas", %{client: client, transport: transport} do
       # Send sequence of text deltas
       deltas = ["Hello", " ", "World", "!"]
 
@@ -161,11 +206,17 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
         MockTransport.push_message(transport, Jason.encode!(event))
       end
 
-      # Text should be accumulated in state
-      Process.sleep(50)
+      # Wait for all deltas to be accumulated
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.accumulated_text == "Hello World!"
+        end,
+        timeout: 2000
+      )
     end
 
-    test "resets accumulated text on message_stop", %{transport: transport} do
+    test "resets accumulated text on message_stop", %{client: client, transport: transport} do
       # Send text deltas
       event1 = %{
         "type" => "content_block_delta",
@@ -174,14 +225,28 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       }
 
       MockTransport.push_message(transport, Jason.encode!(event1))
-      Process.sleep(25)
+
+      # Wait for text to be accumulated
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.accumulated_text == "Hello"
+        end,
+        timeout: 2000
+      )
 
       # Send message_stop
       event2 = %{"type" => "message_stop"}
       MockTransport.push_message(transport, Jason.encode!(event2))
-      Process.sleep(25)
 
-      # Accumulated text should be reset (verified by no crash)
+      # Wait for completion (active_subscriber reset AND accumulated_text reset)
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber == nil and state.accumulated_text == ""
+        end,
+        timeout: 2000
+      )
     end
   end
 
@@ -240,10 +305,13 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
           {:mock_transport_started, t} -> t
         end
 
+      # Wait for client to complete subscription
+      :sys.get_state(client)
+
       %{client: client, transport: transport}
     end
 
-    test "broadcasts events to active subscriber only", %{transport: transport} do
+    test "broadcasts events to active subscriber only", %{client: client, transport: transport} do
       # Subscriber broadcasting test
       # (Will implement with proper subscribe handler)
 
@@ -254,10 +322,18 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       }
 
       MockTransport.push_message(transport, Jason.encode!(event))
-      Process.sleep(50)
+
+      # Wait for event to be processed
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.accumulated_text == "Test"
+        end,
+        timeout: 2000
+      )
     end
 
-    test "does not broadcast when no active subscriber", %{transport: transport} do
+    test "does not broadcast when no active subscriber", %{client: client, transport: transport} do
       # Should handle gracefully when no subscribers
       event = %{
         "type" => "content_block_delta",
@@ -266,10 +342,19 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       }
 
       MockTransport.push_message(transport, Jason.encode!(event))
-      Process.sleep(50)
+
+      # Wait for event to be processed (should accumulate even without subscriber)
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.accumulated_text == "Test"
+        end,
+        timeout: 2000
+      )
 
       # Should not crash
       assert Process.alive?(transport)
+      assert Process.alive?(client)
     end
   end
 
@@ -288,18 +373,28 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
           {:mock_transport_started, t} -> t
         end
 
+      # Wait for client to complete subscription
+      :sys.get_state(client)
+
       %{client: client, transport: transport}
     end
 
-    test "handles malformed stream events gracefully", %{transport: transport} do
+    test "handles malformed stream events gracefully", %{client: client, transport: transport} do
       # Malformed event
       bad_event = %{"type" => "unknown_stream_event", "data" => "???"}
 
       MockTransport.push_message(transport, Jason.encode!(bad_event))
-      Process.sleep(50)
 
-      # Should not crash
+      # Should not crash - just verify client is responsive
+      eventually(
+        fn ->
+          Process.alive?(client) and Process.alive?(transport)
+        end,
+        timeout: 2000
+      )
+
       assert Process.alive?(transport)
+      assert Process.alive?(client)
     end
 
     test "handles incomplete JSON gracefully", %{transport: transport} do
