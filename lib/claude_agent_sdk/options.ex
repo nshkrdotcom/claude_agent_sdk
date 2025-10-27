@@ -25,6 +25,19 @@ defmodule ClaudeAgentSDK.Options do
   - `abort_ref` - Reference for aborting requests (reference)
   - `hooks` - Hook configurations (see `t:ClaudeAgentSDK.Hooks.hook_config/0`)
   - `timeout_ms` - Command execution timeout in milliseconds (integer, default: 4_500_000)
+  - `include_partial_messages` - Enable character-level streaming (boolean) (v0.6.0+)
+  - `preferred_transport` - Override automatic transport selection (`:auto | :cli | :control`) (v0.6.0+)
+
+  ## Streaming + Tools (v0.6.0)
+
+  The SDK automatically selects the appropriate transport:
+  - **CLI-only**: Fast streaming without control features (no hooks, MCP, or permissions)
+  - **Control client**: Full features with streaming (hooks + partial messages)
+
+  Override with `preferred_transport`:
+  - `:auto` - Automatic selection (default)
+  - `:cli` - Force CLI-only mode (ignores control features)
+  - `:control` - Force control client (even without features)
 
   ## Examples
 
@@ -42,6 +55,14 @@ defmodule ClaudeAgentSDK.Options do
         permission_mode: :accept_edits,
         cwd: "/path/to/project"
       }
+
+      # Streaming with tools (v0.6.0)
+      %ClaudeAgentSDK.Options{
+        include_partial_messages: true,
+        hooks: %{pre_tool_use: [...]},
+        mcp_servers: %{"math" => sdk_server}
+      }
+      # → Automatically selects control client with streaming enabled
 
   """
 
@@ -90,7 +111,12 @@ defmodule ClaudeAgentSDK.Options do
     # Permission callback function
     :can_use_tool,
     # Timeout for command execution in milliseconds (default: 4_500_000 = 75 minutes)
-    :timeout_ms
+    :timeout_ms,
+    # Streaming + Tools (v0.6.0)
+    # Enable character-level streaming with --include-partial-messages
+    :include_partial_messages,
+    # Override automatic transport selection
+    :preferred_transport
   ]
 
   @type output_format :: :text | :json | :stream_json
@@ -98,6 +124,7 @@ defmodule ClaudeAgentSDK.Options do
   @type model_name :: String.t()
   @type agent_name :: atom()
   @type agent_definition :: ClaudeAgentSDK.Agent.t()
+  @type transport_preference :: :auto | :cli | :control
 
   @typedoc """
   SDK MCP server configuration (in-process)
@@ -149,7 +176,10 @@ defmodule ClaudeAgentSDK.Options do
           add_dir: [String.t()] | nil,
           strict_mcp_config: boolean() | nil,
           hooks: ClaudeAgentSDK.Hooks.hook_config() | nil,
-          can_use_tool: ClaudeAgentSDK.Permission.callback() | nil
+          can_use_tool: ClaudeAgentSDK.Permission.callback() | nil,
+          timeout_ms: integer() | nil,
+          include_partial_messages: boolean() | nil,
+          preferred_transport: transport_preference() | nil
         }
 
   @doc """
@@ -219,6 +249,7 @@ defmodule ClaudeAgentSDK.Options do
     |> add_fork_session_args(options)
     |> add_dir_args(options)
     |> add_strict_mcp_args(options)
+    |> add_partial_messages_args(options)
   end
 
   defp add_output_format_args(args, %{output_format: nil}), do: args
@@ -407,6 +438,11 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_strict_mcp_args(args, %{strict_mcp_config: true}), do: args ++ ["--strict-mcp-config"]
   defp add_strict_mcp_args(args, _), do: args
+
+  defp add_partial_messages_args(args, %{include_partial_messages: true}),
+    do: args ++ ["--include-partial-messages"]
+
+  defp add_partial_messages_args(args, _), do: args
 
   @doc """
   Validates agent configuration in Options.
