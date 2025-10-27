@@ -147,23 +147,24 @@ defmodule SDKMCPStreamingExample do
       IO.puts("Problem #{idx}/#{length(problems)}: #{problem}")
       IO.puts("-" |> String.duplicate(70))
 
-      # Track state
-      current_text = ""
-      tool_count = 0
+      # Send message and collect events (take 100 to avoid hanging)
+      events =
+        Streaming.send_message(session, problem)
+        |> Enum.take(100)
 
-      # Send message and stream response
-      Streaming.send_message(session, problem)
-      |> Stream.each(fn event ->
+      # Count tools used
+      tool_count = Enum.count(events, &(&1[:type] == :tool_use_start))
+
+      # Process events
+      Enum.each(events, fn event ->
         case event do
           # Text streaming
           %{type: :text_delta, text: text} ->
             IO.write(text)
-            current_text = current_text <> text
 
           # Tool events
           %{type: :tool_use_start, name: name} ->
             IO.puts("\n\n🛠️  Executing SDK MCP tool: #{name}")
-            tool_count = tool_count + 1
 
           %{type: :tool_input_delta, json: json} ->
             # Show tool input as it streams
@@ -188,7 +189,6 @@ defmodule SDKMCPStreamingExample do
             :ok
         end
       end)
-      |> Stream.run()
 
       # Brief pause between problems
       if idx < length(problems) do
