@@ -4,13 +4,17 @@ These examples demonstrate the new streaming + tools unification feature.
 
 ## Running the Examples
 
-These examples are designed to run from IEx (not `mix run` or `elixir`):
+Simply use `mix run`:
 
 ```bash
-# Start IEx with the project
-iex -S mix
+mix run examples/streaming_tools/basic_streaming_with_hooks.exs
+mix run examples/streaming_tools/sdk_mcp_streaming.exs
+```
 
-# Run an example
+Or from IEx for interactive exploration:
+
+```bash
+iex -S mix
 iex> StreamingHooksExample.run()
 ```
 
@@ -20,8 +24,7 @@ iex> StreamingHooksExample.run()
 Demonstrates streaming with pre-tool hooks for security and monitoring.
 
 ```bash
-iex -S mix
-iex> StreamingHooksExample.run()
+mix run examples/streaming_tools/basic_streaming_with_hooks.exs
 ```
 
 Features:
@@ -34,8 +37,7 @@ Features:
 Shows streaming with SDK MCP servers (in-process tools).
 
 ```bash
-iex -S mix
-iex> SDKMCPStreamingExample.run()
+mix run examples/streaming_tools/sdk_mcp_streaming.exs
 ```
 
 Features:
@@ -74,14 +76,15 @@ See the EventParser and EventAdapter docs for more details.
 
 ## Troubleshooting
 
-**Error: "Mix.install cannot be used inside a Mix project"**
-- These examples must be run from IEx, not `mix run`
-- Solution: `iex -S mix` then call the example module's `run()` function
-
-**Error: "Module not compiled"**
-- Run `mix compile` first
-- Then `iex -S mix`
+**Example runs but shows no output**
+- The examples connect to the real Claude CLI
+- Make sure you're authenticated: `claude --version`
+- Output may take a few seconds to appear (Claude is thinking)
 
 **CLI not authenticated**
 - Run `claude --version` to check authentication
 - Follow Claude CLI setup instructions if needed
+
+**Module not found errors**
+- Run `mix compile` first
+- Then run the example again
