@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.AuthManagerTest do
-  use ClaudeAgentSDK.SupertesterCase, isolation: :basic
+  use ExUnit.Case, async: false
 
   alias ClaudeAgentSDK.AuthManager
 
