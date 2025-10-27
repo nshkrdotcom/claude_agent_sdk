@@ -32,7 +32,7 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   @typedoc """
   Message type classifier.
   """
-  @type message_type :: :control_request | :control_response | :sdk_message
+  @type message_type :: :control_request | :control_response | :sdk_message | :stream_event
 
   @doc """
   Encodes an initialize request with hooks configuration and SDK MCP servers.
@@ -292,5 +292,18 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
 
   defp classify_message(%{"type" => "control_request"} = _data), do: :control_request
   defp classify_message(%{"type" => "control_response"} = _data), do: :control_response
+
+  # Streaming events (v0.6.0) - from CLI when --include-partial-messages is enabled
+  defp classify_message(%{"type" => type} = _data)
+       when type in [
+              "message_start",
+              "message_stop",
+              "message_delta",
+              "content_block_start",
+              "content_block_delta",
+              "content_block_stop"
+            ],
+       do: :stream_event
+
   defp classify_message(_data), do: :sdk_message
 end

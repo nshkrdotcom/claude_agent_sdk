@@ -75,11 +75,14 @@ defmodule ClaudeAgentSDK.Client do
   - `port` - Port to Claude CLI process
   - `options` - Configuration options
   - `registry` - Hook callback registry
-  - `subscribers` - List of pids subscribed to messages
+  - `subscribers` - Map of ref => pid for streaming subscriptions, or list of pids for legacy
   - `pending_requests` - Map of request_id => {from, ref}
   - `initialized` - Whether initialization handshake completed
   - `buffer` - Incomplete JSON buffer
   - `sdk_mcp_servers` - Map of server_name => registry_pid for SDK MCP servers
+  - `accumulated_text` - Buffer for partial text (streaming, v0.6.0)
+  - `active_subscriber` - Current streaming consumer reference (v0.6.0)
+  - `subscriber_queue` - Pending message queue (v0.6.0)
   """
   @type state :: %{
           port: port() | nil,
@@ -88,13 +91,16 @@ defmodule ClaudeAgentSDK.Client do
           transport_opts: keyword(),
           options: Options.t(),
           registry: Registry.t(),
-          subscribers: [pid()],
+          subscribers: %{reference() => pid()} | [pid()],
           pending_requests: %{String.t() => {GenServer.from(), reference()}},
           initialized: boolean(),
           buffer: String.t(),
           sdk_mcp_servers: %{String.t() => pid()},
           current_model: String.t() | nil,
-          pending_model_change: {GenServer.from(), reference()} | nil
+          pending_model_change: {GenServer.from(), reference()} | nil,
+          accumulated_text: String.t(),
+          active_subscriber: reference() | nil,
+          subscriber_queue: [{reference(), String.t()}]
         }
 
   ## Public API
@@ -341,14 +347,18 @@ defmodule ClaudeAgentSDK.Client do
         transport_opts: transport_opts,
         options: updated_options,
         registry: Registry.new(),
-        subscribers: [],
+        subscribers: %{},
         pending_requests: %{},
         initialized: false,
         buffer: "",
         session_id: nil,
         sdk_mcp_servers: sdk_mcp_servers,
         current_model: updated_options.model,
-        pending_model_change: nil
+        pending_model_change: nil,
+        # Streaming support fields (v0.6.0)
+        accumulated_text: "",
+        active_subscriber: nil,
+        subscriber_queue: []
       }
 
       {:ok, state, {:continue, :start_cli}}
@@ -429,9 +439,36 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
+  # Subscribe with reference (streaming with queue, v0.6.0)
+  def handle_call({:subscribe, ref}, from, state) do
+    {pid, _from_ref} = from
+
+    # Add to subscribers map
+    subscribers = Map.put(state.subscribers, ref, pid)
+
+    # Activate if no active subscriber, otherwise subscriber waits
+    new_active =
+      if state.active_subscriber == nil do
+        ref
+      else
+        state.active_subscriber
+      end
+
+    {:reply, :ok,
+     %{
+       state
+       | subscribers: subscribers,
+         active_subscriber: new_active
+     }}
+  end
+
+  # Legacy subscribe (backwards compatibility) - generate a ref for the pid
   def handle_call({:subscribe}, from, state) do
     {pid, _ref} = from
-    {:reply, :ok, %{state | subscribers: [pid | state.subscribers]}}
+    # For backwards compat, create a ref for this pid subscription
+    ref = make_ref()
+    subscribers = Map.put(state.subscribers, ref, pid)
+    {:reply, :ok, %{state | subscribers: subscribers}}
   end
 
   def handle_call({:set_permission_mode, mode}, _from, state) do
@@ -836,6 +873,11 @@ defmodule ClaudeAgentSDK.Client do
     state
   end
 
+  defp handle_decoded_message(:stream_event, event_data, state) do
+    # Streaming event (v0.6.0) - from CLI when --include-partial-messages enabled
+    handle_stream_event(event_data, state)
+  end
+
   defp handle_control_request(request_data, state) do
     request_id = request_data["request_id"]
     request = request_data["request"]
@@ -1140,8 +1182,8 @@ defmodule ClaudeAgentSDK.Client do
     # Parse into Message struct
     case Message.from_json(Jason.encode!(message_data)) do
       {:ok, message} ->
-        # Send to all subscribers
-        Enum.each(state.subscribers, fn pid ->
+        # Send to all subscribers (now a map of ref => pid)
+        Enum.each(state.subscribers, fn {_ref, pid} ->
           send(pid, {:claude_message, message})
         end)
 
@@ -1373,6 +1415,70 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp send_payload(_state, _payload), do: {:error, :not_connected}
+
+  ## Stream Event Handling (v0.6.0)
+
+  defp handle_stream_event(event_data, state) do
+    # Parse streaming event via EventParser (always returns {:ok, events, accumulated})
+    {:ok, events, new_accumulated} =
+      ClaudeAgentSDK.Streaming.EventParser.parse_event(event_data, state.accumulated_text)
+
+    # Broadcast to active subscriber only (queue model)
+    if state.active_subscriber do
+      broadcast_events_to_subscriber(
+        state.active_subscriber,
+        state.subscribers,
+        events
+      )
+    end
+
+    # Check for message completion
+    message_complete? = Enum.any?(events, &(&1.type == :message_stop))
+
+    if message_complete? do
+      handle_stream_completion(state, new_accumulated)
+    else
+      %{state | accumulated_text: new_accumulated}
+    end
+  end
+
+  defp handle_stream_completion(state, accumulated_text) do
+    # Process next queued message if any
+    case state.subscriber_queue do
+      [{next_ref, _next_message} | rest] ->
+        # Activate next subscriber from queue
+        %{
+          state
+          | active_subscriber: next_ref,
+            subscriber_queue: rest,
+            accumulated_text: ""
+        }
+
+      [] ->
+        # No queued messages, reset
+        %{
+          state
+          | active_subscriber: nil,
+            subscriber_queue: [],
+            accumulated_text: accumulated_text
+        }
+    end
+  end
+
+  defp broadcast_events_to_subscriber(ref, subscribers, events) do
+    # Look up pid for this ref
+    case Map.get(subscribers, ref) do
+      nil ->
+        # No subscriber for this ref (possibly unsubscribed)
+        :ok
+
+      pid ->
+        # Send events to the subscriber process
+        Enum.each(events, fn event ->
+          send(pid, {:stream_event, ref, event})
+        end)
+    end
+  end
 
   defp ensure_newline(payload) when is_binary(payload) do
     if String.ends_with?(payload, "\n") do
