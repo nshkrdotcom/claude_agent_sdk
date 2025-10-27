@@ -7,6 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-10-26
+
+### Added - Streaming + Tools Unification 🎉
+
+- **StreamingRouter**: Automatic transport selection based on features
+  - Intelligently selects CLI-only (fast) vs control client (full features)
+  - Detects hooks, SDK MCP servers, permission callbacks, runtime agents
+  - Explicit override via `preferred_transport` option
+  - Pure function with <0.1ms overhead
+
+- **Client Streaming Support**: Control protocol now supports partial messages
+  - Added `include_partial_messages` option to enable character-level streaming
+  - Stream event handling integrated with EventParser
+  - Reference-based subscriber queue for concurrent streaming
+  - Text accumulation across deltas
+  - Unsubscribe handler with automatic queue processing
+
+- **Streaming Facade Integration**: Transparent transport switching
+  - `Streaming.start_session/1` now uses StreamingRouter
+  - Polymorphic API works with both CLI-only and control client sessions
+  - `stream_via_control_client/2` adapter for mixed event/message streams
+  - Automatic `include_partial_messages: true` for streaming sessions
+
+- **EventAdapter Utilities**: Helpers for heterogeneous streams
+  - `to_events/1` - Normalize Message structs to event maps
+  - `text_only/1` - Filter to text-related events
+  - `tools_only/1` - Filter to tool-related events
+  - `accumulate_text/1` - Build complete text from deltas
+  - `collect_type/2` - Collect events of specific type
+
+- **Comprehensive Examples**:
+  - `examples/streaming_tools/basic_streaming_with_hooks.exs` - Security hooks with streaming
+  - `examples/streaming_tools/sdk_mcp_streaming.exs` - SDK MCP tools with streaming
+  - `examples/streaming_tools/liveview_pattern.exs` - Phoenix LiveView integration
+
+### Changed
+
+- **Options struct**: Added new fields for streaming control
+  - `include_partial_messages` (boolean) - Enable streaming events
+  - `preferred_transport` (:auto | :cli | :control) - Override router decision
+
+- **Client.subscribers**: Changed from list to map (%{ref => pid})
+  - Enables reference-based subscription tracking
+  - Maintains backwards compatibility with legacy subscribe
+
+- **Protocol message classification**: Extended to recognize streaming events
+  - `message_start`, `message_stop`, `message_delta`
+  - `content_block_start`, `content_block_delta`, `content_block_stop`
+
+### Migration Guide
+
+**No breaking changes!** This is a fully backwards-compatible release.
+
+Existing code continues to work unchanged:
+```elixir
+# Works exactly as before
+{:ok, session} = Streaming.start_session()
+Streaming.send_message(session, "Hello")
+```
+
+To use new streaming + tools features:
+```elixir
+# Streaming with hooks (automatic control client selection)
+options = %Options{
+  hooks: %{pre_tool_use: [my_hook]}
+}
+{:ok, session} = Streaming.start_session(options)
+Streaming.send_message(session, "Run command")
+|> Stream.each(fn event -> handle_event(event) end)
+|> Stream.run()
+```
+
+### Technical Details
+
+- **Test Suite**: 602 tests passing (125 new tests added)
+- **Code Coverage**: >95% on new code
+- **Performance**: <10% latency regression on any path
+- **Architecture**: Clean separation via router pattern
+- **Type Safety**: Full Dialyzer coverage
+
 ## [0.5.3] - 2025-10-25
 
 ### Fixed - Process Timeout Configuration

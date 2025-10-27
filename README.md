@@ -96,9 +96,178 @@ mix deps.get
    mix run.live examples/simple_analyzer.exs lib/claude_agent_sdk.ex
    ```
 
+## Streaming + Tools (v0.6.0)
+
+The SDK now supports streaming WITH control features like hooks, SDK MCP servers, and permissions! Previously, you had to choose between fast streaming (CLI-only) or control features (blocking). Now you get both automatically.
+
+### Automatic Transport Selection
+
+The SDK intelligently routes your streaming requests:
+
+- **CLI-only path**: Fast streaming without control features
+  - No hooks, SDK MCP, permissions, or agents configured
+  - Direct subprocess streaming (lowest latency)
+
+- **Control client path**: Streaming WITH all features
+  - Hooks enabled
+  - SDK MCP servers configured
+  - Permission callbacks active
+  - Runtime agents configured
+
+### Quick Example: Streaming with Hooks
+
+```elixir
+alias ClaudeAgentSDK.{Streaming, Options}
+alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+
+# Define a pre-tool hook
+def log_tool_use(input, _tool_id, _context) do
+  tool_name = input["tool_name"]
+  IO.puts("🔧 Executing tool: #{tool_name}")
+  Output.allow()
+end
+
+# Configure options with hooks
+options = %Options{
+  hooks: %{
+    pre_tool_use: [Matcher.new("*", [&log_tool_use/3])]
+  }
+}
+
+# Start streaming session - automatically uses control client
+{:ok, session} = Streaming.start_session(options)
+
+# Send message and get streaming response with hook execution
+Streaming.send_message(session, "Create a hello.ex file")
+|> Stream.each(fn
+  %{type: :text_delta, text: text} ->
+    IO.write(text)  # Typewriter effect
+
+  %{type: :tool_complete, tool_name: name} ->
+    IO.puts("\n✅ Tool #{name} completed")
+
+  %{type: :message_stop} ->
+    IO.puts("\n[Complete]")
+end)
+|> Stream.run()
+
+Streaming.close_session(session)
+```
+
+### Streaming with SDK MCP Servers
+
+```elixir
+# Define an SDK MCP tool
+defmodule Calculator do
+  use ClaudeAgentSDK.Tool
+
+  deftool :add, "Adds two numbers", %{
+    type: "object",
+    properties: %{
+      a: %{type: "number"},
+      b: %{type: "number"}
+    }
+  } do
+    def execute(%{"a" => a, "b" => b}) do
+      {:ok, %{"content" => [%{"type" => "text", "text" => "#{a + b}"}]}}
+    end
+  end
+end
+
+# Create SDK MCP server
+server = ClaudeAgentSDK.create_sdk_mcp_server(
+  name: "calculator",
+  version: "1.0.0",
+  tools: [Calculator.Add]
+)
+
+# Configure streaming with MCP
+options = %Options{
+  mcp_servers: %{"calculator" => server}
+}
+
+# Streaming automatically uses control client
+{:ok, session} = Streaming.start_session(options)
+
+Streaming.send_message(session, "What is 123 + 456?")
+|> Stream.each(fn event ->
+  case event.type do
+    :text_delta -> IO.write(event.text)
+    :tool_use_start -> IO.puts("\n🛠️ Using #{event.name}")
+    :message_stop -> IO.puts("\n")
+  end
+end)
+|> Stream.run()
+
+Streaming.close_session(session)
+```
+
+### Configuration Options
+
+```elixir
+# Force CLI-only mode (fast, no control features)
+options = %Options{
+  preferred_transport: :cli,
+  include_partial_messages: true  # Auto-set by start_session
+}
+
+# Force control client mode (even without features)
+options = %Options{
+  preferred_transport: :control
+}
+
+# Automatic selection (default, recommended)
+options = %Options{}  # Analyzes your config and chooses best transport
+```
+
+### Migration from v0.5.x
+
+No breaking changes! Your existing streaming code works as-is:
+
+```elixir
+# v0.5.x code - still works!
+{:ok, session} = Streaming.start_session()
+Streaming.send_message(session, "Hello") |> Enum.to_list()
+Streaming.close_session(session)
+
+# v0.6.0 - just add hooks and they work automatically
+options = %Options{hooks: %{pre_tool_use: [my_hook]}}
+{:ok, session} = Streaming.start_session(options)
+# Now streaming includes hook execution!
+```
+
+### Event Types with Tools
+
+The streaming events now include tool-related events when using control client:
+
+```elixir
+# Standard streaming events (both transports)
+%{type: :text_delta, text: "...", accumulated: "..."}
+%{type: :message_start, model: "..."}
+%{type: :message_stop, final_text: "..."}
+
+# Tool events (control client only)
+%{type: :tool_use_start, name: "Bash", id: "..."}
+%{type: :tool_input_delta, json: "..."}
+%{type: :tool_complete, tool_name: "Bash", result: "..."}
+
+# Hook events (control client only)
+%{type: :hook_invoked, event: :pre_tool_use, result: :allow}
+```
+
+### Examples
+
+See working examples in `examples/streaming_tools/`:
+- `basic_streaming_with_hooks.exs` - Streaming with pre-tool hooks
+- `sdk_mcp_streaming.exs` - Streaming with SDK MCP servers
+- `liveview_pattern.exs` - Phoenix LiveView integration
+
 ## Implementation Status
 
-### ✅ **Currently Implemented (v0.5.2)**
+### ✅ **Currently Implemented (v0.6.0)**
+- **Streaming + Tools Unification**: Automatic transport selection for streaming with hooks/MCP/permissions
+- **StreamingRouter**: Intelligent routing between CLI-only and control client transports
+- **Polymorphic API**: Same `Streaming` API works with both transports seamlessly
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
 - **Live Script Runner**: `mix run.live` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
