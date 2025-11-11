@@ -16,30 +16,44 @@ An Elixir SDK for programmatically interacting with Claude Code. This library pr
 ## Architecture
 
 ```mermaid
-graph TB
-    subgraph "Your Elixir Application"
-        A[ClaudeAgentSDK] --> B[Process Manager]
-        B --> C[Message Parser]
-        B --> D[Auth Checker]
+flowchart LR
+    subgraph "Elixir Application"
+        SDK[ClaudeAgentSDK API]
+        Router[Streaming Router\n(auto CLI vs control)]
+        Transport[Transport Behaviour\n(Port, Process, Mock)]
+        ClientCtrl[Control Client\n(GenServer + Hooks + MCP)]
+        Streaming[Streaming Facade]
+        Options[Options + Runtime Control]
+        Tests[Supertester Mock Harness]
     end
-    
+
     subgraph "Claude Code CLI"
-        E[claude-code executable]
-        E --> F[API Communication]
+        CLI[claude executable\n(Node.js CLI]
+        CLI --> API[Claude Service]
+        API --> CLI
     end
-    
-    subgraph "Claude API"
-        G[Claude Service]
-    end
-    
-    A -->|spawn & control| E
-    E -->|HTTPS| G
-    G -->|Responses| E
-    E -->|JSON stream| B
-    C -->|Parsed Messages| A
-    
-    style A fill:#4a9eff,stroke:#2d7dd2,stroke-width:2px,color:#000
-    style G fill:#ff6b6b,stroke:#ff4757,stroke-width:2px,color:#000
+
+    SDK --> Options
+    SDK --> Router
+    Router -->|CLI path| Transport
+    Router -->|Control path| ClientCtrl
+    ClientCtrl --> Transport
+    Transport --> CLI
+    CLI --> Transport
+    Transport --> Streaming
+    Streaming --> SDK
+
+    ClientCtrl --> Hooks[Hooks Registry]
+    ClientCtrl --> MCP[SDK MCP Bridge]
+    ClientCtrl --> Permissions[Permission Callback]
+    Options --> Transport
+    Options --> ClientCtrl
+    Tests --> Transport
+    Tests --> SDK
+
+    style SDK fill:#4a9eff,stroke:#2d7dd2,stroke-width:2px,color:#000
+    style CLI fill:#f08b54,stroke:#c36c34,stroke-width:2px,color:#000
+    style API fill:#ff6b6b,stroke:#ff4757,stroke-width:2px,color:#000
 ```
 
 ## Prerequisites
