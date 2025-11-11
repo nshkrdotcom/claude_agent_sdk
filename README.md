@@ -16,7 +16,7 @@ An Elixir SDK for programmatically interacting with Claude Code. This library pr
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph "Elixir Application"
         SDK["ClaudeAgentSDK API"]
         Router["Streaming Router<br>(auto CLI vs control)"]
