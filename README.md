@@ -57,7 +57,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.6.0"}
+    {:claude_agent_sdk, "~> 0.6.1"}
   ]
 end
 ```
@@ -336,7 +336,7 @@ See working examples in `examples/streaming_tools/`:
   - Tool input modification and execution interrupts
   - `Client.set_permission_mode/2` for runtime mode changes
   - 49 tests covering security scenarios
-- **Runtime Control** (v0.6.0): Change models and transports without restarting
+- **Runtime Control** (v0.6.1): Change models and transports without restarting
   - `Client.set_model/2` to switch models mid-conversation
   - `Client.get_model/1` to introspect active configuration
   - `Client.interrupt/1` to stop runaway tool executions
@@ -419,6 +419,18 @@ mix run examples/runtime_control/subscriber_broadcast.exs
 
 Pass `--live` to any script to attempt the default CLI transport once `claude login` is configured.
 The model switcher prints the model before and after calling `set_model/2`, making it easy to confirm the change succeeded in real time.
+
+## Runtime Control Enhancements (v0.6.1)
+
+The 0.6.1 patch release tightens parity with the Python SDK and makes custom transports easier to work with:
+
+- **`Client.interrupt/1`** — send a control protocol interrupt from Elixir and stop dangerous or runaway tool calls instantly.
+- **`Client.get_server_info/1`** — capture the CLI’s initialization payload (commands, output styles, capability flags) for your UI or logging layer.
+- **`Client.receive_response/1`** — a bounded helper that streams until the `:result` frame, perfect for REPLs or short-lived jobs.
+- **Expanded `Options` struct** — configure budgets, resume/fork semantics, plugin directories, env/extra CLI flags, and thinking-token caps exactly like the Python SDK.
+- **Transport/Process parity** — `ClaudeAgentSDK.Transport.Port` and `ClaudeAgentSDK.Process` now respect `Options.env`, custom cwd, and larger buffer sizes while stamping `CLAUDE_AGENT_SDK_VERSION` into every subprocess.
+
+See [CHANGELOG.md](CHANGELOG.md#061---2025-11-11) for the complete diff.
 
 ## Testing with Mocks
 

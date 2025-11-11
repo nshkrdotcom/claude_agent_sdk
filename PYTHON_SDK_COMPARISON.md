@@ -777,13 +777,11 @@ options = %Options{
 - Need partial message streaming (character-level)
 - Prefer async/await patterns
 - Have existing Python infrastructure
-- Need runtime model switching
 
 ### For Existing Python Projects
 
-The Elixir SDK provides 95% feature parity. Missing features:
+The Elixir SDK provides 95%+ feature parity. Remaining gap:
 1. Partial message streaming (low impact)
-2. Some runtime control methods (low impact)
 
 **Migration is feasible** for most applications. The core functionality is identical.
 
@@ -791,25 +789,21 @@ The Elixir SDK provides 95% feature parity. Missing features:
 
 ## 🔮 Roadmap
 
-### v0.5.0 (Planned)
-- ✅ Partial message streaming (StreamEvent)
-- ✅ `Client.interrupt/1`
-- ✅ `Client.get_server_info/1`
-- ✅ `Client.set_model/2`
-- ✅ Telemetry integration
-- ✅ Performance optimizations
+### v0.6.1 (Current)
+- Runtime control parity (`Client.interrupt/1`, `Client.get_server_info/1`, `Client.receive_response/1`)
+- Expanded options surface area & transport env overrides
 
-### v0.6.0 (Future)
+### v0.7.0 (Planned)
+- Partial message streaming event support
 - Phoenix LiveView integration examples
-- Advanced caching strategies
 - Plugin system for extensibility
-- Additional transport options
+- Additional transport options and telemetry integration
 
 ---
 
 ## 📊 Conclusion
 
-The Elixir SDK has achieved **~95% feature parity** with the Python SDK (v0.1.3), with all major features implemented:
+The Elixir SDK has achieved **~97% feature parity** with the Python SDK (v0.1.3), with all major features implemented:
 
 ✅ **Complete:**
 - Core query API

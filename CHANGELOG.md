@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2025-11-11
+
+### Added
+
+- **Runtime control parity**:
+  - `Client.interrupt/1` to stop active runs.
+  - `Client.get_server_info/1` to surface CLI initialization metadata.
+  - `Client.receive_response/1` for single-response workflows.
+- **Options surface area**:
+  - Support for `max_budget_usd`, `continue_conversation`, `resume`, `settings`, `setting_sources`, `plugins`, `extra_args`, `env`, `user`, `max_thinking_tokens`, `max_buffer_size`, and additive `add_dirs`.
+  - Extended CLI argument builder plus dedicated unit tests (`options_extended_test.exs`).
+- **Transport & Process tests** covering env propagation and custom CLI scripts.
+- **Documentation**:
+  - New `docs/20251111/elixir_python_gap_report.md` to track parity.
+  - README + Python comparison updated with the new APIs.
+
+### Changed
+
+- **Transport.Port** now honors `Options.env`, `cwd`, buffer limits, and stamps `CLAUDE_AGENT_SDK_VERSION`/`CLAUDE_CODE_ENTRYPOINT`.
+- **Process** uses the same env overrides when spawning erlexec-based CLI runs.
+- **Streaming control adapter** now uses the new `Client.subscribe/1` contract for deterministic subscription handling (no sleeps).
+- **Tests** were hardened with Supertester helpers instead of `Process.sleep/1`.
+
 ## [0.6.0] - 2025-10-26
 
 ### Added - Streaming + Tools Unification 🎉
