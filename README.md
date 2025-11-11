@@ -372,13 +372,12 @@ All three critical features now implemented with full test coverage!
 - Agent Definitions (fully working)
 - Permission System (fully working)
 
-### 🔮 **Planned Features (v0.5.0+)**
-- **Telemetry Integration**: Production observability with :telemetry events
-- **Performance Optimization**: Caching, memory optimization
-- **Integration Patterns**: Phoenix LiveView examples, OTP applications, worker pools
-- **Advanced Examples**: Code analysis pipelines, test generators, refactoring tools
-- **Plugin System**: Extensible architecture for custom behaviors
-- **Transport Abstraction**: Pluggable transports (HTTP, WebSocket, etc.)
+### 🔮 **Planned Features (v0.7.0+)**
+- **Partial Message Streaming**: Character-level deltas sourced directly from the CLI (pending upstream support)
+- **Telemetry Integration**: First-class :telemetry events + dashboards
+- **Additional Transports**: HTTP/WebSocket bridges and multi-tenant gateways
+- **Advanced Examples**: Phoenix LiveView dashboards, CI/CD analyzers, refactoring assistants
+- **Plugin System Enhancements**: Hot-reloadable local plugins, richer config merging
 
 ## Basic Usage
 
@@ -785,8 +784,8 @@ The showcase demonstrates all SDK functionality:
 |-------------|------------|-----------|
 | `mix showcase` | ✅ Working | Mock mode, fast, no costs |
 | `mix showcase --live` | ✅ Working | Live mode, real API calls, no hanging |
-| `mix test` | ✅ Working | Mock mode, 75 tests, 17 skipped |
-| `mix test.live` | ✅ Working | Live mode, properly warns about costs |
+| `mix test` | ✅ Working | Mock mode, **618 tests**, 52 skipped |
+| `mix test.live` | ⚠️ Requires CLI auth | Live mode; run only after `claude login` succeeds |
 | `mix run example.exs` | ✅ Working | Uses mock mode by default, auto-starts Mock |
 | `mix run examples/simple_analyzer.exs` | ✅ Working | Uses mock mode by default |
 | `mix run.live examples/basic_example.exs` | ✅ Working | Live mode, real API calls, stdin support |
