@@ -18,18 +18,18 @@ An Elixir SDK for programmatically interacting with Claude Code. This library pr
 ```mermaid
 flowchart LR
     subgraph "Elixir Application"
-        SDK[ClaudeAgentSDK API]
-        Router[Streaming Router\n(auto CLI vs control)]
-        Transport[Transport Behaviour\n(Port, Process, Mock)]
-        ClientCtrl[Control Client\n(GenServer + Hooks + MCP)]
-        Streaming[Streaming Facade]
-        Options[Options + Runtime Control]
-        Tests[Supertester Mock Harness]
+        SDK["ClaudeAgentSDK API"]
+        Router["Streaming Router<br>(auto CLI vs control)"]
+        Transport["Transport Behaviour<br>(Port, Process, Mock)"]
+        ClientCtrl["Control Client<br>(GenServer + Hooks + MCP)"]
+        Streaming["Streaming Facade"]
+        Options["Options + Runtime Control"]
+        Tests["Supertester Mock Harness"]
     end
 
     subgraph "Claude Code CLI"
-        CLI[claude executable\n(Node.js CLI]
-        CLI --> API[Claude Service]
+        CLI["claude executable<br>(Node.js CLI)"]
+        CLI --> API["Claude Service"]
         API --> CLI
     end
 
