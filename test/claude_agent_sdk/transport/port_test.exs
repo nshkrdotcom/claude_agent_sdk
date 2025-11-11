@@ -5,6 +5,7 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
   use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
   alias ClaudeAgentSDK.Transport.Port, as: PortTransport
+  alias ClaudeAgentSDK.Options
 
   @cat_executable System.find_executable("cat") || "/bin/cat"
 
@@ -115,5 +116,58 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
 
       refute Process.alive?(transport)
     end
+  end
+
+  describe "option propagation" do
+    test "passes env overrides to the spawned process" do
+      script = create_test_script("""
+      printf "%s\\n" "$PORT_ENV_TEST"
+      exec cat
+      """)
+
+      options = %Options{env: %{"PORT_ENV_TEST" => "from_options"}}
+
+      {:ok, transport} = PortTransport.start_link(command: script, args: [], options: options)
+      PortTransport.subscribe(transport, self())
+
+      assert_receive {:transport_message, "from_options"}, 500
+      PortTransport.close(transport)
+    end
+
+    test "applies cwd from options" do
+      tmp_dir = Path.join(System.tmp_dir!(), "port_cwd_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(tmp_dir)
+
+      script = create_test_script("""
+      pwd
+      exec cat
+      """)
+
+      options = %Options{cwd: tmp_dir}
+
+      {:ok, transport} = PortTransport.start_link(command: script, args: [], options: options)
+      PortTransport.subscribe(transport, self())
+
+      assert_receive {:transport_message, ^tmp_dir}, 500
+      PortTransport.close(transport)
+    end
+  end
+
+  defp create_test_script(body) do
+    dir = Path.join(System.tmp_dir!(), "port_transport_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    path = Path.join(dir, "transport_port_test.sh")
+
+    File.write!(path, """
+    #!/usr/bin/env bash
+    set -euo pipefail
+    #{body}
+    """)
+
+    File.chmod!(path, 0o755)
+
+    ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(dir) end)
+
+    path
   end
 end

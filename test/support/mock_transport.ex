@@ -68,6 +68,7 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
 
   def handle_call({:subscribe, pid}, _from, state) do
     Process.monitor(pid)
+    if state.test_pid, do: Kernel.send(state.test_pid, {:mock_transport_subscribed, pid})
     {:reply, :ok, %{state | subscribers: MapSet.put(state.subscribers, pid)}}
   end
 

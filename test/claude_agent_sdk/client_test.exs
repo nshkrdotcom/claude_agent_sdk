@@ -424,4 +424,153 @@ defmodule ClaudeAgentSDK.ClientTest do
       assert :ok = Task.await(task, 1_000)
     end
   end
+
+  describe "runtime control APIs" do
+    alias ClaudeAgentSDK.TestSupport.MockTransport
+
+    setup do
+      Process.flag(:trap_exit, true)
+
+      assert {:ok, client} =
+               Client.start_link(%Options{},
+                 transport: MockTransport,
+                 transport_opts: [test_pid: self()]
+               )
+
+      on_exit(fn ->
+        try do
+          Client.stop(client)
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      assert_receive {:mock_transport_send, init_json}, 200
+      init_request = Jason.decode!(init_json)
+
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => init_request["request_id"],
+          "subtype" => "success",
+          "response" => %{
+            "commands" => [%{"name" => "plan"}],
+            "outputStyle" => %{"current" => "default"}
+          }
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+
+      {:ok, %{client: client, transport: transport_pid}}
+    end
+
+    test "interrupt sends control request", %{client: client, transport: transport} do
+      task = Task.async(fn -> Client.interrupt(client) end)
+
+      assert_receive {:mock_transport_send, json}, 200
+      decoded = Jason.decode!(json)
+      assert decoded["request"]["subtype"] == "interrupt"
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => decoded["request_id"],
+          "subtype" => "success",
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(response))
+      assert :ok = Task.await(task, 1_000)
+    end
+
+    test "interrupt forwards CLI error", %{client: client, transport: transport} do
+      task = Task.async(fn -> Client.interrupt(client) end)
+
+      assert_receive {:mock_transport_send, json}, 200
+      decoded = Jason.decode!(json)
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => decoded["request_id"],
+          "subtype" => "error",
+          "error" => "blocked"
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(response))
+      assert {:error, "blocked"} = Task.await(task, 1_000)
+    end
+
+    test "get_server_info returns initialization payload", %{client: client} do
+      info =
+        SupertesterCase.eventually(fn ->
+          case Client.get_server_info(client) do
+            {:ok, info} -> info
+            _ -> nil
+          end
+        end)
+
+      assert %{"commands" => [_ | _]} = info
+    end
+
+    test "get_server_info errors before initialization" do
+      assert {:ok, client} =
+               Client.start_link(%Options{},
+                 transport: MockTransport,
+                 transport_opts: [test_pid: self()]
+               )
+
+      on_exit(fn ->
+        try do
+          Client.stop(client)
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      assert_receive {:mock_transport_started, _} = _msg = {:mock_transport_started, _transport}, 200
+      assert {:error, :not_initialized} = Client.get_server_info(client)
+    end
+
+    test "receive_response collects messages", %{client: client, transport: transport} do
+      task = Task.async(fn -> Client.receive_response(client) end)
+
+      SupertesterCase.eventually(fn ->
+        state = :sys.get_state(client)
+
+        case state.subscribers do
+          subs when is_map(subs) and map_size(subs) > 0 -> true
+          subs when is_list(subs) and subs != [] -> true
+          _ -> nil
+        end
+      end)
+
+      assistant = %{
+        "type" => "assistant",
+        "message" => %{"role" => "assistant", "content" => "hi"},
+        "session_id" => "sess"
+      }
+
+      result = %{
+        "type" => "result",
+        "subtype" => "success",
+        "session_id" => "sess",
+        "duration_ms" => 10,
+        "num_turns" => 1,
+        "is_error" => false
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(assistant))
+      MockTransport.push_message(transport, Jason.encode!(result))
+
+      assert {:ok, messages} = Task.await(task, 1_000)
+      assert length(messages) == 2
+      assert Enum.at(messages, 0).type == :assistant
+      assert Enum.at(messages, 1).type == :result
+    end
+  end
 end

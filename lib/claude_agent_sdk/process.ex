@@ -117,7 +117,7 @@ defmodule ClaudeAgentSDK.Process do
   defp run_with_stdin_erlexec(cmd, input, _exec_options, options) do
     # Add stdin to the exec options and use async execution
     # Build fresh options with env vars for async mode
-    env_vars = build_env_vars()
+    env_vars = build_env_vars(options)
     base_options = if env_vars != [], do: [{:env, env_vars}], else: []
     stdin_exec_options = [:stdin, :stdout, :stderr, :monitor] ++ base_options
 
@@ -299,7 +299,7 @@ defmodule ClaudeAgentSDK.Process do
     base_options = [:sync, :stdout, :stderr, {:timeout, timeout_ms}]
 
     # Add environment variables (critical for authentication!)
-    env_options = build_env_vars()
+    env_options = build_env_vars(options)
 
     base_options =
       if env_options != [], do: [{:env, env_options} | base_options], else: base_options
@@ -318,26 +318,33 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp build_env_vars do
-    # Pass authentication environment variables to subprocess
-    # The Claude CLI checks these in order:
-    # 1. CLAUDE_AGENT_OAUTH_TOKEN (OAuth tokens from setup-token)
-    # 2. ANTHROPIC_API_KEY (API keys)
-    # 3. Stored session from 'claude login'
+  defp build_env_vars(%Options{} = options) do
+    base_env =
+      ["CLAUDE_AGENT_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "PATH", "HOME"]
+      |> Enum.reduce(%{}, fn var, acc ->
+        case System.get_env(var) do
+          nil -> acc
+          "" -> acc
+          value -> Map.put(acc, var, value)
+        end
+      end)
 
-    []
-    |> add_env_var("CLAUDE_AGENT_OAUTH_TOKEN")
-    |> add_env_var("ANTHROPIC_API_KEY")
-    |> add_env_var("PATH")
-    |> add_env_var("HOME")
-  end
+    overrides =
+      options.env
+      |> Enum.reduce(%{}, fn {key, value}, acc ->
+        env_key = to_string(key)
+        Map.put(acc, env_key, value)
+      end)
 
-  defp add_env_var(env_vars, var_name) do
-    case System.get_env(var_name) do
-      nil -> env_vars
-      "" -> env_vars
-      value -> [{var_name, value} | env_vars]
-    end
+    merged =
+      Enum.reduce(overrides, base_env, fn
+        {key, nil}, acc -> Map.delete(acc, key)
+        {key, value}, acc -> Map.put(acc, key, to_string(value))
+      end)
+      |> Map.put_new("CLAUDE_CODE_ENTRYPOINT", "sdk-elixir")
+      |> Map.put_new("CLAUDE_AGENT_SDK_VERSION", version_string())
+
+    Enum.map(merged, fn {k, v} -> {k, v} end)
   end
 
   defp shell_escape(arg) do
@@ -358,6 +365,16 @@ defmodule ClaudeAgentSDK.Process do
         path
     end
   end
+
+  defp version_string do
+    case Application.spec(:claude_agent_sdk, :vsn) do
+      nil -> "unknown"
+      version -> to_string(version)
+    end
+  end
+
+  @doc false
+  def __env_vars__(%Options{} = options), do: build_env_vars(options)
 
   defp ensure_json_flags(args) do
     cond do

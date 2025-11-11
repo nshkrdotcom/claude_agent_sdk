@@ -23,8 +23,8 @@ The Elixir SDK has achieved **~97% feature parity** with the Python SDK (v0.1.3)
 | **Authentication** | ✅ | ✅ | **Complete** | OAuth tokens, API keys |
 | **Partial Messages** | ✅ | ⚠️ | **Missing** | StreamEvent for incremental updates |
 | **Control Protocol** | ✅ | ✅ | **Complete** | Bidirectional JSON-RPC |
-| **Interrupt Support** | ✅ | 🔄 | **Planned** | `interrupt()` method |
-| **Server Info** | ✅ | 🔄 | **Planned** | `get_server_info()` |
+| **Interrupt Support** | ✅ | ✅ | **Complete** | `interrupt()` / `Client.interrupt/1` |
+| **Server Info** | ✅ | ✅ | **Complete** | `get_server_info()` / `Client.get_server_info/1` |
 | **Set Model Runtime** | ✅ | ✅ | **Complete** | `Client.set_model/2`, `Client.get_model/1` |
 
 **Legend:**
@@ -335,22 +335,22 @@ Client.set_permission_mode(client, :accept_edits)
 # Change agent
 Client.set_agent(client, :researcher)
 
-# Interrupt (planned v0.5.0)
-# Client.interrupt(client)
+# Interrupt an active run
+Client.interrupt(client)
 
-# Get server info (planned v0.5.0)
-# Client.get_server_info(client)
+# Inspect CLI server info
+{:ok, info} = Client.get_server_info(client)
 
-# Set model (planned v0.5.0)
-# Client.set_model(client, "claude-opus-4")
+# Switch models at runtime
+Client.set_model(client, "claude-opus-4")
 ```
 
 **Status:**
 - ✅ `set_permission_mode()` - Complete
 - ✅ `set_agent()` - Complete (Elixir-specific, Python uses agent names)
-- 🔄 `interrupt()` - Planned for v0.5.0
-- 🔄 `get_server_info()` - Planned for v0.5.0
-- 🔄 `set_model()` - Planned for v0.5.0
+- ✅ `interrupt()` - Complete (`Client.interrupt/1`)
+- ✅ `get_server_info()` - Complete (`Client.get_server_info/1`)
+- ✅ `set_model()` - Complete (`Client.set_model/2`)
 
 ---
 

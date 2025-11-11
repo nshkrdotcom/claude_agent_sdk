@@ -13,6 +13,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
   @behaviour ClaudeAgentSDK.Transport
 
   @line_length 65_536
+  alias ClaudeAgentSDK.Options
 
   defstruct port: nil,
             subscribers: %{},
@@ -22,8 +23,19 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
   @impl ClaudeAgentSDK.Transport
   def start_link(opts) when is_list(opts) do
-    with {:ok, command} <- resolve_command(opts) do
-      opts = Keyword.put(opts, :command, command)
+    options = Keyword.get(opts, :options)
+
+    with {:ok, {command, default_args}} <- resolve_command(opts) do
+      args = Keyword.get(opts, :args, default_args)
+
+      opts =
+        opts
+        |> Keyword.put(:command, command)
+        |> Keyword.put(:args, args)
+        |> maybe_put_cd_from_options(options)
+        |> maybe_put_env_from_options(options)
+        |> maybe_put_line_length_from_options(options)
+
       GenServer.start_link(__MODULE__, opts)
     end
   end
@@ -196,16 +208,16 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
     cond do
       is_binary(command) and File.exists?(command) ->
-        {:ok, command}
+        {:ok, {command, Keyword.get(opts, :args, [])}}
 
       is_binary(command) ->
         case System.find_executable(command) do
           nil -> {:error, {:command_not_found, command}}
-          path -> {:ok, path}
+          path -> {:ok, {path, Keyword.get(opts, :args, [])}}
         end
 
       is_list(command) ->
-        {:ok, List.to_string(command)}
+        {:ok, {List.to_string(command), Keyword.get(opts, :args, [])}}
 
       # No explicit command - build from Options if provided
       true ->
@@ -215,25 +227,100 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
   defp build_command_from_options(opts) do
     case Keyword.get(opts, :options) do
-      %ClaudeAgentSDK.Options{} = options ->
-        # Build CLI command with options (including streaming flags)
+      %Options{} = options ->
         executable = System.find_executable("claude")
 
         if executable do
-          # Base args for control protocol
           args = ["--output-format", "stream-json", "--input-format", "stream-json", "--verbose"]
-
-          # Add Options.to_args (includes --include-partial-messages if set)
-          args = args ++ ClaudeAgentSDK.Options.to_args(options)
-
-          cmd = Enum.join([executable | args], " ") <> " 2>/dev/null"
-          {:ok, cmd}
+          args = args ++ Options.to_args(options)
+          {:ok, {executable, args}}
         else
           {:error, {:command_not_found, "claude"}}
         end
 
       _ ->
         {:error, {:command_not_found, nil}}
+    end
+  end
+
+  defp maybe_put_cd_from_options(opts, %Options{cwd: nil}), do: opts
+
+  defp maybe_put_cd_from_options(opts, %Options{cwd: cwd}) when is_binary(cwd) do
+    if not File.dir?(cwd) do
+      File.mkdir_p!(cwd)
+    end
+
+    Keyword.put_new(opts, :cd, cwd)
+  end
+
+  defp maybe_put_cd_from_options(opts, _), do: opts
+
+  defp maybe_put_line_length_from_options(opts, %Options{max_buffer_size: size})
+       when is_integer(size) and size > 0 do
+    Keyword.put_new(opts, :line_length, size)
+  end
+
+  defp maybe_put_line_length_from_options(opts, _), do: opts
+
+  defp maybe_put_env_from_options(opts, %Options{env: env_map}) when is_map(env_map) do
+    if map_size(env_map) == 0 do
+      opts
+    else
+      merged_env =
+        opts
+        |> Keyword.get(:env)
+        |> env_list_to_map()
+        |> merge_with_system_env()
+        |> merge_env_overrides(env_map)
+
+      Keyword.put(opts, :env, map_to_env_list(merged_env))
+    end
+  end
+
+  defp maybe_put_env_from_options(opts, _), do: opts
+
+  defp env_list_to_map(nil), do: %{}
+
+  defp env_list_to_map(list) when is_list(list) do
+    Enum.reduce(list, %{}, fn
+      {key, value}, acc ->
+        Map.put(acc, to_string(key), to_string(value))
+
+      other, acc when is_binary(other) ->
+        Map.put(acc, other, "")
+    end)
+  end
+
+  defp merge_with_system_env(map) do
+    System.get_env()
+    |> Enum.reduce(map, fn {key, value}, acc -> Map.put_new(acc, key, value) end)
+  end
+
+  defp merge_env_overrides(existing, overrides) do
+    overrides
+    |> Enum.reduce(existing, fn {key, value}, acc ->
+      env_key = to_string(key)
+
+      cond do
+        is_nil(value) ->
+          Map.delete(acc, env_key)
+
+        true ->
+          Map.put(acc, env_key, to_string(value))
+      end
+    end)
+    |> Map.put_new("CLAUDE_CODE_ENTRYPOINT", "sdk-elixir")
+    |> Map.put_new("CLAUDE_AGENT_SDK_VERSION", sdk_version())
+  end
+
+  defp map_to_env_list(map) do
+    Enum.map(map, fn {key, value} -> {key, value} end)
+  end
+
+  defp sdk_version do
+    case Application.spec(:claude_agent_sdk, :vsn) do
+      nil -> "unknown"
+      version -> to_string(version)
     end
   end
 

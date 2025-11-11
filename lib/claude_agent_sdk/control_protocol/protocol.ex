@@ -115,6 +115,24 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   end
 
   @doc """
+  Encodes an interrupt control request.
+  """
+  @spec encode_interrupt_request(request_id() | nil) :: {request_id(), String.t()}
+  def encode_interrupt_request(request_id \\ nil) do
+    req_id = request_id || generate_request_id()
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => req_id,
+      "request" => %{
+        "subtype" => "interrupt"
+      }
+    }
+
+    {req_id, Jason.encode!(request)}
+  end
+
+  @doc """
   Encodes a hook callback response.
 
   Sends the result of a hook callback execution back to CLI.

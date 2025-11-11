@@ -100,7 +100,8 @@ defmodule ClaudeAgentSDK.Client do
           pending_model_change: {GenServer.from(), reference()} | nil,
           accumulated_text: String.t(),
           active_subscriber: reference() | nil,
-          subscriber_queue: [{reference(), String.t()}]
+          subscriber_queue: [{reference(), String.t()}],
+          server_info: map() | nil
         }
 
   ## Public API
@@ -187,6 +188,28 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @doc """
+  Collects messages until a result frame is received.
+
+  Useful for workflows that only care about a single response and want
+  to avoid managing streaming state manually.
+  """
+  @spec receive_response(pid()) :: {:ok, [Message.t()]} | {:error, term()}
+  def receive_response(client) when is_pid(client) do
+    try do
+      case collect_until_result(stream_messages(client)) do
+        {:ok, messages} ->
+          {:ok, messages}
+
+        _ ->
+          {:error, :no_result}
+      end
+    rescue
+      exception ->
+        {:error, exception}
+    end
+  end
+
+  @doc """
   Stops the client.
 
   Terminates the CLI process and cleans up resources.
@@ -217,6 +240,14 @@ defmodule ClaudeAgentSDK.Client do
   @spec set_model(pid(), String.t()) :: :ok | {:error, term()}
   def set_model(client, model) when is_pid(client) do
     GenServer.call(client, {:set_model, model}, :infinity)
+  end
+
+  @doc """
+  Sends an interrupt control request to the CLI.
+  """
+  @spec interrupt(pid()) :: :ok | {:error, term()}
+  def interrupt(client) when is_pid(client) do
+    GenServer.call(client, :interrupt, :infinity)
   end
 
   @doc """
@@ -252,6 +283,25 @@ defmodule ClaudeAgentSDK.Client do
           :ok | {:error, :invalid_permission_mode}
   def set_permission_mode(client, mode) when is_pid(client) do
     GenServer.call(client, {:set_permission_mode, mode})
+  end
+
+  @doc """
+  Subscribes to the client's message stream and returns a subscription reference.
+  """
+  @spec subscribe(pid()) :: {pid(), reference() | nil}
+  def subscribe(client) when is_pid(client) do
+    case GenServer.call(client, {:subscribe, make_ref()}) do
+      {:ok, ref} -> {client, ref}
+      :ok -> {client, nil}
+    end
+  end
+
+  @doc """
+  Returns the server initialization info provided by the CLI.
+  """
+  @spec get_server_info(pid()) :: {:ok, map()} | {:error, term()}
+  def get_server_info(client) when is_pid(client) do
+    GenServer.call(client, :get_server_info)
   end
 
   @doc """
@@ -358,7 +408,8 @@ defmodule ClaudeAgentSDK.Client do
         # Streaming support fields (v0.6.0)
         accumulated_text: "",
         active_subscriber: nil,
-        subscriber_queue: []
+        subscriber_queue: [],
+        server_info: nil
       }
 
       {:ok, state, {:continue, :start_cli}}
@@ -439,7 +490,6 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  # Subscribe with reference (streaming with queue, v0.6.0)
   def handle_call({:subscribe, ref}, from, state) do
     {pid, _from_ref} = from
 
@@ -454,7 +504,7 @@ defmodule ClaudeAgentSDK.Client do
         state.active_subscriber
       end
 
-    {:reply, :ok,
+    {:reply, {:ok, ref},
      %{
        state
        | subscribers: subscribers,
@@ -512,6 +562,26 @@ defmodule ClaudeAgentSDK.Client do
       else
         {:reply, {:error, :agent_not_found}, state}
       end
+    end
+  end
+
+  def handle_call(:get_server_info, _from, state) do
+    case state.server_info do
+      nil -> {:reply, {:error, :not_initialized}, state}
+      info -> {:reply, {:ok, info}, state}
+    end
+  end
+
+  def handle_call(:interrupt, from, state) do
+    {request_id, json} = Protocol.encode_interrupt_request()
+
+    case send_payload(state, json) do
+      :ok ->
+        pending_requests = Map.put(state.pending_requests, request_id, {:interrupt, from})
+        {:noreply, %{state | pending_requests: pending_requests}}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -988,14 +1058,36 @@ defmodule ClaudeAgentSDK.Client do
         GenServer.reply(from, {:error, :unexpected_response})
         %{updated_state | pending_model_change: nil}
 
+      {{:interrupt, from}, "success"} ->
+        Logger.info("Interrupt acknowledged", request_id: request_id)
+        GenServer.reply(from, :ok)
+        updated_state
+
+      {{:interrupt, from}, "error"} ->
+        error = response["error"] || "interrupt_failed"
+        Logger.error("Interrupt rejected", request_id: request_id, error: error)
+        GenServer.reply(from, {:error, error})
+        updated_state
+
+      {{:interrupt, from}, other} ->
+        Logger.warning("Unexpected subtype for interrupt response",
+          request_id: request_id,
+          subtype: other
+        )
+
+        GenServer.reply(from, {:error, :unexpected_response})
+        updated_state
+
       {nil, "success"} ->
         Logger.debug("Received successful control response", request_id: request_id)
 
-        if not updated_state.initialized do
+        state_with_info = maybe_store_server_info(updated_state, response)
+
+        if not state_with_info.initialized do
           Logger.info("Client initialized successfully")
-          %{updated_state | initialized: true}
+          %{state_with_info | initialized: true}
         else
-          updated_state
+          state_with_info
         end
 
       {nil, "error"} ->
@@ -1232,25 +1324,38 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  defp subscribe(client) do
-    GenServer.call(client, {:subscribe})
-    client
-  end
-
-  defp receive_next_message(client) when is_pid(client) do
+  defp receive_next_message({client, ref}) when is_pid(client) do
     receive do
       {:claude_message, message} ->
-        {[message], client}
+        {[message], {client, ref}}
     after
       30_000 ->
         # No message for 30 seconds, check if client still alive
         if Process.alive?(client) do
-          receive_next_message(client)
+          receive_next_message({client, ref})
         else
           {:halt, client}
         end
     end
   end
+
+  defp collect_until_result(stream) do
+    Enum.reduce_while(stream, [], fn message, acc ->
+      acc_with_message = [message | acc]
+
+      if message.type == :result do
+        {:halt, {:ok, Enum.reverse(acc_with_message)}}
+      else
+        {:cont, acc_with_message}
+      end
+    end)
+  end
+
+  defp maybe_store_server_info(state, %{"response" => info}) when is_map(info) do
+    %{state | server_info: info}
+  end
+
+  defp maybe_store_server_info(state, _), do: state
 
   ## SDK MCP Server Support
 

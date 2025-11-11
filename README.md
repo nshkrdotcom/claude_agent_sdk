@@ -336,9 +336,12 @@ See working examples in `examples/streaming_tools/`:
   - Tool input modification and execution interrupts
   - `Client.set_permission_mode/2` for runtime mode changes
   - 49 tests covering security scenarios
-- **Runtime Control** (v0.5.0): Change models and transports without restarting
+- **Runtime Control** (v0.6.0): Change models and transports without restarting
   - `Client.set_model/2` to switch models mid-conversation
   - `Client.get_model/1` to introspect active configuration
+  - `Client.interrupt/1` to stop runaway tool executions
+  - `Client.get_server_info/1` to read CLI command/output-style metadata
+  - `Client.receive_response/1` to collect a single response without manual streaming loops
   - Pluggable transports via `ClaudeAgentSDK.Transport`
   - Mock transport for fully offline test suites
 - **Error Handling**: Improved error detection and timeout handling
@@ -362,7 +365,6 @@ All three critical features now implemented with full test coverage!
 - **Advanced Examples**: Code analysis pipelines, test generators, refactoring tools
 - **Plugin System**: Extensible architecture for custom behaviors
 - **Transport Abstraction**: Pluggable transports (HTTP, WebSocket, etc.)
-- **Additional Runtime Control**: `Client.interrupt/1`, extended control flow APIs
 
 ## Basic Usage
 

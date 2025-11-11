@@ -73,6 +73,11 @@ defmodule ClaudeAgentSDK.Options do
     :output_format,
     :allowed_tools,
     :disallowed_tools,
+    :max_budget_usd,
+    :continue_conversation,
+    :resume,
+    :settings,
+    :setting_sources,
     # MCP Configuration (v0.5.0+)
     # Programmatic MCP server definitions (SDK and external)
     :mcp_servers,
@@ -116,7 +121,14 @@ defmodule ClaudeAgentSDK.Options do
     # Enable character-level streaming with --include-partial-messages
     :include_partial_messages,
     # Override automatic transport selection
-    :preferred_transport
+    :preferred_transport,
+    :user,
+    :max_thinking_tokens,
+    :max_buffer_size,
+    plugins: [],
+    add_dirs: [],
+    extra_args: %{},
+    env: %{}
   ]
 
   @type output_format :: :text | :json | :stream_json
@@ -150,6 +162,14 @@ defmodule ClaudeAgentSDK.Options do
   """
   @type mcp_server :: sdk_mcp_server() | external_mcp_server()
 
+  @typedoc """
+  Plugin configuration supported by the SDK (currently local directories only).
+  """
+  @type plugin_config :: %{
+          required(:type) => :local | String.t(),
+          required(:path) => String.t()
+        }
+
   @type t :: %__MODULE__{
           max_turns: integer() | nil,
           system_prompt: String.t() | nil,
@@ -157,6 +177,12 @@ defmodule ClaudeAgentSDK.Options do
           output_format: output_format() | nil,
           allowed_tools: [String.t()] | nil,
           disallowed_tools: [String.t()] | nil,
+          max_budget_usd: number() | nil,
+          continue_conversation: boolean() | nil,
+          resume: String.t() | nil,
+          settings: String.t() | nil,
+          setting_sources: [String.t() | atom()] | nil,
+          plugins: [plugin_config()],
           mcp_servers: %{String.t() => mcp_server()} | nil,
           mcp_config: String.t() | nil,
           permission_prompt_tool: String.t() | nil,
@@ -174,12 +200,18 @@ defmodule ClaudeAgentSDK.Options do
           session_id: String.t() | nil,
           fork_session: boolean() | nil,
           add_dir: [String.t()] | nil,
+          add_dirs: [String.t()] | nil,
           strict_mcp_config: boolean() | nil,
           hooks: ClaudeAgentSDK.Hooks.hook_config() | nil,
           can_use_tool: ClaudeAgentSDK.Permission.callback() | nil,
           timeout_ms: integer() | nil,
           include_partial_messages: boolean() | nil,
-          preferred_transport: transport_preference() | nil
+          preferred_transport: transport_preference() | nil,
+          max_buffer_size: pos_integer() | nil,
+          extra_args: %{optional(String.t()) => String.t() | boolean() | nil},
+          env: %{optional(String.t()) => String.t()},
+          user: String.t() | nil,
+          max_thinking_tokens: pos_integer() | nil
         }
 
   @doc """
@@ -233,10 +265,15 @@ defmodule ClaudeAgentSDK.Options do
     []
     |> add_output_format_args(options)
     |> add_max_turns_args(options)
+    |> add_max_budget_args(options)
     |> add_system_prompt_args(options)
     |> add_append_system_prompt_args(options)
     |> add_allowed_tools_args(options)
     |> add_disallowed_tools_args(options)
+    |> add_continue_args(options)
+    |> add_resume_args(options)
+    |> add_settings_args(options)
+    |> add_setting_sources_args(options)
     |> add_mcp_args(options)
     |> add_permission_prompt_tool_args(options)
     |> add_permission_mode_args(options)
@@ -248,8 +285,11 @@ defmodule ClaudeAgentSDK.Options do
     |> add_session_id_args(options)
     |> add_fork_session_args(options)
     |> add_dir_args(options)
+    |> add_plugins_args(options)
     |> add_strict_mcp_args(options)
     |> add_partial_messages_args(options)
+    |> add_max_thinking_tokens_args(options)
+    |> add_extra_args(options)
   end
 
   defp add_output_format_args(args, %{output_format: nil}), do: args
@@ -276,6 +316,12 @@ defmodule ClaudeAgentSDK.Options do
   defp add_max_turns_args(args, %{max_turns: turns}),
     do: args ++ ["--max-turns", to_string(turns)]
 
+  defp add_max_budget_args(args, %{max_budget_usd: nil}), do: args
+
+  defp add_max_budget_args(args, %{max_budget_usd: budget}) when is_number(budget) do
+    args ++ ["--max-budget-usd", to_string(budget)]
+  end
+
   defp add_system_prompt_args(args, %{system_prompt: nil}), do: args
 
   defp add_system_prompt_args(args, %{system_prompt: prompt}),
@@ -295,6 +341,26 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_disallowed_tools_args(args, %{disallowed_tools: tools}),
     do: args ++ ["--disallowedTools", Enum.join(tools, " ")]
+
+  defp add_continue_args(args, %{continue_conversation: true}), do: args ++ ["--continue"]
+  defp add_continue_args(args, _), do: args
+
+  defp add_resume_args(args, %{resume: nil}), do: args
+  defp add_resume_args(args, %{resume: resume}), do: args ++ ["--resume", resume]
+
+  defp add_settings_args(args, %{settings: nil}), do: args
+  defp add_settings_args(args, %{settings: path}), do: args ++ ["--settings", path]
+
+  defp add_setting_sources_args(args, %{setting_sources: nil}), do: args
+
+  defp add_setting_sources_args(args, %{setting_sources: sources}) when is_list(sources) do
+    value =
+      sources
+      |> Enum.map(&to_string/1)
+      |> Enum.join(",")
+
+    args ++ ["--setting-sources", value]
+  end
 
   # MCP Configuration - handles both mcp_servers (v0.5.0+) and mcp_config (backward compat)
   defp add_mcp_args(args, options) do
@@ -430,11 +496,23 @@ defmodule ClaudeAgentSDK.Options do
   defp add_fork_session_args(args, %{fork_session: true}), do: args ++ ["--fork-session"]
   defp add_fork_session_args(args, _), do: args
 
-  defp add_dir_args(args, %{add_dir: nil}), do: args
+  defp add_dir_args(args, %{add_dir: add_dir, add_dirs: add_dirs}) do
+    directories =
+      []
+      |> append_directories(add_dir)
+      |> append_directories(add_dirs)
 
-  defp add_dir_args(args, %{add_dir: directories}) when is_list(directories) do
-    args ++ ["--add-dir"] ++ directories
+    Enum.reduce(directories, args, fn dir, acc -> acc ++ ["--add-dir", dir] end)
   end
+
+  defp add_dir_args(args, %{add_dir: add_dir}) do
+    add_dir_args(args, %{add_dir: add_dir, add_dirs: nil})
+  end
+
+  defp append_directories(list, nil), do: list
+  defp append_directories(list, dirs) when is_list(dirs), do: list ++ dirs
+
+  defp append_directories(list, dir) when is_binary(dir), do: list ++ [dir]
 
   defp add_strict_mcp_args(args, %{strict_mcp_config: true}), do: args ++ ["--strict-mcp-config"]
   defp add_strict_mcp_args(args, _), do: args
@@ -443,6 +521,83 @@ defmodule ClaudeAgentSDK.Options do
     do: args ++ ["--include-partial-messages"]
 
   defp add_partial_messages_args(args, _), do: args
+
+  defp add_plugins_args(args, %{plugins: plugins}) when is_list(plugins) do
+    Enum.reduce(plugins, args, fn plugin, acc ->
+      case normalize_plugin(plugin) do
+        {:ok, %{path: path}} ->
+          acc ++ ["--plugin-dir", path]
+
+        {:error, reason} ->
+          raise ArgumentError, "Invalid plugin configuration: #{reason}"
+      end
+    end)
+  end
+
+  defp add_plugins_args(args, _), do: args
+
+  defp add_max_thinking_tokens_args(args, %{max_thinking_tokens: nil}), do: args
+
+  defp add_max_thinking_tokens_args(args, %{max_thinking_tokens: tokens}) do
+    args ++ ["--max-thinking-tokens", to_string(tokens)]
+  end
+
+  defp add_extra_args(args, %{extra_args: extra_args}) when is_map(extra_args) do
+    extra_args
+    |> Enum.sort_by(fn {flag, _} -> flag end)
+    |> Enum.reduce(args, fn {flag, value}, acc ->
+      cli_flag = "--" <> flag
+
+      cond do
+        is_nil(value) ->
+          acc ++ [cli_flag]
+
+        is_boolean(value) ->
+          acc ++ [cli_flag, to_string(value)]
+
+        true ->
+          acc ++ [cli_flag, to_string(value)]
+      end
+    end)
+  end
+
+  defp add_extra_args(args, _), do: args
+
+  defp normalize_plugin(%{type: type, path: path}) do
+    case normalize_plugin_type(type) do
+      :local when is_binary(path) ->
+        {:ok, %{path: path}}
+
+      :local ->
+        {:error, "plugin path must be a string"}
+
+      _ ->
+        {:error, "unsupported plugin type #{inspect(type)}"}
+    end
+  end
+
+  defp normalize_plugin(other) when is_map(other) do
+    required = Map.take(other, [:type, "type", :path, "path"])
+
+    with {:ok, type} <- fetch_plugin_type(required),
+         {:ok, path} <- fetch_plugin_path(required) do
+      normalize_plugin(%{type: type, path: path})
+    end
+  end
+
+  defp normalize_plugin(_), do: {:error, "plugin must be a map with :type and :path"}
+
+  defp normalize_plugin_type(:local), do: :local
+  defp normalize_plugin_type("local"), do: :local
+  defp normalize_plugin_type(other), do: other
+
+  defp fetch_plugin_type(%{type: type}), do: {:ok, type}
+  defp fetch_plugin_type(%{"type" => type}), do: {:ok, type}
+  defp fetch_plugin_type(_), do: {:error, "missing plugin type"}
+
+  defp fetch_plugin_path(%{path: path}), do: {:ok, path}
+  defp fetch_plugin_path(%{"path" => path}), do: {:ok, path}
+  defp fetch_plugin_path(_), do: {:error, "missing plugin path"}
 
   @doc """
   Validates agent configuration in Options.

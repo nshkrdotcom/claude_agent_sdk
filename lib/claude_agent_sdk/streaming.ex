@@ -401,17 +401,14 @@ defmodule ClaudeAgentSDK.Streaming do
   ## Private - Control Client Streaming Adapter
 
   defp stream_via_control_client(client, message) do
-    ref = make_ref()
-
-    # Subscribe to control client
-    :ok = GenServer.call(client, {:subscribe, ref})
+    {client_pid, ref} = Client.subscribe(client)
 
     # Send message
-    :ok = Client.send_message(client, message)
+    :ok = Client.send_message(client_pid, message)
 
     # Return stream that adapts client messages to events
     Stream.resource(
-      fn -> {client, ref, :active, ""} end,
+      fn -> {client_pid, ref, :active, ""} end,
       fn state ->
         case state do
           {_client, _ref, :complete, _accumulated} ->
