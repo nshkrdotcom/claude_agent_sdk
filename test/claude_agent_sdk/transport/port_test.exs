@@ -120,10 +120,11 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
 
   describe "option propagation" do
     test "passes env overrides to the spawned process" do
-      script = create_test_script("""
-      printf "%s\\n" "$PORT_ENV_TEST"
-      exec cat
-      """)
+      script =
+        create_test_script("""
+        printf "%s\\n" "$PORT_ENV_TEST"
+        exec cat
+        """)
 
       options = %Options{env: %{"PORT_ENV_TEST" => "from_options"}}
 
@@ -138,10 +139,11 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
       tmp_dir = Path.join(System.tmp_dir!(), "port_cwd_#{System.unique_integer([:positive])}")
       File.mkdir_p!(tmp_dir)
 
-      script = create_test_script("""
-      pwd
-      exec cat
-      """)
+      script =
+        create_test_script("""
+        pwd
+        exec cat
+        """)
 
       options = %Options{cwd: tmp_dir}
 

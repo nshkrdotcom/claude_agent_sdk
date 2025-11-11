@@ -532,7 +532,9 @@ defmodule ClaudeAgentSDK.ClientTest do
         end
       end)
 
-      assert_receive {:mock_transport_started, _} = _msg = {:mock_transport_started, _transport}, 200
+      assert_receive {:mock_transport_started, _} = _msg = {:mock_transport_started, _transport},
+                     200
+
       assert {:error, :not_initialized} = Client.get_server_info(client)
     end
 
