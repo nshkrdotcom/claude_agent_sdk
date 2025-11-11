@@ -1,35 +1,82 @@
-<svg width="200" height="200" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" version="1.1">
+<svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Claude Agent SDK for Elixir logo">
   <defs>
-    <linearGradient id="logo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#cc785c;" />
-      <stop offset="100%" style="stop-color:#db9b70;" />
+    <linearGradient id="hex-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#120C2C"/>
+      <stop offset="55%" stop-color="#3B1F66"/>
+      <stop offset="100%" stop-color="#7A4BFF"/>
     </linearGradient>
-    <filter id="symbol-shadow" height="130%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="1"/>
-      <feOffset dx="1" dy="1" result="offsetblur"/>
-      <feComponentTransfer>
-        <feFuncA type="linear" slope="0.5"/>
-      </feComponentTransfer>
-      <feMerge>
-        <feMergeNode in="offsetblur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <linearGradient id="inner-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1D133F"/>
+      <stop offset="100%" stop-color="#261A4F"/>
+    </linearGradient>
+    <linearGradient id="droplet-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#AC76FF"/>
+      <stop offset="50%" stop-color="#D18BFF"/>
+      <stop offset="100%" stop-color="#F5D8FF"/>
+    </linearGradient>
+    <filter id="hex-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#0B051A" flood-opacity="0.55"/>
+    </filter>
+    <filter id="symbol-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feColorMatrix type="matrix" values="
+        0 0 0 0 0.71
+        0 0 0 0 0.46
+        0 0 0 0 1
+        0 0 0 0.35 0"/>
+      <feBlend in="SourceGraphic" in2="blur" mode="screen"/>
     </filter>
   </defs>
 
+  <!-- Outer hexagon -->
   <path
-    d="M 50 0 L 93.3 25 L 93.3 75 L 50 100 L 6.7 75 L 6.7 25 Z"
-    fill="url(#logo-gradient)"
+    d="M110 10 L198 60 L198 160 L110 210 L22 160 L22 60 Z"
+    fill="url(#hex-gradient)"
+    stroke="#A47DFF"
+    stroke-width="1.5"
+    filter="url(#hex-shadow)"
   />
 
-  <g filter="url(#symbol-shadow)">
-    <circle cx="50" cy="35" r="15" fill="white" opacity="0.9"/>
-    <ellipse cx="50" cy="70" rx="20" ry="18" fill="white" opacity="0.9"/>
-    <ellipse cx="35" cy="70" rx="8" ry="7" fill="white" opacity="0.75"/>
-    <ellipse cx="65" cy="70" rx="8" ry="7" fill="white" opacity="0.75"/>
+  <!-- Inner recessed hex -->
+  <path
+    d="M110 36 L174 73 L174 147 L110 184 L46 147 L46 73 Z"
+    fill="url(#inner-gradient)"
+    stroke="#6C4ACF"
+    stroke-width="1.2"
+    opacity="0.95"
+  />
 
-    <circle cx="47" cy="33" r="2" fill="#cc785c"/>
-    <circle cx="53" cy="33" r="2" fill="#cc785c"/>
-    <path d="M 45 40 Q 50 42 55 40" stroke="#cc785c" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- Orbiting nodes representing tool/agent coordination -->
+  <g stroke="#8F6BFF" stroke-width="1.8" opacity="0.85">
+    <path d="M70 120 Q110 60 150 120 Q110 180 70 120 Z" fill="none"/>
+    <path d="M78 105 Q110 150 142 105" fill="none" opacity="0.75"/>
+    <circle cx="70" cy="120" r="5" fill="#E9D7FF"/>
+    <circle cx="150" cy="120" r="5" fill="#E9D7FF"/>
+    <circle cx="110" cy="65" r="6" fill="#E9D7FF"/>
   </g>
+
+  <!-- Central Elixir-inspired droplet with circuitry -->
+  <g filter="url(#symbol-glow)">
+    <!-- Central glyph inspired by Elixir + circuit hub -->
+    <path
+      d="M110 86 L96 118 L110 168 L124 118 Z"
+      fill="url(#droplet-gradient)"
+      stroke="#F8E7FF"
+      stroke-width="1.2"
+      opacity="0.95"
+    />
+
+    <!-- Concentric arcs -->
+    <g stroke="#3B1F66" stroke-width="2" fill="none" opacity="0.7">
+      <path d="M98 125 Q110 105 122 125"/>
+      <path d="M103 140 Q110 130 117 140"/>
+    </g>
+
+    <!-- Node anchors -->
+    <circle cx="110" cy="100" r="4" fill="#F7EAFF"/>
+    <circle cx="100" cy="136" r="3" fill="#F7EAFF"/>
+    <circle cx="120" cy="136" r="3" fill="#F7EAFF"/>
+    <circle cx="110" cy="158" r="4" fill="#F7EAFF"/>
+  </g>
+
 </svg>
