@@ -64,6 +64,13 @@ This SDK requires the Claude Code CLI to be installed:
 npm install -g @anthropic-ai/claude-code
 ```
 
+### CLI discovery & version checks
+
+- The SDK now centralizes CLI lookup in `ClaudeAgentSDK.CLI`, trying `claude-code` first and then `claude`.
+- Minimum supported CLI version: `1.0.0`. Check with `ClaudeAgentSDK.CLI.version_supported?/0` or print the detected version via `ClaudeAgentSDK.CLI.version/0`.
+- Emit an upgrade hint for operators with `ClaudeAgentSDK.CLI.warn_if_outdated/0`.
+- Any live example (e.g., `mix run.live examples/basic_example.exs`) will use the same discovery logic, so running one is a quick end-to-end verification of your install.
+
 ## Installation
 
 Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:

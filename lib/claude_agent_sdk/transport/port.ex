@@ -13,7 +13,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
   @behaviour ClaudeAgentSDK.Transport
 
   @line_length 65_536
-  alias ClaudeAgentSDK.Options
+  alias ClaudeAgentSDK.{CLI, Options}
 
   defstruct port: nil,
             subscribers: %{},
@@ -228,14 +228,21 @@ defmodule ClaudeAgentSDK.Transport.Port do
   defp build_command_from_options(opts) do
     case Keyword.get(opts, :options) do
       %Options{} = options ->
-        executable = System.find_executable("claude")
+        case CLI.find_executable() do
+          {:ok, executable} ->
+            args = [
+              "--output-format",
+              "stream-json",
+              "--input-format",
+              "stream-json",
+              "--verbose"
+            ]
 
-        if executable do
-          args = ["--output-format", "stream-json", "--input-format", "stream-json", "--verbose"]
-          args = args ++ Options.to_args(options)
-          {:ok, {executable, args}}
-        else
-          {:error, {:command_not_found, "claude"}}
+            args = args ++ Options.to_args(options)
+            {:ok, {executable, args}}
+
+          {:error, :not_found} ->
+            {:error, {:command_not_found, "claude"}}
         end
 
       _ ->

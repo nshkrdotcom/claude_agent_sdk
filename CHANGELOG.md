@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Centralized Claude CLI discovery/version tracking via `ClaudeAgentSDK.CLI` (ADR 0005a), with min-version warning and shared lookup across Process/Streaming/Client/Transport/AuthChecker.
 - Initialize control wait now honors `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` (ms) with a 60s floor (parity with Python) and is documented for operators handling slow MCP/server startups.
 - Updated live structured output example and documentation to highlight the new initialization timeout override for real CLI runs.
 - Hook matcher timeouts (ADR 0002): per-matcher `timeout_ms` flows to `"timeout"` in initialize, bounds hook callback execution, and is showcased in the live `examples/hooks/complete_workflow.exs` plus README/HOOKS_GUIDE updates.

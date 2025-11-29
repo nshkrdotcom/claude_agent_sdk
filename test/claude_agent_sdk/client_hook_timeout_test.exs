@@ -1,5 +1,6 @@
 defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
   use ClaudeAgentSDK.SupertesterCase
+  @moduletag capture_log: true
 
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}

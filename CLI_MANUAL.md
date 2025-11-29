@@ -53,6 +53,7 @@ A complete reference showing how to use the official Claude Code SDK features in
 
 - [x] **Helper Modules**
   - [x] `AuthChecker` for authentication validation and diagnostics
+  - [x] `CLI` for centralized executable discovery and version checks
   - [x] `ContentExtractor` for message text extraction and processing
   - [x] `OptionBuilder` for smart preset configurations
   - [x] `DebugMode` for comprehensive troubleshooting and performance analysis

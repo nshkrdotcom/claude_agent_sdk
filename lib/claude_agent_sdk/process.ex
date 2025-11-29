@@ -14,7 +14,7 @@ defmodule ClaudeAgentSDK.Process do
 
   require Logger
 
-  alias ClaudeAgentSDK.{Message, Options}
+  alias ClaudeAgentSDK.{CLI, Message, Options}
 
   @doc """
   Streams messages from Claude Code CLI using erlexec.
@@ -296,7 +296,7 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp build_claude_command(args, _options, _stdin_input) do
-    executable = find_executable()
+    executable = CLI.find_executable!()
 
     # Ensure proper flags for JSON output
     final_args = ensure_json_flags(args)
@@ -367,16 +367,6 @@ defmodule ClaudeAgentSDK.Process do
       "\"#{String.replace(arg, "\"", "\\\"")}\""
     else
       arg
-    end
-  end
-
-  defp find_executable do
-    case System.find_executable("claude") do
-      nil ->
-        raise "Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code"
-
-      path ->
-        path
     end
   end
 

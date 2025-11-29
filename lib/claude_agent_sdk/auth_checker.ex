@@ -31,6 +31,8 @@ defmodule ClaudeAgentSDK.AuthChecker do
   This module detects and validates all supported authentication methods.
   """
 
+  alias ClaudeAgentSDK.CLI
+
   @type auth_status ::
           :ready | :cli_not_found | :not_authenticated | :invalid_credentials | :unknown
 
@@ -341,20 +343,15 @@ defmodule ClaudeAgentSDK.AuthChecker do
   # Private helper functions
 
   defp check_cli_installation_private do
-    case System.find_executable("claude") do
-      nil ->
-        {false, nil}
-
-      _path ->
-        case execute_with_timeout("claude --version", 10_000) do
-          {:ok, output} ->
-            version = String.trim(output)
-            {true, version}
-
-          {:error, _} ->
-            # CLI found but version check failed
-            {true, nil}
+    case CLI.find_executable() do
+      {:ok, _path} ->
+        case CLI.version() do
+          {:ok, version} -> {true, version}
+          {:error, _} -> {true, nil}
         end
+
+      {:error, :not_found} ->
+        {false, nil}
     end
   end
 

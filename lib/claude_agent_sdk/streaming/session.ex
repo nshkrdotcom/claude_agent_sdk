@@ -42,7 +42,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   use GenServer
   require Logger
 
-  alias ClaudeAgentSDK.Options
+  alias ClaudeAgentSDK.{CLI, Options}
   alias ClaudeAgentSDK.Streaming.EventParser
 
   @type subscriber_ref :: reference()
@@ -466,8 +466,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   defp spawn_subprocess(args) do
     # Find claude executable
-    executable =
-      System.find_executable("claude-code") || System.find_executable("claude") || "claude"
+    executable = CLI.find_executable!()
 
     # Build command string
     quoted_args = Enum.map(args, &shell_escape/1)

@@ -64,7 +64,7 @@ defmodule ClaudeAgentSDK.Client do
   use GenServer
   require Logger
 
-  alias ClaudeAgentSDK.{Options, Hooks, Message, Model}
+  alias ClaudeAgentSDK.{CLI, Hooks, Message, Model, Options}
   alias ClaudeAgentSDK.Hooks.{Matcher, Registry}
   alias ClaudeAgentSDK.ControlProtocol.Protocol
   @default_hook_timeout_ms 60_000
@@ -1071,22 +1071,22 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp build_cli_command(options) do
-    executable = System.find_executable("claude")
+    case CLI.find_executable() do
+      {:ok, executable} ->
+        # Build arguments for streaming mode
+        args = ["--output-format", "stream-json", "--input-format", "stream-json", "--verbose"]
 
-    if executable do
-      # Build arguments for streaming mode
-      args = ["--output-format", "stream-json", "--input-format", "stream-json", "--verbose"]
+        # Add other options
+        args = args ++ Options.to_args(options)
 
-      # Add other options
-      args = args ++ Options.to_args(options)
+        # Redirect stderr to /dev/null to suppress benign EPIPE errors during cleanup
+        # These errors occur when the Elixir side closes the connection while the CLI
+        # is still writing output - they're harmless but noisy
+        cmd = Enum.join([executable | args], " ") <> " 2>/dev/null"
+        {:ok, cmd}
 
-      # Redirect stderr to /dev/null to suppress benign EPIPE errors during cleanup
-      # These errors occur when the Elixir side closes the connection while the CLI
-      # is still writing output - they're harmless but noisy
-      cmd = Enum.join([executable | args], " ") <> " 2>/dev/null"
-      {:ok, cmd}
-    else
-      {:error, :claude_not_found}
+      {:error, :not_found} ->
+        {:error, :claude_not_found}
     end
   end
 
