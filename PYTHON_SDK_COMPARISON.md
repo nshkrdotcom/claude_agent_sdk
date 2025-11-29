@@ -789,7 +789,7 @@ The Elixir SDK provides 95%+ feature parity. Remaining gap:
 
 ## 🔮 Roadmap
 
-### v0.6.1 (Current)
+### v0.6.2 (Current)
 - Runtime control parity (`Client.interrupt/1`, `Client.get_server_info/1`, `Client.receive_response/1`)
 - Expanded options surface area & transport env overrides
 

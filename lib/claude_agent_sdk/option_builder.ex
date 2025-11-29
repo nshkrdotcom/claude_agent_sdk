@@ -25,6 +25,19 @@ defmodule ClaudeAgentSDK.OptionBuilder do
       # Customize a preset
       options = ClaudeAgentSDK.OptionBuilder.merge(:development, %{max_turns: 15})
 
+  ## Structured Outputs (JSON Schema)
+
+  Request validated JSON by providing a schema to `output_format`. This emits
+  `--json-schema` for compatible CLI versions (same flag used by the Python SDK 0.1.10):
+
+      schema = %{
+        "type" => "object",
+        "properties" => %{"summary" => %{"type" => "string"}},
+        "required" => ["summary"]
+      }
+
+      options = %Options{output_format: %{type: :json_schema, schema: schema}}
+
   ## Environment Presets
 
   | Environment | Security | Tools | Turn Limit | Use Case |

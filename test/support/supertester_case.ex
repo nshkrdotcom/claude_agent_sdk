@@ -9,7 +9,7 @@ defmodule ClaudeAgentSDK.SupertesterCase do
     isolation = Keyword.get(opts, :isolation, :basic)
 
     quote do
-      use Supertester.UnifiedTestFoundation, isolation: unquote(isolation)
+      use Supertester.ExUnitFoundation, isolation: unquote(isolation)
 
       import Supertester.OTPHelpers
       import Supertester.GenServerHelpers
@@ -33,19 +33,24 @@ defmodule ClaudeAgentSDK.SupertesterCase do
   def eventually(fun, opts \\ []) when is_function(fun, 0) do
     timeout = Keyword.get(opts, :timeout, 1_000)
     interval = Keyword.get(opts, :interval, 25)
-    deadline = System.monotonic_time(:millisecond) + timeout
+    start = System.monotonic_time(:millisecond)
+    deadline = start + timeout
 
-    do_eventually(fun, interval, deadline)
+    do_eventually(fun, interval, deadline, start)
   end
 
-  defp do_eventually(fun, interval, deadline) do
+  defp do_eventually(fun, interval, deadline, start_time) do
     case fun.() do
       result when result in [false, nil] ->
         if System.monotonic_time(:millisecond) >= deadline do
-          flunk("eventually/2 timed out after #{deadline} ms")
+          elapsed = System.monotonic_time(:millisecond) - start_time
+
+          flunk(
+            "eventually/2 timed out after #{elapsed} ms (timeout #{deadline - start_time} ms)"
+          )
         else
           Process.sleep(interval)
-          do_eventually(fun, interval, deadline)
+          do_eventually(fun, interval, deadline, start_time)
         end
 
       result ->

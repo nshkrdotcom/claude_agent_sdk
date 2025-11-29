@@ -29,6 +29,8 @@ defmodule Integration.CustomTransportTest do
         |> Enum.take(2)
       end)
 
+    wait_for_stream_subscriber(client)
+
     first_message = %{
       "type" => "assistant",
       "message" => %{"content" => "Hello from custom transport", "role" => "assistant"},
@@ -49,5 +51,17 @@ defmodule Integration.CustomTransportTest do
     assert Enum.all?(messages, fn msg -> msg.type == :assistant end)
     contents = Enum.map(messages, fn msg -> msg.data[:message]["content"] end)
     assert contents == ["Hello from custom transport", "Second reply"]
+  end
+
+  defp wait_for_stream_subscriber(client) do
+    SupertesterCase.eventually(
+      fn ->
+        state = :sys.get_state(client)
+        map_size(state.subscribers) > 0
+      end,
+      timeout: 500
+    )
+
+    :ok
   end
 end

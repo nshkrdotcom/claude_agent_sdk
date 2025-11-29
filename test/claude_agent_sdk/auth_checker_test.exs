@@ -168,6 +168,8 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
     end
 
     test "detects bedrock configuration when set" do
+      original_api = System.get_env("ANTHROPIC_API_KEY")
+      System.delete_env("ANTHROPIC_API_KEY")
       System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
       System.put_env("AWS_ACCESS_KEY_ID", "test-key")
 
@@ -180,12 +182,15 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
           {:error, _} -> :ok
         end
       after
+        if original_api, do: System.put_env("ANTHROPIC_API_KEY", original_api)
         System.delete_env("CLAUDE_AGENT_USE_BEDROCK")
         System.delete_env("AWS_ACCESS_KEY_ID")
       end
     end
 
     test "detects vertex configuration when set" do
+      original_api = System.get_env("ANTHROPIC_API_KEY")
+      System.delete_env("ANTHROPIC_API_KEY")
       System.put_env("CLAUDE_AGENT_USE_VERTEX", "1")
       System.put_env("GOOGLE_CLOUD_PROJECT", "test-project")
 
@@ -198,6 +203,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
           {:error, _} -> :ok
         end
       after
+        if original_api, do: System.put_env("ANTHROPIC_API_KEY", original_api)
         System.delete_env("CLAUDE_AGENT_USE_VERTEX")
         System.delete_env("GOOGLE_CLOUD_PROJECT")
       end

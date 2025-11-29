@@ -118,6 +118,22 @@ defmodule ClaudeAgentSDK.ContentExtractor do
     result
   end
 
+  def extract_text(%Message{
+        type: :result,
+        data: %{structured_output: structured_output}
+      })
+      when is_map(structured_output) do
+    Jason.encode!(structured_output)
+  end
+
+  def extract_text(%Message{
+        type: :result,
+        data: %{structured_output: structured_output}
+      })
+      when not is_nil(structured_output) do
+    inspect(structured_output)
+  end
+
   def extract_text(%Message{type: :system, data: _data}) do
     # System messages don't contain extractable text content
     nil

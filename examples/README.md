@@ -6,7 +6,14 @@ This directory contains comprehensive examples showcasing all major use cases of
 
 Run any example with: `mix run examples/<example_name>.exs`
 
+For live CLI behavior (instead of the default mock), set `LIVE_MODE=true` or ensure
+`Application.put_env(:claude_agent_sdk, :use_mock, false)` before calling the SDK.
+
 ## 📂 Available Examples
+
+### 🧱 Structured Outputs (CLI JSON Schema)
+
+- [`structured_output_live.exs`](structured_output_live.exs) — live CLI example that requests validated JSON via `output_format: %{type: :json_schema, schema: ...}` and prints the returned `structured_output`. Requires a CLI that supports `--json-schema` and an authenticated session.
 
 ### 🔄 Runtime Control (v0.5.0)
 

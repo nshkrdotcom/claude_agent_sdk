@@ -184,14 +184,19 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     {:ok, events, accumulated_text}
   end
 
-  def parse_event(%{"type" => "message_stop"}, accumulated_text) do
+  def parse_event(%{"type" => "message_stop"} = event, accumulated_text) do
     # Message complete - final event
-    events = [
+    structured_output =
+      Map.get(event, "structured_output") || get_in(event, ["message", "structured_output"])
+
+    message_stop_event =
       %{
         type: :message_stop,
         final_text: accumulated_text
       }
-    ]
+      |> maybe_put_structured_output(structured_output)
+
+    events = [message_stop_event]
 
     # Reset for next message in session
     {:ok, events, ""}
@@ -281,4 +286,9 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
   end
 
   defp unwrap_stream_event(event), do: event
+
+  defp maybe_put_structured_output(event, nil), do: event
+
+  defp maybe_put_structured_output(event, structured_output),
+    do: Map.put(event, :structured_output, structured_output)
 end

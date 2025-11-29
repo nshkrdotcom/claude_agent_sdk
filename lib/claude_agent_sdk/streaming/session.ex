@@ -456,7 +456,11 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
     # Add user options (but skip verbose since we already added it)
     user_args = Options.to_args(options)
-    user_args = Enum.reject(user_args, &(&1 == "--verbose"))
+
+    user_args =
+      user_args
+      |> Enum.reject(&(&1 == "--verbose"))
+      |> strip_flag_with_value("--output-format")
 
     base_args ++ user_args
   end
@@ -489,6 +493,22 @@ defmodule ClaudeAgentSDK.Streaming.Session do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp strip_flag_with_value(args, flag) do
+    args
+    |> Enum.reduce({[], false}, fn
+      ^flag, {acc, _skip_next} ->
+        {acc, true}
+
+      _value, {acc, true} ->
+        {acc, false}
+
+      value, {acc, false} ->
+        {[value | acc], false}
+    end)
+    |> elem(0)
+    |> Enum.reverse()
   end
 
   defp shell_escape(arg) when is_binary(arg) do

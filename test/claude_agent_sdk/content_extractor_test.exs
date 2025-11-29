@@ -154,6 +154,35 @@ defmodule ClaudeAgentSDK.ContentExtractorTest do
     end
   end
 
+  describe "structured outputs" do
+    test "prefers result text when structured_output is also present" do
+      message = %Message{
+        type: :result,
+        data: %{result: "plain result", structured_output: %{"foo" => "bar"}}
+      }
+
+      assert ContentExtractor.extract_text(message) == "plain result"
+    end
+
+    test "falls back to structured_output when result text missing" do
+      message = %Message{
+        type: :result,
+        data: %{structured_output: %{"foo" => "bar"}}
+      }
+
+      assert ContentExtractor.extract_text(message) == ~s({"foo":"bar"})
+    end
+
+    test "has_text?/1 returns true for structured outputs" do
+      message = %Message{
+        type: :result,
+        data: %{structured_output: %{"foo" => "bar"}}
+      }
+
+      assert ContentExtractor.has_text?(message)
+    end
+  end
+
   describe "extract_all_text/2" do
     test "extracts and joins text from multiple messages" do
       messages = [

@@ -73,6 +73,46 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
     end
   end
 
+  describe "structured outputs" do
+    test "tuple output_format emits json-schema flag and json output format" do
+      schema = %{"type" => "object", "properties" => %{"foo" => %{"type" => "string"}}}
+      options = %Options{output_format: {:json_schema, schema}}
+
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--output-format", "json")
+
+      json_schema_value = value_for_flag(args, "--json-schema")
+      assert Jason.decode!(json_schema_value) == schema
+    end
+
+    test "map output_format emits json-schema flag and supports atom type" do
+      schema = %{"type" => "object", "properties" => %{"count" => %{"type" => "integer"}}}
+      options = %Options{output_format: %{type: :json_schema, schema: schema}}
+
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--output-format", "json")
+      assert Jason.decode!(value_for_flag(args, "--json-schema")) == schema
+    end
+
+    test "invalid structured output raises" do
+      options = %Options{output_format: {:json_schema, "not a map"}}
+
+      assert_raise ArgumentError, fn ->
+        Options.to_args(options)
+      end
+    end
+
+    test "stream-json format still injects verbose flag" do
+      options = %Options{output_format: :stream_json}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--output-format", "stream-json")
+      assert "--verbose" in args
+    end
+  end
+
   defp collect_flag_values(args, flag) do
     args
     |> Enum.chunk_every(2, 1, :discard)
@@ -86,6 +126,13 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
     case Enum.find_index(args, &(&1 == flag)) do
       nil -> false
       idx -> Enum.at(args, idx + 1) == expected_value
+    end
+  end
+
+  defp value_for_flag(args, flag) do
+    case Enum.find_index(args, &(&1 == flag)) do
+      nil -> nil
+      idx -> Enum.at(args, idx + 1)
     end
   end
 end

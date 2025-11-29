@@ -30,6 +30,10 @@ defmodule Integration.ModelSwitchingLiveTest do
         |> Enum.take(3)
       end)
 
+    # Ensure the transport subscription is active and our stream subscriber is registered
+    assert_receive {:mock_transport_subscribed, _pid}, 200
+    wait_for_stream_subscriber(client)
+
     initial_message = %{
       "type" => "assistant",
       "message" => %{"content" => "Started with sonnet", "role" => "assistant"},
@@ -76,12 +80,7 @@ defmodule Integration.ModelSwitchingLiveTest do
 
     MockTransport.push_message(transport_pid, Jason.encode!(final_message))
 
-    messages =
-      SupertesterCase.eventually(fn -> Task.yield(stream_task, 25) end,
-        timeout: 1_500
-      )
-
-    assert {:ok, streamed} = messages
+    streamed = Task.await(stream_task, 1_500)
 
     contents =
       streamed
@@ -91,5 +90,17 @@ defmodule Integration.ModelSwitchingLiveTest do
     assert contents == ["Started with sonnet", "Now speaking as opus"]
     assert {:ok, ^normalized} = Client.get_model(client)
     Task.shutdown(stream_task)
+  end
+
+  defp wait_for_stream_subscriber(client) do
+    SupertesterCase.eventually(
+      fn ->
+        state = :sys.get_state(client)
+        map_size(state.subscribers) > 0
+      end,
+      timeout: 500
+    )
+
+    :ok
   end
 end

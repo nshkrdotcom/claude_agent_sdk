@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2025-11-29
+
+### Added
+
+- Structured outputs parity with Python SDK: JSON Schema options flag, parsed
+  `structured_output` on results and streaming, ContentExtractor fallback, and
+  a live example that pretty prints validated JSON.
+
+### Changed
+
+- Upgraded test harness to Supertester 0.3.1 (ExUnitFoundation) and hardened
+  streaming/custom transport tests by waiting for subscriber registration.
+
+### Fixed
+
+- Auth checker Bedrock/Vertex tests now isolate `ANTHROPIC_API_KEY` to prevent
+  environment bleed and ensure deterministic branch coverage.
+
 ## [0.6.1] - 2025-11-11
 
 ### Added

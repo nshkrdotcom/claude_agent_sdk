@@ -10,7 +10,7 @@ defmodule ClaudeAgentSDK.Options do
   - `max_turns` - Maximum number of conversation turns (integer)
   - `system_prompt` - Custom system prompt to use (string)
   - `append_system_prompt` - Additional system prompt to append (string)
-  - `output_format` - Output format (`:text`, `:json`, or `:stream_json`)
+  - `output_format` - Output format (`:text`, `:json`, `:stream_json`, or structured JSON schema config)
   - `allowed_tools` - List of allowed tool names (list of strings)
   - `disallowed_tools` - List of disallowed tool names (list of strings)
   - `mcp_servers` - Map of MCP server configurations (SDK and external servers) (v0.5.0+)
@@ -131,7 +131,15 @@ defmodule ClaudeAgentSDK.Options do
     env: %{}
   ]
 
-  @type output_format :: :text | :json | :stream_json
+  @type structured_output_format ::
+          {:json_schema, map()}
+          | %{
+              required(:type) => :json_schema | String.t(),
+              required(:schema) => map(),
+              optional(:output_format) => :json | :stream_json | String.t()
+            }
+
+  @type output_format :: :text | :json | :stream_json | structured_output_format()
   @type permission_mode :: :default | :accept_edits | :bypass_permissions | :plan
   @type model_name :: String.t()
   @type agent_name :: atom()
@@ -295,21 +303,85 @@ defmodule ClaudeAgentSDK.Options do
   defp add_output_format_args(args, %{output_format: nil}), do: args
 
   defp add_output_format_args(args, %{output_format: format}) do
-    # Convert format atom to CLI string format
-    format_string =
-      case format do
-        :stream_json -> "stream-json"
-        other -> to_string(other)
-      end
+    case normalize_output_format(format) do
+      {:standard, normalized_format} ->
+        args
+        |> Kernel.++(["--output-format", to_cli_format(normalized_format)])
+        |> Kernel.++(verbose_if_stream(normalized_format))
 
-    format_args = ["--output-format", format_string]
-    # CLI requires --verbose when using stream-json with --print
-    if format == :stream_json do
-      args ++ format_args ++ ["--verbose"]
-    else
-      args ++ format_args
+      {:json_schema, schema, base_format} ->
+        args
+        |> Kernel.++(["--output-format", to_cli_format(base_format)])
+        |> Kernel.++(["--json-schema", Jason.encode!(schema)])
+        |> Kernel.++(verbose_if_stream(base_format))
     end
   end
+
+  defp normalize_output_format(format) when format in [:text, :json, :stream_json] do
+    {:standard, format}
+  end
+
+  defp normalize_output_format("text"), do: {:standard, :text}
+  defp normalize_output_format("json"), do: {:standard, :json}
+  defp normalize_output_format("stream-json"), do: {:standard, :stream_json}
+  defp normalize_output_format("stream_json"), do: {:standard, :stream_json}
+
+  defp normalize_output_format({:json_schema, schema}) when is_map(schema) do
+    {:json_schema, schema, :json}
+  end
+
+  defp normalize_output_format({:json_schema, _schema}) do
+    raise ArgumentError, "structured output_format schema must be a map"
+  end
+
+  defp normalize_output_format(%{} = config) do
+    normalize_structured_output_config(config)
+  end
+
+  defp normalize_output_format(other) when is_binary(other) do
+    raise ArgumentError, "Unsupported output_format: #{inspect(other)}"
+  end
+
+  defp normalize_output_format(other) do
+    raise ArgumentError, "Unsupported output_format: #{inspect(other)}"
+  end
+
+  defp normalize_structured_output_config(config) do
+    type = Map.get(config, :type) || Map.get(config, "type")
+    schema = Map.get(config, :schema) || Map.get(config, "schema")
+    base_format = Map.get(config, :output_format) || Map.get(config, "output_format") || :json
+
+    cond do
+      type in [:json_schema, "json_schema"] and is_map(schema) ->
+        {:json_schema, schema, normalize_base_output_format(base_format)}
+
+      type in [:json_schema, "json_schema"] ->
+        raise ArgumentError, "structured output_format schema must be a map"
+
+      true ->
+        raise ArgumentError, "Unsupported structured output_format config: #{inspect(config)}"
+    end
+  end
+
+  defp normalize_base_output_format(:json), do: :json
+  defp normalize_base_output_format("json"), do: :json
+  defp normalize_base_output_format(:stream_json), do: :stream_json
+  defp normalize_base_output_format("stream-json"), do: :stream_json
+  defp normalize_base_output_format("stream_json"), do: :stream_json
+
+  defp normalize_base_output_format(other) do
+    raise ArgumentError,
+          "Unsupported base output_format for structured outputs: #{inspect(other)}"
+  end
+
+  defp to_cli_format(:stream_json), do: "stream-json"
+
+  defp to_cli_format(other) when is_atom(other) or is_binary(other) do
+    to_string(other)
+  end
+
+  defp verbose_if_stream(:stream_json), do: ["--verbose"]
+  defp verbose_if_stream(_), do: []
 
   defp add_max_turns_args(args, %{max_turns: nil}), do: args
 

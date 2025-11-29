@@ -250,6 +250,7 @@ defmodule ClaudeAgentSDK.Message do
     %{
       result: raw["result"],
       session_id: raw["session_id"],
+      structured_output: raw["structured_output"],
       total_cost_usd: raw["total_cost_usd"],
       duration_ms: raw["duration_ms"],
       duration_api_ms: raw["duration_api_ms"],
@@ -264,6 +265,7 @@ defmodule ClaudeAgentSDK.Message do
 
     %{
       session_id: raw["session_id"],
+      structured_output: raw["structured_output"],
       total_cost_usd: raw["total_cost_usd"] || 0.0,
       duration_ms: raw["duration_ms"] || 0,
       duration_api_ms: raw["duration_api_ms"] || 0,
