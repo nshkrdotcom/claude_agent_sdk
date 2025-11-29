@@ -68,6 +68,8 @@ defmodule ClaudeAgentSDK.Client do
   alias ClaudeAgentSDK.Hooks.{Matcher, Registry}
   alias ClaudeAgentSDK.ControlProtocol.Protocol
   @default_hook_timeout_ms 60_000
+  @default_init_timeout_ms 60_000
+  @init_timeout_env_var "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT"
 
   @typedoc """
   Client state.
@@ -104,7 +106,10 @@ defmodule ClaudeAgentSDK.Client do
           accumulated_text: String.t(),
           active_subscriber: reference() | nil,
           subscriber_queue: [{reference(), String.t()}],
-          server_info: map() | nil
+          server_info: map() | nil,
+          init_request_id: String.t() | nil,
+          init_timeout_ref: reference() | nil,
+          init_timeout_ms: pos_integer() | nil
         }
 
   ## Public API
@@ -413,7 +418,10 @@ defmodule ClaudeAgentSDK.Client do
         accumulated_text: "",
         active_subscriber: nil,
         subscriber_queue: [],
-        server_info: nil
+        server_info: nil,
+        init_request_id: nil,
+        init_timeout_ref: nil,
+        init_timeout_ms: nil
       }
 
       {:ok, state, {:continue, :start_cli}}
@@ -645,6 +653,30 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @impl true
+  def handle_info({:initialize_timeout, request_id}, state) do
+    cond do
+      state.initialized ->
+        {:noreply, state}
+
+      state.init_request_id != request_id ->
+        {:noreply, state}
+
+      true ->
+        Logger.error("Initialization control request timed out",
+          request_id: request_id,
+          timeout_ms: state.init_timeout_ms
+        )
+
+        new_state =
+          state
+          |> cancel_init_timeout()
+          |> Map.put(:init_request_id, nil)
+
+        {:stop, {:initialize_timeout, request_id}, new_state}
+    end
+  end
+
+  @impl true
   def handle_info({:transport_message, payload}, state) do
     case decode_transport_payload(payload) do
       {:ok, {message_type, message_data}} ->
@@ -743,6 +775,8 @@ defmodule ClaudeAgentSDK.Client do
   @impl true
   def terminate(reason, %{transport: transport, transport_module: module} = state)
       when is_pid(transport) do
+    state = cancel_init_timeout(state)
+
     try do
       module.close(transport)
     catch
@@ -752,7 +786,9 @@ defmodule ClaudeAgentSDK.Client do
     terminate(reason, %{state | transport: nil})
   end
 
-  def terminate(reason, %{port: port}) when is_port(port) do
+  def terminate(reason, %{port: port} = state) when is_port(port) do
+    _ = cancel_init_timeout(state)
+
     if Mix.env() != :test do
       Logger.debug("Terminating client", reason: reason)
     end
@@ -794,7 +830,9 @@ defmodule ClaudeAgentSDK.Client do
     :ok
   end
 
-  def terminate(reason, _state) do
+  def terminate(reason, state) do
+    _ = cancel_init_timeout(state)
+
     if Mix.env() != :test do
       Logger.debug("Terminating client (no port)", reason: reason)
     end
@@ -844,6 +882,55 @@ defmodule ClaudeAgentSDK.Client do
 
   defp apply_agent_settings(options), do: {:ok, options}
 
+  @doc false
+  @spec init_timeout_seconds_from_env() :: number()
+  def init_timeout_seconds_from_env do
+    env_value = System.get_env(@init_timeout_env_var)
+
+    parsed_ms =
+      case env_value do
+        value when is_binary(value) ->
+          case Integer.parse(value) do
+            {int, _} when int > 0 -> int
+            _ -> @default_init_timeout_ms
+          end
+
+        _ ->
+          @default_init_timeout_ms
+      end
+
+    timeout_ms = max(parsed_ms, @default_init_timeout_ms)
+    timeout_ms / 1_000
+  end
+
+  defp schedule_initialize_timeout(request_id) when is_binary(request_id) do
+    timeout_ms =
+      init_timeout_seconds_from_env()
+      |> Kernel.*(1_000)
+      |> trunc()
+
+    ref = Process.send_after(self(), {:initialize_timeout, request_id}, timeout_ms)
+    {ref, timeout_ms}
+  end
+
+  defp maybe_cancel_init_timeout(state, request_id) do
+    cond do
+      state.init_request_id == request_id and is_reference(state.init_timeout_ref) ->
+        _ = Process.cancel_timer(state.init_timeout_ref)
+        %{state | init_timeout_ref: nil, init_request_id: nil, init_timeout_ms: nil}
+
+      true ->
+        state
+    end
+  end
+
+  defp cancel_init_timeout(%{init_timeout_ref: ref} = state) when is_reference(ref) do
+    _ = Process.cancel_timer(ref)
+    %{state | init_timeout_ref: nil, init_timeout_ms: nil}
+  end
+
+  defp cancel_init_timeout(state), do: state
+
   defp start_cli_process(%{transport_module: module} = state) when not is_nil(module) do
     registry = register_hooks(state.registry, state.options.hooks)
     hook_callback_timeouts = build_hook_timeout_map(registry, state.options.hooks)
@@ -855,8 +942,10 @@ defmodule ClaudeAgentSDK.Client do
 
     with {:ok, transport} <- module.start_link(transport_opts),
          :ok <- module.subscribe(transport, self()) do
-      {_request_id, init_json} =
+      {init_request_id, init_json} =
         Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil)
+
+      {init_timeout_ref, init_timeout_ms} = schedule_initialize_timeout(init_request_id)
 
       _ = module.send(transport, ensure_newline(init_json))
 
@@ -866,7 +955,10 @@ defmodule ClaudeAgentSDK.Client do
          | transport: transport,
            registry: registry,
            hook_callback_timeouts: hook_callback_timeouts,
-           initialized: false
+           initialized: false,
+           init_request_id: init_request_id,
+           init_timeout_ref: init_timeout_ref,
+           init_timeout_ms: init_timeout_ms
        }}
     else
       {:error, reason} ->
@@ -894,8 +986,10 @@ defmodule ClaudeAgentSDK.Client do
         hooks_config = build_hooks_config(registry, state.options.hooks)
         sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
 
-        {_request_id, init_json} =
+        {init_request_id, init_json} =
           Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil)
+
+        {init_timeout_ref, init_timeout_ms} = schedule_initialize_timeout(init_request_id)
 
         Port.command(port, ensure_newline(init_json))
 
@@ -905,7 +999,10 @@ defmodule ClaudeAgentSDK.Client do
            | port: port,
              registry: registry,
              hook_callback_timeouts: hook_callback_timeouts,
-             initialized: false
+             initialized: false,
+             init_request_id: init_request_id,
+             init_timeout_ref: init_timeout_ref,
+             init_timeout_ms: init_timeout_ms
          }}
 
       {:error, reason} ->
@@ -1044,7 +1141,11 @@ defmodule ClaudeAgentSDK.Client do
     response = response_data["response"]
     request_id = response["request_id"]
     {pending_entry, pending_requests} = Map.pop(state.pending_requests, request_id)
-    updated_state = %{state | pending_requests: pending_requests}
+
+    updated_state =
+      state
+      |> Map.put(:pending_requests, pending_requests)
+      |> maybe_cancel_init_timeout(request_id)
 
     case {pending_entry, response["subtype"]} do
       {{:set_model, from, requested_model}, "success"} ->

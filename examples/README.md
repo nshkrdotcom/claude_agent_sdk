@@ -13,7 +13,7 @@ For live CLI behavior (instead of the default mock), set `LIVE_MODE=true` or ens
 
 ### 🧱 Structured Outputs (CLI JSON Schema)
 
-- [`structured_output_live.exs`](structured_output_live.exs) — live CLI example that requests validated JSON via `output_format: %{type: :json_schema, schema: ...}` and prints the returned `structured_output`. Requires a CLI that supports `--json-schema` and an authenticated session.
+- [`structured_output_live.exs`](structured_output_live.exs) — live CLI example that requests validated JSON via `output_format: %{type: :json_schema, schema: ...}` and prints the returned `structured_output`. Requires a CLI that supports `--json-schema` and an authenticated session. For slow MCP/server startups, set `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` (ms) to extend the initialize wait.
 
 ### 🔄 Runtime Control (v0.5.0)
 

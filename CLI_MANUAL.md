@@ -209,6 +209,12 @@ end)
 
 ---
 
+### Initialization timeout override
+
+- `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` (milliseconds) controls how long the client waits for the initialize control response. The value is converted to seconds with a 60s floor (parity with the Python SDK) and is useful when MCP servers or the CLI itself need extra startup time.
+
+---
+
 ## Advanced Configuration Examples
 
 ### Smart Option Configuration with OptionBuilder

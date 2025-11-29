@@ -874,6 +874,10 @@ schema = %{
 options = %ClaudeAgentSDK.Options{
   output_format: %{type: :json_schema, schema: schema}
 }
+
+# Live demo (pretty prints structured_output)
+# mix run.live examples/structured_output_live.exs
+# Tip: set CLAUDE_CODE_STREAM_CLOSE_TIMEOUT=120000 for slow MCP/server startups.
 ```
 
 ### Message Types
@@ -1475,6 +1479,8 @@ claude login
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
+
+**Slow initialize responses (MCP/server startup)**: Increase the initialize wait by setting `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` (milliseconds). The value is converted to seconds with a 60-second floor and is useful when the CLI needs extra time to bring up MCP servers or slow environments.
 
 **CLI argument format errors**: Recent improvements have fixed common CLI format issues:
 - Output format: Now correctly uses `stream-json` instead of `stream_json`

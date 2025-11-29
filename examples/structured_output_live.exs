@@ -5,6 +5,7 @@ defmodule StructuredOutputLiveExample do
   Requires:
     * A CLI version that supports --json-schema (the Python 0.1.10 parity feature).
     * Authenticated `claude` (`CLAUDE_AGENT_OAUTH_TOKEN` or `claude login`).
+    * Optional: set `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` (ms) if MCP/server startup is slow.
   """
 
   alias ClaudeAgentSDK.Options
@@ -41,6 +42,10 @@ defmodule StructuredOutputLiveExample do
     IO.puts("\n🧪 Structured output demo (live CLI)…")
     IO.puts("Schema: #{Jason.encode!(@schema)}\n")
 
+    IO.puts(
+      "Init timeout: #{timeout_env_value()} (set CLAUDE_CODE_STREAM_CLOSE_TIMEOUT to extend for slow MCP/server startup)\n"
+    )
+
     messages = ClaudeAgentSDK.query(prompt, options) |> Enum.to_list()
 
     case find_structured_output(messages) do
@@ -68,6 +73,13 @@ defmodule StructuredOutputLiveExample do
       _ ->
         nil
     end)
+  end
+
+  defp timeout_env_value do
+    case System.get_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT") do
+      nil -> "default 60000ms (60s floor)"
+      value -> "#{value}ms"
+    end
   end
 end
 
