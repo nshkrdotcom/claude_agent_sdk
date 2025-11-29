@@ -65,8 +65,9 @@ defmodule ClaudeAgentSDK.Client do
   require Logger
 
   alias ClaudeAgentSDK.{Options, Hooks, Message, Model}
-  alias ClaudeAgentSDK.Hooks.Registry
+  alias ClaudeAgentSDK.Hooks.{Matcher, Registry}
   alias ClaudeAgentSDK.ControlProtocol.Protocol
+  @default_hook_timeout_ms 60_000
 
   @typedoc """
   Client state.
@@ -75,6 +76,7 @@ defmodule ClaudeAgentSDK.Client do
   - `port` - Port to Claude CLI process
   - `options` - Configuration options
   - `registry` - Hook callback registry
+  - `hook_callback_timeouts` - Map of callback_id => timeout_ms
   - `subscribers` - Map of ref => pid for streaming subscriptions, or list of pids for legacy
   - `pending_requests` - Map of request_id => {from, ref}
   - `initialized` - Whether initialization handshake completed
@@ -91,6 +93,7 @@ defmodule ClaudeAgentSDK.Client do
           transport_opts: keyword(),
           options: Options.t(),
           registry: Registry.t(),
+          hook_callback_timeouts: %{String.t() => pos_integer()},
           subscribers: %{reference() => pid()} | [pid()],
           pending_requests: %{String.t() => {GenServer.from(), reference()}},
           initialized: boolean(),
@@ -397,6 +400,7 @@ defmodule ClaudeAgentSDK.Client do
         transport_opts: transport_opts,
         options: updated_options,
         registry: Registry.new(),
+        hook_callback_timeouts: %{},
         subscribers: %{},
         pending_requests: %{},
         initialized: false,
@@ -842,6 +846,7 @@ defmodule ClaudeAgentSDK.Client do
 
   defp start_cli_process(%{transport_module: module} = state) when not is_nil(module) do
     registry = register_hooks(state.registry, state.options.hooks)
+    hook_callback_timeouts = build_hook_timeout_map(registry, state.options.hooks)
     hooks_config = build_hooks_config(registry, state.options.hooks)
     sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
 
@@ -860,6 +865,7 @@ defmodule ClaudeAgentSDK.Client do
          state
          | transport: transport,
            registry: registry,
+           hook_callback_timeouts: hook_callback_timeouts,
            initialized: false
        }}
     else
@@ -871,6 +877,7 @@ defmodule ClaudeAgentSDK.Client do
   defp start_cli_process(state) do
     # Register hooks and build configuration
     registry = register_hooks(state.registry, state.options.hooks)
+    hook_callback_timeouts = build_hook_timeout_map(registry, state.options.hooks)
 
     # Build CLI command
     case build_cli_command(state.options) do
@@ -897,6 +904,7 @@ defmodule ClaudeAgentSDK.Client do
            state
            | port: port,
              registry: registry,
+             hook_callback_timeouts: hook_callback_timeouts,
              initialized: false
          }}
 
@@ -917,6 +925,35 @@ defmodule ClaudeAgentSDK.Client do
     end)
   end
 
+  defp build_hook_timeout_map(_registry, nil), do: %{}
+
+  defp build_hook_timeout_map(registry, hooks) do
+    Enum.reduce(hooks, %{}, fn {_event, matchers}, acc ->
+      Enum.reduce(matchers, acc, fn matcher, matcher_acc ->
+        timeout_ms =
+          matcher.timeout_ms
+          |> Matcher.sanitize_timeout_ms()
+          |> case do
+            nil -> @default_hook_timeout_ms
+            value -> value
+          end
+
+        Enum.reduce(matcher.hooks, matcher_acc, fn callback, cb_acc ->
+          case Registry.get_id(registry, callback) do
+            nil ->
+              cb_acc
+
+            callback_id ->
+              Map.update(cb_acc, callback_id, timeout_ms, fn existing ->
+                # Prefer the longest timeout when callbacks are reused across matchers
+                max(existing, timeout_ms)
+              end)
+          end
+        end)
+      end)
+    end)
+  end
+
   defp build_hooks_config(_registry, nil), do: nil
 
   defp build_hooks_config(registry, hooks) do
@@ -926,15 +963,9 @@ defmodule ClaudeAgentSDK.Client do
 
       matchers_config =
         Enum.map(matchers, fn matcher ->
-          callback_ids =
-            Enum.map(matcher.hooks, fn callback ->
-              Registry.get_id(registry, callback)
-            end)
-
-          %{
-            "matcher" => matcher.matcher,
-            "hookCallbackIds" => callback_ids
-          }
+          Matcher.to_cli_format(matcher, fn callback ->
+            Registry.get_id(registry, callback)
+          end)
         end)
 
       {event_str, matchers_config}
@@ -1115,6 +1146,8 @@ defmodule ClaudeAgentSDK.Client do
     # Look up callback in registry
     case Registry.get_callback(state.registry, callback_id) do
       {:ok, callback_fn} ->
+        timeout_ms = hook_timeout_ms(state, callback_id)
+
         # Invoke callback with timeout protection
         task =
           Task.async(fn ->
@@ -1135,15 +1168,23 @@ defmodule ClaudeAgentSDK.Client do
           end)
 
         result =
-          case Task.yield(task, 60_000) || Task.shutdown(task) do
+          case Task.yield(task, timeout_ms) do
             {:ok, {:ok, output}} ->
               {:ok, output}
 
             {:ok, {:error, reason}} ->
               {:error, reason}
 
-            nil ->
-              {:error, "Hook callback timeout after 60s"}
+            other ->
+              _ = Task.shutdown(task, :brutal_kill)
+
+              case other do
+                nil ->
+                  {:error, hook_timeout_error_message(timeout_ms)}
+
+                _ ->
+                  {:error, hook_timeout_error_message(timeout_ms)}
+              end
           end
 
         case result do
@@ -1175,6 +1216,30 @@ defmodule ClaudeAgentSDK.Client do
         _ = send_payload(state, json)
         Logger.error("Hook callback not found", callback_id: callback_id)
         state
+    end
+  end
+
+  defp hook_timeout_ms(state, callback_id) do
+    state
+    |> Map.get(:hook_callback_timeouts, %{})
+    |> Map.get(callback_id, @default_hook_timeout_ms)
+  end
+
+  defp hook_timeout_error_message(timeout_ms) do
+    "Hook callback timeout after #{format_timeout_ms(timeout_ms)}"
+  end
+
+  defp format_timeout_ms(timeout_ms) when is_integer(timeout_ms) do
+    cond do
+      timeout_ms >= 1_000 and rem(timeout_ms, 1_000) == 0 ->
+        "#{div(timeout_ms, 1_000)}s"
+
+      timeout_ms >= 1_000 ->
+        seconds = timeout_ms / 1_000
+        "#{Float.round(seconds, 1)}s"
+
+      true ->
+        "#{timeout_ms}ms"
     end
   end
 

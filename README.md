@@ -1102,6 +1102,8 @@ Client.stream_messages(client) |> Enum.to_list()
 Client.stop(client)
 ```
 
+Each matcher can override the default 60_000 ms timeout by passing `timeout_ms` (minimum 1 second) to `Matcher.new/3`; the value is included in the initialize payload sent to the CLI.
+
 **Supported Hook Events:**
 - `pre_tool_use` - Before tool execution (can block)
 - `post_tool_use` - After tool execution (can add context)

@@ -198,6 +198,52 @@ defmodule ClaudeAgentSDK.ClientTest do
       assert hooks_config["PreToolUse"] |> List.first() |> Map.get("matcher") == "Bash"
       assert hooks_config["PostToolUse"] |> List.first() |> Map.get("matcher") == "*"
     end
+
+    test "includes matcher timeout when present" do
+      callback = fn _, _, _ -> Output.allow() end
+
+      hooks = %{
+        pre_tool_use: [
+          Matcher.new("Bash", [callback], timeout_ms: 1_500)
+        ]
+      }
+
+      registry = Hooks.Registry.new()
+      registry = Hooks.Registry.register(registry, callback)
+
+      hooks_config =
+        hooks
+        |> Enum.map(fn {event, matchers} ->
+          event_str = Hooks.event_to_string(event)
+
+          matchers_config =
+            Enum.map(matchers, fn matcher ->
+              callback_ids =
+                Enum.map(matcher.hooks, fn cb ->
+                  Hooks.Registry.get_id(registry, cb)
+                end)
+
+              %{
+                "matcher" => matcher.matcher,
+                "hookCallbackIds" => callback_ids,
+                "timeout" => matcher.timeout_ms
+              }
+            end)
+
+          {event_str, matchers_config}
+        end)
+        |> Map.new()
+
+      assert hooks_config == %{
+               "PreToolUse" => [
+                 %{
+                   "matcher" => "Bash",
+                   "hookCallbackIds" => ["hook_0"],
+                   "timeout" => 1_500
+                 }
+               ]
+             }
+    end
   end
 
   describe "hook callback invocation (simulated)" do

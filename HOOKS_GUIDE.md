@@ -31,7 +31,7 @@ Claude Code Hooks are callback functions that execute at specific lifecycle even
 - **Bidirectional control**: Can approve, deny, or modify behavior
 - **Pattern-based matching**: Target specific tools or all tools
 - **Not visible to Claude**: Infrastructure-level callbacks
-- **60-second timeout**: Automatic timeout protection
+- **Timeouts**: 60-second default per matcher (`timeout_ms`, minimum 1s)
 
 ---
 
@@ -91,6 +91,8 @@ Client.stream_messages(client)
 # Stop client
 Client.stop(client)
 ```
+
+Each matcher can set `timeout_ms` when you need a different execution window; the default is 60_000 ms with a 1-second floor and is shared with the CLI during initialization.
 
 ---
 
@@ -623,12 +625,13 @@ Type definitions and utilities.
 Hook matcher for pattern-based filtering.
 
 **Functions**:
-- `new/2` - Create new matcher
+- `new/3` - Create new matcher (`timeout_ms` opt, default 60s, min 1s)
 - `to_cli_format/2` - Convert to CLI JSON format
 
 **Fields**:
 - `matcher` - Tool pattern (nil, "*", "Tool", "Tool1|Tool2")
 - `hooks` - List of callback functions
+- `timeout_ms` - Optional timeout (ms) sent during initialize
 
 ### ClaudeAgentSDK.Hooks.Output
 
@@ -684,7 +687,7 @@ These hooks only work in interactive CLI mode.
 
 ### Timeout
 
-All hooks have a 60-second default timeout. If your hook takes longer:
+Hooks default to a 60-second timeout (minimum 1 second). Override it per matcher with `timeout_ms`—the value is shared with the CLI during initialization. If your hook still takes too long:
 
 1. Optimize the hook logic
 2. Move slow operations to background tasks

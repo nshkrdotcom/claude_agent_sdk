@@ -10,6 +10,7 @@ defmodule ClaudeAgentSDK.Hooks.MatcherTest do
 
       assert matcher.matcher == "Bash"
       assert matcher.hooks == [callback]
+      assert matcher.timeout_ms == nil
     end
 
     test "creates matcher with regex pattern" do
@@ -18,6 +19,7 @@ defmodule ClaudeAgentSDK.Hooks.MatcherTest do
 
       assert matcher.matcher == "Write|Edit"
       assert matcher.hooks == [callback]
+      assert matcher.timeout_ms == nil
     end
 
     test "creates matcher for all tools" do
@@ -25,6 +27,7 @@ defmodule ClaudeAgentSDK.Hooks.MatcherTest do
       matcher = Matcher.new("*", [callback])
 
       assert matcher.matcher == "*"
+      assert matcher.timeout_ms == nil
     end
 
     test "creates matcher with nil (matches all)" do
@@ -32,6 +35,7 @@ defmodule ClaudeAgentSDK.Hooks.MatcherTest do
       matcher = Matcher.new(nil, [callback])
 
       assert matcher.matcher == nil
+      assert matcher.timeout_ms == nil
     end
 
     test "creates matcher with multiple hooks" do
@@ -40,12 +44,28 @@ defmodule ClaudeAgentSDK.Hooks.MatcherTest do
       matcher = Matcher.new("Bash", [callback1, callback2])
 
       assert length(matcher.hooks) == 2
+      assert matcher.timeout_ms == nil
     end
 
     test "creates matcher with empty hooks list" do
       matcher = Matcher.new("Bash", [])
 
       assert matcher.hooks == []
+      assert matcher.timeout_ms == nil
+    end
+
+    test "stores optional timeout value" do
+      callback = fn _, _, _ -> %{} end
+      matcher = Matcher.new("Bash", [callback], timeout_ms: 1_500)
+
+      assert matcher.timeout_ms == 1_500
+    end
+
+    test "floors non-positive timeout to minimum" do
+      callback = fn _, _, _ -> %{} end
+      matcher = Matcher.new("Bash", [callback], timeout_ms: 0)
+
+      assert matcher.timeout_ms == 1_000
     end
   end
 
@@ -60,6 +80,20 @@ defmodule ClaudeAgentSDK.Hooks.MatcherTest do
       assert result == %{
                "matcher" => "Bash",
                "hookCallbackIds" => ["hook_0"]
+             }
+    end
+
+    test "includes timeout when present" do
+      callback = fn _, _, _ -> %{} end
+      matcher = Matcher.new("Bash", [callback], timeout_ms: 2_000)
+
+      id_fn = fn ^callback -> "hook_0" end
+      result = Matcher.to_cli_format(matcher, id_fn)
+
+      assert result == %{
+               "matcher" => "Bash",
+               "hookCallbackIds" => ["hook_0"],
+               "timeout" => 2_000
              }
     end
 
