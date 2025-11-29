@@ -444,7 +444,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   defp build_streaming_args(%Options{} = options) do
     base_args = [
-      "--print",
       "--input-format",
       "stream-json",
       "--output-format",
@@ -491,6 +490,12 @@ defmodule ClaudeAgentSDK.Streaming.Session do
         {:ok, {pid, os_pid}, :monitor_via_erlexec}
 
       {:error, reason} ->
+        Logger.error("Failed to start Claude CLI subprocess",
+          cmd: cmd,
+          reason: reason,
+          env_keys: env_keys(exec_opts)
+        )
+
         {:error, reason}
     end
   end
@@ -522,18 +527,47 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   defp build_env_vars do
     # Pass authentication environment variables to subprocess
-    []
-    |> add_env_var("CLAUDE_AGENT_OAUTH_TOKEN")
-    |> add_env_var("ANTHROPIC_API_KEY")
-    |> add_env_var("PATH")
-    |> add_env_var("HOME")
+    base_vars =
+      []
+      |> add_env_var("CLAUDE_AGENT_OAUTH_TOKEN")
+      |> add_env_var("ANTHROPIC_API_KEY")
+      |> add_env_var("PATH")
+      |> add_env_var("HOME")
+
+    # Add SDK identification (matching Process.ex behavior)
+    sdk_vars = [
+      {~c"CLAUDE_CODE_ENTRYPOINT", ~c"sdk-elixir"},
+      {~c"CLAUDE_AGENT_SDK_VERSION", version_string() |> String.to_charlist()}
+    ]
+
+    base_vars ++ sdk_vars
+  end
+
+  defp version_string do
+    case Application.spec(:claude_agent_sdk, :vsn) do
+      nil -> "unknown"
+      version -> to_string(version)
+    end
   end
 
   defp add_env_var(env_vars, var_name) do
     case System.get_env(var_name) do
       nil -> env_vars
+      "" -> env_vars
       value -> [{String.to_charlist(var_name), String.to_charlist(value)} | env_vars]
     end
+  end
+
+  defp env_keys(opts) do
+    opts
+    |> Enum.find_value([], fn
+      {:env, env} -> env
+      _ -> nil
+    end)
+    |> Enum.map(fn
+      {key, _} when is_list(key) -> to_string(key)
+      {key, _} -> inspect(key)
+    end)
   end
 
   defp extract_session_id(events) do

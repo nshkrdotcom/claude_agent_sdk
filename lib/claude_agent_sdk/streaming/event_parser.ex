@@ -17,6 +17,8 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
   - https://docs.anthropic.com/en/api/messages-streaming
   """
 
+  alias ClaudeAgentSDK.AssistantError
+
   @type event :: map()
   @type accumulated_text :: String.t()
 
@@ -189,12 +191,18 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     structured_output =
       Map.get(event, "structured_output") || get_in(event, ["message", "structured_output"])
 
+    error =
+      event
+      |> fetch_assistant_error()
+      |> AssistantError.cast()
+
     message_stop_event =
       %{
         type: :message_stop,
         final_text: accumulated_text
       }
       |> maybe_put_structured_output(structured_output)
+      |> maybe_put_error(error)
 
     events = [message_stop_event]
 
@@ -291,4 +299,11 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
 
   defp maybe_put_structured_output(event, structured_output),
     do: Map.put(event, :structured_output, structured_output)
+
+  defp maybe_put_error(event, nil), do: event
+  defp maybe_put_error(event, error), do: Map.put(event, :error, error)
+
+  defp fetch_assistant_error(event) do
+    Map.get(event, "error") || get_in(event, ["message", "error"])
+  end
 end

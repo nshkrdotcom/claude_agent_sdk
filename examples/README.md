@@ -9,6 +9,10 @@ Run any example with: `mix run examples/<example_name>.exs`
 For live CLI behavior (instead of the default mock), set `LIVE_MODE=true` or ensure
 `Application.put_env(:claude_agent_sdk, :use_mock, false)` before calling the SDK.
 
+### ⚠️ Assistant Errors (ADR 0004)
+
+- [`assistant_error_live.exs`](assistant_error_live.exs) — live demo that surfaces assistant error enums on both streaming `message_stop` events and aggregated assistant messages. Run with `mix run.live examples/assistant_error_live.exs` after authenticating (`claude login` or `CLAUDE_AGENT_OAUTH_TOKEN`).
+
 ## 📂 Available Examples
 
 ### 🧱 Structured Outputs (CLI JSON Schema)

@@ -406,13 +406,18 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_allowed_tools_args(args, %{allowed_tools: nil}), do: args
 
+  defp add_allowed_tools_args(args, %{allowed_tools: tools}) when tools == [], do: args
+
   defp add_allowed_tools_args(args, %{allowed_tools: tools}),
-    do: args ++ ["--allowedTools", Enum.join(tools, " ")]
+    do: args ++ ["--allowedTools", Enum.join(tools, ",")]
 
   defp add_disallowed_tools_args(args, %{disallowed_tools: nil}), do: args
 
+  defp add_disallowed_tools_args(args, %{disallowed_tools: tools}) when tools == [],
+    do: args
+
   defp add_disallowed_tools_args(args, %{disallowed_tools: tools}),
-    do: args ++ ["--disallowedTools", Enum.join(tools, " ")]
+    do: args ++ ["--disallowedTools", Enum.join(tools, ",")]
 
   defp add_continue_args(args, %{continue_conversation: true}), do: args ++ ["--continue"]
   defp add_continue_args(args, _), do: args

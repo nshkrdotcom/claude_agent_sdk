@@ -37,4 +37,28 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
       refute Map.has_key?(parsed, :structured_output)
     end
   end
+
+  describe "parse_event/2 assistant errors" do
+    test "propagates top-level error on message_stop" do
+      event = %{"type" => "message_stop", "error" => "billing_error"}
+
+      {:ok, [parsed], new_acc} = EventParser.parse_event(event, "final text")
+
+      assert parsed.type == :message_stop
+      assert parsed.error == :billing_error
+      assert parsed.final_text == "final text"
+      assert new_acc == ""
+    end
+
+    test "propagates nested error on message_stop" do
+      event = %{
+        "type" => "message_stop",
+        "message" => %{"error" => "authentication_failed"}
+      }
+
+      {:ok, [parsed], _} = EventParser.parse_event(event, "")
+
+      assert parsed.error == :authentication_failed
+    end
+  end
 end

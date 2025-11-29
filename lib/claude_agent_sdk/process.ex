@@ -12,6 +12,8 @@ defmodule ClaudeAgentSDK.Process do
   at once, then converts it to a lazy stream for consumption.
   """
 
+  require Logger
+
   alias ClaudeAgentSDK.{Message, Options}
 
   @doc """
@@ -88,6 +90,12 @@ defmodule ClaudeAgentSDK.Process do
             }
 
           {:error, reason} ->
+            Logger.error("Failed to start Claude CLI (sync run)",
+              cmd: cmd,
+              reason: reason,
+              env_keys: env_keys(exec_options)
+            )
+
             formatted_error = format_error_message(reason, options)
 
             error_msg = %Message{
@@ -137,6 +145,12 @@ defmodule ClaudeAgentSDK.Process do
         receive_exec_output(pid, os_pid, [], [], timeout_ms)
 
       {:error, reason} ->
+        Logger.error("Failed to start Claude CLI (stdin run)",
+          cmd: cmd,
+          reason: reason,
+          env_keys: env_keys(stdin_exec_options)
+        )
+
         formatted_error = format_error_message(reason, options)
 
         error_msg = %Message{
@@ -375,6 +389,19 @@ defmodule ClaudeAgentSDK.Process do
 
   @doc false
   def __env_vars__(%Options{} = options), do: build_env_vars(options)
+
+  defp env_keys(opts) do
+    opts
+    |> Enum.find_value([], fn
+      {:env, env} -> env
+      _ -> nil
+    end)
+    |> Enum.map(fn
+      {key, _} when is_binary(key) -> key
+      {key, _} when is_atom(key) -> Atom.to_string(key)
+      {key, _} -> to_string(key)
+    end)
+  end
 
   defp ensure_json_flags(args) do
     cond do

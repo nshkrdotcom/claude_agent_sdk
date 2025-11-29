@@ -41,6 +41,36 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
     end
   end
 
+  describe "tool allowlists/denylists" do
+    test "allowed_tools are comma-joined to match CLI expectations" do
+      options = %Options{allowed_tools: ["Read", "Write", "Bash"]}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--allowedTools", "Read,Write,Bash")
+    end
+
+    test "allowed_tools empty list omits flag" do
+      options = %Options{allowed_tools: []}
+      args = Options.to_args(options)
+
+      refute "--allowedTools" in args
+    end
+
+    test "disallowed_tools are comma-joined to match CLI expectations" do
+      options = %Options{disallowed_tools: ["Bash", "Edit"]}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--disallowedTools", "Bash,Edit")
+    end
+
+    test "disallowed_tools empty list omits flag" do
+      options = %Options{disallowed_tools: []}
+      args = Options.to_args(options)
+
+      refute "--disallowedTools" in args
+    end
+  end
+
   describe "plugins and extra args" do
     test "local plugin entries become --plugin-dir flags" do
       options = %Options{

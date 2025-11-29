@@ -34,6 +34,7 @@
    - Integration mock: feed a stream including an assistant error and ensure downstream sees it.
 4) **Docs**
    - Note the field in message type docs and give example handling (e.g., show a retry prompt on `rate_limit`).
+   - Provide a live example demonstrating both aggregated assistant messages and streaming `message_stop` events surfacing the error code.
 
 ## Alternatives Considered
 - Expose only in result frames — rejected; assistant-level errors are useful for mid-stream handling.

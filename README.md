@@ -886,8 +886,25 @@ The SDK returns a stream of `ClaudeAgentSDK.Message` structs with these types:
 
 - **`:system`** - Session initialization (session_id, model, tools)
 - **`:user`** - User messages  
-- **`:assistant`** - Claude's responses
+- **`:assistant`** - Claude's responses (data includes `:message`, `:session_id`, and optional `:error` from `:authentication_failed | :billing_error | :rate_limit | :invalid_request | :server_error | :unknown`)
 - **`:result`** - Final result with cost/duration stats
+
+Handle assistant errors surfaced mid-stream to tailor UX (e.g., retry prompts on rate limits):
+
+```elixir
+case message do
+  %ClaudeAgentSDK.Message{type: :assistant, data: %{error: :rate_limit}} ->
+    IO.puts("Rate limited — prompt the user to retry or wait.")
+
+  %ClaudeAgentSDK.Message{type: :assistant, data: %{error: :authentication_failed}} ->
+    IO.puts("Auth error — show login helper or token setup instructions.")
+
+  %ClaudeAgentSDK.Message{type: :assistant} ->
+    :ok
+end
+
+# Live demo: `mix run.live examples/assistant_error_live.exs`
+```
 
 ### Message Processing
 

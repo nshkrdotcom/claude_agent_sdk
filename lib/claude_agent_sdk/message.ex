@@ -13,6 +13,9 @@ defmodule ClaudeAgentSDK.Message do
   - `:assistant` - Claude's response messages containing the actual AI output
   - `:result` - Final result messages with cost, duration, and completion status
 
+  Assistant messages may optionally include an `error` code when the CLI surfaces
+  an issue (e.g., `:rate_limit` or `:authentication_failed`).
+
   ## Result Subtypes
 
   - `:success` - Successful completion
@@ -35,6 +38,17 @@ defmodule ClaudeAgentSDK.Message do
         }
       }
 
+      # Assistant message with error metadata
+      %ClaudeAgentSDK.Message{
+        type: :assistant,
+        subtype: nil,
+        data: %{
+          message: %{"content" => "Please try again later."},
+          session_id: "session-123",
+          error: :rate_limit
+        }
+      }
+
       # Result message
       %ClaudeAgentSDK.Message{
         type: :result,
@@ -49,16 +63,24 @@ defmodule ClaudeAgentSDK.Message do
 
   """
 
+  alias ClaudeAgentSDK.AssistantError
+
   defstruct [:type, :subtype, :data, :raw]
 
   @type message_type :: :assistant | :user | :result | :system
   @type result_subtype :: :success | :error_max_turns | :error_during_execution
   @type system_subtype :: :init
+  @type assistant_error :: AssistantError.t()
+  @type assistant_data :: %{
+          required(:message) => map(),
+          required(:session_id) => String.t() | nil,
+          optional(:error) => assistant_error() | nil
+        }
 
   @type t :: %__MODULE__{
           type: message_type(),
           subtype: result_subtype() | system_subtype() | nil,
-          data: map(),
+          data: assistant_data() | map(),
           raw: map()
         }
 
@@ -122,7 +144,8 @@ defmodule ClaudeAgentSDK.Message do
             "role" => "assistant",
             "content" => content
           },
-          "session_id" => extract_string_field(str, "session_id")
+          "session_id" => extract_string_field(str, "session_id"),
+          "error" => extract_string_field(str, "error")
         }
 
       String.contains?(str, ~s("type":"result")) ->
@@ -223,7 +246,7 @@ defmodule ClaudeAgentSDK.Message do
   end
 
   defp parse_by_type(message, :assistant, raw) do
-    %{message | data: %{message: raw["message"], session_id: raw["session_id"]}}
+    %{message | data: build_assistant_data(raw)}
   end
 
   defp parse_by_type(message, :user, raw) do
@@ -244,6 +267,21 @@ defmodule ClaudeAgentSDK.Message do
 
   defp parse_by_type(message, _unknown_type, raw) do
     %{message | data: raw}
+  end
+
+  defp build_assistant_data(raw) do
+    %{
+      message: raw["message"],
+      session_id: raw["session_id"]
+    }
+    |> maybe_put_assistant_error(raw["error"])
+  end
+
+  defp maybe_put_assistant_error(data, error_value) do
+    case AssistantError.cast(error_value) do
+      nil -> data
+      parsed_error -> Map.put(data, :error, parsed_error)
+    end
   end
 
   defp build_result_data(:success, raw) do
