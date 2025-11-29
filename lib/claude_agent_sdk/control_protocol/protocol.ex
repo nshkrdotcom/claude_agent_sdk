@@ -133,6 +133,28 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   end
 
   @doc """
+  Encodes a set_permission_mode control request.
+
+  Returns `{request_id, json}`.
+  """
+  @spec encode_set_permission_mode_request(String.t(), request_id() | nil) ::
+          {request_id(), String.t()}
+  def encode_set_permission_mode_request(mode, request_id \\ nil) when is_binary(mode) do
+    req_id = request_id || generate_request_id()
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => req_id,
+      "request" => %{
+        "subtype" => "set_permission_mode",
+        "mode" => mode
+      }
+    }
+
+    {req_id, Jason.encode!(request)}
+  end
+
+  @doc """
   Encodes a hook callback response.
 
   Sends the result of a hook callback execution back to CLI.

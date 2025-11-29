@@ -219,7 +219,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     args = build_streaming_args(opts)
 
     # Start subprocess with stdin/stdout/stderr pipes
-    case spawn_subprocess(args) do
+    case spawn_subprocess(args, opts) do
       {:ok, subprocess, monitor_ref} ->
         state = %__MODULE__{
           subprocess: subprocess,
@@ -464,7 +464,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     base_args ++ user_args
   end
 
-  defp spawn_subprocess(args) do
+  defp spawn_subprocess(args, %Options{} = options) do
     # Find claude executable
     executable = CLI.find_executable!()
 
@@ -473,13 +473,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     cmd = Enum.join([executable | quoted_args], " ")
 
     # Build exec options with environment variables
-    exec_opts = [
-      :stdin,
-      :stdout,
-      :stderr,
-      :monitor,
-      {:env, build_env_vars()}
-    ]
+    exec_opts = build_exec_opts(options)
 
     # Spawn subprocess
     case :exec.run(cmd, exec_opts) do
@@ -524,38 +518,41 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     end
   end
 
-  defp build_env_vars do
-    # Pass authentication environment variables to subprocess
-    base_vars =
-      []
-      |> add_env_var("CLAUDE_AGENT_OAUTH_TOKEN")
-      |> add_env_var("ANTHROPIC_API_KEY")
-      |> add_env_var("PATH")
-      |> add_env_var("HOME")
+  defp build_exec_opts(%Options{} = options) do
+    env = build_env_vars(options)
 
-    # Add SDK identification (matching Process.ex behavior)
-    sdk_vars = [
-      {~c"CLAUDE_CODE_ENTRYPOINT", ~c"sdk-elixir"},
-      {~c"CLAUDE_AGENT_SDK_VERSION", version_string() |> String.to_charlist()}
-    ]
-
-    base_vars ++ sdk_vars
+    [:stdin, :stdout, :stderr, :monitor]
+    |> maybe_put_env_option(env)
+    |> maybe_put_user_option(options.user)
+    |> maybe_put_cd_option(options.cwd)
   end
 
-  defp version_string do
-    case Application.spec(:claude_agent_sdk, :vsn) do
-      nil -> "unknown"
-      version -> to_string(version)
-    end
+  @doc false
+  def __exec_opts__(%Options{} = options), do: build_exec_opts(options)
+
+  defp build_env_vars(%Options{} = options) do
+    options
+    |> ClaudeAgentSDK.Process.__env_vars__()
+    |> Enum.map(fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
   end
 
-  defp add_env_var(env_vars, var_name) do
-    case System.get_env(var_name) do
-      nil -> env_vars
-      "" -> env_vars
-      value -> [{String.to_charlist(var_name), String.to_charlist(value)} | env_vars]
-    end
+  defp maybe_put_env_option(opts, []), do: opts
+  defp maybe_put_env_option(opts, env) when is_list(env), do: [{:env, env} | opts]
+
+  defp maybe_put_user_option(opts, nil), do: opts
+
+  defp maybe_put_user_option(opts, user) when is_binary(user) do
+    [{:user, String.to_charlist(user)} | opts]
   end
+
+  defp maybe_put_cd_option(opts, nil), do: opts
+
+  defp maybe_put_cd_option(opts, cwd) when is_binary(cwd) do
+    unless File.dir?(cwd), do: File.mkdir_p!(cwd)
+    [{:cd, cwd} | opts]
+  end
+
+  defp maybe_put_cd_option(opts, _), do: opts
 
   defp env_keys(opts) do
     opts

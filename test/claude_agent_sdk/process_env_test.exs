@@ -3,8 +3,11 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
 
   alias ClaudeAgentSDK.{Options, Process}
 
-  test "env builder merges option overrides" do
-    options = %Options{env: %{"PORT_ENV_TEST" => "from_process", :PATH => "/custom"}}
+  test "env builder merges option overrides and user" do
+    options = %Options{
+      env: %{"PORT_ENV_TEST" => "from_process", :PATH => "/custom"},
+      user: "runner"
+    }
 
     env_map =
       Process.__env_vars__(options)
@@ -12,6 +15,8 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
 
     assert env_map["PORT_ENV_TEST"] == "from_process"
     assert env_map["PATH"] == "/custom"
+    assert env_map["USER"] == "runner"
+    assert env_map["LOGNAME"] == "runner"
     assert env_map["CLAUDE_CODE_ENTRYPOINT"] == "sdk-elixir"
     assert env_map["CLAUDE_AGENT_SDK_VERSION"]
   end

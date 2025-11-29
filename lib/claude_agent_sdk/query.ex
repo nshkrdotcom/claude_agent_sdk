@@ -18,6 +18,7 @@ defmodule ClaudeAgentSDK.Query do
 
   alias ClaudeAgentSDK.{Options, Process}
   alias ClaudeAgentSDK.Query.ClientStream
+  alias ClaudeAgentSDK.Transport.StreamingRouter
 
   @doc """
   Runs a new query with the given prompt and options.
@@ -49,13 +50,13 @@ defmodule ClaudeAgentSDK.Query do
   """
   @spec run(String.t(), Options.t()) :: Enumerable.t(ClaudeAgentSDK.Message.t())
   def run(prompt, %Options{} = options) do
-    if has_sdk_mcp_servers?(options) do
-      # Use Client GenServer for SDK MCP support
-      ClientStream.stream(prompt, options)
+    if control_client_required?(options) do
+      # Use Client GenServer when control protocol features are present
+      client_stream_module().stream(prompt, options)
     else
       # Use simple Process.stream for non-SDK-MCP queries
       {args, stdin_prompt} = build_args(prompt, options)
-      Process.stream(args, options, stdin_prompt)
+      process_module().stream(args, options, stdin_prompt)
     end
   end
 
@@ -138,5 +139,17 @@ defmodule ClaudeAgentSDK.Query do
     Enum.any?(servers, fn {_name, config} ->
       is_map(config) and Map.get(config, :type) == :sdk
     end)
+  end
+
+  defp control_client_required?(%Options{} = options) do
+    has_sdk_mcp_servers?(options) or StreamingRouter.requires_control_protocol?(options)
+  end
+
+  defp client_stream_module do
+    Application.get_env(:claude_agent_sdk, :client_stream_module, ClientStream)
+  end
+
+  defp process_module do
+    Application.get_env(:claude_agent_sdk, :process_module, Process)
   end
 end

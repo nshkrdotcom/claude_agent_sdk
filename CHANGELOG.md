@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hook matcher timeouts (ADR 0002): per-matcher `timeout_ms` flows to `"timeout"` in initialize, bounds hook callback execution, and is showcased in the live `examples/hooks/complete_workflow.exs` plus README/HOOKS_GUIDE updates.
 - Assistant message error field parity (ADR 0004): optional `error` enum on assistant messages, streaming `message_stop` propagation, and a live demo in `examples/assistant_error_live.exs` with README/docs updates.
 
+## [0.6.3] - 2025-11-29
+
+### Added
+
+- Control protocol parity updates:
+  - `Client.set_permission_mode/2` now issues control requests to the CLI and tracks acknowledgements.
+  - `ClaudeAgentSDK.query/2` auto-selects the control client when hooks, permission callbacks, agents, or non-default permission modes are configured (not just SDK MCP servers).
+  - `Client.stream_messages/1` forwards partial `stream_event` frames as `%{type: :stream_event, event: ...}` so typewriter UIs can consume deltas alongside messages.
+- Transport enhancements honor the `user` option across erlexec/streaming/port flows (env + user flag), enabling execution under an alternate OS account when permitted.
+- Documentation updates reflecting the 2025-11-29 gap analysis and the new control/streaming behaviors.
+
 ## [0.6.2] - 2025-11-29
 
 ### Added

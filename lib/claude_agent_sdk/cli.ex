@@ -58,28 +58,21 @@ defmodule ClaudeAgentSDK.CLI do
   """
   @spec version() :: {:ok, String.t()} | {:error, term()}
   def version do
-    with {:ok, executable} <- find_executable(),
-         {output, 0} <- System.cmd(executable, ["--version"], stderr_to_stdout: true),
-         {:ok, version} <- parse_version(output) do
-      {:ok, version}
-    else
+    case find_executable() do
+      {:ok, executable} ->
+        case System.cmd(executable, ["--version"], stderr_to_stdout: true) do
+          {output, 0} ->
+            case parse_version(output) do
+              {:ok, version} -> {:ok, version}
+              _ -> {:error, :parse_failed}
+            end
+
+          {_output, status} ->
+            {:error, {:exit_status, status}}
+        end
+
       {:error, :not_found} = error ->
         error
-
-      {:error, _reason} = error ->
-        error
-
-      {_output, status} ->
-        {:error, {:exit_status, status}}
-
-      :error ->
-        {:error, :parse_failed}
-
-      other ->
-        cond do
-          match?({:error, _}, other) -> other
-          true -> {:error, :version_command_failed}
-        end
     end
   end
 

@@ -126,8 +126,12 @@ defmodule ClaudeAgentSDK.Process do
     # Add stdin to the exec options and use async execution
     # Build fresh options with env vars for async mode
     env_vars = build_env_vars(options)
-    base_options = if env_vars != [], do: [{:env, env_vars}], else: []
-    stdin_exec_options = [:stdin, :stdout, :stderr, :monitor] ++ base_options
+
+    stdin_exec_options =
+      [:stdin, :stdout, :stderr, :monitor]
+      |> maybe_put_env_option(env_vars)
+      |> maybe_put_user_option(options.user)
+      |> maybe_put_cd_option(options.cwd)
 
     case :exec.run(cmd, stdin_exec_options) do
       {:ok, pid, os_pid} ->
@@ -315,21 +319,10 @@ defmodule ClaudeAgentSDK.Process do
     # Add environment variables (critical for authentication!)
     env_options = build_env_vars(options)
 
-    base_options =
-      if env_options != [], do: [{:env, env_options} | base_options], else: base_options
-
-    case options.cwd do
-      nil ->
-        base_options
-
-      cwd ->
-        # Ensure the directory exists
-        unless File.dir?(cwd) do
-          File.mkdir_p!(cwd)
-        end
-
-        [{:cd, cwd} | base_options]
-    end
+    base_options
+    |> maybe_put_env_option(env_options)
+    |> maybe_put_user_option(options.user)
+    |> maybe_put_cd_option(options.cwd)
   end
 
   defp build_env_vars(%Options{} = options) do
@@ -355,10 +348,19 @@ defmodule ClaudeAgentSDK.Process do
         {key, nil}, acc -> Map.delete(acc, key)
         {key, value}, acc -> Map.put(acc, key, to_string(value))
       end)
+      |> maybe_put_user_env(options.user)
       |> Map.put_new("CLAUDE_CODE_ENTRYPOINT", "sdk-elixir")
       |> Map.put_new("CLAUDE_AGENT_SDK_VERSION", version_string())
 
     Enum.map(merged, fn {k, v} -> {k, v} end)
+  end
+
+  defp maybe_put_user_env(env_map, nil), do: env_map
+
+  defp maybe_put_user_env(env_map, user) when is_binary(user) do
+    env_map
+    |> Map.put("USER", user)
+    |> Map.put("LOGNAME", user)
   end
 
   defp shell_escape(arg) do
@@ -379,6 +381,27 @@ defmodule ClaudeAgentSDK.Process do
 
   @doc false
   def __env_vars__(%Options{} = options), do: build_env_vars(options)
+
+  @doc false
+  def __exec_options__(%Options{} = options), do: build_exec_options(options)
+
+  defp maybe_put_env_option(opts, []), do: opts
+  defp maybe_put_env_option(opts, env) when is_list(env), do: [{:env, env} | opts]
+
+  defp maybe_put_cd_option(opts, nil), do: opts
+
+  defp maybe_put_cd_option(opts, cwd) when is_binary(cwd) do
+    unless File.dir?(cwd), do: File.mkdir_p!(cwd)
+    [{:cd, cwd} | opts]
+  end
+
+  defp maybe_put_cd_option(opts, _), do: opts
+
+  defp maybe_put_user_option(opts, nil), do: opts
+
+  defp maybe_put_user_option(opts, user) when is_binary(user) do
+    [{:user, String.to_charlist(user)} | opts]
+  end
 
   defp env_keys(opts) do
     opts

@@ -69,7 +69,7 @@ npm install -g @anthropic-ai/claude-code
 - The SDK now centralizes CLI lookup in `ClaudeAgentSDK.CLI`, trying `claude-code` first and then `claude`.
 - Minimum supported CLI version: `1.0.0`. Check with `ClaudeAgentSDK.CLI.version_supported?/0` or print the detected version via `ClaudeAgentSDK.CLI.version/0`.
 - Emit an upgrade hint for operators with `ClaudeAgentSDK.CLI.warn_if_outdated/0`.
-- Any live example (e.g., `mix run.live examples/basic_example.exs`) will use the same discovery logic, so running one is a quick end-to-end verification of your install.
+- Any example (e.g., `mix run examples/basic_example.exs`) will use the same discovery logic, so running one is a quick end-to-end verification of your install.
 
 ## Installation
 
@@ -78,7 +78,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.6.2"}
+    {:claude_agent_sdk, "~> 0.6.3"}
   ]
 end
 ```
@@ -103,18 +103,13 @@ mix deps.get
 
 3. **Run the showcase**:
    ```bash
-   # Safe demo with mocks (no API costs)
    mix showcase
-   
-   # Live demo with real API calls (requires authentication)
-   mix showcase --live
    ```
 
-4. **Try the live script runner**:
+4. **Try the script runner**:
    ```bash
-   # Run example scripts with live API calls
-   mix run.live examples/basic_example.exs
-   mix run.live examples/simple_analyzer.exs lib/claude_agent_sdk.ex
+   mix run examples/basic_example.exs
+   mix run examples/simple_analyzer.exs lib/claude_agent_sdk.ex
    ```
 
 ## Streaming + Tools (v0.6.0)
@@ -290,7 +285,7 @@ See working examples in `examples/streaming_tools/`:
 - **StreamingRouter**: Intelligent routing between CLI-only and control client transports
 - **Polymorphic API**: Same `Streaming` API works with both transports seamlessly
 - **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
-- **Live Script Runner**: `mix run.live` for executing scripts with real API calls
+- **Live Script Runner**: `mix run` for executing scripts with real API calls
 - **Message Processing**: Structured message types with proper parsing
 - **Options Configuration**: Full CLI argument mapping with smart presets and correct CLI formats
 - **Subprocess Management**: Robust erlexec integration with stdin support
@@ -357,7 +352,7 @@ See working examples in `examples/streaming_tools/`:
   - Tool input modification and execution interrupts
   - `Client.set_permission_mode/2` for runtime mode changes
   - 49 tests covering security scenarios
-- **Runtime Control** (v0.6.2): Change models and transports without restarting
+- **Runtime Control** (v0.6.3): Change models and transports without restarting
   - `Client.set_model/2` to switch models mid-conversation
   - `Client.get_model/1` to introspect active configuration
   - `Client.interrupt/1` to stop runaway tool executions
@@ -435,22 +430,21 @@ You can try the runtime control examples directly:
 mix run examples/runtime_control/model_switcher.exs
 mix run examples/runtime_control/transport_swap.exs
 mix run examples/runtime_control/subscriber_broadcast.exs
+mix run examples/control_parity_live.exs
 ```
 
-Pass `--live` to any script to attempt the default CLI transport once `claude login` is configured.
 The model switcher prints the model before and after calling `set_model/2`, making it easy to confirm the change succeeded in real time.
 
-## Runtime Control Enhancements (v0.6.2)
+## Runtime Control Enhancements (v0.6.3)
 
-The 0.6.2 release tightens parity with the Python SDK and makes custom transports easier to work with:
+The 0.6.3 release closes the remaining Python parity gaps:
 
-- **`Client.interrupt/1`** — send a control protocol interrupt from Elixir and stop dangerous or runaway tool calls instantly.
-- **`Client.get_server_info/1`** — capture the CLI’s initialization payload (commands, output styles, capability flags) for your UI or logging layer.
-- **`Client.receive_response/1`** — a bounded helper that streams until the `:result` frame, perfect for REPLs or short-lived jobs.
-- **Expanded `Options` struct** — configure budgets, resume/fork semantics, plugin directories, env/extra CLI flags, and thinking-token caps exactly like the Python SDK.
-- **Transport/Process parity** — `ClaudeAgentSDK.Transport.Port` and `ClaudeAgentSDK.Process` now respect `Options.env`, custom cwd, and larger buffer sizes while stamping `CLAUDE_AGENT_SDK_VERSION` into every subprocess.
+- **Permission mode toggles are live** — `Client.set_permission_mode/2` now sends a control protocol request to the CLI and waits for acknowledgement.
+- **Control-aware `query/2`** — hooks, permission callbacks, agents, and non-default permission modes automatically route through the control client (not just SDK MCP servers).
+- **Partial events in-band** — `Client.stream_messages/1` now emits `%{type: :stream_event, event: ...}` items when `include_partial_messages` is enabled, so typewriter UIs can use the same stream.
+- **Run as another user** — `Options.user` now flows into erlexec/streaming/port transports (env + user flag) for deployments that need a dedicated OS account.
 
-See [CHANGELOG.md](CHANGELOG.md#061---2025-11-11) for the complete diff.
+See [CHANGELOG.md](CHANGELOG.md#063---2025-11-29) for the complete diff.
 
 ## Testing with Mocks
 
@@ -505,298 +499,67 @@ For detailed documentation about the mocking system, see [MOCKING.md](MOCKING.md
 ### 🎯 Getting Started (Start Here!)
 
 ```bash
-# 1. Quick showcase - demonstrates all features in mock mode (FREE)
+# 1. Showcase - demonstrates all features
 mix showcase
 
-# 2. Live showcase - same with real API calls (costs money)
-mix showcase --live
-
-# 3. Simple SDK MCP test - verify MCP integration (FREE)
+# 2. Simple SDK MCP test - verify MCP integration
 mix run examples/advanced_features/sdk_mcp_simple_test.exs
 ```
 
 ---
 
-### 🌟 MCP Tools (SDK MCP Servers)
-
-**Mock Mode (FREE - No API costs):**
-```bash
-# MCP Calculator - Tool definition and direct execution
-mix run examples/advanced_features/mcp_calculator_tool.exs
-
-# SDK MCP Simple Test - Comprehensive validation
-mix run examples/advanced_features/sdk_mcp_simple_test.exs
-```
-
-**Live Mode (Real API calls - costs money):**
-```bash
-# SDK MCP Live Demo - Real Claude using SDK tools
-MIX_ENV=test mix run.live examples/advanced_features/sdk_mcp_live_demo.exs
-```
-
----
-
-### 🤖 Agents & Permissions
-
-**Mock Mode (FREE):**
-```bash
-# Agent Switching - Multi-agent workflows
-mix run examples/advanced_features/agent_switching.exs
-
-# Permission Control - Security callbacks
-mix run examples/advanced_features/permission_control.exs
-
-# Full Feature Showcase - All three features together
-mix run examples/advanced_features/full_feature_showcase.exs
-```
-
-**Live Mode (Real API calls - costs money):**
-```bash
-# Agents Live - Real agent switching with multi-turn workflow
-MIX_ENV=test mix run.live examples/advanced_features/agents_live.exs
-
-# Permissions Live - Real permission checks and auditing
-MIX_ENV=test mix run.live examples/advanced_features/permissions_live.exs
-```
-
----
-
-### 🪝 Hooks System
-
-**All hook examples (FREE - mock mode):**
-```bash
-# Basic Bash Blocking - Simple hook to block dangerous commands
-mix run examples/hooks/basic_bash_blocking.exs
-
-# Complete Workflow - Full hook lifecycle demonstration
-mix run examples/hooks/complete_workflow.exs
-
-# Context Injection - Adding context to prompts
-mix run examples/hooks/context_injection.exs
-
-# File Policy Enforcement - Controlling file operations
-mix run examples/hooks/file_policy_enforcement.exs
-
-# Logging and Audit - Tracking all tool usage
-mix run examples/hooks/logging_and_audit.exs
-```
-
----
-
-### 📚 Core Examples - Basic Usage
-
-**Mock Mode (FREE):**
-```bash
-# Basic usage - Simple query example
-mix run examples/basic_example.exs
-
-# Factorial - Function generation
-mix run examples/factorial_example.exs
-
-# Custom Agents - Define specialized agents
-mix run examples/custom_agents_example.exs
-
-# Model Selection - Choose different Claude models
-mix run examples/model_selection_example.exs
-
-# Session Features - Save and resume sessions
-mix run examples/session_features_example.exs
-
-# Week 1-2 Showcase - Early features demonstration
-mix run examples/week_1_2_showcase.exs
-```
-
-**Live Mode (Costs money):**
-```bash
-# Simple Analyzer - Code analysis
-mix run.live examples/simple_analyzer.exs lib/claude_agent_sdk.ex
-
-# File Reviewer - Review any file
-mix run.live examples/file_reviewer.exs README.md
-
-# Simple Batch - Batch processing
-mix run.live examples/simple_batch.exs
-
-# Test Generator - Generate tests (experimental)
-mix run.live examples/simple_test_gen.exs
-
-# Project Assistant - Fixed version with better features
-mix run.live examples/project_assistant_fixed.exs
-```
-
----
-
-### 🧪 Testing & Utilities
-
-```bash
-# Auth Detection Test - Verify authentication setup
-mix run examples/test_auth_detection.exs
-```
-
----
-
-### 📋 Running All Examples
-
-**Quick Scripts:**
-
-```bash
-# Run ALL examples in mock mode (FREE - no API costs, ~30 examples)
-./run_all_examples.sh
-
-# Run ALL examples in LIVE mode (⚠️ EXPENSIVE - requires confirmation, default: N)
-./run_all_examples.sh live
-```
-
-**Or run by specific groups:**
-
-```bash
-# Run all mock mode examples by group (FREE - no API costs)
-./test_all_examples.sh all
-
-# Run specific groups
-./test_all_examples.sh getting-started  # Quick start examples
-./test_all_examples.sh mcp              # MCP tools
-./test_all_examples.sh agents           # Agents & Permissions
-./test_all_examples.sh hooks            # Hooks system
-./test_all_examples.sh core             # Core/basic examples
-
-# ⚠️  DANGEROUS: Run live examples by group (costs money!)
-./test_all_examples.sh live
-```
-
-**Manual Group Commands:**
-
-```bash
-# MCP Tools (Mock Mode)
-for f in examples/advanced_features/sdk_mcp_simple_test.exs examples/advanced_features/mcp_calculator_tool.exs; do
-  echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
-done
-
-# Agents & Permissions (Mock Mode)
-for f in examples/advanced_features/{agent_switching,permission_control,full_feature_showcase}.exs; do
-  echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
-done
-
-# Hooks (Mock Mode)
-for f in examples/hooks/*.exs; do
-  echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
-done
-
-# Core Examples (Mock Mode)
-for f in examples/{basic_example,factorial_example,custom_agents_example,model_selection_example,session_features_example,week_1_2_showcase,test_auth_detection}.exs; do
-  echo "Running $f..." && mix run "$f" && echo "✅ PASSED\n" || echo "❌ FAILED\n"
-done
-```
-
-## Live Script Runner
-
-The SDK includes a powerful `mix run.live` task for executing Elixir scripts with live Claude API calls:
-
-### Usage
-
-```bash
-# Run any .exs script with live API
-mix run.live script.exs [args...]
-
-# Examples
-mix run.live examples/basic_example.exs
-mix run.live examples/simple_analyzer.exs lib/claude_agent_sdk.ex
-mix run.live examples/file_reviewer.exs path/to/your/file.txt
-```
-
-### Features
-
-- **🔴 Live API Integration**: Makes real Claude API calls with proper stdin handling
-- **⚠️ Cost Warnings**: Clear warnings about API usage and costs
-- **📄 Argument Passing**: Supports passing arguments to scripts
-- **🛡️ Safe by Default**: Requires explicit live mode activation
-- **🎭 Mock Fallback**: Scripts can still run in mock mode during development
-
-### Difference from Regular `mix run`
-
-| **Command** | **API Calls** | **Costs** | **Authentication Required** |
-|-------------|---------------|-----------|---------------------------|
-| `mix run script.exs` | None (mock mode) | $0.00 | No |
-| `mix run.live script.exs` | Real API calls | Real costs | Yes (`claude login`) |
-
-### Example Scripts
-
-The SDK includes several example scripts you can run immediately:
-
-```bash
-# Basic factorial function generation
-mix run.live examples/basic_example.exs
-
-# Code analysis with file input
-mix run.live examples/simple_analyzer.exs lib/claude_agent_sdk.ex
-
-# Simple batch processing
-mix run.live examples/simple_batch.exs
-
-# File review and analysis
-mix run.live examples/file_reviewer.exs README.md
-```
-
-### Creating Your Own Live Scripts
-
-Create scripts that automatically work in both mock and live modes:
-
-```elixir
-#!/usr/bin/env elixir
-
-# Check if we're in live mode
-if Application.get_env(:claude_agent_sdk, :use_mock, false) do
-  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
-  IO.puts("🎭 Mock mode enabled")
-else
-  IO.puts("🔴 Live mode enabled")
-end
-
-# Your script logic here...
-response = ClaudeAgentSDK.query("Your prompt here")
-|> extract_response()
-
-IO.puts("Response: #{response}")
-```
-
-### 🎭 Mock vs Live Mode
-
-**All examples and tests can run in two modes:**
-
-| **Mode** | **Command Format** | **API Calls** | **Costs** | **Authentication Required** |
-|----------|-------------------|---------------|-----------|---------------------------|
-| **Mock** | `mix showcase` | None (mocked) | $0.00 | No |
-| **Live** | `mix showcase --live` | Real API calls | Real costs | Yes (`claude login`) |
-
-### 🎯 Showcase Features
-
-The showcase demonstrates all SDK functionality:
-
-| **Feature Demonstrated** | **What It Shows** |
-|-------------------------|-------------------|
-| **OptionBuilder** | Smart configuration presets for development, production, chat, analysis |
-| **AuthChecker** | Environment validation and authentication diagnostics |
-| **Basic SDK Usage** | Core query functionality with mocked/real responses |
-| **ContentExtractor** | Easy text extraction from complex message formats |
-| **DebugMode** | Message analysis, benchmarking, troubleshooting tools |
-| **Mock System** | Complete testing infrastructure without API costs |
-| **Advanced Configurations** | Real-world scenarios for different use cases |
-| **Performance Features** | Benchmarking and timing analysis |
-
-### 🚀 Running Examples
-
-**⚠️ Live mode will make real API calls and incur costs. Always test with mock mode first!**
-
-| **Command** | **Status** | **Notes** |
-|-------------|------------|-----------|
-| `mix showcase` | ✅ Working | Mock mode, fast, no costs |
-| `mix showcase --live` | ✅ Working | Live mode, real API calls, no hanging |
-| `mix test` | ✅ Working | Mock mode, **618 tests**, 52 skipped |
-| `mix test.live` | ⚠️ Requires CLI auth | Live mode; run only after `claude login` succeeds |
-| `mix run example.exs` | ✅ Working | Uses mock mode by default, auto-starts Mock |
-| `mix run examples/simple_analyzer.exs` | ✅ Working | Uses mock mode by default |
-| `mix run.live examples/basic_example.exs` | ✅ Working | Live mode, real API calls, stdin support |
-| `mix run.live examples/simple_analyzer.exs` | ✅ Working | Live mode, file analysis with arguments |
+### Examples (mix run)
+
+All examples run with `mix run` against the live Claude Code runtime (authenticate first). Full descriptions live in `examples/README.md`; quick commands are below.
+
+**Core & quickstart**
+- `mix run examples/basic_example.exs`
+- `mix run examples/simple_analyzer.exs [path]`
+- `mix run examples/file_reviewer.exs [path]`
+- `mix run examples/simple_batch.exs [dir] [op]`
+- `mix run examples/simple_test_gen.exs [file]`
+- `mix run examples/custom_agents_example.exs`
+- `mix run examples/model_selection_example.exs`
+- `mix run examples/factorial_example.exs`
+- `mix run examples/session_features_example.exs`
+- `mix run examples/project_assistant_fixed.exs`
+- `mix run examples/week_1_2_showcase.exs`
+- `mix run examples/test_auth_detection.exs`
+- `mix run examples/assistant_error_live.exs`
+- `mix run examples/structured_output_live.exs`
+- `mix run examples/control_parity_live.exs`
+
+**Streaming + tools**
+- `mix run examples/streaming_tools/basic_streaming_with_hooks.exs`
+- `mix run examples/streaming_tools/sdk_mcp_streaming.exs`
+- `mix run examples/streaming_tools/quick_demo.exs`
+- `mix run examples/streaming_tools/liveview_pattern.exs`
+
+**Runtime control**
+- `mix run examples/runtime_control/model_switcher.exs`
+- `mix run examples/runtime_control/transport_swap.exs`
+- `mix run examples/runtime_control/subscriber_broadcast.exs`
+
+**MCP, agents, permissions**
+- `mix run examples/advanced_features/mcp_calculator_tool.exs`
+- `mix run examples/advanced_features/sdk_mcp_simple_test.exs`
+- `mix run examples/advanced_features/sdk_mcp_live_demo.exs`
+- `mix run examples/advanced_features/agent_switching.exs`
+- `mix run examples/advanced_features/agents_live.exs`
+- `mix run examples/advanced_features/permission_control.exs`
+- `mix run examples/advanced_features/permissions_live.exs`
+- `mix run examples/advanced_features/full_feature_showcase.exs`
+
+**Hooks**
+- `mix run examples/hooks/basic_bash_blocking.exs`
+- `mix run examples/hooks/context_injection.exs`
+- `mix run examples/hooks/file_policy_enforcement.exs`
+- `mix run examples/hooks/logging_and_audit.exs`
+- `mix run examples/hooks/complete_workflow.exs`
+
+**Helper scripts**
+- `./run_all_examples.sh`
+- `./test_all_examples.sh [group]`
 
 ## API Reference
 
@@ -882,8 +645,8 @@ options = %ClaudeAgentSDK.Options{
   output_format: %{type: :json_schema, schema: schema}
 }
 
-# Live demo (pretty prints structured_output)
-# mix run.live examples/structured_output_live.exs
+# Demo (pretty prints structured_output)
+# mix run examples/structured_output_live.exs
 # Tip: set CLAUDE_CODE_STREAM_CLOSE_TIMEOUT=120000 for slow MCP/server startups.
 ```
 
@@ -910,7 +673,7 @@ case message do
     :ok
 end
 
-# Live demo: `mix run.live examples/assistant_error_live.exs`
+# Demo: `mix run examples/assistant_error_live.exs`
 ```
 
 ### Message Processing
@@ -1516,14 +1279,7 @@ npm install -g @anthropic-ai/claude-code
 - Permission modes: Now correctly uses `acceptEdits` instead of `accept_edits`
 - These fixes ensure compatibility with the latest Claude CLI versions
 
-**Live mode not working**: Make sure you're using `mix run.live` for live API calls:
-```bash
-# ❌ Won't make live API calls
-mix run examples/basic_example.exs
-
-# ✅ Makes live API calls
-mix run.live examples/basic_example.exs
-```
+**Calls failing**: Confirm `claude login` succeeds, then rerun `mix run examples/basic_example.exs`.
 
 ### Debug Mode
 

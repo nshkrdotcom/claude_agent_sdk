@@ -248,6 +248,43 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
         timeout: 2000
       )
     end
+
+    test "stream_messages yields stream events for partial messages", %{
+      client: client,
+      transport: transport
+    } do
+      stream =
+        client
+        |> Client.stream_messages()
+        |> Stream.take(1)
+
+      task =
+        Task.async(fn ->
+          stream
+          |> Enum.to_list()
+        end)
+
+      assert_receive {:mock_transport_subscribed, _pid}, 200
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber != nil
+        end,
+        timeout: 500
+      )
+
+      event = %{
+        "type" => "content_block_delta",
+        "delta" => %{"type" => "text_delta", "text" => "Hello"},
+        "index" => 0
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(event))
+
+      assert [%{type: :stream_event, event: %{type: :text_delta, accumulated: "Hello"}}] =
+               Task.await(task, 1_000)
+    end
   end
 
   describe "subscriber queue behavior" do

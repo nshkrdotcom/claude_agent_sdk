@@ -103,6 +103,8 @@ defmodule ClaudeAgentSDK.Client do
           sdk_mcp_servers: %{String.t() => pid()},
           current_model: String.t() | nil,
           pending_model_change: {GenServer.from(), reference()} | nil,
+          current_permission_mode: ClaudeAgentSDK.Permission.permission_mode() | nil,
+          pending_permission_change: {GenServer.from(), reference()} | nil,
           accumulated_text: String.t(),
           active_subscriber: reference() | nil,
           subscriber_queue: [{reference(), String.t()}],
@@ -414,6 +416,8 @@ defmodule ClaudeAgentSDK.Client do
         sdk_mcp_servers: sdk_mcp_servers,
         current_model: updated_options.model,
         pending_model_change: nil,
+        current_permission_mode: updated_options.permission_mode,
+        pending_permission_change: nil,
         # Streaming support fields (v0.6.0)
         accumulated_text: "",
         active_subscriber: nil,
@@ -533,14 +537,33 @@ defmodule ClaudeAgentSDK.Client do
     {:reply, :ok, %{state | subscribers: subscribers}}
   end
 
-  def handle_call({:set_permission_mode, mode}, _from, state) do
-    # Validate permission mode
-    if ClaudeAgentSDK.Permission.valid_mode?(mode) do
-      # Update options with new permission mode
-      new_options = %{state.options | permission_mode: mode}
-      {:reply, :ok, %{state | options: new_options}}
-    else
-      {:reply, {:error, :invalid_permission_mode}, state}
+  def handle_call({:set_permission_mode, mode}, from, state) do
+    cond do
+      state.pending_permission_change != nil ->
+        {:reply, {:error, :permission_change_in_progress}, state}
+
+      not ClaudeAgentSDK.Permission.valid_mode?(mode) ->
+        {:reply, {:error, :invalid_permission_mode}, state}
+
+      true ->
+        mode_string = to_cli_permission_mode(mode)
+        {request_id, json} = Protocol.encode_set_permission_mode_request(mode_string)
+
+        case send_payload(state, json) do
+          :ok ->
+            pending_requests =
+              Map.put(state.pending_requests, request_id, {:set_permission_mode, from, mode})
+
+            {:noreply,
+             %{
+               state
+               | pending_requests: pending_requests,
+                 pending_permission_change: request_id
+             }}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
     end
   end
 
@@ -1190,6 +1213,45 @@ defmodule ClaudeAgentSDK.Client do
         GenServer.reply(from, {:error, :unexpected_response})
         %{updated_state | pending_model_change: nil}
 
+      {{:set_permission_mode, from, requested_mode}, "success"} ->
+        Logger.info("Permission mode changed successfully",
+          request_id: request_id,
+          mode: requested_mode
+        )
+
+        updated_options = %{updated_state.options | permission_mode: requested_mode}
+        GenServer.reply(from, :ok)
+
+        %{
+          updated_state
+          | options: updated_options,
+            current_permission_mode: requested_mode,
+            pending_permission_change: nil
+        }
+
+      {{:set_permission_mode, from, _requested_mode}, "error"} ->
+        error = response["error"] || "set_permission_mode_failed"
+        Logger.error("Permission mode change rejected", request_id: request_id, error: error)
+        GenServer.reply(from, {:error, error})
+
+        %{
+          updated_state
+          | pending_permission_change: nil
+        }
+
+      {{:set_permission_mode, from, _requested_mode}, other} ->
+        Logger.warning("Unexpected subtype for set_permission_mode response",
+          request_id: request_id,
+          subtype: other
+        )
+
+        GenServer.reply(from, {:error, :unexpected_response})
+
+        %{
+          updated_state
+          | pending_permission_change: nil
+        }
+
       {{:interrupt, from}, "success"} ->
         Logger.info("Interrupt acknowledged", request_id: request_id)
         GenServer.reply(from, :ok)
@@ -1494,6 +1556,9 @@ defmodule ClaudeAgentSDK.Client do
     receive do
       {:claude_message, message} ->
         {[message], {client, ref}}
+
+      {:stream_event, ^ref, event} ->
+        {[%{type: :stream_event, event: event}], {client, ref}}
     after
       30_000 ->
         # No message for 30 seconds, check if client still alive
@@ -1792,6 +1857,14 @@ defmodule ClaudeAgentSDK.Client do
         Enum.each(events, fn event ->
           send(pid, {:stream_event, ref, event})
         end)
+    end
+  end
+
+  defp to_cli_permission_mode(mode) do
+    case mode do
+      :accept_edits -> "acceptEdits"
+      :bypass_permissions -> "bypassPermissions"
+      other -> to_string(other)
     end
   end
 

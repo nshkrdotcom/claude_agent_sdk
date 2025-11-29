@@ -23,7 +23,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
   @impl ClaudeAgentSDK.Transport
   def start_link(opts) when is_list(opts) do
-    options = Keyword.get(opts, :options)
+    options = Keyword.get(opts, :options) || %Options{}
 
     with {:ok, {command, default_args}} <- resolve_command(opts) do
       args = Keyword.get(opts, :args, default_args)
@@ -32,12 +32,20 @@ defmodule ClaudeAgentSDK.Transport.Port do
         opts
         |> Keyword.put(:command, command)
         |> Keyword.put(:args, args)
-        |> maybe_put_cd_from_options(options)
-        |> maybe_put_env_from_options(options)
-        |> maybe_put_line_length_from_options(options)
+        |> __build_port_options__(options)
 
       GenServer.start_link(__MODULE__, opts)
     end
+  end
+
+  @doc false
+  def __build_port_options__(opts, nil), do: __build_port_options__(opts, %Options{})
+
+  def __build_port_options__(opts, %Options{} = options) do
+    opts
+    |> maybe_put_cd_from_options(options)
+    |> maybe_put_env_from_options(options)
+    |> maybe_put_line_length_from_options(options)
   end
 
   @impl ClaudeAgentSDK.Transport
@@ -269,22 +277,23 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
   defp maybe_put_line_length_from_options(opts, _), do: opts
 
-  defp maybe_put_env_from_options(opts, %Options{env: env_map}) when is_map(env_map) do
-    if map_size(env_map) == 0 do
+  defp maybe_put_env_from_options(opts, %Options{} = options) do
+    env_overrides = options.env || %{}
+
+    merged_env =
+      opts
+      |> Keyword.get(:env)
+      |> env_list_to_map()
+      |> merge_with_system_env()
+      |> merge_env_overrides(env_overrides)
+      |> merge_user_env(options.user)
+
+    if map_size(merged_env) == 0 do
       opts
     else
-      merged_env =
-        opts
-        |> Keyword.get(:env)
-        |> env_list_to_map()
-        |> merge_with_system_env()
-        |> merge_env_overrides(env_map)
-
       Keyword.put(opts, :env, map_to_env_list(merged_env))
     end
   end
-
-  defp maybe_put_env_from_options(opts, _), do: opts
 
   defp env_list_to_map(nil), do: %{}
 
@@ -318,6 +327,14 @@ defmodule ClaudeAgentSDK.Transport.Port do
     end)
     |> Map.put_new("CLAUDE_CODE_ENTRYPOINT", "sdk-elixir")
     |> Map.put_new("CLAUDE_AGENT_SDK_VERSION", sdk_version())
+  end
+
+  defp merge_user_env(env_map, nil), do: env_map
+
+  defp merge_user_env(env_map, user) when is_binary(user) do
+    env_map
+    |> Map.put("USER", user)
+    |> Map.put("LOGNAME", user)
   end
 
   defp map_to_env_list(map) do
