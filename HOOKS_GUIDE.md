@@ -687,7 +687,22 @@ These hooks only work in interactive CLI mode.
 
 ### Timeout
 
-Hooks default to a 60-second timeout (minimum 1 second). Override it per matcher with `timeout_ms`—the value is shared with the CLI during initialization. If your hook still takes too long:
+Hooks default to a 60-second timeout (minimum 1 second). Override it per matcher with `timeout_ms`; the sanitized value is sent to the CLI as `"timeout"` during initialize and also bounds the `Task.yield/2` window for that matcher:
+
+```elixir
+hooks = %{
+  pre_tool_use: [
+    # Allow up to 1.5s for pre-tool validation; defaults remain 60s elsewhere
+    Matcher.new("Bash", [&MyHooks.check_bash/3], timeout_ms: 1_500)
+  ],
+  user_prompt_submit: [
+    # Slightly longer budget for gathering context
+    Matcher.new(nil, [&MyHooks.add_context/3], timeout_ms: 3_000)
+  ]
+}
+```
+
+If your hook still takes too long:
 
 1. Optimize the hook logic
 2. Move slow operations to background tasks

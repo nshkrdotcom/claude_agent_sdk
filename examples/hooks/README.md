@@ -168,6 +168,7 @@ elixir examples/hooks/logging_and_audit.exs
 - Security + Context + Monitoring + Session management
 - Complete agent lifecycle
 - Production-ready patterns
+- Per-matcher hook timeouts shared with the CLI during initialize
 
 **Features:**
 - Security validation (PreToolUse)
@@ -175,6 +176,7 @@ elixir examples/hooks/logging_and_audit.exs
 - Execution monitoring (PostToolUse)
 - Session management (Stop)
 - Comprehensive logging
+- Live CLI run with explicit `timeout_ms` budgets per matcher
 
 **Run it:**
 ```bash

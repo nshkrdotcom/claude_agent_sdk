@@ -466,18 +466,21 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
   @moduledoc """
   Hook matcher configuration.
 
-  Defines which hooks should run for which tool patterns.
+  Defines which hooks should run for which tool patterns and
+  how long callbacks are allowed to execute before timing out.
   """
 
   alias ClaudeAgentSDK.Hooks
+  @min_timeout_ms 1_000
 
   @type t :: %__MODULE__{
-    matcher: String.t() | nil,
-    hooks: [Hooks.hook_callback()]
-  }
+          matcher: String.t() | nil,
+          hooks: [Hooks.hook_callback()],
+          timeout_ms: pos_integer() | nil
+        }
 
   @enforce_keys [:hooks]
-  defstruct [:matcher, :hooks]
+  defstruct [:matcher, :hooks, :timeout_ms]
 
   @doc """
   Creates a new hook matcher.
@@ -487,6 +490,8 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
   - `matcher` - Tool name pattern (e.g., "Bash", "Write|Edit", "*")
                 `nil` matches all tools
   - `hooks` - List of callback functions
+  - `opts` - Keyword list
+    - `:timeout_ms` - Optional timeout in milliseconds (default 60s, floored to 1s)
 
   ## Examples
 
@@ -499,11 +504,12 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
       # Match all tools
       Matcher.new(nil, [&log_all_tools/3])
   """
-  @spec new(String.t() | nil, [Hooks.hook_callback()]) :: t()
-  def new(matcher, hooks) when is_list(hooks) do
+  @spec new(String.t() | nil, [Hooks.hook_callback()], keyword()) :: t()
+  def new(matcher, hooks, opts \\ []) when is_list(hooks) and is_list(opts) do
     %__MODULE__{
       matcher: matcher,
-      hooks: hooks
+      hooks: hooks,
+      timeout_ms: sanitize_timeout_ms(Keyword.get(opts, :timeout_ms))
     }
   end
 
@@ -518,7 +524,23 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
       "matcher" => matcher.matcher,
       "hookCallbackIds" => callback_ids
     }
+    |> maybe_put_timeout(sanitize_timeout_ms(matcher.timeout_ms))
   end
+
+  def sanitize_timeout_ms(nil), do: nil
+
+  def sanitize_timeout_ms(timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
+    max(timeout_ms, @min_timeout_ms)
+  end
+
+  def sanitize_timeout_ms(timeout_ms) when is_float(timeout_ms) and timeout_ms > 0 do
+    timeout_ms |> round() |> max(@min_timeout_ms)
+  end
+
+  def sanitize_timeout_ms(_), do: @min_timeout_ms
+
+  defp maybe_put_timeout(map, nil), do: map
+  defp maybe_put_timeout(map, timeout_ms), do: Map.put(map, "timeout", timeout_ms)
 end
 ```
 

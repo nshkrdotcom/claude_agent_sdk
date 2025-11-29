@@ -16,6 +16,58 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
     :ok
   end
 
+  test "sends matcher timeout metadata during initialize handshake" do
+    callback = fn _, _, _ -> Output.allow() end
+
+    options = %Options{
+      hooks: %{
+        pre_tool_use: [
+          Matcher.new("Bash", [callback], timeout_ms: 10)
+        ]
+      }
+    }
+
+    {:ok, client} =
+      Client.start_link(options,
+        transport: MockTransport,
+        transport_opts: [test_pid: self()]
+      )
+
+    on_exit(fn -> safe_stop(client) end)
+
+    transport =
+      receive do
+        {:mock_transport_started, pid} -> pid
+      end
+
+    init_request =
+      receive do
+        {:mock_transport_send, json} -> Jason.decode!(json)
+      after
+        500 -> flunk("Did not receive initialize payload")
+      end
+
+    state = :sys.get_state(client)
+    callback_id = Registry.get_id(state.registry, callback)
+    [matcher_config] = init_request["request"]["hooks"]["PreToolUse"]
+
+    assert matcher_config["timeout"] == 1_000
+    assert matcher_config["matcher"] == "Bash"
+    assert matcher_config["hookCallbackIds"] == [callback_id]
+
+    # Ensure the transport captured the same payload for later assertions
+    recorded =
+      transport
+      |> MockTransport.recorded_messages()
+      |> Enum.map(&Jason.decode!/1)
+
+    assert Enum.any?(recorded, fn msg ->
+             msg["request"]["hooks"]["PreToolUse"]
+             |> List.first()
+             |> Map.get("timeout") == 1_000
+           end)
+  end
+
   test "uses matcher-specific timeout when executing hook callbacks" do
     callback = fn _input, _tool_use_id, _context ->
       Process.sleep(1_300)

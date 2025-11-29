@@ -1106,7 +1106,12 @@ Client.stream_messages(client) |> Enum.to_list()
 Client.stop(client)
 ```
 
-Each matcher can override the default 60_000 ms timeout by passing `timeout_ms` (minimum 1 second) to `Matcher.new/3`; the value is included in the initialize payload sent to the CLI.
+Each matcher can override the default 60_000 ms timeout by passing `timeout_ms` (minimum 1 second) to `Matcher.new/3`; the sanitized value (floored to 1s) is included as `"timeout"` in the initialize payload and used to bound the hook callback `Task.yield/2`.
+
+```elixir
+# Tighten the pre-tool hook budget to 1.5s while leaving others at the 60s default
+Matcher.new("Bash", [&check_bash_command/3], timeout_ms: 1_500)
+```
 
 **Supported Hook Events:**
 - `pre_tool_use` - Before tool execution (can block)
@@ -1144,7 +1149,7 @@ mix run examples/hooks/file_policy_enforcement.exs
 # 4. Comprehensive audit logging
 mix run examples/hooks/logging_and_audit.exs
 
-# 5. Complete workflow (all hooks together)
+# 5. Complete workflow (all hooks together, per-matcher timeouts, live CLI)
 mix run examples/hooks/complete_workflow.exs
 ```
 

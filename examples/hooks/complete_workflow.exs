@@ -12,7 +12,8 @@ alias ClaudeAgentSDK.Hooks.{Matcher, Output}
 
 defmodule CompleteWorkflow do
   @moduledoc """
-  Complete hooks workflow demonstrating security, logging, and context.
+  Complete hooks workflow demonstrating security, logging, context, and
+  per-matcher hook timeouts.
   """
 
   require Logger
@@ -20,6 +21,10 @@ defmodule CompleteWorkflow do
   # Security policy
   @forbidden_patterns ["rm -rf", "dd if=", "mkfs"]
   @allowed_sandbox "/tmp/sandbox"
+  @pre_tool_timeout_ms 1_200
+  @context_timeout_ms 3_000
+  def pre_tool_timeout_ms, do: @pre_tool_timeout_ms
+  def context_timeout_ms, do: @context_timeout_ms
 
   @doc """
   Security validation hook (PreToolUse).
@@ -62,6 +67,8 @@ defmodule CompleteWorkflow do
   Logs all tool invocations.
   """
   def audit_log(input, tool_use_id, _context) do
+    # Simulate modest work to show timebox still succeeds under timeout
+    Process.sleep(200)
     timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
     tool_name = input["tool_name"]
 
@@ -76,6 +83,9 @@ defmodule CompleteWorkflow do
   Adds security and environment context to prompts.
   """
   def add_context(_input, _tool_use_id, _context) do
+    # Simulate a slower context collection to demonstrate custom timeout budget
+    Process.sleep(500)
+
     context_text = """
     ## 🔒 Security Context
     - Bash commands restricted: No rm -rf, dd, mkfs
@@ -111,11 +121,15 @@ end
 hooks = %{
   # Security validation and audit logging (both run on PreToolUse)
   pre_tool_use: [
-    Matcher.new("*", [&CompleteWorkflow.audit_log/3, &CompleteWorkflow.security_validation/3])
+    Matcher.new("*", [&CompleteWorkflow.audit_log/3, &CompleteWorkflow.security_validation/3],
+      timeout_ms: CompleteWorkflow.pre_tool_timeout_ms()
+    )
   ],
   # Context injection on prompts
   user_prompt_submit: [
-    Matcher.new(nil, [&CompleteWorkflow.add_context/3])
+    Matcher.new(nil, [&CompleteWorkflow.add_context/3],
+      timeout_ms: CompleteWorkflow.context_timeout_ms()
+    )
   ],
   # Execution monitoring
   post_tool_use: [
@@ -134,7 +148,9 @@ IO.puts("=" <> String.duplicate("=", 79))
 IO.puts("\nStarting Claude CLI with complete hooks workflow...")
 IO.puts("  - Security validation (PreToolUse)")
 IO.puts("  - Audit logging (PreToolUse)")
+IO.puts("    • Per-matcher timeout: #{CompleteWorkflow.pre_tool_timeout_ms()} ms")
 IO.puts("  - Context injection (UserPromptSubmit)")
+IO.puts("    • Per-matcher timeout: #{CompleteWorkflow.context_timeout_ms()} ms")
 IO.puts("  - Execution monitoring (PostToolUse)\n")
 
 # Start client with hooks
