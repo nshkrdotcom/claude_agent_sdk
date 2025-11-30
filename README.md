@@ -78,7 +78,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.6.3"}
+    {:claude_agent_sdk, "~> 0.6.4"}
   ]
 end
 ```
@@ -352,12 +352,14 @@ See working examples in `examples/streaming_tools/`:
   - Tool input modification and execution interrupts
   - `Client.set_permission_mode/2` for runtime mode changes
   - 49 tests covering security scenarios
-- **Runtime Control** (v0.6.3): Change models and transports without restarting
+- **Runtime Control** (v0.6.4): Change models/transports and cooperatively cancel callbacks
   - `Client.set_model/2` to switch models mid-conversation
   - `Client.get_model/1` to introspect active configuration
   - `Client.interrupt/1` to stop runaway tool executions
   - `Client.get_server_info/1` to read CLI command/output-style metadata
   - `Client.receive_response/1` to collect a single response without manual streaming loops
+  - Cooperative cancellation for hooks/permissions via `control_cancel_request` + abort signals
+  - SessionStart/SessionEnd/Notification hooks supported
   - Pluggable transports via `ClaudeAgentSDK.Transport`
   - Mock transport for fully offline test suites
 - **Error Handling**: Improved error detection and timeout handling
@@ -430,21 +432,22 @@ You can try the runtime control examples directly:
 mix run examples/runtime_control/model_switcher.exs
 mix run examples/runtime_control/transport_swap.exs
 mix run examples/runtime_control/subscriber_broadcast.exs
+mix run examples/runtime_control/cancellable_callbacks.exs
 mix run examples/control_parity_live.exs
 ```
 
 The model switcher prints the model before and after calling `set_model/2`, making it easy to confirm the change succeeded in real time.
 
-## Runtime Control Enhancements (v0.6.3)
+## Runtime Control Enhancements (v0.6.4)
 
-The 0.6.3 release closes the remaining Python parity gaps:
+The 0.6.4 release adds cooperative cancellation and broader control protocol coverage:
 
-- **Permission mode toggles are live** — `Client.set_permission_mode/2` now sends a control protocol request to the CLI and waits for acknowledgement.
-- **Control-aware `query/2`** — hooks, permission callbacks, agents, and non-default permission modes automatically route through the control client (not just SDK MCP servers).
-- **Partial events in-band** — `Client.stream_messages/1` now emits `%{type: :stream_event, event: ...}` items when `include_partial_messages` is enabled, so typewriter UIs can use the same stream.
-- **Run as another user** — `Options.user` now flows into erlexec/streaming/port transports (env + user flag) for deployments that need a dedicated OS account.
+- **Control cancel + abort signals** — `control_cancel_request` now cancels in-flight hooks/permissions and surfaces an abort signal to callbacks.
+- **Session/notification hooks** — SessionStart, SessionEnd, and Notification hooks are supported and validated.
+- **MCP routing** — SDK MCP servers respond to `resources/list`, `prompts/list`, and `notifications/initialized` for forward compatibility.
+- **Graceful shutdown** — Pending callbacks are cancelled when the client stops to avoid leaked work.
 
-See [CHANGELOG.md](CHANGELOG.md#063---2025-11-29) for the complete diff.
+See [CHANGELOG.md](CHANGELOG.md#064---2025-11-29) for the complete diff.
 
 ## Testing with Mocks
 

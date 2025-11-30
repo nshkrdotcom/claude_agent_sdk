@@ -64,7 +64,7 @@ defmodule ClaudeAgentSDK.Client do
   use GenServer
   require Logger
 
-  alias ClaudeAgentSDK.{CLI, Hooks, Message, Model, Options}
+  alias ClaudeAgentSDK.{AbortSignal, CLI, Hooks, Message, Model, Options}
   alias ClaudeAgentSDK.Hooks.{Matcher, Registry}
   alias ClaudeAgentSDK.ControlProtocol.Protocol
   @default_hook_timeout_ms 60_000
@@ -81,6 +81,7 @@ defmodule ClaudeAgentSDK.Client do
   - `hook_callback_timeouts` - Map of callback_id => timeout_ms
   - `subscribers` - Map of ref => pid for streaming subscriptions, or list of pids for legacy
   - `pending_requests` - Map of request_id => {from, ref}
+  - `pending_callbacks` - Map of request_id => %{pid, signal, type} for in-flight control callbacks
   - `initialized` - Whether initialization handshake completed
   - `buffer` - Incomplete JSON buffer
   - `sdk_mcp_servers` - Map of server_name => registry_pid for SDK MCP servers
@@ -98,6 +99,13 @@ defmodule ClaudeAgentSDK.Client do
           hook_callback_timeouts: %{String.t() => pos_integer()},
           subscribers: %{reference() => pid()} | [pid()],
           pending_requests: %{String.t() => {GenServer.from(), reference()}},
+          pending_callbacks: %{
+            String.t() => %{
+              pid: pid(),
+              signal: ClaudeAgentSDK.AbortSignal.t(),
+              type: :hook | :permission
+            }
+          },
           initialized: boolean(),
           buffer: String.t(),
           sdk_mcp_servers: %{String.t() => pid()},
@@ -410,6 +418,7 @@ defmodule ClaudeAgentSDK.Client do
         hook_callback_timeouts: %{},
         subscribers: %{},
         pending_requests: %{},
+        pending_callbacks: %{},
         initialized: false,
         buffer: "",
         session_id: nil,
@@ -716,8 +725,75 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @impl true
+  def handle_info({:callback_result, request_id, :hook, signal, result}, state) do
+    {pending, updated_state} = pop_pending_callback(state, request_id)
+
+    cond do
+      AbortSignal.cancelled?(signal) ->
+        {:noreply, updated_state}
+
+      pending == nil ->
+        {:noreply, updated_state}
+
+      true ->
+        case result do
+          {:ok, output} ->
+            json = Protocol.encode_hook_response(request_id, output, :success)
+            _ = send_payload(updated_state, json)
+            Logger.debug("Sent hook callback response", request_id: request_id)
+
+          {:error, reason} ->
+            json = Protocol.encode_hook_response(request_id, reason, :error)
+            _ = send_payload(updated_state, json)
+            Logger.error("Hook callback failed", request_id: request_id, reason: reason)
+        end
+
+        {:noreply, updated_state}
+    end
+  end
+
+  @impl true
+  def handle_info({:callback_result, request_id, :permission, signal, result}, state) do
+    {pending, updated_state} = pop_pending_callback(state, request_id)
+
+    cond do
+      AbortSignal.cancelled?(signal) ->
+        {:noreply, updated_state}
+
+      pending == nil ->
+        {:noreply, updated_state}
+
+      true ->
+        case result do
+          {:ok, permission_result} ->
+            json =
+              encode_permission_response(
+                request_id,
+                permission_result.behavior,
+                permission_result
+              )
+
+            _ = send_payload(updated_state, json)
+
+            Logger.debug("Sent permission response",
+              request_id: request_id,
+              behavior: permission_result.behavior
+            )
+
+          {:error, reason} ->
+            json = encode_permission_error_response(request_id, reason)
+            _ = send_payload(updated_state, json)
+            Logger.error("Permission callback failed", request_id: request_id, reason: reason)
+        end
+
+        {:noreply, updated_state}
+    end
+  end
+
+  @impl true
   def handle_info({:transport_exit, reason}, state) do
     Logger.info("Transport disconnected", reason: inspect(reason))
+    state = cancel_pending_callbacks(state)
     {:stop, :normal, %{state | transport: nil}}
   end
 
@@ -798,7 +874,10 @@ defmodule ClaudeAgentSDK.Client do
   @impl true
   def terminate(reason, %{transport: transport, transport_module: module} = state)
       when is_pid(transport) do
-    state = cancel_init_timeout(state)
+    state =
+      state
+      |> cancel_init_timeout()
+      |> cancel_pending_callbacks()
 
     try do
       module.close(transport)
@@ -810,7 +889,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   def terminate(reason, %{port: port} = state) when is_port(port) do
-    _ = cancel_init_timeout(state)
+    _state = state |> cancel_init_timeout() |> cancel_pending_callbacks()
 
     if Mix.env() != :test do
       Logger.debug("Terminating client", reason: reason)
@@ -854,7 +933,9 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   def terminate(reason, state) do
-    _ = cancel_init_timeout(state)
+    state
+    |> cancel_init_timeout()
+    |> cancel_pending_callbacks()
 
     if Mix.env() != :test do
       Logger.debug("Terminating client (no port)", reason: reason)
@@ -1120,6 +1201,10 @@ defmodule ClaudeAgentSDK.Client do
     handle_control_request(data, state)
   end
 
+  defp handle_decoded_message(:control_cancel_request, data, state) do
+    handle_control_cancel_request(data, state)
+  end
+
   defp handle_decoded_message(:control_response, data, state) do
     # CLI is responding to our request
     handle_control_response(data, state)
@@ -1157,6 +1242,23 @@ defmodule ClaudeAgentSDK.Client do
         Logger.warning("Unsupported control request subtype", subtype: other)
         send_error_response(state, request_id, "Unsupported request: #{other}")
         state
+    end
+  end
+
+  defp handle_control_cancel_request(request_data, state) do
+    request_id = request_data["request_id"]
+    {pending, updated_state} = pop_pending_callback(state, request_id)
+
+    case pending do
+      nil ->
+        Logger.debug("Cancel request for unknown callback", request_id: request_id)
+        updated_state
+
+      %{pid: pid, signal: signal, type: type} ->
+        AbortSignal.cancel(signal)
+        Process.exit(pid, :kill)
+        send_cancellation_response(updated_state, request_id, type)
+        updated_state
     end
   end
 
@@ -1310,68 +1412,18 @@ defmodule ClaudeAgentSDK.Client do
     case Registry.get_callback(state.registry, callback_id) do
       {:ok, callback_fn} ->
         timeout_ms = hook_timeout_ms(state, callback_id)
+        signal = AbortSignal.new()
+        server = self()
 
-        # Invoke callback with timeout protection
-        task =
-          Task.async(fn ->
-            try do
-              context = %{}
-              result = callback_fn.(input, tool_use_id, context)
+        {:ok, pid} =
+          Task.start(fn ->
+            result =
+              execute_hook_callback(callback_fn, input, tool_use_id, signal, timeout_ms)
 
-              # Convert to JSON-compatible format
-              if is_map(result) do
-                {:ok, Hooks.Output.to_json_map(result)}
-              else
-                {:error, "Hook must return a map"}
-              end
-            rescue
-              e ->
-                {:error, "Hook exception: #{Exception.message(e)}"}
-            end
+            send(server, {:callback_result, request_id, :hook, signal, result})
           end)
 
-        result =
-          case Task.yield(task, timeout_ms) do
-            {:ok, {:ok, output}} ->
-              {:ok, output}
-
-            {:ok, {:error, reason}} ->
-              {:error, reason}
-
-            other ->
-              _ = Task.shutdown(task, :brutal_kill)
-
-              case other do
-                nil ->
-                  {:error, hook_timeout_error_message(timeout_ms)}
-
-                _ ->
-                  {:error, hook_timeout_error_message(timeout_ms)}
-              end
-          end
-
-        case result do
-          {:ok, output} ->
-            json = Protocol.encode_hook_response(request_id, output, :success)
-
-            case send_payload(state, json) do
-              :ok ->
-                Logger.debug("Sent hook callback response", request_id: request_id)
-
-              {:error, reason} ->
-                Logger.error("Failed to send hook callback response",
-                  request_id: request_id,
-                  error: inspect(reason)
-                )
-            end
-
-          {:error, reason} ->
-            json = Protocol.encode_hook_response(request_id, reason, :error)
-            _ = send_payload(state, json)
-            Logger.error("Hook callback failed", request_id: request_id, reason: reason)
-        end
-
-        state
+        put_pending_callback(state, request_id, pid, signal, :hook)
 
       :error ->
         error_msg = "Callback not found: #{callback_id}"
@@ -1410,6 +1462,7 @@ defmodule ClaudeAgentSDK.Client do
     tool_name = request["tool_name"]
     tool_input = request["input"]
     suggestions = request["permission_suggestions"] || []
+    session_id = state.session_id || "unknown"
 
     Logger.debug("Permission request for tool",
       request_id: request_id,
@@ -1426,68 +1479,106 @@ defmodule ClaudeAgentSDK.Client do
         state
 
       callback when is_function(callback, 1) ->
-        # Build permission context
-        context =
-          ClaudeAgentSDK.Permission.Context.new(
-            tool_name: tool_name,
-            tool_input: tool_input,
-            session_id: state.session_id || "unknown",
-            suggestions: suggestions
-          )
+        signal = AbortSignal.new()
+        server = self()
 
-        # Invoke callback with timeout protection
-        task =
-          Task.async(fn ->
-            try do
-              result = callback.(context)
-
-              # Validate result
-              case ClaudeAgentSDK.Permission.Result.validate(result) do
-                :ok -> {:ok, result}
-                {:error, reason} -> {:error, "Invalid result: #{reason}"}
-              end
-            rescue
-              e ->
-                {:error, "Permission callback exception: #{Exception.message(e)}"}
-            end
-          end)
-
-        result =
-          case Task.yield(task, 60_000) || Task.shutdown(task) do
-            {:ok, {:ok, permission_result}} ->
-              {:ok, permission_result}
-
-            {:ok, {:error, reason}} ->
-              {:error, reason}
-
-            nil ->
-              {:error, "Permission callback timeout after 60s"}
-          end
-
-        case result do
-          {:ok, permission_result} ->
-            json =
-              encode_permission_response(
-                request_id,
-                permission_result.behavior,
-                permission_result
+        {:ok, pid} =
+          Task.start(fn ->
+            result =
+              execute_permission_callback(
+                callback,
+                tool_name,
+                tool_input,
+                suggestions,
+                session_id,
+                signal
               )
 
-            _ = send_payload(state, json)
+            send(server, {:callback_result, request_id, :permission, signal, result})
+          end)
 
-            Logger.debug("Sent permission response",
-              request_id: request_id,
-              behavior: permission_result.behavior
+        put_pending_callback(state, request_id, pid, signal, :permission)
+    end
+  end
+
+  defp execute_hook_callback(callback_fn, input, tool_use_id, signal, timeout_ms) do
+    task =
+      Task.async(fn ->
+        try do
+          context = %{signal: signal}
+          result = callback_fn.(input, tool_use_id, context)
+
+          if is_map(result) do
+            {:ok, Hooks.Output.to_json_map(result)}
+          else
+            {:error, "Hook must return a map"}
+          end
+        rescue
+          e ->
+            {:error, "Hook exception: #{Exception.message(e)}"}
+        end
+      end)
+
+    case Task.yield(task, timeout_ms) do
+      {:ok, {:ok, output}} ->
+        {:ok, output}
+
+      {:ok, {:error, reason}} ->
+        {:error, reason}
+
+      nil ->
+        Task.shutdown(task, :brutal_kill)
+        {:error, hook_timeout_error_message(timeout_ms)}
+
+      {:exit, _} ->
+        {:error, hook_timeout_error_message(timeout_ms)}
+    end
+  end
+
+  defp execute_permission_callback(
+         callback,
+         tool_name,
+         tool_input,
+         suggestions,
+         session_id,
+         signal
+       ) do
+    task =
+      Task.async(fn ->
+        try do
+          context =
+            ClaudeAgentSDK.Permission.Context.new(
+              tool_name: tool_name,
+              tool_input: tool_input,
+              session_id: session_id,
+              suggestions: suggestions,
+              signal: signal
             )
 
-          {:error, reason} ->
-            # On error, deny by default
-            json = encode_permission_error_response(request_id, reason)
-            _ = send_payload(state, json)
-            Logger.error("Permission callback failed", request_id: request_id, reason: reason)
-        end
+          result = callback.(context)
 
-        state
+          case ClaudeAgentSDK.Permission.Result.validate(result) do
+            :ok -> {:ok, result}
+            {:error, reason} -> {:error, "Invalid result: #{reason}"}
+          end
+        rescue
+          e ->
+            {:error, "Permission callback exception: #{Exception.message(e)}"}
+        end
+      end)
+
+    case Task.yield(task, 60_000) || Task.shutdown(task) do
+      {:ok, {:ok, permission_result}} ->
+        {:ok, permission_result}
+
+      {:ok, {:error, reason}} ->
+        {:error, reason}
+
+      nil ->
+        {:error, "Permission callback timeout after 60s"}
+
+      {:exit, reason} ->
+        {:error, "Permission callback failed: #{inspect(reason)}"}
     end
   end
 
@@ -1532,6 +1623,41 @@ defmodule ClaudeAgentSDK.Client do
 
     Jason.encode!(response)
   end
+
+  defp put_pending_callback(state, request_id, pid, signal, type) do
+    pending =
+      Map.put(state.pending_callbacks, request_id, %{pid: pid, signal: signal, type: type})
+
+    %{state | pending_callbacks: pending}
+  end
+
+  defp pop_pending_callback(state, request_id) do
+    {entry, pending} = Map.pop(state.pending_callbacks, request_id)
+    {entry, %{state | pending_callbacks: pending}}
+  end
+
+  defp cancel_pending_callbacks(state) do
+    Enum.each(state.pending_callbacks, fn {_id, %{pid: pid, signal: signal}} ->
+      AbortSignal.cancel(signal)
+      Process.exit(pid, :kill)
+    end)
+
+    %{state | pending_callbacks: %{}}
+  end
+
+  defp send_cancellation_response(state, request_id, :hook) do
+    json = Protocol.encode_hook_response(request_id, "Callback cancelled", :error)
+    _ = send_payload(state, json)
+    Logger.debug("Sent hook cancellation response", request_id: request_id)
+  end
+
+  defp send_cancellation_response(state, request_id, :permission) do
+    json = encode_permission_error_response(request_id, "Permission callback cancelled")
+    _ = send_payload(state, json)
+    Logger.debug("Sent permission cancellation response", request_id: request_id)
+  end
+
+  defp send_cancellation_response(_state, _request_id, _type), do: :ok
 
   defp send_error_response(state, request_id, error_message) do
     json = Protocol.encode_hook_response(request_id, error_message, :error)
@@ -1705,6 +1831,27 @@ defmodule ClaudeAgentSDK.Client do
               }
             }
         end
+
+      "resources/list" ->
+        %{
+          "jsonrpc" => "2.0",
+          "id" => message_id,
+          "result" => %{"resources" => []}
+        }
+
+      "prompts/list" ->
+        %{
+          "jsonrpc" => "2.0",
+          "id" => message_id,
+          "result" => %{"prompts" => []}
+        }
+
+      "notifications/initialized" ->
+        %{
+          "jsonrpc" => "2.0",
+          "id" => message_id,
+          "result" => %{}
+        }
 
       _ ->
         # Method not found

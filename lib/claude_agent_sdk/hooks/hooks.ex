@@ -13,6 +13,9 @@ defmodule ClaudeAgentSDK.Hooks do
 
   ## Hook Events
 
+  - `:session_start` - At session start
+  - `:session_end` - At session end
+  - `:notification` - For CLI notifications
   - `:pre_tool_use` - Before a tool executes
   - `:post_tool_use` - After a tool executes
   - `:user_prompt_submit` - When user submits a prompt
@@ -50,11 +53,12 @@ defmodule ClaudeAgentSDK.Hooks do
   @typedoc """
   Hook event types supported by the SDK.
 
-  Note: SessionStart, SessionEnd, and Notification hooks are not supported
-  in SDK mode due to CLI limitations.
   """
   @type hook_event ::
-          :pre_tool_use
+          :session_start
+          | :session_end
+          | :notification
+          | :pre_tool_use
           | :post_tool_use
           | :user_prompt_submit
           | :stop
@@ -96,12 +100,12 @@ defmodule ClaudeAgentSDK.Hooks do
   Context information passed to hook callbacks.
 
   Currently contains:
-  - `signal` - Optional abort signal reference (reserved for future use)
+  - `signal` - Optional abort signal reference for cooperative cancellation
 
   Note: Can be an empty map initially.
   """
   @type hook_context :: %{
-          optional(:signal) => reference(),
+          optional(:signal) => ClaudeAgentSDK.AbortSignal.t(),
           optional(atom()) => term()
         }
 
@@ -152,6 +156,9 @@ defmodule ClaudeAgentSDK.Hooks do
       "PostToolUse"
   """
   @spec event_to_string(hook_event()) :: String.t()
+  def event_to_string(:session_start), do: "SessionStart"
+  def event_to_string(:session_end), do: "SessionEnd"
+  def event_to_string(:notification), do: "Notification"
   def event_to_string(:pre_tool_use), do: "PreToolUse"
   def event_to_string(:post_tool_use), do: "PostToolUse"
   def event_to_string(:user_prompt_submit), do: "UserPromptSubmit"
@@ -173,6 +180,9 @@ defmodule ClaudeAgentSDK.Hooks do
       nil
   """
   @spec string_to_event(String.t()) :: hook_event() | nil
+  def string_to_event("SessionStart"), do: :session_start
+  def string_to_event("SessionEnd"), do: :session_end
+  def string_to_event("Notification"), do: :notification
   def string_to_event("PreToolUse"), do: :pre_tool_use
   def string_to_event("PostToolUse"), do: :post_tool_use
   def string_to_event("UserPromptSubmit"), do: :user_prompt_submit
@@ -194,7 +204,17 @@ defmodule ClaudeAgentSDK.Hooks do
   """
   @spec all_valid_events() :: [hook_event()]
   def all_valid_events do
-    [:pre_tool_use, :post_tool_use, :user_prompt_submit, :stop, :subagent_stop, :pre_compact]
+    [
+      :session_start,
+      :session_end,
+      :notification,
+      :pre_tool_use,
+      :post_tool_use,
+      :user_prompt_submit,
+      :stop,
+      :subagent_stop,
+      :pre_compact
+    ]
   end
 
   @doc """
