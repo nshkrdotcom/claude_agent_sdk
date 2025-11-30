@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2025-11-29
+
+### Added
+
+- Cooperative cancellation for hooks and permission callbacks via `control_cancel_request`, abort signals passed into callback contexts, and pending callback tracking.
+- SessionStart, SessionEnd, and Notification hook events are now validated and supported.
+- SDK MCP routing now replies to `resources/list`, `prompts/list`, and `notifications/initialized` for forward compatibility.
+- New example: `examples/runtime_control/cancellable_callbacks.exs` demonstrating abortable callbacks.
+
+### Changed
+
+- Pending callbacks are cancelled during shutdown to avoid leaked work when transports or clients stop.
+
 ### Added
 
 - Centralized Claude CLI discovery/version tracking via `ClaudeAgentSDK.CLI` (ADR 0005a), with min-version warning and shared lookup across Process/Streaming/Client/Transport/AuthChecker.

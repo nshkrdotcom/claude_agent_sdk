@@ -38,6 +38,8 @@ mix run examples/<path>.exs [args...]
 - `examples/runtime_control/model_switcher.exs`
 - `examples/runtime_control/transport_swap.exs`
 - `examples/runtime_control/subscriber_broadcast.exs`
+- `examples/runtime_control/cancellable_callbacks.exs` — cooperative cancellation using abort signals
+  - Emits simple telemetry events for hook/permission start/completion/cancel
 
 ## Advanced (MCP, Agents, Permissions)
 

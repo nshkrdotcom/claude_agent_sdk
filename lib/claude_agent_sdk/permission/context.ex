@@ -76,7 +76,7 @@ defmodule ClaudeAgentSDK.Permission.Context do
           tool_input: map(),
           session_id: String.t(),
           suggestions: [map()],
-          signal: reference() | nil
+          signal: ClaudeAgentSDK.AbortSignal.t() | nil
         }
 
   @enforce_keys [:tool_name, :tool_input, :session_id]

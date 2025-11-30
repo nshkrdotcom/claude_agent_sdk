@@ -32,7 +32,12 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   @typedoc """
   Message type classifier.
   """
-  @type message_type :: :control_request | :control_response | :sdk_message | :stream_event
+  @type message_type ::
+          :control_request
+          | :control_response
+          | :control_cancel_request
+          | :sdk_message
+          | :stream_event
 
   @doc """
   Encodes an initialize request with hooks configuration and SDK MCP servers.
@@ -322,7 +327,7 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   """
   @spec is_control_message?(map()) :: boolean()
   def is_control_message?(%{"type" => type})
-      when type in ["control_request", "control_response"] do
+      when type in ["control_request", "control_response", "control_cancel_request"] do
     true
   end
 
@@ -332,6 +337,9 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
 
   defp classify_message(%{"type" => "control_request"} = _data), do: :control_request
   defp classify_message(%{"type" => "control_response"} = _data), do: :control_response
+
+  defp classify_message(%{"type" => "control_cancel_request"} = _data),
+    do: :control_cancel_request
 
   # Streaming events (v0.6.0) - CLI wraps Anthropic streaming events in stream_event wrapper
   defp classify_message(%{"type" => "stream_event"} = _data), do: :stream_event
