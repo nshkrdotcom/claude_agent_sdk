@@ -255,8 +255,12 @@ The `ClaudeAgentSDK.Options` struct supports all Claude CLI options:
   verbose: true,                    # Enable verbose logging
   
   # Tool management
+  tools: ["Read", "Edit"],          # Base tools set (or [] / %{type: :preset, preset: :claude_code})
   allowed_tools: ["Bash", "Read"],  # Allowed tool list
   disallowed_tools: ["Write"],      # Disallowed tool list
+
+  # SDK beta flags
+  betas: ["context-1m-2025-08-07"], # Comma-joined to --betas
   
   # MCP configuration
   mcp_config: "/path/to/mcp.json",  # MCP server config
@@ -270,6 +274,13 @@ The `ClaudeAgentSDK.Options` struct supports all Claude CLI options:
   cwd: "/project/path",             # Working directory
   executable: "node",               # JavaScript runtime
   executable_args: ["--max-memory"], # Runtime arguments
+
+  # Settings + sandbox
+  settings: "/path/to/settings.json", # File path or JSON object string
+  sandbox: %{enabled: true},          # Merged into --settings JSON when present
+
+  # File checkpointing + rewind_files
+  enable_file_checkpointing: true,    # Sets CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true
   
   # Advanced
   path_to_claude_code_executable: "/custom/path/claude",
@@ -277,36 +288,17 @@ The `ClaudeAgentSDK.Options` struct supports all Claude CLI options:
 }
 ```
 
-### Option Builder Pattern **(FUTURE/PLANNED)**
+### Option Builder Pattern
 
 ```elixir
-defmodule OptionBuilder do  # FUTURE/PLANNED - Not yet implemented
-  def build_development_options do
-    ClaudeAgentSDK.Options.new(
-      max_turns: 5,
-      verbose: true,
-      allowed_tools: ["Bash", "Read", "Write"],
-      permission_mode: :accept_edits
-    )
-  end
-  
-  def build_production_options do
-    ClaudeAgentSDK.Options.new(
-      max_turns: 3,
-      verbose: false,
-      permission_mode: :plan,
-      disallowed_tools: ["Bash"]
-    )
-  end
-  
-  def build_mcp_options(mcp_config_path) do
-    ClaudeAgentSDK.Options.new(
-      mcp_config: mcp_config_path,
-      allowed_tools: ["mcp__filesystem__read", "mcp__github__search"],
-      permission_prompt_tool: "mcp__auth__approve"
-    )
-  end
-end
+alias ClaudeAgentSDK.OptionBuilder
+
+# Environment presets
+dev_options = OptionBuilder.build_development_options()
+prod_options = OptionBuilder.build_production_options()
+
+# Compose presets with overrides
+custom = OptionBuilder.merge(:development, %{max_turns: 5})
 ```
 
 ## Message Types & Processing

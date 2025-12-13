@@ -9,7 +9,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
   """
   use ClaudeAgentSDK.SupertesterCase
 
-  alias ClaudeAgentSDK.{Streaming, Options}
+  alias ClaudeAgentSDK.{Options, Streaming}
 
   alias ClaudeAgentSDK.TestSupport.{
     CLIScriptBuilder,

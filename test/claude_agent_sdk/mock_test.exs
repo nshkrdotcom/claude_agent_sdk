@@ -1,6 +1,8 @@
 defmodule ClaudeAgentSDK.MockTest do
   use ClaudeAgentSDK.SupertesterCase
 
+  @moduletag :mock
+
   alias ClaudeAgentSDK.Mock
 
   describe "Mock server" do

@@ -65,8 +65,10 @@ defmodule ClaudeAgentSDK.Client do
   require Logger
 
   alias ClaudeAgentSDK.{AbortSignal, CLI, Hooks, Message, Model, Options}
-  alias ClaudeAgentSDK.Hooks.{Matcher, Registry}
   alias ClaudeAgentSDK.ControlProtocol.Protocol
+  alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
+  alias ClaudeAgentSDK.Permission.{Context, Result}
+  alias ClaudeAgentSDK.Streaming.EventParser
   @default_hook_timeout_ms 60_000
   @default_init_timeout_ms 60_000
   @init_timeout_env_var "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT"
@@ -201,7 +203,13 @@ defmodule ClaudeAgentSDK.Client do
     Stream.resource(
       fn -> subscribe(client) end,
       fn state -> receive_next_message(state) end,
-      fn _state -> :ok end
+      fn
+        {client, ref} when is_pid(client) and is_reference(ref) ->
+          GenServer.cast(client, {:unsubscribe, ref})
+
+        _ ->
+          :ok
+      end
     )
   end
 
@@ -213,18 +221,16 @@ defmodule ClaudeAgentSDK.Client do
   """
   @spec receive_response(pid()) :: {:ok, [Message.t()]} | {:error, term()}
   def receive_response(client) when is_pid(client) do
-    try do
-      case collect_until_result(stream_messages(client)) do
-        {:ok, messages} ->
-          {:ok, messages}
+    case collect_until_result(stream_messages(client)) do
+      {:ok, messages} ->
+        {:ok, messages}
 
-        _ ->
-          {:error, :no_result}
-      end
-    rescue
-      exception ->
-        {:error, exception}
+      _ ->
+        {:error, :no_result}
     end
+  rescue
+    exception ->
+      {:error, exception}
   end
 
   @doc """
@@ -266,6 +272,16 @@ defmodule ClaudeAgentSDK.Client do
   @spec interrupt(pid()) :: :ok | {:error, term()}
   def interrupt(client) when is_pid(client) do
     GenServer.call(client, :interrupt, :infinity)
+  end
+
+  @doc """
+  Rewinds tracked files to their state at a specific user message.
+
+  Requires `Options.enable_file_checkpointing` to be enabled when starting the client.
+  """
+  @spec rewind_files(pid(), String.t()) :: :ok | {:error, term()}
+  def rewind_files(client, user_message_id) when is_pid(client) and is_binary(user_message_id) do
+    GenServer.call(client, {:rewind_files, user_message_id}, :infinity)
   end
 
   @doc """
@@ -480,38 +496,10 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   def handle_call({:set_model, model}, from, state) do
-    cond do
-      state.pending_model_change != nil ->
-        {:reply, {:error, :model_change_in_progress}, state}
-
-      true ->
-        model_string = model |> to_string() |> String.trim()
-
-        case Model.validate(model_string) do
-          {:ok, normalized} ->
-            {request_id, json} = Protocol.encode_set_model_request(normalized)
-
-            case send_payload(state, json) do
-              :ok ->
-                pending_requests =
-                  Map.put(state.pending_requests, request_id, {:set_model, from, normalized})
-
-                new_state = %{
-                  state
-                  | pending_requests: pending_requests,
-                    pending_model_change: request_id
-                }
-
-                {:noreply, new_state}
-
-              {:error, reason} ->
-                {:reply, {:error, reason}, state}
-            end
-
-          {:error, :invalid_model} ->
-            suggestions = Model.suggest(model_string)
-            {:reply, {:error, {:invalid_model, suggestions}}, state}
-        end
+    if state.pending_model_change != nil do
+      {:reply, {:error, :model_change_in_progress}, state}
+    else
+      set_model_request(model, from, state)
     end
   end
 
@@ -587,15 +575,16 @@ defmodule ClaudeAgentSDK.Client do
     # Check if agents are configured
     agents = state.options.agents || %{}
 
-    if agents == %{} do
-      {:reply, {:error, :no_agents_configured}, state}
-    else
-      # Check if agent exists in the map
-      if Map.has_key?(agents, agent_name) do
-        # Update options with new active agent
+    cond do
+      agents == %{} ->
+        {:reply, {:error, :no_agents_configured}, state}
+
+      not Map.has_key?(agents, agent_name) ->
+        {:reply, {:error, :agent_not_found}, state}
+
+      true ->
         new_options = %{state.options | agent: agent_name}
 
-        # Apply the agent's settings to options
         case apply_agent_settings(new_options) do
           {:ok, updated_options} ->
             {:reply, :ok, %{state | options: updated_options}}
@@ -603,9 +592,6 @@ defmodule ClaudeAgentSDK.Client do
           {:error, reason} ->
             {:reply, {:error, reason}, state}
         end
-      else
-        {:reply, {:error, :agent_not_found}, state}
-      end
     end
   end
 
@@ -629,6 +615,29 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
+  def handle_call({:rewind_files, user_message_id}, from, state)
+      when is_binary(user_message_id) do
+    cond do
+      not connected?(state) ->
+        {:reply, {:error, :not_connected}, state}
+
+      state.options.enable_file_checkpointing != true ->
+        {:reply, {:error, :file_checkpointing_not_enabled}, state}
+
+      true ->
+        {request_id, json} = Protocol.encode_rewind_files_request(user_message_id)
+
+        case send_payload(state, json) do
+          :ok ->
+            pending_requests = Map.put(state.pending_requests, request_id, {:rewind_files, from})
+            {:noreply, %{state | pending_requests: pending_requests}}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+    end
+  end
+
   def handle_call(:get_agent, _from, state) do
     agents = state.options.agents || %{}
 
@@ -648,6 +657,31 @@ defmodule ClaudeAgentSDK.Client do
     agents = state.options.agents || %{}
     agent_names = Map.keys(agents)
     {:reply, {:ok, agent_names}, state}
+  end
+
+  defp set_model_request(model, from, state) do
+    model_string = model |> to_string() |> String.trim()
+
+    with {:ok, normalized} <- Model.validate(model_string),
+         {request_id, json} = Protocol.encode_set_model_request(normalized),
+         :ok <- send_payload(state, json) do
+      pending_requests =
+        Map.put(state.pending_requests, request_id, {:set_model, from, normalized})
+
+      {:noreply,
+       %{
+         state
+         | pending_requests: pending_requests,
+           pending_model_change: request_id
+       }}
+    else
+      {:error, :invalid_model} ->
+        suggestions = Model.suggest(model_string)
+        {:reply, {:error, {:invalid_model, suggestions}}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   @impl true
@@ -1018,13 +1052,11 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp maybe_cancel_init_timeout(state, request_id) do
-    cond do
-      state.init_request_id == request_id and is_reference(state.init_timeout_ref) ->
-        _ = Process.cancel_timer(state.init_timeout_ref)
-        %{state | init_timeout_ref: nil, init_request_id: nil, init_timeout_ms: nil}
-
-      true ->
-        state
+    if state.init_request_id == request_id and is_reference(state.init_timeout_ref) do
+      _ = Process.cancel_timer(state.init_timeout_ref)
+      %{state | init_timeout_ref: nil, init_request_id: nil, init_timeout_ms: nil}
+    else
+      state
     end
   end
 
@@ -1082,7 +1114,7 @@ defmodule ClaudeAgentSDK.Client do
           Port.open({:spawn, cmd}, [
             :binary,
             :exit_status,
-            {:line, 65536},
+            {:line, 65_536},
             :use_stdio,
             :hide
           ])
@@ -1117,42 +1149,41 @@ defmodule ClaudeAgentSDK.Client do
   defp register_hooks(registry, nil), do: registry
 
   defp register_hooks(registry, hooks) when is_map(hooks) do
-    Enum.reduce(hooks, registry, fn {_event, matchers}, acc ->
-      Enum.reduce(matchers, acc, fn matcher, reg ->
-        Enum.reduce(matcher.hooks, reg, fn callback, r ->
-          Registry.register(r, callback)
-        end)
-      end)
+    hooks
+    |> Enum.flat_map(fn {_event, matchers} ->
+      Enum.flat_map(matchers, & &1.hooks)
     end)
+    |> Enum.reduce(registry, fn callback, reg -> Registry.register(reg, callback) end)
   end
 
   defp build_hook_timeout_map(_registry, nil), do: %{}
 
   defp build_hook_timeout_map(registry, hooks) do
-    Enum.reduce(hooks, %{}, fn {_event, matchers}, acc ->
-      Enum.reduce(matchers, acc, fn matcher, matcher_acc ->
-        timeout_ms =
-          matcher.timeout_ms
-          |> Matcher.sanitize_timeout_ms()
-          |> case do
-            nil -> @default_hook_timeout_ms
-            value -> value
-          end
-
-        Enum.reduce(matcher.hooks, matcher_acc, fn callback, cb_acc ->
-          case Registry.get_id(registry, callback) do
-            nil ->
-              cb_acc
-
-            callback_id ->
-              Map.update(cb_acc, callback_id, timeout_ms, fn existing ->
-                # Prefer the longest timeout when callbacks are reused across matchers
-                max(existing, timeout_ms)
-              end)
-          end
-        end)
-      end)
+    hooks
+    |> Enum.flat_map(fn {_event, matchers} ->
+      Enum.flat_map(matchers, &matcher_hook_timeouts(registry, &1))
     end)
+    |> Enum.reduce(%{}, fn {callback_id, timeout_ms}, acc ->
+      Map.update(acc, callback_id, timeout_ms, &max(&1, timeout_ms))
+    end)
+  end
+
+  defp matcher_hook_timeouts(registry, matcher) do
+    timeout_ms = matcher_timeout_ms(matcher)
+
+    matcher.hooks
+    |> Enum.map(&Registry.get_id(registry, &1))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&{&1, timeout_ms})
+  end
+
+  defp matcher_timeout_ms(matcher) do
+    matcher.timeout_ms
+    |> Matcher.sanitize_timeout_ms()
+    |> case do
+      nil -> @default_hook_timeout_ms
+      value -> value
+    end
   end
 
   defp build_hooks_config(_registry, nil), do: nil
@@ -1162,16 +1193,15 @@ defmodule ClaudeAgentSDK.Client do
     |> Enum.map(fn {event, matchers} ->
       event_str = Hooks.event_to_string(event)
 
-      matchers_config =
-        Enum.map(matchers, fn matcher ->
-          Matcher.to_cli_format(matcher, fn callback ->
-            Registry.get_id(registry, callback)
-          end)
-        end)
-
-      {event_str, matchers_config}
+      {event_str, matchers_to_cli(matchers, registry)}
     end)
     |> Map.new()
+  end
+
+  defp matchers_to_cli(matchers, registry) do
+    Enum.map(matchers, fn matcher ->
+      Matcher.to_cli_format(matcher, fn callback -> Registry.get_id(registry, callback) end)
+    end)
   end
 
   defp build_cli_command(options) do
@@ -1272,128 +1302,185 @@ defmodule ClaudeAgentSDK.Client do
       |> Map.put(:pending_requests, pending_requests)
       |> maybe_cancel_init_timeout(request_id)
 
-    case {pending_entry, response["subtype"]} do
-      {{:set_model, from, requested_model}, "success"} ->
-        case Protocol.decode_set_model_response(response_data) do
-          {:ok, model} ->
-            Logger.info("Model changed successfully", request_id: request_id, model: model)
-            GenServer.reply(from, :ok)
-            %{updated_state | current_model: model, pending_model_change: nil}
+    dispatch_control_response(pending_entry, response_data, response, request_id, updated_state)
+  end
 
-          {:error, :invalid_response} when is_binary(requested_model) ->
-            Logger.info(
-              "Model change acknowledged without explicit model; using requested value",
-              request_id: request_id,
-              model: requested_model
-            )
+  defp dispatch_control_response(
+         {:set_model, from, requested_model},
+         response_data,
+         response,
+         request_id,
+         state
+       ) do
+    handle_set_model_response(from, requested_model, response_data, response, request_id, state)
+  end
 
-            GenServer.reply(from, :ok)
-            %{updated_state | current_model: requested_model, pending_model_change: nil}
+  defp dispatch_control_response(
+         {:set_permission_mode, from, requested_mode},
+         _response_data,
+         response,
+         request_id,
+         state
+       ) do
+    handle_set_permission_mode_response(from, requested_mode, response, request_id, state)
+  end
 
-          {:error, reason} ->
-            Logger.error(
-              "Failed to decode set_model response: #{inspect(response_data)} (reason=#{inspect(reason)})",
-              request_id: request_id
-            )
+  defp dispatch_control_response({:interrupt, from}, _response_data, response, request_id, state) do
+    handle_simple_control_response(:interrupt, from, response, request_id, state)
+  end
 
-            GenServer.reply(from, {:error, reason})
-            %{updated_state | pending_model_change: nil}
-        end
+  defp dispatch_control_response(
+         {:rewind_files, from},
+         _response_data,
+         response,
+         request_id,
+         state
+       ) do
+    handle_simple_control_response(:rewind_files, from, response, request_id, state)
+  end
 
-      {{:set_model, from, _requested_model}, "error"} ->
+  defp dispatch_control_response(nil, _response_data, response, request_id, state) do
+    handle_untracked_control_response(response, request_id, state)
+  end
+
+  defp handle_set_model_response(
+         from,
+         requested_model,
+         response_data,
+         response,
+         request_id,
+         state
+       ) do
+    case response["subtype"] do
+      "success" ->
+        handle_set_model_success(from, requested_model, response_data, request_id, state)
+
+      "error" ->
         error = response["error"] || "set_model_failed"
         Logger.error("Model change rejected", request_id: request_id, error: error)
         GenServer.reply(from, {:error, error})
-        %{updated_state | pending_model_change: nil}
+        %{state | pending_model_change: nil}
 
-      {{:set_model, from, _requested_model}, other} ->
+      other ->
         Logger.warning("Unexpected subtype for set_model response",
           request_id: request_id,
           subtype: other
         )
 
         GenServer.reply(from, {:error, :unexpected_response})
-        %{updated_state | pending_model_change: nil}
+        %{state | pending_model_change: nil}
+    end
+  end
 
-      {{:set_permission_mode, from, requested_mode}, "success"} ->
+  defp handle_set_model_success(from, requested_model, response_data, request_id, state) do
+    case Protocol.decode_set_model_response(response_data) do
+      {:ok, model} ->
+        Logger.info("Model changed successfully", request_id: request_id, model: model)
+        GenServer.reply(from, :ok)
+        %{state | current_model: model, pending_model_change: nil}
+
+      {:error, :invalid_response} when is_binary(requested_model) ->
+        Logger.info(
+          "Model change acknowledged without explicit model; using requested value",
+          request_id: request_id,
+          model: requested_model
+        )
+
+        GenServer.reply(from, :ok)
+        %{state | current_model: requested_model, pending_model_change: nil}
+
+      {:error, reason} ->
+        Logger.error(
+          "Failed to decode set_model response: #{inspect(response_data)} (reason=#{inspect(reason)})",
+          request_id: request_id
+        )
+
+        GenServer.reply(from, {:error, reason})
+        %{state | pending_model_change: nil}
+    end
+  end
+
+  defp handle_set_permission_mode_response(from, requested_mode, response, request_id, state) do
+    case response["subtype"] do
+      "success" ->
         Logger.info("Permission mode changed successfully",
           request_id: request_id,
           mode: requested_mode
         )
 
-        updated_options = %{updated_state.options | permission_mode: requested_mode}
+        updated_options = %{state.options | permission_mode: requested_mode}
         GenServer.reply(from, :ok)
 
         %{
-          updated_state
+          state
           | options: updated_options,
             current_permission_mode: requested_mode,
             pending_permission_change: nil
         }
 
-      {{:set_permission_mode, from, _requested_mode}, "error"} ->
+      "error" ->
         error = response["error"] || "set_permission_mode_failed"
         Logger.error("Permission mode change rejected", request_id: request_id, error: error)
         GenServer.reply(from, {:error, error})
+        %{state | pending_permission_change: nil}
 
-        %{
-          updated_state
-          | pending_permission_change: nil
-        }
-
-      {{:set_permission_mode, from, _requested_mode}, other} ->
+      other ->
         Logger.warning("Unexpected subtype for set_permission_mode response",
           request_id: request_id,
           subtype: other
         )
 
         GenServer.reply(from, {:error, :unexpected_response})
+        %{state | pending_permission_change: nil}
+    end
+  end
 
-        %{
-          updated_state
-          | pending_permission_change: nil
-        }
-
-      {{:interrupt, from}, "success"} ->
-        Logger.info("Interrupt acknowledged", request_id: request_id)
+  defp handle_simple_control_response(action, from, response, request_id, state) do
+    case response["subtype"] do
+      "success" ->
+        Logger.info("#{action} acknowledged", request_id: request_id)
         GenServer.reply(from, :ok)
-        updated_state
+        state
 
-      {{:interrupt, from}, "error"} ->
-        error = response["error"] || "interrupt_failed"
-        Logger.error("Interrupt rejected", request_id: request_id, error: error)
+      "error" ->
+        error = response["error"] || "#{action}_failed"
+        Logger.error("#{action} rejected", request_id: request_id, error: error)
         GenServer.reply(from, {:error, error})
-        updated_state
+        state
 
-      {{:interrupt, from}, other} ->
-        Logger.warning("Unexpected subtype for interrupt response",
+      other ->
+        Logger.warning("Unexpected subtype for #{action} response",
           request_id: request_id,
           subtype: other
         )
 
         GenServer.reply(from, {:error, :unexpected_response})
-        updated_state
+        state
+    end
+  end
 
-      {nil, "success"} ->
+  defp handle_untracked_control_response(response, request_id, state) do
+    case response["subtype"] do
+      "success" ->
         Logger.debug("Received successful control response", request_id: request_id)
 
-        state_with_info = maybe_store_server_info(updated_state, response)
+        state_with_info = maybe_store_server_info(state, response)
 
-        if not state_with_info.initialized do
+        if state_with_info.initialized do
+          state_with_info
+        else
           Logger.info("Client initialized successfully")
           %{state_with_info | initialized: true}
-        else
-          state_with_info
         end
 
-      {nil, "error"} ->
+      "error" ->
         error = response["error"]
         Logger.error("Control response error", request_id: request_id, error: error)
-        updated_state
+        state
 
-      {nil, other} ->
+      other ->
         Logger.warning("Unknown control response subtype", subtype: other)
-        updated_state
+        state
     end
   end
 
@@ -1509,7 +1596,7 @@ defmodule ClaudeAgentSDK.Client do
           result = callback_fn.(input, tool_use_id, context)
 
           if is_map(result) do
-            {:ok, Hooks.Output.to_json_map(result)}
+            {:ok, Output.to_json_map(result)}
           else
             {:error, "Hook must return a map"}
           end
@@ -1547,7 +1634,7 @@ defmodule ClaudeAgentSDK.Client do
       Task.async(fn ->
         try do
           context =
-            ClaudeAgentSDK.Permission.Context.new(
+            Context.new(
               tool_name: tool_name,
               tool_input: tool_input,
               session_id: session_id,
@@ -1557,7 +1644,7 @@ defmodule ClaudeAgentSDK.Client do
 
           result = callback.(context)
 
-          case ClaudeAgentSDK.Permission.Result.validate(result) do
+          case Result.validate(result) do
             :ok -> {:ok, result}
             {:error, reason} -> {:error, "Invalid result: #{reason}"}
           end
@@ -1588,10 +1675,7 @@ defmodule ClaudeAgentSDK.Client do
       "response" => %{
         "request_id" => request_id,
         "subtype" => "success",
-        "result" =>
-          ClaudeAgentSDK.Permission.Result.to_json_map(
-            result || ClaudeAgentSDK.Permission.Result.allow()
-          )
+        "result" => Result.to_json_map(result || Result.allow())
       }
     }
 
@@ -1604,7 +1688,7 @@ defmodule ClaudeAgentSDK.Client do
       "response" => %{
         "request_id" => request_id,
         "subtype" => "success",
-        "result" => ClaudeAgentSDK.Permission.Result.to_json_map(result)
+        "result" => Result.to_json_map(result)
       }
     }
 
@@ -1691,7 +1775,7 @@ defmodule ClaudeAgentSDK.Client do
         if Process.alive?(client) do
           receive_next_message({client, ref})
         else
-          {:halt, client}
+          {:halt, {client, ref}}
         end
     end
   end
@@ -1746,7 +1830,7 @@ defmodule ClaudeAgentSDK.Client do
           "jsonrpc" => "2.0",
           "id" => message["id"],
           "error" => %{
-            "code" => -32601,
+            "code" => -32_601,
             "message" => "Server '#{server_name}' not found"
           }
         }
@@ -1769,101 +1853,110 @@ defmodule ClaudeAgentSDK.Client do
     params = message["params"] || %{}
     message_id = message["id"]
 
-    case method do
-      "initialize" ->
-        # MCP initialization - return capabilities
+    dispatch_sdk_mcp_method(method, registry_pid, server_name, message_id, params)
+  end
+
+  defp dispatch_sdk_mcp_method("initialize", _registry_pid, server_name, message_id, _params) do
+    %{
+      "jsonrpc" => "2.0",
+      "id" => message_id,
+      "result" => %{
+        "protocolVersion" => "2024-11-05",
+        "capabilities" => %{
+          "tools" => %{}
+        },
+        "serverInfo" => %{
+          "name" => server_name,
+          "version" => "1.0.0"
+        }
+      }
+    }
+  end
+
+  defp dispatch_sdk_mcp_method("tools/list", registry_pid, _server_name, message_id, _params) do
+    {:ok, tools} = ClaudeAgentSDK.Tool.Registry.list_tools(registry_pid)
+
+    tools_data =
+      Enum.map(tools, fn tool ->
+        %{
+          "name" => to_string(tool.name),
+          "description" => tool.description,
+          "inputSchema" => tool.input_schema
+        }
+      end)
+
+    %{
+      "jsonrpc" => "2.0",
+      "id" => message_id,
+      "result" => %{
+        "tools" => tools_data
+      }
+    }
+  end
+
+  defp dispatch_sdk_mcp_method("tools/call", registry_pid, _server_name, message_id, params) do
+    tool_name = String.to_atom(params["name"])
+    tool_input = params["arguments"] || %{}
+
+    case ClaudeAgentSDK.Tool.Registry.execute_tool(registry_pid, tool_name, tool_input) do
+      {:ok, result} ->
         %{
           "jsonrpc" => "2.0",
           "id" => message_id,
-          "result" => %{
-            "protocolVersion" => "2024-11-05",
-            "capabilities" => %{
-              "tools" => %{}
-            },
-            "serverInfo" => %{
-              "name" => server_name,
-              "version" => "1.0.0"
-            }
-          }
+          "result" => result
         }
 
-      "tools/list" ->
-        # List all tools from registry
-        {:ok, tools} = ClaudeAgentSDK.Tool.Registry.list_tools(registry_pid)
-
-        tools_data =
-          Enum.map(tools, fn tool ->
-            %{
-              "name" => to_string(tool.name),
-              "description" => tool.description,
-              "inputSchema" => tool.input_schema
-            }
-          end)
-
-        %{
-          "jsonrpc" => "2.0",
-          "id" => message_id,
-          "result" => %{
-            "tools" => tools_data
-          }
-        }
-
-      "tools/call" ->
-        # Execute tool
-        tool_name = String.to_atom(params["name"])
-        tool_input = params["arguments"] || %{}
-
-        case ClaudeAgentSDK.Tool.Registry.execute_tool(registry_pid, tool_name, tool_input) do
-          {:ok, result} ->
-            %{
-              "jsonrpc" => "2.0",
-              "id" => message_id,
-              "result" => result
-            }
-
-          {:error, reason} ->
-            %{
-              "jsonrpc" => "2.0",
-              "id" => message_id,
-              "error" => %{
-                "code" => -32603,
-                "message" => "Tool execution failed: #{inspect(reason)}"
-              }
-            }
-        end
-
-      "resources/list" ->
-        %{
-          "jsonrpc" => "2.0",
-          "id" => message_id,
-          "result" => %{"resources" => []}
-        }
-
-      "prompts/list" ->
-        %{
-          "jsonrpc" => "2.0",
-          "id" => message_id,
-          "result" => %{"prompts" => []}
-        }
-
-      "notifications/initialized" ->
-        %{
-          "jsonrpc" => "2.0",
-          "id" => message_id,
-          "result" => %{}
-        }
-
-      _ ->
-        # Method not found
+      {:error, reason} ->
         %{
           "jsonrpc" => "2.0",
           "id" => message_id,
           "error" => %{
-            "code" => -32601,
-            "message" => "Method not found: #{method}"
+            "code" => -32_603,
+            "message" => "Tool execution failed: #{inspect(reason)}"
           }
         }
     end
+  end
+
+  defp dispatch_sdk_mcp_method("resources/list", _registry_pid, _server_name, message_id, _params) do
+    %{
+      "jsonrpc" => "2.0",
+      "id" => message_id,
+      "result" => %{"resources" => []}
+    }
+  end
+
+  defp dispatch_sdk_mcp_method("prompts/list", _registry_pid, _server_name, message_id, _params) do
+    %{
+      "jsonrpc" => "2.0",
+      "id" => message_id,
+      "result" => %{"prompts" => []}
+    }
+  end
+
+  defp dispatch_sdk_mcp_method(
+         "notifications/initialized",
+         _registry_pid,
+         _server_name,
+         message_id,
+         _params
+       ) do
+    %{
+      "jsonrpc" => "2.0",
+      "id" => message_id,
+      "result" => %{}
+    }
+  end
+
+  defp dispatch_sdk_mcp_method(method, _registry_pid, _server_name, message_id, _params) do
+    %{
+      "jsonrpc" => "2.0",
+      "id" => message_id,
+      "error" => %{
+        "code" => -32_601,
+        "message" => "Method not found: #{method}"
+      }
+    }
   end
 
   @doc false
@@ -1929,12 +2022,10 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp send_payload(%{port: port}, payload) when is_port(port) do
-    try do
-      Port.command(port, ensure_newline(payload))
-      :ok
-    rescue
-      e -> {:error, e}
-    end
+    Port.command(port, ensure_newline(payload))
+    :ok
+  rescue
+    e -> {:error, e}
   end
 
   defp send_payload(_state, _payload), do: {:error, :not_connected}
@@ -1944,7 +2035,7 @@ defmodule ClaudeAgentSDK.Client do
   defp handle_stream_event(event_data, state) do
     # Parse streaming event via EventParser (always returns {:ok, events, accumulated})
     {:ok, events, new_accumulated} =
-      ClaudeAgentSDK.Streaming.EventParser.parse_event(event_data, state.accumulated_text)
+      EventParser.parse_event(event_data, state.accumulated_text)
 
     # Broadcast to active subscriber only (queue model)
     if state.active_subscriber do

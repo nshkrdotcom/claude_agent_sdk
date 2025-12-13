@@ -1,11 +1,14 @@
 # Claude Code SDK Examples
 
-All scripts run with `mix run` and hit the live Claude Code runtime. Authenticate first (`claude login` or `CLAUDE_AGENT_OAUTH_TOKEN`) and then execute any example directly.
+Scripts can be run in **live mode** (real Claude Code CLI + real API calls) or using the SDK mocks.
+
+- Live (recommended for examples): `mix run.live examples/<path>.exs`
+- Mock/default: `mix run examples/<path>.exs` (behavior depends on `:claude_agent_sdk, :use_mock` and `LIVE_MODE`)
 
 ## Usage
 
 ```bash
-mix run examples/<path>.exs [args...]
+mix run.live examples/<path>.exs [args...]
 ```
 
 ## Core & Quickstart
@@ -25,6 +28,9 @@ mix run examples/<path>.exs [args...]
 - `examples/assistant_error_live.exs` — assistant error surface
 - `examples/structured_output_live.exs` — JSON schema output
 - `examples/control_parity_live.exs` — control protocol parity
+- `examples/tools_and_betas_live.exs` — `tools` / `betas` option parity
+- `examples/sandbox_settings_live.exs` — sandbox settings merged into `--settings`
+- `examples/file_checkpointing_live.exs` — enable file checkpointing + `rewind_files` (CLI payload dependent)
 
 ## Streaming + Tools
 

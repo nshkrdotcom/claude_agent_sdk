@@ -106,7 +106,7 @@ defmodule ClaudeAgentSDK.Streaming.EventAdapter do
   """
   @spec text_only(Enumerable.t()) :: Enumerable.t()
   def text_only(stream) do
-    Stream.filter(stream, &is_text_event?/1)
+    Stream.filter(stream, &text_event?/1)
   end
 
   @doc """
@@ -138,7 +138,7 @@ defmodule ClaudeAgentSDK.Streaming.EventAdapter do
   """
   @spec tools_only(Enumerable.t()) :: Enumerable.t()
   def tools_only(stream) do
-    Stream.filter(stream, &is_tool_event?/1)
+    Stream.filter(stream, &tool_event?/1)
   end
 
   @doc """
@@ -239,11 +239,11 @@ defmodule ClaudeAgentSDK.Streaming.EventAdapter do
   # Private Functions - Type Guards
   # ============================================================================
 
-  defp is_text_event?(%{type: :text_delta}), do: true
-  defp is_text_event?(%{type: :text_block_start}), do: true
-  defp is_text_event?(_), do: false
+  defp text_event?(%{type: :text_delta}), do: true
+  defp text_event?(%{type: :text_block_start}), do: true
+  defp text_event?(_), do: false
 
-  defp is_tool_event?(%{type: :tool_use_start}), do: true
-  defp is_tool_event?(%{type: :tool_input_delta}), do: true
-  defp is_tool_event?(_), do: false
+  defp tool_event?(%{type: :tool_use_start}), do: true
+  defp tool_event?(%{type: :tool_input_delta}), do: true
+  defp tool_event?(_), do: false
 end

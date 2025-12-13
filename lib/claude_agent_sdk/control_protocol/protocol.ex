@@ -120,6 +120,28 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   end
 
   @doc """
+  Encodes a rewind_files control request.
+
+  Returns `{request_id, json}`.
+  """
+  @spec encode_rewind_files_request(String.t(), request_id() | nil) :: {request_id(), String.t()}
+  def encode_rewind_files_request(user_message_id, request_id \\ nil)
+      when is_binary(user_message_id) do
+    req_id = request_id || generate_request_id()
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => req_id,
+      "request" => %{
+        "subtype" => "rewind_files",
+        "user_message_id" => user_message_id
+      }
+    }
+
+    {req_id, Jason.encode!(request)}
+  end
+
+  @doc """
   Encodes an interrupt control request.
   """
   @spec encode_interrupt_request(request_id() | nil) :: {request_id(), String.t()}
@@ -233,19 +255,26 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   def decode_set_model_response(_), do: {:error, :invalid_response}
 
   defp extract_model_from_response(response) do
-    cond do
-      result = response["result"] || response[:result] ->
-        result["model"] || result[:model]
+    model_from_result(response) || model_from_inner_response(response) ||
+      model_from_direct_field(response)
+  end
 
-      inner = response["response"] || response[:response] ->
-        inner["model"] || inner[:model]
-
-      model = response["model"] || response[:model] ->
-        model
-
-      true ->
-        nil
+  defp model_from_result(response) do
+    case Map.get(response, "result") || Map.get(response, :result) do
+      %{} = result -> Map.get(result, "model") || Map.get(result, :model)
+      _ -> nil
     end
+  end
+
+  defp model_from_inner_response(response) do
+    case Map.get(response, "response") || Map.get(response, :response) do
+      %{} = inner -> Map.get(inner, "model") || Map.get(inner, :model)
+      _ -> nil
+    end
+  end
+
+  defp model_from_direct_field(response) do
+    Map.get(response, "model") || Map.get(response, :model)
   end
 
   @doc """
@@ -319,19 +348,19 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
 
   ## Examples
 
-      iex> Protocol.is_control_message?(%{"type" => "control_request"})
+      iex> Protocol.control_message?(%{"type" => "control_request"})
       true
 
-      iex> Protocol.is_control_message?(%{"type" => "assistant"})
+      iex> Protocol.control_message?(%{"type" => "assistant"})
       false
   """
-  @spec is_control_message?(map()) :: boolean()
-  def is_control_message?(%{"type" => type})
+  @spec control_message?(map()) :: boolean()
+  def control_message?(%{"type" => type})
       when type in ["control_request", "control_response", "control_cancel_request"] do
     true
   end
 
-  def is_control_message?(_), do: false
+  def control_message?(_), do: false
 
   ## Private Functions
 

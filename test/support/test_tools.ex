@@ -1,4 +1,6 @@
 defmodule ClaudeAgentSDK.TestSupport.CalculatorTools do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :add,
@@ -28,6 +30,8 @@ defmodule ClaudeAgentSDK.TestSupport.CalculatorTools do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.ErrorTools do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :fail_tool,
@@ -48,6 +52,8 @@ defmodule ClaudeAgentSDK.TestSupport.ErrorTools do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.ImageTools do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :generate_chart,

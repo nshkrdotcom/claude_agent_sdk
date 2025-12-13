@@ -78,7 +78,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.6.4"}
+    {:claude_agent_sdk, "~> 0.6.5"}
   ]
 end
 ```
@@ -352,10 +352,11 @@ See working examples in `examples/streaming_tools/`:
   - Tool input modification and execution interrupts
   - `Client.set_permission_mode/2` for runtime mode changes
   - 49 tests covering security scenarios
-- **Runtime Control** (v0.6.4): Change models/transports and cooperatively cancel callbacks
+- **Runtime Control** (v0.6.5): Change models/transports, rewind files, and cooperatively cancel callbacks
   - `Client.set_model/2` to switch models mid-conversation
   - `Client.get_model/1` to introspect active configuration
   - `Client.interrupt/1` to stop runaway tool executions
+  - `Client.rewind_files/2` to rewind tracked files (requires `enable_file_checkpointing: true`)
   - `Client.get_server_info/1` to read CLI command/output-style metadata
   - `Client.receive_response/1` to collect a single response without manual streaming loops
   - Cooperative cancellation for hooks/permissions via `control_cancel_request` + abort signals
@@ -459,11 +460,11 @@ The SDK includes a comprehensive mocking system for testing without making actua
 # Run tests with mocks (default)
 mix test
 
-# Run tests with live API calls
-MIX_ENV=test mix test.live
+# Run live tests (real API calls; disables mocks; runs only @tag :live)
+mix test.live
 
-# Run specific test with live API
-MIX_ENV=test mix test.live test/specific_test.exs
+# Run a specific test file in live mode
+mix test.live test/specific_test.exs
 ```
 
 ### Using Mocks in Your Code
@@ -634,6 +635,50 @@ options = OptionBuilder.for_environment()
 options = OptionBuilder.merge(:development, %{max_turns: 5})
 ```
 
+#### Tools, Betas, and Sandbox Settings (v0.6.5)
+
+Python SDK parity options:
+
+```elixir
+alias ClaudeAgentSDK.Options
+
+%Options{
+  # Base tools set selection (separate from allowed_tools/disallowed_tools filtering)
+  tools: ["Read", "Edit"],                 # -> --tools Read,Edit
+  # tools: [],                             # -> --tools ""
+  # tools: %{type: :preset, preset: :claude_code}, # -> --tools default
+
+  # SDK beta feature flags
+  betas: ["context-1m-2025-08-07"],        # -> --betas context-1m-2025-08-07
+
+  # Sandbox settings (merged into --settings JSON when present)
+  settings: ~s({"foo":"bar"}),             # JSON string or file path
+  sandbox: %{enabled: true, excludedCommands: ["docker"]}
+}
+
+# Demos:
+# mix run.live examples/tools_and_betas_live.exs
+# mix run.live examples/sandbox_settings_live.exs
+```
+
+#### File Checkpointing + `rewind_files` (v0.6.5)
+
+Enable file checkpointing via an environment flag and rewind tracked files with a control request:
+
+```elixir
+alias ClaudeAgentSDK.{Client, Options}
+
+{:ok, client} = Client.start_link(%Options{enable_file_checkpointing: true})
+:ok = Client.send_message(client, "Edit a file, then stop.")
+
+# Capture the user message id from incoming frames (CLI payload varies by version).
+# Inspect `message.raw` for a UUID-like field and pass it to rewind_files/2.
+:ok = Client.rewind_files(client, user_message_id)
+```
+
+# Demo:
+# mix run.live examples/file_checkpointing_live.exs
+
 #### Structured outputs (JSON Schema)
 Request validated JSON responses using a schema (CLI must support `--json-schema`, as in the Python SDK 0.1.10 feature set):
 
@@ -659,7 +704,7 @@ The SDK returns a stream of `ClaudeAgentSDK.Message` structs with these types:
 
 - **`:system`** - Session initialization (session_id, model, tools)
 - **`:user`** - User messages  
-- **`:assistant`** - Claude's responses (data includes `:message`, `:session_id`, and optional `:error` from `:authentication_failed | :billing_error | :rate_limit | :invalid_request | :server_error | :unknown`)
+- **`:assistant`** - Claude's responses (data includes `:message`, `:session_id`, and optional `:error` parsed from the CLI `message.error` field for rate-limit detection parity)
 - **`:result`** - Final result with cost/duration stats
 
 Handle assistant errors surfaced mid-stream to tailor UX (e.g., retry prompts on rate limits):

@@ -70,10 +70,8 @@ defmodule ClaudeAgentSDK.ClientInitTimeoutEnvTest do
   end
 
   defp safe_stop(pid) when is_pid(pid) do
-    try do
-      Client.stop(pid)
-    catch
-      :exit, _ -> :ok
-    end
+    Client.stop(pid)
+  catch
+    :exit, _ -> :ok
   end
 end

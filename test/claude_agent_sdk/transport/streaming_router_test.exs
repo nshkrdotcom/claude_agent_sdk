@@ -1,8 +1,8 @@
 defmodule ClaudeAgentSDK.Transport.StreamingRouterTest do
   use ExUnit.Case, async: true
 
-  alias ClaudeAgentSDK.{Options, Transport.StreamingRouter}
   alias ClaudeAgentSDK.Hooks.Matcher
+  alias ClaudeAgentSDK.{Options, Transport.StreamingRouter}
 
   describe "select_transport/1 - defaults" do
     test "empty options → CLI-only" do

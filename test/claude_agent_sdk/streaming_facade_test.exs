@@ -6,7 +6,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
   """
   use ClaudeAgentSDK.SupertesterCase
 
-  alias ClaudeAgentSDK.{Streaming, Options, Client}
+  alias ClaudeAgentSDK.{Client, Options, Streaming}
   alias ClaudeAgentSDK.TestSupport.{MockTransport, TestFixtures}
 
   describe "start_session/1 with router integration" do

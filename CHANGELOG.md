@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] - 2025-12-13
+
+### Added
+
+- Options parity with Python v0.1.12+: `tools` (`--tools`) base tools selection and `betas` (`--betas`) beta feature flags.
+- Sandbox settings parity with Python v0.1.12+: `sandbox` merged into `--settings` as JSON when present.
+- File checkpointing parity with Python v0.1.15+: `enable_file_checkpointing` env propagation plus `Client.rewind_files/2` and `rewind_files` control request encoding.
+
+### Fixed
+
+- Assistant error parsing now prefers `message.error` (with root-level fallback) to enable rate-limit detection parity with Python v0.1.16+.
+
+### Changed
+
+- No explicit write lock added for transport writes: GenServer serialization already prevents the Python Trio concurrency issue.
+
 ## [0.6.4] - 2025-11-29
 
 ### Added

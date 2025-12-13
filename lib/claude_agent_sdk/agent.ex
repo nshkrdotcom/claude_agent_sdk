@@ -161,9 +161,8 @@ defmodule ClaudeAgentSDK.Agent do
   def validate(%__MODULE__{} = agent) do
     with :ok <- validate_description(agent.description),
          :ok <- validate_prompt(agent.prompt),
-         :ok <- validate_allowed_tools(agent.allowed_tools),
-         :ok <- validate_model(agent.model) do
-      :ok
+         :ok <- validate_allowed_tools(agent.allowed_tools) do
+      validate_model(agent.model)
     end
   end
 

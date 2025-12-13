@@ -159,30 +159,30 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
     end
   end
 
-  describe "is_control_message?/1" do
+  describe "control_message?/1" do
     test "returns true for control_request" do
       msg = %{"type" => "control_request"}
-      assert Protocol.is_control_message?(msg) == true
+      assert Protocol.control_message?(msg) == true
     end
 
     test "returns true for control_response" do
       msg = %{"type" => "control_response"}
-      assert Protocol.is_control_message?(msg) == true
+      assert Protocol.control_message?(msg) == true
     end
 
     test "returns false for SDK messages" do
       msg = %{"type" => "assistant"}
-      assert Protocol.is_control_message?(msg) == false
+      assert Protocol.control_message?(msg) == false
     end
 
     test "returns false for unknown types" do
       msg = %{"type" => "unknown"}
-      assert Protocol.is_control_message?(msg) == false
+      assert Protocol.control_message?(msg) == false
     end
 
     test "returns false for messages without type" do
       msg = %{"data" => "something"}
-      assert Protocol.is_control_message?(msg) == false
+      assert Protocol.control_message?(msg) == false
     end
   end
 
@@ -205,6 +205,30 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
 
       decoded = Jason.decode!(json)
       assert decoded["request_id"] == "req_custom"
+    end
+  end
+
+  describe "encode_rewind_files_request/2" do
+    test "creates control request with rewind_files subtype" do
+      {request_id, json} = Protocol.encode_rewind_files_request("user_msg_123", "req_custom")
+
+      assert request_id == "req_custom"
+      decoded = Jason.decode!(json)
+
+      assert decoded["type"] == "control_request"
+      assert decoded["request_id"] == "req_custom"
+      assert decoded["request"]["subtype"] == "rewind_files"
+      assert decoded["request"]["user_message_id"] == "user_msg_123"
+    end
+
+    test "generates request ID when not provided" do
+      {request_id, json} = Protocol.encode_rewind_files_request("user_msg_456", nil)
+
+      assert is_binary(request_id)
+      assert String.starts_with?(request_id, "req_")
+
+      decoded = Jason.decode!(json)
+      assert decoded["request_id"] == request_id
     end
   end
 

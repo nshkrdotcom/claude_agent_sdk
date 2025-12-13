@@ -1,0 +1,145 @@
+alias ClaudeAgentSDK.{CLI, Client, ContentExtractor, Options}
+
+defmodule FileCheckpointingLive do
+  def run do
+    demo_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "claude_agent_sdk_checkpointing_demo_#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(demo_dir)
+    IO.puts("Demo working directory: #{demo_dir}")
+    IO.inspect(CLI.find_executable(), label: "Claude CLI (resolved)")
+    IO.inspect(CLI.version(), label: "Claude CLI (version)")
+
+    file_path = Path.join(demo_dir, "demo.txt")
+    init_git_repo(demo_dir)
+
+    options = %Options{
+      cwd: demo_dir,
+      enable_file_checkpointing: true,
+      permission_mode: :accept_edits,
+      allowed_tools: ["Read", "Write", "Edit"]
+    }
+
+    {:ok, client} = Client.start_link(options, transport: ClaudeAgentSDK.Transport.Port)
+
+    checkpoint_id =
+      run_step(
+        client,
+        "Create a file demo.txt with the single line: one. Then say done.",
+        file_path
+      )
+
+    _ =
+      run_step(
+        client,
+        "Replace demo.txt so it contains the single line: two. Then say done.",
+        file_path
+      )
+
+    attempt_rewind(client, checkpoint_id, file_path)
+
+    Client.stop(client)
+  end
+
+  defp run_step(client, prompt, file_path) do
+    task =
+      Task.async(fn ->
+        Client.stream_messages(client)
+        |> Enum.reduce_while(nil, fn message, acc ->
+          case message do
+            %{type: :user} ->
+              candidates = extract_user_message_id_candidates(message)
+              Enum.each(candidates, &IO.puts("Captured user_message_id candidate: #{&1}"))
+              {:cont, List.first(candidates) || acc}
+
+            %{type: :assistant} ->
+              text =
+                message
+                |> ContentExtractor.extract_text()
+                |> normalize_display_newlines()
+
+              if text != "", do: IO.puts("Assistant: #{text}")
+              {:cont, acc}
+
+            %{type: :result} ->
+              {:halt, acc}
+
+            _ ->
+              {:cont, acc}
+          end
+        end)
+      end)
+
+    :ok = Client.send_message(client, prompt)
+    user_message_id = Task.await(task, 450_000)
+
+    print_file(file_path, "demo.txt after step")
+    user_message_id
+  end
+
+  defp extract_user_message_id_candidates(message) do
+    [
+      get_in(message.raw, ["message", "id"]),
+      message.raw["uuid"],
+      get_in(message.raw, ["message", "uuid"]),
+      message.raw["user_message_id"]
+    ]
+    |> Enum.filter(&is_binary/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp print_file(path, label) do
+    case File.read(path) do
+      {:ok, contents} ->
+        IO.puts("#{label}: #{inspect(contents)}")
+
+      {:error, reason} ->
+        IO.puts("#{label}: #{inspect(reason)}")
+    end
+  end
+
+  defp attempt_rewind(_client, nil, file_path) do
+    IO.puts("""
+    No user_message_id found in incoming frames.
+
+    Inspect `%ClaudeAgentSDK.Message{type: :user}.raw` while running this example to find the correct ID field
+    to pass to Client.rewind_files/2.
+    """)
+
+    print_file(file_path, "demo.txt after rewind (skipped)")
+  end
+
+  defp attempt_rewind(client, user_message_id, file_path) when is_binary(user_message_id) do
+    IO.puts("Rewinding files to user_message_id: #{user_message_id}")
+    IO.inspect(Client.rewind_files(client, user_message_id), label: "rewind_files result")
+    print_file(file_path, "demo.txt after rewind")
+  end
+
+  defp normalize_display_newlines(text) when is_binary(text) do
+    if String.contains?(text, "\\n") and not String.contains?(text, "\n") do
+      String.replace(text, "\\n", "\n")
+    else
+      text
+    end
+  end
+
+  defp init_git_repo(dir) do
+    if System.find_executable("git") do
+      {_, 0} = System.cmd("git", ["init", "--quiet", "--initial-branch=main"], cd: dir)
+
+      {_, 0} =
+        System.cmd("git", ["config", "user.email", "claude-agent-sdk@example.com"], cd: dir)
+
+      {_, 0} = System.cmd("git", ["config", "user.name", "Claude Agent SDK"], cd: dir)
+      File.write!(Path.join(dir, ".gitignore"), "\n")
+      {_, 0} = System.cmd("git", ["add", "."], cd: dir)
+      {_, 0} = System.cmd("git", ["commit", "-m", "init", "--quiet"], cd: dir)
+    end
+  end
+end
+
+FileCheckpointingLive.run()

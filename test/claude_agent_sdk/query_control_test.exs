@@ -1,8 +1,8 @@
 defmodule ClaudeAgentSDK.QueryControlTest do
   use ExUnit.Case, async: true
 
-  alias ClaudeAgentSDK.{Options, Query}
   alias ClaudeAgentSDK.Hooks.Matcher
+  alias ClaudeAgentSDK.{Options, Query}
 
   defmodule StubClientStream do
     def stream(prompt, options) do

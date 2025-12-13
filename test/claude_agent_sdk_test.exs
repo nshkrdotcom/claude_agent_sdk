@@ -2,6 +2,8 @@ defmodule ClaudeAgentSDKTest do
   use ExUnit.Case
   doctest ClaudeAgentSDK
 
+  @moduletag :mock
+
   alias ClaudeAgentSDK.{Mock, Options}
 
   setup do

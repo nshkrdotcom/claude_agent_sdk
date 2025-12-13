@@ -1,6 +1,8 @@
 defmodule ClaudeAgentSDK.DebugModeTest do
   use ClaudeAgentSDK.SupertesterCase
 
+  @moduletag :mock
+
   alias ClaudeAgentSDK.{DebugMode, Message, Mock}
 
   setup do

@@ -250,7 +250,11 @@ defmodule ClaudeAgentSDK.Message do
   end
 
   defp parse_by_type(message, :user, raw) do
-    %{message | data: %{message: raw["message"], session_id: raw["session_id"]}}
+    data =
+      %{message: raw["message"], session_id: raw["session_id"]}
+      |> maybe_put_uuid(raw)
+
+    %{message | data: data}
   end
 
   defp parse_by_type(message, :result, raw) do
@@ -269,12 +273,21 @@ defmodule ClaudeAgentSDK.Message do
     %{message | data: raw}
   end
 
+  # Extract uuid from user messages for file checkpointing support
+  defp maybe_put_uuid(data, %{"uuid" => uuid}) when is_binary(uuid) and uuid != "" do
+    Map.put(data, :uuid, uuid)
+  end
+
+  defp maybe_put_uuid(data, _raw), do: data
+
   defp build_assistant_data(raw) do
+    error_value = get_in(raw, ["message", "error"]) || raw["error"]
+
     %{
       message: raw["message"],
       session_id: raw["session_id"]
     }
-    |> maybe_put_assistant_error(raw["error"])
+    |> maybe_put_assistant_error(error_value)
   end
 
   defp maybe_put_assistant_error(data, error_value) do

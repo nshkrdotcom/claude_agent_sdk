@@ -11,10 +11,12 @@ defmodule ClaudeAgentSDK.Options do
   - `system_prompt` - Custom system prompt to use (string)
   - `append_system_prompt` - Additional system prompt to append (string)
   - `output_format` - Output format (`:text`, `:json`, `:stream_json`, or structured JSON schema config)
+  - `tools` - Base tools set selection (`--tools`) (Python v0.1.12+)
   - `allowed_tools` - List of allowed tool names (list of strings)
   - `disallowed_tools` - List of disallowed tool names (list of strings)
   - `mcp_servers` - Map of MCP server configurations (SDK and external servers) (v0.5.0+)
   - `mcp_config` - Path to MCP configuration file (string, backward compat)
+  - `betas` - SDK beta feature flags (`--betas`) (Python v0.1.12+)
   - `permission_prompt_tool` - Tool for permission prompts (string)
   - `permission_mode` - Permission handling mode (see `t:permission_mode/0`)
   - `cwd` - Working directory for the CLI (string)
@@ -25,6 +27,8 @@ defmodule ClaudeAgentSDK.Options do
   - `abort_ref` - Reference for aborting requests (reference)
   - `hooks` - Hook configurations (see `t:ClaudeAgentSDK.Hooks.hook_config/0`)
   - `timeout_ms` - Command execution timeout in milliseconds (integer, default: 4_500_000)
+  - `sandbox` - Sandbox settings merged into `--settings` JSON when present (Python v0.1.12+)
+  - `enable_file_checkpointing` - Enables file checkpointing + `rewind_files` (Python v0.1.15+)
   - `include_partial_messages` - Enable character-level streaming (boolean) (v0.6.0+)
   - `preferred_transport` - Override automatic transport selection (`:auto | :cli | :control`) (v0.6.0+)
 
@@ -71,6 +75,7 @@ defmodule ClaudeAgentSDK.Options do
     :system_prompt,
     :append_system_prompt,
     :output_format,
+    :tools,
     :allowed_tools,
     :disallowed_tools,
     :max_budget_usd,
@@ -78,6 +83,7 @@ defmodule ClaudeAgentSDK.Options do
     :resume,
     :settings,
     :setting_sources,
+    :sandbox,
     # MCP Configuration (v0.5.0+)
     # Programmatic MCP server definitions (SDK and external)
     :mcp_servers,
@@ -96,6 +102,7 @@ defmodule ClaudeAgentSDK.Options do
     :model,
     # Fallback model when primary is busy
     :fallback_model,
+    # SDK beta feature flags (Python v0.1.12+)
     # Custom agent definitions
     :agents,
     # Active agent (atom key from agents map)
@@ -117,6 +124,8 @@ defmodule ClaudeAgentSDK.Options do
     :can_use_tool,
     # Timeout for command execution in milliseconds (default: 4_500_000 = 75 minutes)
     :timeout_ms,
+    # File checkpointing (Python v0.1.15+)
+    :enable_file_checkpointing,
     # Streaming + Tools (v0.6.0)
     # Enable character-level streaming with --include-partial-messages
     :include_partial_messages,
@@ -125,6 +134,7 @@ defmodule ClaudeAgentSDK.Options do
     :user,
     :max_thinking_tokens,
     :max_buffer_size,
+    betas: [],
     plugins: [],
     add_dirs: [],
     extra_args: %{},
@@ -145,6 +155,29 @@ defmodule ClaudeAgentSDK.Options do
   @type agent_name :: atom()
   @type agent_definition :: ClaudeAgentSDK.Agent.t()
   @type transport_preference :: :auto | :cli | :control
+
+  @typedoc """
+  Tools preset configuration.
+  """
+  @type tools_preset :: %{
+          required(:type) => :preset | String.t(),
+          required(:preset) => :claude_code | String.t()
+        }
+
+  @typedoc """
+  Tools option - controls the base set of available tools.
+
+  Supported forms:
+  - List of tool names: `["Read", "Edit"]`
+  - Empty list: `[]` (disables all built-in tools)
+  - Preset map: `%{type: :preset, preset: :claude_code}` (maps to `"default"`)
+  """
+  @type tools_option :: [String.t()] | tools_preset() | map() | nil
+
+  @typedoc """
+  SDK beta feature flag.
+  """
+  @type sdk_beta :: String.t()
 
   @typedoc """
   SDK MCP server configuration (in-process)
@@ -183,6 +216,7 @@ defmodule ClaudeAgentSDK.Options do
           system_prompt: String.t() | nil,
           append_system_prompt: String.t() | nil,
           output_format: output_format() | nil,
+          tools: tools_option(),
           allowed_tools: [String.t()] | nil,
           disallowed_tools: [String.t()] | nil,
           max_budget_usd: number() | nil,
@@ -190,6 +224,7 @@ defmodule ClaudeAgentSDK.Options do
           resume: String.t() | nil,
           settings: String.t() | nil,
           setting_sources: [String.t() | atom()] | nil,
+          sandbox: map() | nil,
           plugins: [plugin_config()],
           mcp_servers: %{String.t() => mcp_server()} | nil,
           mcp_config: String.t() | nil,
@@ -203,6 +238,7 @@ defmodule ClaudeAgentSDK.Options do
           abort_ref: reference() | nil,
           model: model_name() | nil,
           fallback_model: model_name() | nil,
+          betas: [sdk_beta()] | nil,
           agents: %{agent_name() => agent_definition()} | nil,
           agent: agent_name() | nil,
           session_id: String.t() | nil,
@@ -213,6 +249,7 @@ defmodule ClaudeAgentSDK.Options do
           hooks: ClaudeAgentSDK.Hooks.hook_config() | nil,
           can_use_tool: ClaudeAgentSDK.Permission.callback() | nil,
           timeout_ms: integer() | nil,
+          enable_file_checkpointing: boolean() | nil,
           include_partial_messages: boolean() | nil,
           preferred_transport: transport_preference() | nil,
           max_buffer_size: pos_integer() | nil,
@@ -276,6 +313,7 @@ defmodule ClaudeAgentSDK.Options do
     |> add_max_budget_args(options)
     |> add_system_prompt_args(options)
     |> add_append_system_prompt_args(options)
+    |> add_tools_args(options)
     |> add_allowed_tools_args(options)
     |> add_disallowed_tools_args(options)
     |> add_continue_args(options)
@@ -288,6 +326,7 @@ defmodule ClaudeAgentSDK.Options do
     |> add_verbose_args(options)
     |> add_model_args(options)
     |> add_fallback_model_args(options)
+    |> add_betas_args(options)
     |> add_agents_args(options)
     |> add_agent_args(options)
     |> add_session_id_args(options)
@@ -404,6 +443,22 @@ defmodule ClaudeAgentSDK.Options do
   defp add_append_system_prompt_args(args, %{append_system_prompt: prompt}),
     do: args ++ ["--append-system-prompt", prompt]
 
+  defp add_tools_args(args, %{tools: nil}), do: args
+
+  defp add_tools_args(args, %{tools: tools}) when is_list(tools) do
+    if tools == [] do
+      args ++ ["--tools", ""]
+    else
+      args ++ ["--tools", Enum.join(tools, ",")]
+    end
+  end
+
+  defp add_tools_args(args, %{tools: tools}) when is_map(tools) do
+    # Python treats any preset object as the Claude Code default tools set.
+    _ = tools
+    args ++ ["--tools", "default"]
+  end
+
   defp add_allowed_tools_args(args, %{allowed_tools: nil}), do: args
 
   defp add_allowed_tools_args(args, %{allowed_tools: tools}) when tools == [], do: args
@@ -425,16 +480,88 @@ defmodule ClaudeAgentSDK.Options do
   defp add_resume_args(args, %{resume: nil}), do: args
   defp add_resume_args(args, %{resume: resume}), do: args ++ ["--resume", resume]
 
-  defp add_settings_args(args, %{settings: nil}), do: args
-  defp add_settings_args(args, %{settings: path}), do: args ++ ["--settings", path]
+  defp add_settings_args(args, options) do
+    case build_settings_value(options) do
+      nil -> args
+      value -> args ++ ["--settings", value]
+    end
+  end
+
+  defp build_settings_value(%{settings: nil, sandbox: nil}), do: nil
+
+  defp build_settings_value(%{settings: settings, sandbox: nil}) when is_binary(settings) do
+    settings
+  end
+
+  defp build_settings_value(%{settings: settings, sandbox: sandbox}) when not is_nil(sandbox) do
+    settings_obj = parse_existing_settings(settings)
+
+    settings_obj
+    |> Map.put("sandbox", deep_stringify_keys(sandbox))
+    |> deep_stringify_keys()
+    |> Jason.encode!()
+  end
+
+  defp parse_existing_settings(nil), do: %{}
+
+  defp parse_existing_settings(settings) when is_binary(settings) do
+    trimmed = String.trim(settings)
+
+    cond do
+      trimmed == "" ->
+        %{}
+
+      String.starts_with?(trimmed, "{") and String.ends_with?(trimmed, "}") ->
+        case Jason.decode(trimmed) do
+          {:ok, obj} when is_map(obj) -> obj
+          _ -> read_settings_file(trimmed)
+        end
+
+      true ->
+        read_settings_file(trimmed)
+    end
+  end
+
+  defp read_settings_file(path) when is_binary(path) do
+    case File.read(path) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, obj} when is_map(obj) -> obj
+          _ -> %{}
+        end
+
+      {:error, _} ->
+        %{}
+    end
+  end
+
+  defp deep_stringify_keys(value) when is_map(value) do
+    Enum.reduce(value, %{}, fn {key, val}, acc ->
+      string_key =
+        cond do
+          is_binary(key) -> key
+          is_atom(key) -> Atom.to_string(key)
+          true -> to_string(key)
+        end
+
+      Map.put(acc, string_key, deep_stringify_keys(val))
+    end)
+  end
+
+  defp deep_stringify_keys(value) when is_list(value) do
+    Enum.map(value, &deep_stringify_keys/1)
+  end
+
+  defp deep_stringify_keys(value) when is_atom(value) and value not in [nil, true, false] do
+    Atom.to_string(value)
+  end
+
+  defp deep_stringify_keys(value), do: value
 
   defp add_setting_sources_args(args, %{setting_sources: nil}), do: args
 
   defp add_setting_sources_args(args, %{setting_sources: sources}) when is_list(sources) do
-    value =
-      sources
-      |> Enum.map(&to_string/1)
-      |> Enum.join(",")
+    value = Enum.map_join(sources, ",", &to_string/1)
 
     args ++ ["--setting-sources", value]
   end
@@ -619,6 +746,12 @@ defmodule ClaudeAgentSDK.Options do
     args ++ ["--max-thinking-tokens", to_string(tokens)]
   end
 
+  defp add_betas_args(args, %{betas: betas}) when is_list(betas) and betas != [] do
+    args ++ ["--betas", Enum.join(betas, ",")]
+  end
+
+  defp add_betas_args(args, _), do: args
+
   defp add_extra_args(args, %{extra_args: extra_args}) when is_map(extra_args) do
     extra_args
     |> Enum.sort_by(fn {flag, _} -> flag end)
@@ -715,9 +848,8 @@ defmodule ClaudeAgentSDK.Options do
 
   def validate_agents(%__MODULE__{agents: agents, agent: active_agent}) when is_map(agents) do
     # Validate all agents in the map
-    with :ok <- validate_agents_map(agents),
-         :ok <- validate_active_agent(agents, active_agent) do
-      :ok
+    with :ok <- validate_agents_map(agents) do
+      validate_active_agent(agents, active_agent)
     end
   end
 

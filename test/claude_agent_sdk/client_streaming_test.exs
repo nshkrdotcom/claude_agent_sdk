@@ -9,6 +9,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
   import ClaudeAgentSDK.SupertesterCase, only: [eventually: 2]
 
+  alias ClaudeAgentSDK.Hooks.Matcher
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.TestSupport.MockTransport
 
@@ -284,6 +285,14 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       assert [%{type: :stream_event, event: %{type: :text_delta, accumulated: "Hello"}}] =
                Task.await(task, 1_000)
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          map_size(state.subscribers) == 0 and state.active_subscriber == nil
+        end,
+        timeout: 500
+      )
     end
   end
 
@@ -453,7 +462,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
         include_partial_messages: true,
         hooks: %{
           pre_tool_use: [
-            ClaudeAgentSDK.Hooks.Matcher.new("Bash", [hook_callback])
+            Matcher.new("Bash", [hook_callback])
           ]
         }
       }

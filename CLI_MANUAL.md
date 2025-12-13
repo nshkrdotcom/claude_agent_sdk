@@ -408,7 +408,7 @@ end
 
 ```elixir
 # Set environment for live testing
-# MIX_ENV=test mix test.live
+# mix test.live
 
 defmodule LiveIntegrationTest do
   use ExUnit.Case

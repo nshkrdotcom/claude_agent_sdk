@@ -78,10 +78,8 @@ defmodule ClaudeAgentSDK.SDKMCPRoutingTest do
   end
 
   defp safe_stop(client) do
-    try do
-      Client.stop(client)
-    catch
-      :exit, _ -> :ok
-    end
+    Client.stop(client)
+  catch
+    :exit, _ -> :ok
   end
 end

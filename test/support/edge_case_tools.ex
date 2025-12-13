@@ -1,4 +1,6 @@
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.MinimalTool do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :minimal,
@@ -11,6 +13,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.MinimalTool do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.OptionalTool do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :optional,
@@ -28,6 +32,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.OptionalTool do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.NestedTool do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :nested,
@@ -51,6 +57,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.NestedTool do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.ArrayTool do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :array_input,
@@ -72,6 +80,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.ArrayTool do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.UnderscoreTest do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :my_special_tool,
@@ -84,6 +94,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.UnderscoreTest do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.LargeInputTool do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :large,
@@ -102,6 +114,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.LargeInputTool do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.LargeOutputTool do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :large_out,
@@ -115,6 +129,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.LargeOutputTool do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.ConcurrentTool do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :concurrent,
@@ -133,6 +149,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.ConcurrentTool do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.StrictTool do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :strict,
@@ -155,6 +173,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.StrictTool do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.TimeoutTool do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :timeout,
@@ -169,6 +189,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.TimeoutTool do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.NumericTools do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :tool_v1,
@@ -185,6 +207,8 @@ defmodule ClaudeAgentSDK.TestSupport.EdgeCase.NumericTools do
 end
 
 defmodule ClaudeAgentSDK.TestSupport.EdgeCase.SingleChar do
+  @moduledoc false
+
   use ClaudeAgentSDK.Tool
 
   deftool :a,

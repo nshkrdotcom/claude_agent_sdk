@@ -322,77 +322,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     {_erlexec_pid, subprocess_os_pid} = state.subprocess
 
     if os_pid == subprocess_os_pid do
-      # Parse streaming JSON events
-      new_buffer = state.message_buffer <> data
-
-      {:ok, events, remaining_buffer, new_accumulated} =
-        EventParser.parse_buffer(new_buffer, state.accumulated_text)
-
-      # Extract session ID from first message_start event
-      new_session_id = extract_session_id(events) || state.session_id
-
-      # Check if message completed
-      message_complete? = Enum.any?(events, &(&1.type == :message_stop))
-
-      # Broadcast events to ACTIVE subscriber only
-      if state.active_subscriber do
-        broadcast_events_to(state.active_subscriber, state.subscribers, events)
-      end
-
-      # If message complete, activate next subscriber and send their message
-      new_state =
-        if message_complete? do
-          case state.subscriber_queue do
-            [{next_ref, next_message} | rest] ->
-              # Activate next subscriber
-              new_state = %{
-                state
-                | active_subscriber: next_ref,
-                  subscriber_queue: rest,
-                  # Reset for next message
-                  accumulated_text: "",
-                  message_buffer: remaining_buffer,
-                  session_id: new_session_id
-              }
-
-              # Send their queued message immediately (synchronously within this handler)
-              json_msg =
-                Jason.encode!(%{
-                  "type" => "user",
-                  "message" => %{
-                    "role" => "user",
-                    "content" => next_message
-                  }
-                })
-
-              {pid, _} = state.subprocess
-
-              :ok = :exec.send(pid, json_msg <> "\n")
-              Logger.debug("Sent queued message to Claude (#{byte_size(next_message)} bytes)")
-
-              new_state
-
-            [] ->
-              # No more subscribers
-              %{
-                state
-                | active_subscriber: nil,
-                  subscriber_queue: [],
-                  accumulated_text: "",
-                  message_buffer: remaining_buffer,
-                  session_id: new_session_id
-              }
-          end
-        else
-          %{
-            state
-            | message_buffer: remaining_buffer,
-              accumulated_text: new_accumulated,
-              session_id: new_session_id
-          }
-        end
-
-      {:noreply, new_state}
+      {:noreply, handle_stdout_data(state, data)}
     else
       {:noreply, state}
     end
@@ -441,6 +371,71 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   ## Private Functions
+
+  defp handle_stdout_data(state, data) do
+    new_buffer = state.message_buffer <> data
+
+    {:ok, events, remaining_buffer, new_accumulated} =
+      EventParser.parse_buffer(new_buffer, state.accumulated_text)
+
+    new_session_id = extract_session_id(events) || state.session_id
+
+    maybe_broadcast_events(state, events)
+
+    state = %{
+      state
+      | message_buffer: remaining_buffer,
+        accumulated_text: new_accumulated,
+        session_id: new_session_id
+    }
+
+    if Enum.any?(events, &(&1.type == :message_stop)) do
+      handle_message_complete(state)
+    else
+      state
+    end
+  end
+
+  defp maybe_broadcast_events(%{active_subscriber: nil}, _events), do: :ok
+
+  defp maybe_broadcast_events(state, events) do
+    broadcast_events_to(state.active_subscriber, state.subscribers, events)
+    :ok
+  end
+
+  defp handle_message_complete(state) do
+    state =
+      %{
+        state
+        | accumulated_text: ""
+      }
+
+    case state.subscriber_queue do
+      [] ->
+        %{state | active_subscriber: nil, subscriber_queue: []}
+
+      [{next_ref, next_message} | rest] ->
+        state = %{state | active_subscriber: next_ref, subscriber_queue: rest}
+        :ok = send_queued_message(state, next_message)
+        state
+    end
+  end
+
+  defp send_queued_message(state, next_message) do
+    json_msg =
+      Jason.encode!(%{
+        "type" => "user",
+        "message" => %{
+          "role" => "user",
+          "content" => next_message
+        }
+      })
+
+    {pid, _} = state.subprocess
+    :ok = :exec.send(pid, json_msg <> "\n")
+    Logger.debug("Sent queued message to Claude (#{byte_size(next_message)} bytes)")
+    :ok
+  end
 
   defp build_streaming_args(%Options{} = options) do
     base_args = [

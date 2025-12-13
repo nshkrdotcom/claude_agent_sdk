@@ -5,19 +5,19 @@ defmodule ClaudeAgentSDK.Tool.EdgeCasesTest do
 
   use ClaudeAgentSDK.SupertesterCase
 
-  alias ClaudeAgentSDK.Tool
-  alias ClaudeAgentSDK.TestSupport.EdgeCase.MinimalTool
-  alias ClaudeAgentSDK.TestSupport.EdgeCase.OptionalTool
-  alias ClaudeAgentSDK.TestSupport.EdgeCase.NestedTool
   alias ClaudeAgentSDK.TestSupport.EdgeCase.ArrayTool
-  alias ClaudeAgentSDK.TestSupport.EdgeCase.UnderscoreTest
+  alias ClaudeAgentSDK.TestSupport.EdgeCase.ConcurrentTool
   alias ClaudeAgentSDK.TestSupport.EdgeCase.LargeInputTool
   alias ClaudeAgentSDK.TestSupport.EdgeCase.LargeOutputTool
-  alias ClaudeAgentSDK.TestSupport.EdgeCase.ConcurrentTool
+  alias ClaudeAgentSDK.TestSupport.EdgeCase.MinimalTool
+  alias ClaudeAgentSDK.TestSupport.EdgeCase.NestedTool
+  alias ClaudeAgentSDK.TestSupport.EdgeCase.NumericTools
+  alias ClaudeAgentSDK.TestSupport.EdgeCase.OptionalTool
+  alias ClaudeAgentSDK.TestSupport.EdgeCase.SingleChar
   alias ClaudeAgentSDK.TestSupport.EdgeCase.StrictTool
   alias ClaudeAgentSDK.TestSupport.EdgeCase.TimeoutTool
-  alias ClaudeAgentSDK.TestSupport.EdgeCase.NumericTools
-  alias ClaudeAgentSDK.TestSupport.EdgeCase.SingleChar
+  alias ClaudeAgentSDK.TestSupport.EdgeCase.UnderscoreTest
+  alias ClaudeAgentSDK.Tool
 
   describe "empty tool definitions" do
     test "tool with minimal schema" do
@@ -57,7 +57,7 @@ defmodule ClaudeAgentSDK.Tool.EdgeCasesTest do
 
   describe "large payloads" do
     test "handles large input" do
-      large_string = String.duplicate("a", 10000)
+      large_string = String.duplicate("a", 10_000)
       {:ok, result} = LargeInputTool.Large.execute(%{"data" => large_string})
       [%{"text" => text}] = result["content"]
       assert text == "Received 10000 bytes"
@@ -66,7 +66,7 @@ defmodule ClaudeAgentSDK.Tool.EdgeCasesTest do
     test "handles large output" do
       {:ok, result} = LargeOutputTool.LargeOut.execute(%{})
       [%{"text" => text}] = result["content"]
-      assert byte_size(text) == 30000
+      assert byte_size(text) == 30_000
     end
   end
 

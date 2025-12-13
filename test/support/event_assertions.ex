@@ -19,7 +19,7 @@ defmodule ClaudeAgentSDK.TestSupport.EventAssertions do
   def assert_event_present(events, event_type, filters \\ []) do
     matching = find_events(events, event_type, filters)
 
-    assert length(matching) > 0,
+    refute Enum.empty?(matching),
            "Expected to find #{event_type} event#{format_filters(filters)}, but none found.\n" <>
              "Available events: #{inspect(Enum.map(events, & &1.type))}"
 
@@ -32,7 +32,7 @@ defmodule ClaudeAgentSDK.TestSupport.EventAssertions do
   def refute_event_present(events, event_type, filters \\ []) do
     matching = find_events(events, event_type, filters)
 
-    assert length(matching) == 0,
+    assert Enum.empty?(matching),
            "Expected NO #{event_type} events#{format_filters(filters)}, but found #{length(matching)}:\n" <>
              inspect(matching)
   end
@@ -116,10 +116,9 @@ defmodule ClaudeAgentSDK.TestSupport.EventAssertions do
   def assert_text_contains(events, substring) do
     matching =
       events
-      |> Enum.filter(&(&1.type == :text_delta))
-      |> Enum.filter(&String.contains?(&1.text, substring))
+      |> Enum.filter(&(&1.type == :text_delta and String.contains?(&1.text, substring)))
 
-    assert length(matching) > 0,
+    refute Enum.empty?(matching),
            "Expected to find text_delta containing #{inspect(substring)}, " <>
              "but none found in #{length(events)} events"
   end
@@ -181,11 +180,11 @@ defmodule ClaudeAgentSDK.TestSupport.EventAssertions do
 
   defp find_events(events, event_type, filters) do
     events
-    |> Enum.filter(&(&1.type == event_type))
     |> Enum.filter(fn event ->
-      Enum.all?(filters, fn {key, value} ->
-        Map.get(event, key) == value
-      end)
+      event.type == event_type and
+        Enum.all?(filters, fn {key, value} ->
+          Map.get(event, key) == value
+        end)
     end)
   end
 

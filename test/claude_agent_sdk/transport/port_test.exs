@@ -4,8 +4,8 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
   """
   use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
-  alias ClaudeAgentSDK.Transport.Port, as: PortTransport
   alias ClaudeAgentSDK.Options
+  alias ClaudeAgentSDK.Transport.Port, as: PortTransport
 
   @cat_executable System.find_executable("cat") || "/bin/cat"
 

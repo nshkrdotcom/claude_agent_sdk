@@ -27,6 +27,12 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
   end
 
   describe "settings controls" do
+    test "no settings and no sandbox omits --settings" do
+      options = %Options{settings: nil, sandbox: nil}
+      args = Options.to_args(options)
+      refute "--settings" in args
+    end
+
     test "settings path maps to --settings" do
       options = %Options{settings: "/tmp/settings.json"}
       args = Options.to_args(options)
@@ -42,6 +48,54 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
   end
 
   describe "tool allowlists/denylists" do
+    test "tools list generates --tools flag" do
+      options = %Options{tools: ["Read", "Edit", "Bash"]}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--tools", "Read,Edit,Bash")
+    end
+
+    test "tools empty list generates --tools with empty string" do
+      options = %Options{tools: []}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--tools", "")
+    end
+
+    test "tools preset generates --tools default" do
+      options = %Options{tools: %{type: :preset, preset: :claude_code}}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--tools", "default")
+    end
+
+    test "tools preset supports string-keyed map" do
+      options = %Options{tools: %{"type" => "preset", "preset" => "claude_code"}}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--tools", "default")
+    end
+
+    test "tools flag appears before allow/deny tool filters" do
+      options = %Options{
+        tools: ["Read"],
+        allowed_tools: ["Bash"],
+        disallowed_tools: ["Write"]
+      }
+
+      args = Options.to_args(options)
+
+      tools_idx = Enum.find_index(args, &(&1 == "--tools"))
+      allowed_idx = Enum.find_index(args, &(&1 == "--allowedTools"))
+      disallowed_idx = Enum.find_index(args, &(&1 == "--disallowedTools"))
+
+      assert is_integer(tools_idx)
+      assert is_integer(allowed_idx)
+      assert is_integer(disallowed_idx)
+      assert tools_idx < allowed_idx
+      assert tools_idx < disallowed_idx
+    end
+
     test "allowed_tools are comma-joined to match CLI expectations" do
       options = %Options{allowed_tools: ["Read", "Write", "Bash"]}
       args = Options.to_args(options)
@@ -68,6 +122,123 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
       args = Options.to_args(options)
 
       refute "--disallowedTools" in args
+    end
+  end
+
+  describe "betas option" do
+    test "betas list generates --betas flag" do
+      options = %Options{betas: ["context-1m-2025-08-07"]}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--betas", "context-1m-2025-08-07")
+    end
+
+    test "multiple betas are comma-separated" do
+      options = %Options{betas: ["context-1m-2025-08-07", "future-beta-2025-01-01"]}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--betas", "context-1m-2025-08-07,future-beta-2025-01-01")
+    end
+
+    test "empty betas omits flag" do
+      options = %Options{betas: []}
+      args = Options.to_args(options)
+
+      refute "--betas" in args
+    end
+
+    test "nil betas omits flag" do
+      options = %Options{betas: nil}
+      args = Options.to_args(options)
+
+      refute "--betas" in args
+    end
+  end
+
+  describe "sandbox settings merge into settings" do
+    test "sandbox-only options emit JSON --settings value" do
+      options = %Options{sandbox: %{enabled: true, network: %{allowLocalBinding: true}}}
+      args = Options.to_args(options)
+
+      decoded =
+        args
+        |> value_for_flag("--settings")
+        |> Jason.decode!()
+
+      assert decoded["sandbox"]["enabled"] == true
+      assert decoded["sandbox"]["network"]["allowLocalBinding"] == true
+    end
+
+    test "settings JSON string merges sandbox settings" do
+      options = %Options{
+        settings: ~s({"hello":"world"}),
+        sandbox: %{enabled: true}
+      }
+
+      decoded =
+        options
+        |> Options.to_args()
+        |> value_for_flag("--settings")
+        |> Jason.decode!()
+
+      assert decoded["hello"] == "world"
+      assert decoded["sandbox"]["enabled"] == true
+    end
+
+    test "settings file path merges sandbox settings when file exists" do
+      tmp_path =
+        Path.join(
+          System.tmp_dir!(),
+          "claude_agent_sdk_settings_#{System.unique_integer([:positive])}.json"
+        )
+
+      File.write!(tmp_path, ~s({"from_file":true}))
+      on_exit(fn -> File.rm(tmp_path) end)
+
+      options = %Options{settings: tmp_path, sandbox: %{enabled: true}}
+
+      decoded =
+        options
+        |> Options.to_args()
+        |> value_for_flag("--settings")
+        |> Jason.decode!()
+
+      assert decoded["from_file"] == true
+      assert decoded["sandbox"]["enabled"] == true
+    end
+
+    test "missing settings file path is ignored when sandbox present" do
+      missing_path =
+        Path.join(
+          System.tmp_dir!(),
+          "claude_agent_sdk_missing_#{System.unique_integer([:positive])}.json"
+        )
+
+      refute File.exists?(missing_path)
+
+      options = %Options{settings: missing_path, sandbox: %{enabled: true}}
+
+      decoded =
+        options
+        |> Options.to_args()
+        |> value_for_flag("--settings")
+        |> Jason.decode!()
+
+      assert decoded["sandbox"]["enabled"] == true
+      refute Map.has_key?(decoded, "from_file")
+    end
+
+    test "invalid JSON settings string falls back to file parsing and is ignored when missing" do
+      options = %Options{settings: "{not json}", sandbox: %{enabled: true}}
+
+      decoded =
+        options
+        |> Options.to_args()
+        |> value_for_flag("--settings")
+        |> Jason.decode!()
+
+      assert decoded["sandbox"]["enabled"] == true
+      assert Map.keys(decoded) == ["sandbox"]
     end
   end
 

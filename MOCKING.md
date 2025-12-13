@@ -76,11 +76,11 @@ mix test
 ### Running Tests with Live API
 
 ```bash
-# Run tests against real Claude API
-MIX_ENV=test mix test.live
+# Run live tests against the Claude CLI/API (disables mocks; runs only @tag :live)
+mix test.live
 
 # Run specific test file with live API
-MIX_ENV=test mix test.live test/specific_test.exs
+mix test.live test/specific_test.exs
 ```
 
 ## Environment Configuration
@@ -229,5 +229,5 @@ Mock.set_response("specific phrase", [...])
 
 ```bash
 # Ensure test environment for mix test.live
-MIX_ENV=test mix test.live
+mix test.live
 ```

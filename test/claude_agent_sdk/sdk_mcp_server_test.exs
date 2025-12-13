@@ -7,7 +7,7 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
 
   use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
-  alias ClaudeAgentSDK.{Tool, Options}
+  alias ClaudeAgentSDK.{Options, Tool}
   alias ClaudeAgentSDK.TestSupport.{CalculatorTools, ErrorTools, ImageTools}
 
   describe "create_sdk_mcp_server/2" do

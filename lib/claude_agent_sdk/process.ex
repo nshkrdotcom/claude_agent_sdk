@@ -47,8 +47,9 @@ defmodule ClaudeAgentSDK.Process do
   defp use_mock? do
     # Check LIVE_MODE environment variable first (set by mix run.live)
     # This overrides the Application config (even when MIX_ENV=test)
-    case System.get_env("LIVE_MODE") do
-      "true" -> false
+    case {System.get_env("LIVE_MODE"), System.get_env("LIVE_TESTS")} do
+      {"true", _} -> false
+      {_, "true"} -> false
       _ -> Application.get_env(:claude_agent_sdk, :use_mock, false)
     end
   end
@@ -142,8 +143,7 @@ defmodule ClaudeAgentSDK.Process do
         # Get timeout from options (default: 75 minutes)
         timeout_ms = options.timeout_ms || 4_500_000
 
-        # Debug: log what timeout we're using
-        IO.puts("\n[DEBUG] Using timeout: #{timeout_ms}ms (#{div(timeout_ms, 60_000)} minutes)")
+        Logger.debug("Using timeout for CLI run", timeout_ms: timeout_ms)
 
         # Collect output until process exits
         receive_exec_output(pid, os_pid, [], [], timeout_ms)
@@ -351,9 +351,16 @@ defmodule ClaudeAgentSDK.Process do
       |> maybe_put_user_env(options.user)
       |> Map.put_new("CLAUDE_CODE_ENTRYPOINT", "sdk-elixir")
       |> Map.put_new("CLAUDE_AGENT_SDK_VERSION", version_string())
+      |> maybe_put_file_checkpointing_env(options)
 
     Enum.map(merged, fn {k, v} -> {k, v} end)
   end
+
+  defp maybe_put_file_checkpointing_env(env_map, %Options{enable_file_checkpointing: true}) do
+    Map.put(env_map, "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING", "true")
+  end
+
+  defp maybe_put_file_checkpointing_env(env_map, _options), do: env_map
 
   defp maybe_put_user_env(env_map, nil), do: env_map
 
@@ -362,6 +369,8 @@ defmodule ClaudeAgentSDK.Process do
     |> Map.put("USER", user)
     |> Map.put("LOGNAME", user)
   end
+
+  defp shell_escape(""), do: "\"\""
 
   defp shell_escape(arg) do
     # Escape arguments that contain spaces or special characters
@@ -384,6 +393,9 @@ defmodule ClaudeAgentSDK.Process do
 
   @doc false
   def __exec_options__(%Options{} = options), do: build_exec_options(options)
+
+  @doc false
+  def __shell_escape__(arg) when is_binary(arg), do: shell_escape(arg)
 
   defp maybe_put_env_option(opts, []), do: opts
   defp maybe_put_env_option(opts, env) when is_list(env), do: [{:env, env} | opts]

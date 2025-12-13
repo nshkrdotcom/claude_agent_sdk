@@ -4,9 +4,9 @@ defmodule ClaudeAgentSDK.MessageErrorTest do
   alias ClaudeAgentSDK.Message
 
   describe "from_json/1 with assistant error" do
-    test "parses assistant error enum when present" do
+    test "parses assistant error enum from nested message.error" do
       json =
-        ~s({"type":"assistant","message":{"role":"assistant","content":"oops"},"session_id":"s1","error":"rate_limit"})
+        ~s({"type":"assistant","message":{"role":"assistant","content":"oops","error":"rate_limit"},"session_id":"s1"})
 
       {:ok, message} = Message.from_json(json)
 
@@ -14,9 +14,18 @@ defmodule ClaudeAgentSDK.MessageErrorTest do
       assert message.data.error == :rate_limit
     end
 
+    test "falls back to root error for backwards compatibility" do
+      json =
+        ~s({"type":"assistant","message":{"role":"assistant","content":"oops"},"session_id":"s1","error":"rate_limit"})
+
+      {:ok, message} = Message.from_json(json)
+
+      assert message.data.error == :rate_limit
+    end
+
     test "maps unknown assistant error values to :unknown" do
       json =
-        ~s({"type":"assistant","message":{"role":"assistant","content":"oops"},"session_id":"s1","error":"some_new_error"})
+        ~s({"type":"assistant","message":{"role":"assistant","content":"oops","error":"some_new_error"},"session_id":"s1"})
 
       {:ok, message} = Message.from_json(json)
 

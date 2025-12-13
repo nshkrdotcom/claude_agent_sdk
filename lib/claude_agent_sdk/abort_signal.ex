@@ -7,7 +7,7 @@ defmodule ClaudeAgentSDK.AbortSignal do
   occurs.
   """
 
-  @type t :: %__MODULE__{ref: reference()}
+  @type t :: %__MODULE__{ref: :atomics.atomics_ref()}
 
   defstruct [:ref]
 

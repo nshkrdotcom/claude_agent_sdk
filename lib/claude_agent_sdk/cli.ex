@@ -58,21 +58,22 @@ defmodule ClaudeAgentSDK.CLI do
   """
   @spec version() :: {:ok, String.t()} | {:error, term()}
   def version do
-    case find_executable() do
-      {:ok, executable} ->
-        case System.cmd(executable, ["--version"], stderr_to_stdout: true) do
-          {output, 0} ->
-            case parse_version(output) do
-              {:ok, version} -> {:ok, version}
-              _ -> {:error, :parse_failed}
-            end
-
-          {_output, status} ->
-            {:error, {:exit_status, status}}
-        end
-
+    with {:ok, executable} <- find_executable(),
+         {output, 0} <- System.cmd(executable, ["--version"], stderr_to_stdout: true),
+         {:ok, parsed} <- parse_version(output) do
+      {:ok, parsed}
+    else
       {:error, :not_found} = error ->
         error
+
+      {_output, status} when is_integer(status) ->
+        {:error, {:exit_status, status}}
+
+      {:error, :parse_failed} ->
+        {:error, :parse_failed}
+
+      _ ->
+        {:error, :parse_failed}
     end
   end
 
@@ -103,19 +104,7 @@ defmodule ClaudeAgentSDK.CLI do
   def warn_if_outdated do
     case version() do
       {:ok, installed} ->
-        case {Version.parse(installed), Version.parse(@minimum_version)} do
-          {{:ok, installed_version}, {:ok, minimum_version}} ->
-            if Version.compare(installed_version, minimum_version) == :lt do
-              Logger.warning(
-                "Claude CLI version #{installed} is below minimum #{@minimum_version}. Please upgrade."
-              )
-            end
-
-          _ ->
-            Logger.warning(
-              "Could not parse Claude CLI version #{installed}. Minimum supported: #{@minimum_version}"
-            )
-        end
+        warn_for_installed_version(installed)
 
       {:error, :not_found} ->
         Logger.warning("Claude CLI not found. Minimum supported version: #{@minimum_version}")
@@ -127,6 +116,22 @@ defmodule ClaudeAgentSDK.CLI do
     end
 
     :ok
+  end
+
+  defp warn_for_installed_version(installed) do
+    case {Version.parse(installed), Version.parse(@minimum_version)} do
+      {{:ok, installed_version}, {:ok, minimum_version}} ->
+        if Version.compare(installed_version, minimum_version) == :lt do
+          Logger.warning(
+            "Claude CLI version #{installed} is below minimum #{@minimum_version}. Please upgrade."
+          )
+        end
+
+      _ ->
+        Logger.warning(
+          "Could not parse Claude CLI version #{installed}. Minimum supported: #{@minimum_version}"
+        )
+    end
   end
 
   defp parse_version(output) when is_binary(output) do

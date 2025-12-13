@@ -207,26 +207,23 @@ defmodule ClaudeAgentSDK.Tool.Registry do
   ## Private Functions
 
   defp execute_tool_safely(tool, input) do
-    try do
-      # Call the tool module's execute function
-      tool.module.execute(input)
-    rescue
-      error ->
-        # Only log in non-test environments (tests verify error handling works)
-        if Mix.env() != :test do
-          Logger.error("Tool execution error: #{inspect(error)}")
-        end
+    tool.module.execute(input)
+  rescue
+    error ->
+      # Only log in non-test environments (tests verify error handling works)
+      if Mix.env() != :test do
+        Logger.error("Tool execution error: #{inspect(error)}")
+      end
 
-        {:error,
-         %{
-           "content" => [
-             %{
-               "type" => "text",
-               "text" => "Error executing tool: #{Exception.message(error)}"
-             }
-           ],
-           "isError" => true
-         }}
-    end
+      {:error,
+       %{
+         "content" => [
+           %{
+             "type" => "text",
+             "text" => "Error executing tool: #{Exception.message(error)}"
+           }
+         ],
+         "isError" => true
+       }}
   end
 end

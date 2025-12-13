@@ -265,27 +265,26 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     # Parse each complete line
     {events, new_accumulated} =
       Enum.reduce(complete_lines, {[], accumulated_text}, fn line, {events_acc, text_acc} ->
-        # Skip empty lines
-        if String.trim(line) == "" do
-          {events_acc, text_acc}
-        else
-          case Jason.decode(line) do
-            {:ok, json} ->
-              # Unwrap stream_event wrapper if present
-              event_json = unwrap_stream_event(json)
-
-              {:ok, parsed_events, new_text_acc} = parse_event(event_json, text_acc)
-              {events_acc ++ parsed_events, new_text_acc}
-
-            {:error, _reason} ->
-              # Invalid JSON - log warning but continue
-              # This makes the parser resilient to malformed output
-              {events_acc, text_acc}
-          end
-        end
+        parse_line(line, events_acc, text_acc)
       end)
 
     {:ok, events, remaining_buffer, new_accumulated}
+  end
+
+  defp parse_line(line, events_acc, text_acc) do
+    if String.trim(line) == "" do
+      {events_acc, text_acc}
+    else
+      case Jason.decode(line) do
+        {:ok, json} ->
+          event_json = unwrap_stream_event(json)
+          {:ok, parsed_events, new_text_acc} = parse_event(event_json, text_acc)
+          {events_acc ++ parsed_events, new_text_acc}
+
+        {:error, _reason} ->
+          {events_acc, text_acc}
+      end
+    end
   end
 
   # Unwrap stream_event wrapper from Claude CLI output

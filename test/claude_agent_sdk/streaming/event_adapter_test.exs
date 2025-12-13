@@ -1,8 +1,8 @@
 defmodule ClaudeAgentSDK.Streaming.EventAdapterTest do
   use ExUnit.Case, async: true
 
-  alias ClaudeAgentSDK.Streaming.EventAdapter
   alias ClaudeAgentSDK.Message
+  alias ClaudeAgentSDK.Streaming.EventAdapter
 
   # ============================================================================
   # Normalization Tests (8 tests)

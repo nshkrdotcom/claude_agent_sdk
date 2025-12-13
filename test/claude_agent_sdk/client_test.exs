@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSDK.ClientTest do
   use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
-  alias ClaudeAgentSDK.{Client, Options, Hooks}
+  alias ClaudeAgentSDK.{Client, Hooks, Options}
   alias ClaudeAgentSDK.Hooks.{Matcher, Output}
 
   @moduletag :client
@@ -382,8 +382,8 @@ defmodule ClaudeAgentSDK.ClientTest do
   end
 
   describe "model switching" do
-    alias ClaudeAgentSDK.TestSupport.MockTransport
     alias ClaudeAgentSDK.Model
+    alias ClaudeAgentSDK.TestSupport.MockTransport
 
     setup do
       Process.flag(:trap_exit, true)
@@ -619,6 +619,140 @@ defmodule ClaudeAgentSDK.ClientTest do
       assert length(messages) == 2
       assert Enum.at(messages, 0).type == :assistant
       assert Enum.at(messages, 1).type == :result
+    end
+  end
+
+  describe "file checkpointing control" do
+    alias ClaudeAgentSDK.TestSupport.MockTransport
+
+    setup do
+      Process.flag(:trap_exit, true)
+
+      assert {:ok, client} =
+               Client.start_link(%Options{enable_file_checkpointing: true},
+                 transport: MockTransport,
+                 transport_opts: [test_pid: self()]
+               )
+
+      on_exit(fn ->
+        try do
+          Client.stop(client)
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      assert_receive {:mock_transport_send, init_json}, 200
+      init_request = Jason.decode!(init_json)
+
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => init_request["request_id"],
+          "subtype" => "success",
+          "response" => %{
+            "commands" => [%{"name" => "plan"}],
+            "outputStyle" => %{"current" => "default"}
+          }
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+
+      {:ok, %{client: client, transport: transport_pid}}
+    end
+
+    test "rewind_files sends control request and waits for success", %{
+      client: client,
+      transport: transport
+    } do
+      task = Task.async(fn -> Client.rewind_files(client, "user_msg_123") end)
+
+      assert_receive {:mock_transport_send, json}, 200
+      decoded = Jason.decode!(json)
+      assert decoded["request"]["subtype"] == "rewind_files"
+      assert decoded["request"]["user_message_id"] == "user_msg_123"
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => decoded["request_id"],
+          "subtype" => "success",
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(response))
+      assert :ok = Task.await(task, 1_000)
+    end
+
+    test "rewind_files forwards CLI error", %{client: client, transport: transport} do
+      task = Task.async(fn -> Client.rewind_files(client, "user_msg_456") end)
+
+      assert_receive {:mock_transport_send, json}, 200
+      decoded = Jason.decode!(json)
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => decoded["request_id"],
+          "subtype" => "error",
+          "error" => "blocked"
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(response))
+      assert {:error, "blocked"} = Task.await(task, 1_000)
+    end
+  end
+
+  describe "rewind_files requires file checkpointing option" do
+    alias ClaudeAgentSDK.TestSupport.MockTransport
+
+    setup do
+      Process.flag(:trap_exit, true)
+
+      assert {:ok, client} =
+               Client.start_link(%Options{},
+                 transport: MockTransport,
+                 transport_opts: [test_pid: self()]
+               )
+
+      on_exit(fn ->
+        try do
+          Client.stop(client)
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      assert_receive {:mock_transport_send, init_json}, 200
+      init_request = Jason.decode!(init_json)
+
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => init_request["request_id"],
+          "subtype" => "success",
+          "response" => %{
+            "commands" => [%{"name" => "plan"}],
+            "outputStyle" => %{"current" => "default"}
+          }
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+
+      {:ok, %{client: client}}
+    end
+
+    test "returns error without sending control request when disabled", %{client: client} do
+      assert {:error, :file_checkpointing_not_enabled} =
+               Client.rewind_files(client, "user_msg_123")
+
+      refute_receive {:mock_transport_send, _json}, 50
     end
   end
 end

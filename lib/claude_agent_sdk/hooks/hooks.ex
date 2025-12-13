@@ -236,28 +236,31 @@ defmodule ClaudeAgentSDK.Hooks do
   """
   @spec validate_config(hook_config()) :: :ok | {:error, String.t()}
   def validate_config(config) when is_map(config) do
-    config
-    |> Enum.reduce_while(:ok, fn {event, matchers}, _acc ->
-      cond do
-        not is_atom(event) ->
-          {:halt, {:error, "Hook event must be an atom, got: #{inspect(event)}"}}
-
-        event not in all_valid_events() ->
-          {:halt, {:error, "Invalid hook event: #{event}"}}
-
-        not is_list(matchers) ->
-          {:halt, {:error, "Matchers must be a list for event #{event}"}}
-
-        true ->
-          case validate_matchers(matchers) do
-            :ok -> {:cont, :ok}
-            error -> {:halt, error}
-          end
-      end
+    Enum.reduce_while(config, :ok, fn {event, matchers}, _acc ->
+      validate_config_entry(event, matchers)
     end)
   end
 
   def validate_config(_), do: {:error, "Hook config must be a map"}
+
+  defp validate_config_entry(event, matchers) do
+    cond do
+      not is_atom(event) ->
+        {:halt, {:error, "Hook event must be an atom, got: #{inspect(event)}"}}
+
+      event not in all_valid_events() ->
+        {:halt, {:error, "Invalid hook event: #{event}"}}
+
+      not is_list(matchers) ->
+        {:halt, {:error, "Matchers must be a list for event #{event}"}}
+
+      true ->
+        case validate_matchers(matchers) do
+          :ok -> {:cont, :ok}
+          error -> {:halt, error}
+        end
+    end
+  end
 
   @doc false
   # Validates a list of matchers

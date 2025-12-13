@@ -1,7 +1,7 @@
 defmodule Integration.ModelSwitchingLiveTest do
   use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
-  alias ClaudeAgentSDK.{Client, Options, Model}
+  alias ClaudeAgentSDK.{Client, Model, Options}
   alias ClaudeAgentSDK.TestSupport.MockTransport
 
   @moduletag :integration

@@ -78,17 +78,18 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
     command = Keyword.fetch!(opts, :command)
 
-    with {:ok, port} <- open_port(command, opts) do
-      state = %__MODULE__{
-        port: port,
-        subscribers: %{},
-        buffer: "",
-        status: :connected,
-        options: opts
-      }
+    case open_port(command, opts) do
+      {:ok, port} ->
+        state = %__MODULE__{
+          port: port,
+          subscribers: %{},
+          buffer: "",
+          status: :connected,
+          options: opts
+        }
 
-      {:ok, state}
-    else
+        {:ok, state}
+
       {:error, reason} ->
         {:stop, reason}
     end
@@ -287,6 +288,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
       |> merge_with_system_env()
       |> merge_env_overrides(env_overrides)
       |> merge_user_env(options.user)
+      |> maybe_put_file_checkpointing_env(options)
 
     if map_size(merged_env) == 0 do
       opts
@@ -317,12 +319,10 @@ defmodule ClaudeAgentSDK.Transport.Port do
     |> Enum.reduce(existing, fn {key, value}, acc ->
       env_key = to_string(key)
 
-      cond do
-        is_nil(value) ->
-          Map.delete(acc, env_key)
-
-        true ->
-          Map.put(acc, env_key, to_string(value))
+      if is_nil(value) do
+        Map.delete(acc, env_key)
+      else
+        Map.put(acc, env_key, to_string(value))
       end
     end)
     |> Map.put_new("CLAUDE_CODE_ENTRYPOINT", "sdk-elixir")
@@ -336,6 +336,12 @@ defmodule ClaudeAgentSDK.Transport.Port do
     |> Map.put("USER", user)
     |> Map.put("LOGNAME", user)
   end
+
+  defp maybe_put_file_checkpointing_env(env_map, %Options{enable_file_checkpointing: true}) do
+    Map.put(env_map, "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING", "true")
+  end
+
+  defp maybe_put_file_checkpointing_env(env_map, _options), do: env_map
 
   defp map_to_env_list(map) do
     Enum.map(map, fn {key, value} -> {key, value} end)
