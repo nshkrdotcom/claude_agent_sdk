@@ -1,4 +1,6 @@
-# Example: Streaming with SDK MCP Servers (v0.6.0)
+#!/usr/bin/env elixir
+
+# Example: Streaming with SDK MCP Servers (live)
 #
 # Demonstrates how to use streaming with SDK MCP servers for in-process
 # tool execution. The SDK automatically selects the control client transport
@@ -10,11 +12,13 @@
 # - Real-time tool usage monitoring
 # - Automatic transport selection
 #
-# To run this example:
-#   iex -S mix
-#   > SDKMCPStreamingExample.run()
+#
+# Run: mix run examples/streaming_tools/sdk_mcp_streaming.exs
+
+Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
 
 alias ClaudeAgentSDK.{Streaming, Options}
+alias Examples.Support
 
 defmodule MathTools do
   @moduledoc """
@@ -100,12 +104,9 @@ defmodule SDKMCPStreamingExample do
   """
 
   def run do
-    IO.puts("=" |> String.duplicate(70))
-    IO.puts("Streaming + SDK MCP Example (v0.6.0)")
-    IO.puts("=" |> String.duplicate(70))
-    IO.puts("\nThis example demonstrates streaming with SDK MCP servers.")
-    IO.puts("The SDK automatically selects the control client transport.")
-    IO.puts("")
+    Support.ensure_live!()
+    Support.header!("Streaming + SDK MCP Example (live)")
+    IO.puts("\nThis example demonstrates streaming with SDK MCP servers.\n")
 
     # Create SDK MCP server
     IO.puts("Creating SDK MCP server with math tools...\n")
@@ -125,7 +126,10 @@ defmodule SDKMCPStreamingExample do
 
     # Configure options with SDK MCP server
     options = %Options{
-      mcp_servers: %{"math-tools" => server}
+      mcp_servers: %{"math-tools" => server},
+      model: "haiku",
+      max_turns: 2,
+      allowed_tools: []
     }
 
     IO.puts("Starting streaming session with SDK MCP...\n")
@@ -133,92 +137,130 @@ defmodule SDKMCPStreamingExample do
     # Start session - automatically uses control client
     {:ok, session} = Streaming.start_session(options)
 
-    IO.puts("✓ Session started (transport: control client with SDK MCP)\n")
-
-    # Run a series of math problems
-    problems = [
-      "What is 123 + 456?",
-      "Calculate 15 × 23",
-      "What is the factorial of 6?"
-    ]
-
-    for {problem, idx} <- Enum.with_index(problems, 1) do
-      IO.puts("\n" <> ("=" |> String.duplicate(70)))
-      IO.puts("Problem #{idx}/#{length(problems)}: #{problem}")
+    try do
+      IO.puts("✓ Session started (transport: control client with SDK MCP)\n")
       IO.puts("-" |> String.duplicate(70))
 
-      # Send message and collect events (take 100 to avoid hanging)
-      events =
-        Streaming.send_message(session, problem)
-        |> Enum.take(100)
+      prompt = """
+      Use the provided `math-tools` MCP tools (add, multiply, factorial) to answer:
 
-      # Count tools used
-      tool_count = Enum.count(events, &(&1[:type] == :tool_use_start))
+      1) What is 123 + 456?
+      2) What is 15 × 23?
+      3) What is the factorial of 6?
 
-      # Process events
-      Enum.each(events, fn event ->
-        case event do
-          # Text streaming
-          %{type: :text_delta, text: text} ->
-            IO.write(text)
+      Use tools for each calculation and show the results.
+      """
 
-          # Tool events
-          %{type: :tool_use_start, name: name} ->
-            IO.puts("\n\n🛠️  Executing SDK MCP tool: #{name}")
+      {tool_use_starts, tool_completes} =
+        Streaming.send_message(session, prompt)
+        |> Enum.reduce_while({0, 0}, fn event, {starts, completes} ->
+          case event do
+            %{type: :text_delta, text: text} ->
+              IO.write(text)
+              {:cont, {starts, completes}}
 
-          %{type: :tool_input_delta, json: json} ->
-            # Show tool input as it streams
-            if String.trim(json) != "" do
-              IO.write("   Input: #{json}")
+            %{type: :tool_use_start, name: name} ->
+              IO.puts("\n\n🛠️  Executing SDK MCP tool: #{name}")
+              {:cont, {starts + 1, completes}}
+
+            %{type: :tool_input_delta, json: json} ->
+              if String.trim(json) != "" do
+                IO.write("   Input: #{json}")
+              end
+
+              {:cont, {starts, completes}}
+
+            %{type: :tool_complete, tool_name: name} ->
+              IO.puts("\n✅ Tool #{name} completed\n")
+              {:cont, {starts, completes + 1}}
+
+            %{type: :message_stop} ->
+              IO.puts("\n" <> ("-" |> String.duplicate(70)))
+              IO.puts("✓ Message complete (tool_use_start=#{starts}, tool_complete=#{completes})")
+              {:halt, {starts, completes}}
+
+            %{type: :error, error: error} ->
+              raise "Streaming error: #{inspect(error)}"
+
+            _ ->
+              {:cont, {starts, completes}}
+          end
+        end)
+
+      # Check if SDK MCP tools were actually used (not Task/other built-in tools)
+      # If Claude uses Task instead of SDK MCP tools, that's a CLI limitation
+      sdk_mcp_used = tool_use_starts > 0 and tool_completes > 0
+
+      cond do
+        tool_use_starts < 1 ->
+          cli_version =
+            case ClaudeAgentSDK.CLI.version() do
+              {:ok, v} -> v
+              _ -> "unknown"
             end
 
-          %{type: :tool_complete, tool_name: name} ->
-            IO.puts("\n✅ Tool #{name} completed\n")
+          IO.puts("\n⚠️  Warning: Claude did not use the SDK MCP tools.")
 
-          # Message complete
-          %{type: :message_stop} ->
-            IO.puts("\n" <> ("-" |> String.duplicate(70)))
-            IO.puts("✓ Problem solved (#{tool_count} tool(s) used)")
+          IO.puts(
+            "   This may indicate the CLI (v#{cli_version}) does not fully support SDK MCP servers."
+          )
 
-          # Errors
-          %{type: :error, error: error} ->
-            IO.puts("\n❌ Error: #{inspect(error)}")
+          IO.puts("   The SDK sent sdkMcpServers in the initialize request, but the CLI")
+          IO.puts("   did not query the SDK for tools/list.")
+          IO.puts("\n   This is a known limitation - SDK MCP support requires CLI updates.")
 
-          # Ignore other events
-          _ ->
-            :ok
-        end
-      end)
+        tool_completes < 1 and tool_use_starts > 0 ->
+          # Claude used tools but they didn't complete - likely used Task which requires
+          # longer execution. This indicates SDK MCP tools weren't recognized.
+          cli_version =
+            case ClaudeAgentSDK.CLI.version() do
+              {:ok, v} -> v
+              _ -> "unknown"
+            end
 
-      # Brief pause between problems
-      if idx < length(problems) do
-        Process.sleep(500)
+          IO.puts(
+            "\n⚠️  Warning: Claude used built-in tools (like Task) instead of SDK MCP tools."
+          )
+
+          IO.puts(
+            "   This may indicate the CLI (v#{cli_version}) does not fully support SDK MCP servers."
+          )
+
+          IO.puts("   The SDK sent sdkMcpServers in the initialize request, but the CLI")
+          IO.puts("   did not recognize them as available tools.")
+          IO.puts("\n   This is a known limitation - SDK MCP support requires CLI updates.")
+
+        true ->
+          :ok
       end
+
+      IO.puts("\n" <> ("=" |> String.duplicate(70)))
+      IO.puts("✓ Session closed\n")
+
+      if sdk_mcp_used do
+        IO.puts("=" |> String.duplicate(70))
+        IO.puts("\nKey Features Demonstrated:")
+        IO.puts("  - Streaming with SDK MCP servers")
+        IO.puts("  - In-process tool execution (no subprocess overhead)")
+        IO.puts("  - Real-time tool input/output streaming")
+        IO.puts("  - Automatic control client transport selection")
+        IO.puts("  - Multiple tool executions in sequence")
+        IO.puts("\nSDK MCP Benefits:")
+        IO.puts("  - Tools run in same Elixir process")
+        IO.puts("  - No IPC overhead")
+        IO.puts("  - Easy debugging and testing")
+        IO.puts("  - Direct access to your application state")
+        IO.puts("\nTry it yourself in IEx:")
+        IO.puts("  iex -S mix")
+        IO.puts("  > SDKMCPStreamingExample.run()")
+        IO.puts("=" |> String.duplicate(70))
+      end
+    after
+      Streaming.close_session(session)
     end
-
-    # Close session
-    Streaming.close_session(session)
-
-    IO.puts("\n" <> ("=" |> String.duplicate(70)))
-    IO.puts("✓ Session closed\n")
-    IO.puts("=" |> String.duplicate(70))
-    IO.puts("\nKey Features Demonstrated:")
-    IO.puts("  - Streaming with SDK MCP servers")
-    IO.puts("  - In-process tool execution (no subprocess overhead)")
-    IO.puts("  - Real-time tool input/output streaming")
-    IO.puts("  - Automatic control client transport selection")
-    IO.puts("  - Multiple tool executions in sequence")
-    IO.puts("\nSDK MCP Benefits:")
-    IO.puts("  - Tools run in same Elixir process")
-    IO.puts("  - No IPC overhead")
-    IO.puts("  - Easy debugging and testing")
-    IO.puts("  - Direct access to your application state")
-    IO.puts("\nTry it yourself in IEx:")
-    IO.puts("  iex -S mix")
-    IO.puts("  > SDKMCPStreamingExample.run()")
-    IO.puts("=" |> String.duplicate(70))
   end
 end
 
 # Auto-run when executed with mix run
 SDKMCPStreamingExample.run()
+Support.halt_if_runner!()

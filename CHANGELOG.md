@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] - 2025-12-14
+
+### Added
+
+- Python parity audit implementations across options, control protocol, transports, message parsing, and error handling.
+- New erlexec-backed transport to support OS-level user execution when `Options.user` is set.
+- Structured error structs for CLI discovery, connection/start failures, subprocess exits, JSON decode failures, and message parse errors.
+
+### Fixed
+
+- Options CLI arg parity: always emit `--setting-sources ""` and `--system-prompt ""` when unset; add preset `system_prompt` shapes and `--append-system-prompt` support.
+- Control protocol parity: camelCase permission response keys (`updatedInput`, `updatedPermissions`), MCP subtype/key compatibility, and bounded control request timeouts with cleanup.
+- Transport parity: CLI discovery locations and bundled lookup, `PWD` env propagation, cwd missing-directory errors (no implicit mkdir), large `--agents` payload `@file` fallback, and stderr callback routing.
+- Message parsing parity: usage extraction, `parent_tool_use_id` extraction, and stream event typing for streaming consumers.
+
 ## [0.6.5] - 2025-12-13
 
 ### Added
@@ -30,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cooperative cancellation for hooks and permission callbacks via `control_cancel_request`, abort signals passed into callback contexts, and pending callback tracking.
 - SessionStart, SessionEnd, and Notification hook events are now validated and supported.
 - SDK MCP routing now replies to `resources/list`, `prompts/list`, and `notifications/initialized` for forward compatibility.
-- New example: `examples/runtime_control/cancellable_callbacks.exs` demonstrating abortable callbacks.
+- New example: `examples/archive/runtime_control/cancellable_callbacks.exs` demonstrating abortable callbacks.
 
 ### Changed
 
@@ -129,7 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Comprehensive Examples**:
   - `examples/streaming_tools/basic_streaming_with_hooks.exs` - Security hooks with streaming
   - `examples/streaming_tools/sdk_mcp_streaming.exs` - SDK MCP tools with streaming
-  - `examples/streaming_tools/liveview_pattern.exs` - Phoenix LiveView integration
+  - `examples/archive/streaming_tools/liveview_pattern.exs` - Phoenix LiveView integration
 
 ### Fixed
 

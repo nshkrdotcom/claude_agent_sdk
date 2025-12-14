@@ -439,6 +439,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   defp build_streaming_args(%Options{} = options) do
     base_args = [
+      "--print",
       "--input-format",
       "stream-json",
       "--output-format",
@@ -460,31 +461,35 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   defp spawn_subprocess(args, %Options{} = options) do
-    # Find claude executable
-    executable = CLI.find_executable!()
+    if is_binary(options.cwd) and not File.dir?(options.cwd) do
+      {:error, {:cwd_not_found, options.cwd}}
+    else
+      # Find claude executable
+      executable = CLI.find_executable!()
 
-    # Build command string
-    quoted_args = Enum.map(args, &shell_escape/1)
-    cmd = Enum.join([executable | quoted_args], " ")
+      # Build command string
+      quoted_args = Enum.map(args, &shell_escape/1)
+      cmd = Enum.join([executable | quoted_args], " ")
 
-    # Build exec options with environment variables
-    exec_opts = build_exec_opts(options)
+      # Build exec options with environment variables
+      exec_opts = build_exec_opts(options)
 
-    # Spawn subprocess
-    case :exec.run(cmd, exec_opts) do
-      {:ok, pid, os_pid} ->
-        # Monitor the process using erlexec's monitor option
-        # The :monitor flag in exec_opts already sets this up
-        {:ok, {pid, os_pid}, :monitor_via_erlexec}
+      # Spawn subprocess
+      case :exec.run(cmd, exec_opts) do
+        {:ok, pid, os_pid} ->
+          # Monitor the process using erlexec's monitor option
+          # The :monitor flag in exec_opts already sets this up
+          {:ok, {pid, os_pid}, :monitor_via_erlexec}
 
-      {:error, reason} ->
-        Logger.error("Failed to start Claude CLI subprocess",
-          cmd: cmd,
-          reason: reason,
-          env_keys: env_keys(exec_opts)
-        )
+        {:error, reason} ->
+          Logger.error("Failed to start Claude CLI subprocess",
+            cmd: cmd,
+            reason: reason,
+            env_keys: env_keys(exec_opts)
+          )
 
-        {:error, reason}
+          {:error, reason}
+      end
     end
   end
 
@@ -505,8 +510,9 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   defp shell_escape(arg) when is_binary(arg) do
-    # Simple shell escaping - wrap in quotes if contains special chars
-    if String.contains?(arg, [" ", "\"", "'", "$", "`", "\\", "&", "|", ";", "(", ")", "<", ">"]) do
+    # Simple shell escaping - wrap in quotes if contains special chars or is empty
+    if arg == "" or
+         String.contains?(arg, [" ", "\"", "'", "$", "`", "\\", "&", "|", ";", "(", ")", "<", ">"]) do
       ~s("#{String.replace(arg, "\"", "\\\"")}")
     else
       arg
@@ -543,11 +549,8 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   defp maybe_put_cd_option(opts, nil), do: opts
 
   defp maybe_put_cd_option(opts, cwd) when is_binary(cwd) do
-    unless File.dir?(cwd), do: File.mkdir_p!(cwd)
     [{:cd, cwd} | opts]
   end
-
-  defp maybe_put_cd_option(opts, _), do: opts
 
   defp env_keys(opts) do
     opts

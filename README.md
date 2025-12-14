@@ -78,7 +78,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.6.5"}
+    {:claude_agent_sdk, "~> 0.6.6"}
   ]
 end
 ```
@@ -109,7 +109,7 @@ mix deps.get
 4. **Try the script runner**:
    ```bash
    mix run examples/basic_example.exs
-   mix run examples/simple_analyzer.exs lib/claude_agent_sdk.ex
+   bash examples/run_all.sh
    ```
 
 ## Streaming + Tools (v0.6.0)
@@ -276,7 +276,8 @@ The streaming events now include tool-related events when using control client:
 See working examples in `examples/streaming_tools/`:
 - `basic_streaming_with_hooks.exs` - Streaming with pre-tool hooks
 - `sdk_mcp_streaming.exs` - Streaming with SDK MCP servers
-- `liveview_pattern.exs` - Phoenix LiveView integration
+- `quick_demo.exs` - Minimal streaming demo
+- `examples/archive/streaming_tools/liveview_pattern.exs` - Phoenix LiveView integration pattern (pseudo-code)
 
 ## Implementation Status
 
@@ -352,7 +353,7 @@ See working examples in `examples/streaming_tools/`:
   - Tool input modification and execution interrupts
   - `Client.set_permission_mode/2` for runtime mode changes
   - 49 tests covering security scenarios
-- **Runtime Control** (v0.6.5): Change models/transports, rewind files, and cooperatively cancel callbacks
+- **Runtime Control** (v0.6.6): Change models/transports, rewind files, and cooperatively cancel callbacks
   - `Client.set_model/2` to switch models mid-conversation
   - `Client.get_model/1` to introspect active configuration
   - `Client.interrupt/1` to stop runaway tool executions
@@ -430,11 +431,14 @@ To experiment with your own transport or to write deterministic tests, take a lo
 You can try the runtime control examples directly:
 
 ```bash
-mix run examples/runtime_control/model_switcher.exs
-mix run examples/runtime_control/transport_swap.exs
-mix run examples/runtime_control/subscriber_broadcast.exs
-mix run examples/runtime_control/cancellable_callbacks.exs
-mix run examples/control_parity_live.exs
+# Live parity + runtime permission mode switching
+mix run examples/runtime_control/control_parity_live.exs
+
+# Archived / deterministic custom-transport demos (mocked)
+mix run examples/archive/runtime_control/model_switcher.exs
+mix run examples/archive/runtime_control/transport_swap.exs
+mix run examples/archive/runtime_control/subscriber_broadcast.exs
+mix run examples/archive/runtime_control/cancellable_callbacks.exs
 ```
 
 The model switcher prints the model before and after calling `set_model/2`, making it easy to confirm the change succeeded in real time.
@@ -498,72 +502,14 @@ mix run demo_mock.exs
 
 For detailed documentation about the mocking system, see [MOCKING.md](MOCKING.md).
 
-## Available Examples - Organized by Feature
+## Examples
 
-### 🎯 Getting Started (Start Here!)
+Examples in `examples/` are **live** (they talk to the real Claude Code CLI), so authenticate first (`claude login`) and expect API costs.
 
-```bash
-# 1. Showcase - demonstrates all features
-mix showcase
-
-# 2. Simple SDK MCP test - verify MCP integration
-mix run examples/advanced_features/sdk_mcp_simple_test.exs
-```
-
----
-
-### Examples (mix run)
-
-All examples run with `mix run` against the live Claude Code runtime (authenticate first). Full descriptions live in `examples/README.md`; quick commands are below.
-
-**Core & quickstart**
-- `mix run examples/basic_example.exs`
-- `mix run examples/simple_analyzer.exs [path]`
-- `mix run examples/file_reviewer.exs [path]`
-- `mix run examples/simple_batch.exs [dir] [op]`
-- `mix run examples/simple_test_gen.exs [file]`
-- `mix run examples/custom_agents_example.exs`
-- `mix run examples/model_selection_example.exs`
-- `mix run examples/factorial_example.exs`
-- `mix run examples/session_features_example.exs`
-- `mix run examples/project_assistant_fixed.exs`
-- `mix run examples/week_1_2_showcase.exs`
-- `mix run examples/test_auth_detection.exs`
-- `mix run examples/assistant_error_live.exs`
-- `mix run examples/structured_output_live.exs`
-- `mix run examples/control_parity_live.exs`
-
-**Streaming + tools**
-- `mix run examples/streaming_tools/basic_streaming_with_hooks.exs`
-- `mix run examples/streaming_tools/sdk_mcp_streaming.exs`
-- `mix run examples/streaming_tools/quick_demo.exs`
-- `mix run examples/streaming_tools/liveview_pattern.exs`
-
-**Runtime control**
-- `mix run examples/runtime_control/model_switcher.exs`
-- `mix run examples/runtime_control/transport_swap.exs`
-- `mix run examples/runtime_control/subscriber_broadcast.exs`
-
-**MCP, agents, permissions**
-- `mix run examples/advanced_features/mcp_calculator_tool.exs`
-- `mix run examples/advanced_features/sdk_mcp_simple_test.exs`
-- `mix run examples/advanced_features/sdk_mcp_live_demo.exs`
-- `mix run examples/advanced_features/agent_switching.exs`
-- `mix run examples/advanced_features/agents_live.exs`
-- `mix run examples/advanced_features/permission_control.exs`
-- `mix run examples/advanced_features/permissions_live.exs`
-- `mix run examples/advanced_features/full_feature_showcase.exs`
-
-**Hooks**
-- `mix run examples/hooks/basic_bash_blocking.exs`
-- `mix run examples/hooks/context_injection.exs`
-- `mix run examples/hooks/file_policy_enforcement.exs`
-- `mix run examples/hooks/logging_and_audit.exs`
-- `mix run examples/hooks/complete_workflow.exs`
-
-**Helper scripts**
-- `./run_all_examples.sh`
-- `./test_all_examples.sh [group]`
+- Run everything: `bash examples/run_all.sh`
+- Run one: `mix run examples/basic_example.exs`
+- Curated list: `examples/README.md`
+- Archived / mock / experimental scripts: `examples/archive/`
 
 ## API Reference
 
@@ -635,7 +581,7 @@ options = OptionBuilder.for_environment()
 options = OptionBuilder.merge(:development, %{max_turns: 5})
 ```
 
-#### Tools, Betas, and Sandbox Settings (v0.6.5)
+#### Tools, Betas, and Sandbox Settings (v0.6.6)
 
 Python SDK parity options:
 
@@ -661,7 +607,7 @@ alias ClaudeAgentSDK.Options
 # mix run.live examples/sandbox_settings_live.exs
 ```
 
-#### File Checkpointing + `rewind_files` (v0.6.5)
+#### File Checkpointing + `rewind_files` (v0.6.6)
 
 Enable file checkpointing via an environment flag and rewind tracked files with a control request:
 
@@ -1046,7 +992,7 @@ options = Options.new(
 
 **Example:**
 ```bash
-mix run examples/advanced_features/mcp_calculator_tool.exs
+mix run examples/advanced_features/sdk_mcp_live_demo.exs
 ```
 
 ---
@@ -1104,7 +1050,7 @@ Client.set_agent(client, :researcher)
 
 **Example:**
 ```bash
-mix run examples/advanced_features/agent_switching.exs
+mix run examples/advanced_features/agents_live.exs
 ```
 
 ---
@@ -1163,7 +1109,7 @@ Client.set_permission_mode(client, :bypass_permissions)  # Allow all
 
 **Example:**
 ```bash
-mix run examples/advanced_features/permission_control.exs
+mix run examples/advanced_features/permissions_live.exs
 ```
 
 ---

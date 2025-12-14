@@ -10,7 +10,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
   import ClaudeAgentSDK.SupertesterCase, only: [eventually: 2]
 
   alias ClaudeAgentSDK.Hooks.Matcher
-  alias ClaudeAgentSDK.{Client, Options}
+  alias ClaudeAgentSDK.{Client, Message, Options}
   alias ClaudeAgentSDK.TestSupport.MockTransport
 
   describe "Client with include_partial_messages option" do
@@ -283,8 +283,12 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       MockTransport.push_message(transport, Jason.encode!(event))
 
-      assert [%{type: :stream_event, event: %{type: :text_delta, accumulated: "Hello"}}] =
-               Task.await(task, 1_000)
+      assert [
+               %Message{
+                 type: :stream_event,
+                 data: %{event: %{type: :text_delta, accumulated: "Hello"}}
+               }
+             ] = Task.await(task, 1_000)
 
       eventually(
         fn ->

@@ -162,15 +162,15 @@ defmodule ClaudeAgentSDK.Permission.Result do
 
       iex> result = Result.allow(updated_input: %{"key" => "value"})
       iex> Result.to_json_map(result)
-      %{"behavior" => "allow", "updated_input" => %{"key" => "value"}}
+      %{"behavior" => "allow", "updatedInput" => %{"key" => "value"}}
   """
   @spec to_json_map(t()) :: map()
   def to_json_map(%__MODULE__{behavior: :allow} = result) do
     base = %{"behavior" => "allow"}
 
     base
-    |> maybe_add("updated_input", result.updated_input)
-    |> maybe_add("updated_permissions", result.updated_permissions)
+    |> maybe_add("updatedInput", result.updated_input)
+    |> maybe_add("updatedPermissions", result.updated_permissions)
   end
 
   def to_json_map(%__MODULE__{behavior: :deny} = result) do

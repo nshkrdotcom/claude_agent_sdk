@@ -346,12 +346,24 @@ defmodule ClaudeAgentSDK.Hooks.Output do
   """
   @spec validate(t()) :: :ok | {:error, String.t()}
   def validate(output) when is_map(output) do
-    # Basic validation - output must be a map
-    # More comprehensive validation could check field types
-    :ok
+    async = Map.get(output, :async) || Map.get(output, "async")
+    async_timeout = Map.get(output, :asyncTimeout) || Map.get(output, "asyncTimeout")
+
+    validate_async(async, async_timeout)
   end
 
   def validate(_), do: {:error, "Hook output must be a map"}
+
+  defp validate_async(nil, nil), do: :ok
+  defp validate_async(true, nil), do: :ok
+  defp validate_async(true, timeout) when is_integer(timeout), do: :ok
+
+  defp validate_async(true, _timeout),
+    do: {:error, "asyncTimeout must be an integer (milliseconds)"}
+
+  defp validate_async(nil, _timeout), do: {:error, "asyncTimeout requires async: true"}
+
+  defp validate_async(_async, _timeout), do: {:error, "async must be true when present"}
 
   @doc """
   Converts Elixir output to JSON-compatible map for CLI.

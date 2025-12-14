@@ -1,7 +1,15 @@
+#!/usr/bin/env elixir
+
+Code.require_file(Path.expand("support/example_helper.exs", __DIR__))
+
 alias ClaudeAgentSDK.{CLI, Client, ContentExtractor, Options}
+alias Examples.Support
 
 defmodule FileCheckpointingLive do
   def run do
+    Support.ensure_live!()
+    Support.header!("File Checkpointing Example (live)")
+
     demo_dir =
       Path.join(
         System.tmp_dir!(),
@@ -20,7 +28,10 @@ defmodule FileCheckpointingLive do
       cwd: demo_dir,
       enable_file_checkpointing: true,
       permission_mode: :accept_edits,
-      allowed_tools: ["Read", "Write", "Edit"]
+      tools: ["Read", "Write", "Edit"],
+      allowed_tools: ["Read", "Write", "Edit"],
+      model: "haiku",
+      max_turns: 3
     }
 
     {:ok, client} = Client.start_link(options, transport: ClaudeAgentSDK.Transport.Port)
@@ -41,7 +52,7 @@ defmodule FileCheckpointingLive do
 
     attempt_rewind(client, checkpoint_id, file_path)
 
-    Client.stop(client)
+    if Process.alive?(client), do: Client.stop(client)
   end
 
   defp run_step(client, prompt, file_path) do
@@ -73,8 +84,9 @@ defmodule FileCheckpointingLive do
         end)
       end)
 
+    Process.sleep(50)
     :ok = Client.send_message(client, prompt)
-    user_message_id = Task.await(task, 450_000)
+    user_message_id = Task.await(task, 180_000)
 
     print_file(file_path, "demo.txt after step")
     user_message_id
@@ -82,6 +94,8 @@ defmodule FileCheckpointingLive do
 
   defp extract_user_message_id_candidates(message) do
     [
+      get_in(message.data || %{}, [:uuid]),
+      get_in(message.data || %{}, [:message, "id"]),
       get_in(message.raw, ["message", "id"]),
       message.raw["uuid"],
       get_in(message.raw, ["message", "uuid"]),
@@ -143,3 +157,4 @@ defmodule FileCheckpointingLive do
 end
 
 FileCheckpointingLive.run()
+Support.halt_if_runner!()

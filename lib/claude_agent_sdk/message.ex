@@ -67,13 +67,14 @@ defmodule ClaudeAgentSDK.Message do
 
   defstruct [:type, :subtype, :data, :raw]
 
-  @type message_type :: :assistant | :user | :result | :system
+  @type message_type :: :assistant | :user | :result | :system | :stream_event
   @type result_subtype :: :success | :error_max_turns | :error_during_execution
   @type system_subtype :: :init
   @type assistant_error :: AssistantError.t()
   @type assistant_data :: %{
           required(:message) => map(),
           required(:session_id) => String.t() | nil,
+          optional(:parent_tool_use_id) => String.t() | nil,
           optional(:error) => assistant_error() | nil
         }
 
@@ -118,6 +119,28 @@ defmodule ClaudeAgentSDK.Message do
         end
     end
   end
+
+  @doc """
+  Returns parsed content blocks for `:user` and `:assistant` messages.
+
+  This is an ergonomic alternative to the Python SDK's typed content-block objects.
+  """
+  @spec content_blocks(t()) :: [map()]
+  def content_blocks(%__MODULE__{type: type, data: %{message: %{"content" => content}}})
+      when type in [:user, :assistant] do
+    cond do
+      is_list(content) ->
+        Enum.map(content, &parse_content_block/1)
+
+      is_binary(content) ->
+        [%{type: :text, text: content}]
+
+      true ->
+        []
+    end
+  end
+
+  def content_blocks(_message), do: []
 
   # Manual JSON parsing for our specific message formats
   defp parse_json_manual(str) do
@@ -251,7 +274,11 @@ defmodule ClaudeAgentSDK.Message do
 
   defp parse_by_type(message, :user, raw) do
     data =
-      %{message: raw["message"], session_id: raw["session_id"]}
+      %{
+        message: raw["message"],
+        session_id: raw["session_id"],
+        parent_tool_use_id: raw["parent_tool_use_id"]
+      }
       |> maybe_put_uuid(raw)
 
     %{message | data: data}
@@ -269,9 +296,52 @@ defmodule ClaudeAgentSDK.Message do
     %{message | subtype: subtype, data: data}
   end
 
+  defp parse_by_type(message, :stream_event, raw) do
+    data = %{
+      uuid: raw["uuid"],
+      session_id: raw["session_id"],
+      event: raw["event"],
+      parent_tool_use_id: raw["parent_tool_use_id"]
+    }
+
+    %{message | data: data}
+  end
+
   defp parse_by_type(message, _unknown_type, raw) do
     %{message | data: raw}
   end
+
+  defp parse_content_block(%{"type" => "text", "text" => text}) when is_binary(text),
+    do: %{type: :text, text: text}
+
+  defp parse_content_block(%{"type" => "thinking"} = block) do
+    %{
+      type: :thinking,
+      thinking: block["thinking"],
+      signature: block["signature"]
+    }
+  end
+
+  defp parse_content_block(%{"type" => "tool_use"} = block) do
+    %{
+      type: :tool_use,
+      id: block["id"],
+      name: block["name"],
+      input: block["input"] || %{}
+    }
+  end
+
+  defp parse_content_block(%{"type" => "tool_result"} = block) do
+    %{
+      type: :tool_result,
+      tool_use_id: block["tool_use_id"],
+      content: block["content"],
+      is_error: block["is_error"]
+    }
+  end
+
+  defp parse_content_block(block) when is_map(block), do: %{type: :unknown, raw: block}
+  defp parse_content_block(other), do: %{type: :unknown, raw: other}
 
   # Extract uuid from user messages for file checkpointing support
   defp maybe_put_uuid(data, %{"uuid" => uuid}) when is_binary(uuid) and uuid != "" do
@@ -285,7 +355,8 @@ defmodule ClaudeAgentSDK.Message do
 
     %{
       message: raw["message"],
-      session_id: raw["session_id"]
+      session_id: raw["session_id"],
+      parent_tool_use_id: raw["parent_tool_use_id"]
     }
     |> maybe_put_assistant_error(error_value)
   end
@@ -302,6 +373,7 @@ defmodule ClaudeAgentSDK.Message do
       result: raw["result"],
       session_id: raw["session_id"],
       structured_output: raw["structured_output"],
+      usage: raw["usage"],
       total_cost_usd: raw["total_cost_usd"],
       duration_ms: raw["duration_ms"],
       duration_api_ms: raw["duration_api_ms"],
@@ -317,6 +389,7 @@ defmodule ClaudeAgentSDK.Message do
     %{
       session_id: raw["session_id"],
       structured_output: raw["structured_output"],
+      usage: raw["usage"],
       total_cost_usd: raw["total_cost_usd"] || 0.0,
       duration_ms: raw["duration_ms"] || 0,
       duration_api_ms: raw["duration_api_ms"] || 0,

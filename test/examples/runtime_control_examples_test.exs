@@ -1,11 +1,11 @@
-defmodule Examples.RuntimeControlExamplesTest do
+defmodule Examples.ExamplesSmokeTest do
   use ExUnit.Case, async: false
 
   @scripts [
-    {"model switcher", "examples/runtime_control/model_switcher.exs", "Switch confirmed"},
-    {"transport swap", "examples/runtime_control/transport_swap.exs", "Transport Swap Demo"},
-    {"subscriber broadcast", "examples/runtime_control/subscriber_broadcast.exs",
-     "Subscriber Broadcast Demo"}
+    {"control client demo", "examples/archive/mock_demos/control_client_demo.exs",
+     "Control Client Demo"},
+    {"streaming demo", "examples/archive/mock_demos/streaming_demo.exs", "Streaming Demo"},
+    {"sdk mcp demo", "examples/archive/mock_demos/sdk_mcp_demo.exs", "SDK MCP Demo"}
   ]
 
   for {label, script, expected} <- @scripts do

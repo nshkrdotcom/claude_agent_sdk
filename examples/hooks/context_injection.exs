@@ -7,13 +7,23 @@
 #
 # Run: mix run examples/hooks/context_injection.exs
 
-alias ClaudeAgentSDK.{Client, Options}
+Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
+
+alias ClaudeAgentSDK.{Client, ContentExtractor, Message, Options}
 alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+alias Examples.Support
+
+Support.ensure_live!()
+Support.header!("Hooks Example: Context Injection (live)")
 
 defmodule ContextHooks do
   @moduledoc """
   Hooks for automatically adding contextual information.
   """
+
+  @table :claude_agent_sdk_examples_context_injection
+
+  def table_name, do: @table
 
   @doc """
   UserPromptSubmit hook that adds project context.
@@ -25,6 +35,8 @@ defmodule ContextHooks do
   - Environment
   """
   def add_project_context(_input, _tool_use_id, _context) do
+    _ = :ets.update_counter(@table, :injections, {2, 1}, {:injections, 0})
+
     # Get current time
     current_time = DateTime.utc_now() |> DateTime.to_string()
 
@@ -54,81 +66,81 @@ hooks = %{
 }
 
 options = %Options{
-  allowed_tools: ["Bash", "Read"],
-  hooks: hooks
+  allowed_tools: [],
+  hooks: hooks,
+  model: "haiku",
+  max_turns: 1,
+  permission_mode: :default
 }
 
-IO.puts("=" <> String.duplicate("=", 79))
-IO.puts("🎣 Hooks Example: Context Injection (LIVE)")
-IO.puts("=" <> String.duplicate("=", 79))
-IO.puts("\nThis example shows how UserPromptSubmit hooks can automatically add")
-IO.puts("context to every conversation, making Claude more aware of your environment.\n")
+table = ContextHooks.table_name()
+
+case :ets.whereis(table) do
+  :undefined -> :ok
+  tid -> :ets.delete(tid)
+end
+
+:ets.new(table, [:named_table, :public, :set])
 
 # Start client with hooks
 {:ok, client} = Client.start_link(options)
 
-IO.puts("✅ Client started with UserPromptSubmit hook")
-
-# Start listening for responses
-listener =
+task =
   Task.async(fn ->
     Client.stream_messages(client)
-    |> Enum.take(3)
-    |> Enum.to_list()
+    |> Enum.reduce_while([], fn message, acc ->
+      acc = [message | acc]
+
+      case message do
+        %Message{type: :assistant} = msg ->
+          text = ContentExtractor.extract_text(msg)
+          if is_binary(text) and text != "", do: IO.puts("\nAssistant:\n#{text}\n")
+          {:cont, acc}
+
+        %Message{type: :result} ->
+          {:halt, Enum.reverse(acc)}
+
+        _ ->
+          {:cont, acc}
+      end
+    end)
   end)
 
-Process.sleep(1000)
+Process.sleep(50)
+prompt = "What time is it and where am I? Use the injected context and answer in one sentence."
+:ok = Client.send_message(client, prompt)
+messages = Task.await(task, 60_000)
 
-# Send a message - context will be auto-injected!
-IO.puts("\n📝 Sending message: 'What time is it and where am I?'")
-IO.puts("-" <> String.duplicate("-", 79))
+injections =
+  case :ets.lookup(table, :injections) do
+    [{:injections, n}] when is_integer(n) -> n
+    _ -> 0
+  end
 
-Client.send_message(client, "What time is it and where am I?")
-
-IO.puts("\n⏳ Waiting for Claude's response...")
-IO.puts("(Watch how Claude uses the injected context in the response!)\n")
-
-# Wait for messages
-messages = Task.await(listener, 30_000)
-
-# Show Claude's response
-IO.puts("\n" <> String.duplicate("=", 80))
-IO.puts("📬 Claude's Response:")
-IO.puts(String.duplicate("=", 80))
-
-assistant_messages =
-  messages
-  |> Enum.filter(fn msg -> msg.type == :assistant end)
-  |> Enum.map(fn msg ->
-    # Extract text from message data
-    case get_in(msg.data, [:message, "content"]) do
-      [%{"text" => text} | _] -> text
-      _ -> ""
-    end
-  end)
-  |> Enum.join("\n")
-
-if assistant_messages != "" do
-  IO.puts(assistant_messages)
-else
-  IO.puts("(Claude's response in progress...)")
-  IO.puts("\nReceived #{length(messages)} messages:")
-
-  Enum.each(messages, fn msg ->
-    IO.puts("  - Type: #{msg.type}")
-  end)
+if injections < 1 do
+  raise "Expected user_prompt_submit hook to fire at least once, but saw #{injections}."
 end
 
-IO.puts(String.duplicate("=", 80))
+assistant_text =
+  messages
+  |> Enum.filter(&(&1.type == :assistant))
+  |> Enum.map(&ContentExtractor.extract_text/1)
+  |> Enum.reject(&(&1 in [nil, ""]))
+  |> Enum.join("\n")
+
+if assistant_text == "" do
+  raise "No assistant text returned; expected Claude to respond using injected context."
+end
+
+case Enum.find(messages, &(&1.type == :result)) do
+  %Message{subtype: :success} -> :ok
+  %Message{subtype: other} -> raise "Query did not succeed (result subtype: #{inspect(other)})"
+  nil -> raise "No result message returned."
+end
 
 # Clean up
-IO.puts("\n\nStopping client...")
-Client.stop(client)
+if Process.alive?(client), do: Client.stop(client)
+:ets.delete(table)
 
-IO.puts("\n\n✨ Example completed!")
-IO.puts("\n📚 Key Takeaways:")
-IO.puts("   - UserPromptSubmit hooks run BEFORE Claude sees your message")
-IO.puts("   - Context is added automatically - you don't have to ask!")
-IO.puts("   - Claude can use the context to give more relevant answers")
-IO.puts("   - Useful for: git status, project info, environment variables, etc.")
-IO.puts("\n💡 Notice how Claude answered using the injected timestamp and location!")
+IO.puts("\nDone.")
+Support.halt_if_runner!()

@@ -7,10 +7,29 @@ defmodule ClaudeAgentSDK.CLITest do
 
   setup do
     original_path = System.get_env("PATH") || ""
+    original_home = System.get_env("HOME") || ""
+    original_known_locations = Application.get_env(:claude_agent_sdk, :cli_known_locations)
+    original_bundled_path = Application.get_env(:claude_agent_sdk, :cli_bundled_path)
 
     on_exit(fn ->
       System.put_env("PATH", original_path)
+      System.put_env("HOME", original_home)
+
+      if is_nil(original_known_locations) do
+        Application.delete_env(:claude_agent_sdk, :cli_known_locations)
+      else
+        Application.put_env(:claude_agent_sdk, :cli_known_locations, original_known_locations)
+      end
+
+      if is_nil(original_bundled_path) do
+        Application.delete_env(:claude_agent_sdk, :cli_bundled_path)
+      else
+        Application.put_env(:claude_agent_sdk, :cli_bundled_path, original_bundled_path)
+      end
     end)
+
+    # Keep tests deterministic by disabling the default global search paths.
+    Application.put_env(:claude_agent_sdk, :cli_known_locations, [])
 
     {:ok, original_path: original_path}
   end
@@ -49,7 +68,7 @@ defmodule ClaudeAgentSDK.CLITest do
 
   test "find_executable!/0 raises when CLI is missing", %{original_path: original_path} do
     with_fake_cli(original_path, [], fn _paths ->
-      assert_raise RuntimeError, fn -> CLI.find_executable!() end
+      assert_raise ClaudeAgentSDK.Errors.CLINotFoundError, fn -> CLI.find_executable!() end
     end)
   end
 
@@ -82,13 +101,13 @@ defmodule ClaudeAgentSDK.CLITest do
   end
 
   test "minimum_version/0 returns the configured minimum version string" do
-    assert CLI.minimum_version() == "1.0.0"
+    assert CLI.minimum_version() == "2.0.0"
   end
 
   test "version_supported?/0 returns true when installed version meets minimum", %{
     original_path: original_path
   } do
-    with_fake_cli(original_path, [{"claude", "1.2.3"}], fn _paths ->
+    with_fake_cli(original_path, [{"claude", "2.1.0"}], fn _paths ->
       assert CLI.version_supported?()
     end)
   end
@@ -96,7 +115,7 @@ defmodule ClaudeAgentSDK.CLITest do
   test "version_supported?/0 returns false when installed version is below minimum", %{
     original_path: original_path
   } do
-    with_fake_cli(original_path, [{"claude", "0.9.0"}], fn _paths ->
+    with_fake_cli(original_path, [{"claude", "1.9.9"}], fn _paths ->
       refute CLI.version_supported?()
     end)
   end
@@ -111,7 +130,50 @@ defmodule ClaudeAgentSDK.CLITest do
         end)
       end)
 
-    assert log =~ "Claude CLI version 0.9.0 is below minimum 1.0.0"
+    assert log =~ "Claude CLI version 0.9.0 is below minimum 2.0.0"
+  end
+
+  test "find_executable/0 falls back to known locations when not on PATH", %{
+    original_path: original_path
+  } do
+    with_fake_cli(original_path, [], fn _paths ->
+      dir = Path.join(System.tmp_dir!(), "claude_cli_known_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+
+      home = Path.join(dir, "home")
+      File.mkdir_p!(home)
+      System.put_env("HOME", home)
+
+      known_path = Path.join(home, ".claude/local/claude")
+      File.mkdir_p!(Path.dirname(known_path))
+      write_cli_script(known_path, "claude", "2.1.0")
+
+      Application.put_env(:claude_agent_sdk, :cli_known_locations, [known_path])
+
+      assert {:ok, path} = CLI.find_executable()
+      assert path == known_path
+
+      File.rm_rf!(dir)
+    end)
+  end
+
+  test "find_executable/0 prefers bundled CLI over PATH", %{original_path: original_path} do
+    with_fake_cli(original_path, [{"claude", "2.1.0"}], fn paths ->
+      bundled_dir =
+        Path.join(System.tmp_dir!(), "claude_cli_bundled_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(bundled_dir)
+      bundled_path = Path.join(bundled_dir, "claude")
+      write_cli_script(bundled_path, "claude", "2.1.0")
+
+      Application.put_env(:claude_agent_sdk, :cli_bundled_path, bundled_path)
+
+      assert {:ok, path} = CLI.find_executable()
+      assert path == bundled_path
+      refute path == paths["claude"]
+
+      File.rm_rf!(bundled_dir)
+    end)
   end
 
   defp with_fake_cli(original_path, cli_defs, fun) do

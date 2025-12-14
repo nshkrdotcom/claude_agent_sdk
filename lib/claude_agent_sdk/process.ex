@@ -15,6 +15,7 @@ defmodule ClaudeAgentSDK.Process do
   require Logger
 
   alias ClaudeAgentSDK.{CLI, Message, Options}
+  alias ClaudeAgentSDK.Transport.AgentsFile
 
   @doc """
   Streams messages from Claude Code CLI using erlexec.
@@ -63,67 +64,101 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp start_claude_process(args, options, stdin_input) do
-    # Start erlexec application if not already running
+    ensure_erlexec_started!()
+    {cmd, temp_files} = build_claude_command(args, options, stdin_input)
+
+    case validate_cwd(options.cwd, temp_files) do
+      {:error, error_state} ->
+        error_state
+
+      :ok ->
+        exec_options = build_exec_options(options)
+        start_exec(cmd, exec_options, options, stdin_input, temp_files)
+    end
+  end
+
+  defp ensure_erlexec_started! do
     case Application.ensure_all_started(:erlexec) do
       {:ok, _} -> :ok
       {:error, reason} -> raise "Failed to start erlexec application: #{inspect(reason)}"
     end
+  end
 
-    # Build the command - for erlexec, stdin is passed as part of the command args, not exec options
-    {cmd, _cmd_args} = build_claude_command(args, options, stdin_input)
-
-    # Build exec options with working directory if specified
-    exec_options = build_exec_options(options)
-
-    # Execute with erlexec
-    case stdin_input do
-      nil ->
-        # Regular sync execution without stdin
-        case :exec.run(cmd, exec_options) do
-          {:ok, result} ->
-            # Process the synchronous result and convert to streaming format
-            %{
-              mode: :sync,
-              result: result,
-              messages: parse_sync_result(result),
-              current_index: 0,
-              done: false
-            }
-
-          {:error, reason} ->
-            Logger.error("Failed to start Claude CLI (sync run)",
-              cmd: cmd,
-              reason: reason,
-              env_keys: env_keys(exec_options)
-            )
-
-            formatted_error = format_error_message(reason, options)
-
-            error_msg = %Message{
-              type: :result,
-              subtype: :error_during_execution,
-              data: %{
-                error: formatted_error,
-                session_id: "error",
-                is_error: true
-              }
-            }
-
-            %{
-              mode: :error,
-              messages: [error_msg],
-              current_index: 0,
-              done: false
-            }
-        end
-
-      input when is_binary(input) ->
-        # Use erlexec with stdin support
-        run_with_stdin_erlexec(cmd, input, exec_options, options)
+  defp validate_cwd(cwd, temp_files) when is_binary(cwd) do
+    if File.dir?(cwd) do
+      :ok
+    else
+      {:error, cwd_not_found_state(cwd, temp_files)}
     end
   end
 
-  defp run_with_stdin_erlexec(cmd, input, _exec_options, options) do
+  defp validate_cwd(_cwd, _temp_files), do: :ok
+
+  defp cwd_not_found_state(cwd, temp_files) do
+    error =
+      %ClaudeAgentSDK.Errors.CLIConnectionError{
+        message: "Working directory does not exist: #{cwd}",
+        cwd: cwd,
+        reason: :cwd_not_found
+      }
+
+    error_msg = %Message{
+      type: :result,
+      subtype: :error_during_execution,
+      data: %{
+        error: Exception.message(error),
+        error_struct: error,
+        session_id: "error",
+        is_error: true
+      }
+    }
+
+    %{
+      mode: :error,
+      messages: [error_msg],
+      current_index: 0,
+      done: false,
+      temp_files: temp_files
+    }
+  end
+
+  defp start_exec(cmd, exec_options, options, nil, temp_files) do
+    case :exec.run(cmd, exec_options) do
+      {:ok, result} ->
+        %{
+          mode: :sync,
+          result: result,
+          messages: parse_sync_result(result),
+          current_index: 0,
+          done: false,
+          temp_files: temp_files
+        }
+
+      {:error, reason} ->
+        Logger.error("Failed to start Claude CLI (sync run)",
+          cmd: cmd,
+          reason: reason,
+          env_keys: env_keys(exec_options)
+        )
+
+        formatted_error = format_error_message(reason, options)
+        error_msg = process_error_message(formatted_error, reason)
+
+        %{
+          mode: :error,
+          messages: [error_msg],
+          current_index: 0,
+          done: false,
+          temp_files: temp_files
+        }
+    end
+  end
+
+  defp start_exec(cmd, exec_options, options, input, temp_files) when is_binary(input) do
+    run_with_stdin_erlexec(cmd, input, exec_options, options, temp_files)
+  end
+
+  defp run_with_stdin_erlexec(cmd, input, _exec_options, options, temp_files) do
     # Add stdin to the exec options and use async execution
     # Build fresh options with env vars for async mode
     env_vars = build_env_vars(options)
@@ -146,7 +181,7 @@ defmodule ClaudeAgentSDK.Process do
         Logger.debug("Using timeout for CLI run", timeout_ms: timeout_ms)
 
         # Collect output until process exits
-        receive_exec_output(pid, os_pid, [], [], timeout_ms)
+        receive_exec_output(pid, os_pid, [], [], timeout_ms, temp_files)
 
       {:error, reason} ->
         Logger.error("Failed to start Claude CLI (stdin run)",
@@ -156,27 +191,19 @@ defmodule ClaudeAgentSDK.Process do
         )
 
         formatted_error = format_error_message(reason, options)
-
-        error_msg = %Message{
-          type: :result,
-          subtype: :error_during_execution,
-          data: %{
-            error: formatted_error,
-            session_id: "error",
-            is_error: true
-          }
-        }
+        error_msg = process_error_message(formatted_error, reason)
 
         %{
           mode: :error,
           messages: [error_msg],
           current_index: 0,
-          done: false
+          done: false,
+          temp_files: temp_files
         }
     end
   end
 
-  defp receive_exec_output(pid, os_pid, stdout_acc, stderr_acc, timeout_ms) do
+  defp receive_exec_output(pid, os_pid, stdout_acc, stderr_acc, timeout_ms, temp_files) do
     receive do
       {:stdout, ^os_pid, data} ->
         # Check for challenge URL in the output
@@ -207,10 +234,18 @@ defmodule ClaudeAgentSDK.Process do
             mode: :error,
             messages: [error_msg],
             current_index: 0,
-            done: false
+            done: false,
+            temp_files: temp_files
           }
         else
-          receive_exec_output(pid, os_pid, [data | stdout_acc], stderr_acc, timeout_ms)
+          receive_exec_output(
+            pid,
+            os_pid,
+            [data | stdout_acc],
+            stderr_acc,
+            timeout_ms,
+            temp_files
+          )
         end
 
       {:stderr, ^os_pid, data} ->
@@ -242,10 +277,18 @@ defmodule ClaudeAgentSDK.Process do
             mode: :error,
             messages: [error_msg],
             current_index: 0,
-            done: false
+            done: false,
+            temp_files: temp_files
           }
         else
-          receive_exec_output(pid, os_pid, stdout_acc, [data | stderr_acc], timeout_ms)
+          receive_exec_output(
+            pid,
+            os_pid,
+            stdout_acc,
+            [data | stderr_acc],
+            timeout_ms,
+            temp_files
+          )
         end
 
       {:DOWN, ^os_pid, :process, ^pid, _exit_status} ->
@@ -263,7 +306,8 @@ defmodule ClaudeAgentSDK.Process do
           result: result,
           messages: parse_sync_result(result),
           current_index: 0,
-          done: false
+          done: false,
+          temp_files: temp_files
         }
     after
       timeout_ms ->
@@ -294,20 +338,23 @@ defmodule ClaudeAgentSDK.Process do
           mode: :error,
           messages: [error_msg],
           current_index: 0,
-          done: false
+          done: false,
+          temp_files: temp_files
         }
     end
   end
 
   defp build_claude_command(args, _options, _stdin_input) do
     executable = CLI.find_executable!()
+    _ = CLI.warn_if_outdated()
 
     # Ensure proper flags for JSON output
     final_args = ensure_json_flags(args)
 
     # Always return the command string format - erlexec handles both cases
+    {final_args, temp_files} = AgentsFile.externalize_agents_if_needed(final_args)
     quoted_args = Enum.map(final_args, &shell_escape/1)
-    {Enum.join([executable | quoted_args], " "), []}
+    {Enum.join([executable | quoted_args], " "), temp_files}
   end
 
   defp build_exec_options(options) do
@@ -349,11 +396,19 @@ defmodule ClaudeAgentSDK.Process do
         {key, value}, acc -> Map.put(acc, key, to_string(value))
       end)
       |> maybe_put_user_env(options.user)
+      |> maybe_put_pwd_env(options.cwd)
       |> Map.put_new("CLAUDE_CODE_ENTRYPOINT", "sdk-elixir")
       |> Map.put_new("CLAUDE_AGENT_SDK_VERSION", version_string())
       |> maybe_put_file_checkpointing_env(options)
 
     Enum.map(merged, fn {k, v} -> {k, v} end)
+  end
+
+  @doc false
+  @spec __env_vars__(Options.t()) :: map()
+  def __env_vars__(%Options{} = options) do
+    build_env_vars(options)
+    |> Map.new()
   end
 
   defp maybe_put_file_checkpointing_env(env_map, %Options{enable_file_checkpointing: true}) do
@@ -368,6 +423,12 @@ defmodule ClaudeAgentSDK.Process do
     env_map
     |> Map.put("USER", user)
     |> Map.put("LOGNAME", user)
+  end
+
+  defp maybe_put_pwd_env(env_map, nil), do: env_map
+
+  defp maybe_put_pwd_env(env_map, cwd) when is_binary(cwd) do
+    Map.put(env_map, "PWD", cwd)
   end
 
   defp shell_escape(""), do: "\"\""
@@ -389,13 +450,16 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   @doc false
-  def __env_vars__(%Options{} = options), do: build_env_vars(options)
-
-  @doc false
   def __exec_options__(%Options{} = options), do: build_exec_options(options)
 
   @doc false
   def __shell_escape__(arg) when is_binary(arg), do: shell_escape(arg)
+
+  @doc false
+  @spec __parse_output__(String.t()) :: [Message.t()]
+  def __parse_output__(output) when is_binary(output) do
+    parse_sync_result(%{stdout: [output], stderr: []})
+  end
 
   defp maybe_put_env_option(opts, []), do: opts
   defp maybe_put_env_option(opts, env) when is_list(env), do: [{:env, env} | opts]
@@ -403,7 +467,6 @@ defmodule ClaudeAgentSDK.Process do
   defp maybe_put_cd_option(opts, nil), do: opts
 
   defp maybe_put_cd_option(opts, cwd) when is_binary(cwd) do
-    unless File.dir?(cwd), do: File.mkdir_p!(cwd)
     [{:cd, cwd} | opts]
   end
 
@@ -457,61 +520,148 @@ defmodule ClaudeAgentSDK.Process do
     combined_text = Enum.join(all_output)
 
     # First check for challenge URL
-    if challenge_url = detect_challenge_url(combined_text) do
-      # Challenge URL detected - dump it and return special message
-      IO.puts("\n🔐 Challenge URL detected:")
-      IO.puts("#{challenge_url}")
-      IO.puts("\nTerminating process...")
+    case detect_challenge_url(combined_text) do
+      nil ->
+        parse_sync_lines(combined_text)
 
-      [
-        %Message{
-          type: :result,
-          subtype: :authentication_required,
-          data: %{
-            error: "Authentication challenge detected",
-            challenge_url: challenge_url,
-            session_id: "auth_challenge",
-            is_error: true
+      challenge_url ->
+        IO.puts("\n🔐 Challenge URL detected:")
+        IO.puts("#{challenge_url}")
+        IO.puts("\nTerminating process...")
+
+        [
+          %Message{
+            type: :result,
+            subtype: :authentication_required,
+            data: %{
+              error: "Authentication challenge detected",
+              challenge_url: challenge_url,
+              session_id: "auth_challenge",
+              is_error: true
+            }
           }
-        }
-      ]
-    else
-      # Parse JSON messages from the output
-      combined_text
-      |> String.split("\n")
-      |> Enum.filter(&(&1 != ""))
-      |> Enum.map(&parse_json_line/1)
-      |> Enum.filter(&(&1 != nil))
+        ]
+    end
+  end
+
+  defp parse_sync_lines(combined_text) do
+    combined_text
+    |> String.split("\n", trim: true)
+    |> Enum.reduce_while([], &parse_sync_line/2)
+    |> case do
+      {:error, error_message} -> [error_message]
+      messages when is_list(messages) -> Enum.reverse(messages)
+    end
+  end
+
+  defp parse_sync_line(line, acc) do
+    case parse_json_line(line) do
+      {:ok, message} -> {:cont, [message | acc]}
+      {:error, error_message} -> {:halt, {:error, error_message}}
     end
   end
 
   defp parse_json_line(line) do
-    # Parse as regular message using Message.from_json
     case ClaudeAgentSDK.JSON.decode(line) do
       {:ok, json_obj} when is_map(json_obj) ->
-        # Try to parse as a regular message
         case Message.from_json(line) do
-          {:ok, message} -> message
-          {:error, _} -> handle_fallback_parsing(line, json_obj)
+          {:ok, message} ->
+            {:ok, message}
+
+          {:error, reason} ->
+            {:error, message_parse_error_message(json_obj, reason)}
         end
 
       {:ok, _other} ->
-        # JSON parsed but not a map (like a number or string)
-        handle_fallback_parsing(line, nil)
+        {:error, json_decode_error_message(line, :not_a_map)}
 
-      {:error, _} ->
-        # JSON parsing failed completely
-        handle_fallback_parsing(line, nil)
+      {:error, reason} ->
+        {:error, json_decode_error_message(line, reason)}
     end
   end
 
-  defp handle_fallback_parsing(line, _json_obj) do
-    # If JSON parsing fails or doesn't match expected format, treat as text output
+  defp json_decode_error_message(line, original_error) do
+    error =
+      %ClaudeAgentSDK.Errors.CLIJSONDecodeError{
+        message: "Failed to decode JSON: #{String.slice(line, 0, 100)}...",
+        line: line,
+        original_error: original_error
+      }
+
     %Message{
-      type: :assistant,
+      type: :result,
+      subtype: :error_during_execution,
       data: %{
-        message: %{"role" => "assistant", "content" => line},
-        session_id: "unknown"
+        error: Exception.message(error),
+        error_struct: error,
+        session_id: "error",
+        is_error: true
+      }
+    }
+  end
+
+  defp process_error_message(formatted_error, reason) do
+    {exit_code, stderr} = extract_process_error_details(reason)
+
+    error =
+      %ClaudeAgentSDK.Errors.ProcessError{
+        message: formatted_error,
+        exit_code: exit_code,
+        stderr: stderr
+      }
+
+    %Message{
+      type: :result,
+      subtype: :error_during_execution,
+      data: %{
+        error: Exception.message(error),
+        error_struct: error,
+        session_id: "error",
+        is_error: true
+      }
+    }
+  end
+
+  defp extract_process_error_details(reason) when is_list(reason) do
+    if Keyword.keyword?(reason) do
+      exit_code =
+        case Keyword.get(reason, :exit_status) do
+          code when is_integer(code) -> code
+          _ -> nil
+        end
+
+      stderr =
+        case Keyword.get(reason, :stderr) do
+          lines when is_list(lines) -> Enum.join(lines, "")
+          other when is_binary(other) -> other
+          _ -> nil
+        end
+
+      {exit_code, stderr}
+    else
+      {nil, nil}
+    end
+  end
+
+  defp extract_process_error_details(_reason) do
+    {nil, nil}
+  end
+
+  defp message_parse_error_message(data, reason) do
+    error =
+      %ClaudeAgentSDK.Errors.MessageParseError{
+        message: "Failed to parse CLI message",
+        data: data
+      }
+
+    %Message{
+      type: :result,
+      subtype: :error_during_execution,
+      data: %{
+        error: Exception.message(error) <> " (#{inspect(reason)})",
+        error_struct: error,
+        session_id: "error",
+        is_error: true
       }
     }
   end
@@ -540,8 +690,8 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp cleanup_process(_state) do
-    # erlexec handles cleanup automatically for sync operations
+  defp cleanup_process(state) do
+    _ = AgentsFile.cleanup_temp_files(Map.get(state, :temp_files, []))
     :ok
   end
 

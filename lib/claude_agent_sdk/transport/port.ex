@@ -14,24 +14,34 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
   @line_length 65_536
   alias ClaudeAgentSDK.{CLI, Options}
+  alias ClaudeAgentSDK.Transport.AgentsFile
 
   defstruct port: nil,
             subscribers: %{},
             buffer: "",
             status: :disconnected,
-            options: []
+            options: [],
+            temp_files: [],
+            stderr_callback: nil
 
   @impl ClaudeAgentSDK.Transport
   def start_link(opts) when is_list(opts) do
     options = Keyword.get(opts, :options) || %Options{}
 
-    with {:ok, {command, default_args}} <- resolve_command(opts) do
+    with :ok <- validate_cwd(options),
+         {:ok, {command, default_args}} <- resolve_command(opts) do
       args = Keyword.get(opts, :args, default_args)
+      {args, temp_files} = AgentsFile.externalize_agents_if_needed(args, opts)
+      stderr_callback = options.stderr
+      stderr_to_stdout? = is_function(stderr_callback, 1)
 
       opts =
         opts
         |> Keyword.put(:command, command)
         |> Keyword.put(:args, args)
+        |> Keyword.put(:temp_files, temp_files)
+        |> Keyword.put(:stderr_callback, stderr_callback)
+        |> Keyword.put(:stderr_to_stdout, stderr_to_stdout?)
         |> __build_port_options__(options)
 
       GenServer.start_link(__MODULE__, opts)
@@ -77,6 +87,8 @@ defmodule ClaudeAgentSDK.Transport.Port do
     Process.flag(:trap_exit, true)
 
     command = Keyword.fetch!(opts, :command)
+    temp_files = Keyword.get(opts, :temp_files, [])
+    stderr_callback = Keyword.get(opts, :stderr_callback)
 
     case open_port(command, opts) do
       {:ok, port} ->
@@ -85,7 +97,9 @@ defmodule ClaudeAgentSDK.Transport.Port do
           subscribers: %{},
           buffer: "",
           status: :connected,
-          options: opts
+          options: opts,
+          temp_files: temp_files,
+          stderr_callback: stderr_callback
         }
 
         {:ok, state}
@@ -152,7 +166,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
   @impl GenServer
   def handle_info({port, {:data, {:eol, line}}}, %{port: port} = state) when is_binary(line) do
     state
-    |> broadcast(line)
+    |> handle_line(line)
     |> noreply()
   end
 
@@ -162,7 +176,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
     new_state =
       Enum.reduce(complete_lines, state, fn line, acc ->
-        broadcast(acc, line)
+        handle_line(acc, line)
       end)
 
     {:noreply, %{new_state | buffer: remaining}}
@@ -203,12 +217,16 @@ defmodule ClaudeAgentSDK.Transport.Port do
   end
 
   @impl GenServer
-  def terminate(_reason, %{port: port}) when is_port(port) do
+  def terminate(_reason, %{port: port, temp_files: temp_files}) when is_port(port) do
+    _ = AgentsFile.cleanup_temp_files(temp_files)
     Port.close(port)
     :ok
   end
 
-  def terminate(_reason, _state), do: :ok
+  def terminate(_reason, %{temp_files: temp_files}) do
+    _ = AgentsFile.cleanup_temp_files(temp_files)
+    :ok
+  end
 
   ## Helpers
 
@@ -239,11 +257,15 @@ defmodule ClaudeAgentSDK.Transport.Port do
       %Options{} = options ->
         case CLI.find_executable() do
           {:ok, executable} ->
+            _ = CLI.warn_if_outdated()
+
             args = [
+              "--print",
               "--output-format",
               "stream-json",
               "--input-format",
               "stream-json",
+              "--replay-user-messages",
               "--verbose"
             ]
 
@@ -262,14 +284,22 @@ defmodule ClaudeAgentSDK.Transport.Port do
   defp maybe_put_cd_from_options(opts, %Options{cwd: nil}), do: opts
 
   defp maybe_put_cd_from_options(opts, %Options{cwd: cwd}) when is_binary(cwd) do
-    if not File.dir?(cwd) do
-      File.mkdir_p!(cwd)
-    end
-
     Keyword.put_new(opts, :cd, cwd)
   end
 
   defp maybe_put_cd_from_options(opts, _), do: opts
+
+  defp validate_cwd(%Options{cwd: nil}), do: :ok
+
+  defp validate_cwd(%Options{cwd: cwd}) when is_binary(cwd) do
+    if File.dir?(cwd) do
+      :ok
+    else
+      {:error, {:cwd_not_found, cwd}}
+    end
+  end
+
+  defp validate_cwd(_), do: :ok
 
   defp maybe_put_line_length_from_options(opts, %Options{max_buffer_size: size})
        when is_integer(size) and size > 0 do
@@ -288,6 +318,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
       |> merge_with_system_env()
       |> merge_env_overrides(env_overrides)
       |> merge_user_env(options.user)
+      |> maybe_put_pwd_env(options.cwd)
       |> maybe_put_file_checkpointing_env(options)
 
     if map_size(merged_env) == 0 do
@@ -343,6 +374,12 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
   defp maybe_put_file_checkpointing_env(env_map, _options), do: env_map
 
+  defp maybe_put_pwd_env(env_map, nil), do: env_map
+
+  defp maybe_put_pwd_env(env_map, cwd) when is_binary(cwd) do
+    Map.put(env_map, "PWD", cwd)
+  end
+
   defp map_to_env_list(map) do
     Enum.map(map, fn {key, value} -> {key, value} end)
   end
@@ -358,6 +395,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
     args = Keyword.get(opts, :args, [])
     env = Keyword.get(opts, :env)
     cd = Keyword.get(opts, :cd)
+    stderr_to_stdout? = Keyword.get(opts, :stderr_to_stdout, false)
     line_length = Keyword.get(opts, :line_length, @line_length)
 
     port_opts =
@@ -371,6 +409,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
       ]
       |> maybe_put_env(env)
       |> maybe_put_cd(cd)
+      |> maybe_put_stderr_to_stdout(stderr_to_stdout?)
 
     {:ok,
      Port.open(
@@ -380,6 +419,23 @@ defmodule ClaudeAgentSDK.Transport.Port do
   rescue
     ArgumentError -> {:error, :failed_to_open_port}
   end
+
+  defp maybe_put_stderr_to_stdout(opts, true), do: [:stderr_to_stdout | opts]
+  defp maybe_put_stderr_to_stdout(opts, _), do: opts
+
+  defp handle_line(%__MODULE__{stderr_callback: stderr_callback} = state, line)
+       when is_function(stderr_callback, 1) do
+    case ClaudeAgentSDK.JSON.decode(line) do
+      {:ok, _} ->
+        broadcast(state, line)
+
+      {:error, _} ->
+        stderr_callback.(line)
+        state
+    end
+  end
+
+  defp handle_line(state, line), do: broadcast(state, line)
 
   defp maybe_put_env(opts, nil), do: opts
 

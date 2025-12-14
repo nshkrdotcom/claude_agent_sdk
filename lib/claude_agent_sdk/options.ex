@@ -138,7 +138,8 @@ defmodule ClaudeAgentSDK.Options do
     plugins: [],
     add_dirs: [],
     extra_args: %{},
-    env: %{}
+    env: %{},
+    stderr: nil
   ]
 
   @type structured_output_format ::
@@ -213,7 +214,7 @@ defmodule ClaudeAgentSDK.Options do
 
   @type t :: %__MODULE__{
           max_turns: integer() | nil,
-          system_prompt: String.t() | nil,
+          system_prompt: String.t() | map() | nil,
           append_system_prompt: String.t() | nil,
           output_format: output_format() | nil,
           tools: tools_option(),
@@ -255,6 +256,7 @@ defmodule ClaudeAgentSDK.Options do
           max_buffer_size: pos_integer() | nil,
           extra_args: %{optional(String.t()) => String.t() | boolean() | nil},
           env: %{optional(String.t()) => String.t()},
+          stderr: (String.t() -> any()) | nil,
           user: String.t() | nil,
           max_thinking_tokens: pos_integer() | nil
         }
@@ -433,15 +435,86 @@ defmodule ClaudeAgentSDK.Options do
     args ++ ["--max-budget-usd", to_string(budget)]
   end
 
-  defp add_system_prompt_args(args, %{system_prompt: nil}), do: args
+  # Python parity: always emit an explicit system prompt flag when unset.
+  # When unset, this forces "no system prompt" rather than relying on CLI defaults.
+  defp add_system_prompt_args(args, %{system_prompt: nil}), do: args ++ ["--system-prompt", ""]
 
-  defp add_system_prompt_args(args, %{system_prompt: prompt}),
+  defp add_system_prompt_args(args, %{system_prompt: prompt}) when is_binary(prompt),
     do: args ++ ["--system-prompt", prompt]
+
+  # Python parity: support SystemPromptPreset objects (type=preset, preset=claude_code, optional append).
+  # A preset with no append emits no system-prompt flags (uses CLI default prompt).
+  defp add_system_prompt_args(args, %{system_prompt: %{} = preset}) do
+    case normalize_system_prompt_preset(preset) do
+      {:preset, _preset, _append} ->
+        args
+
+      :invalid ->
+        raise ArgumentError,
+              "system_prompt preset must be %{type: :preset, preset: :claude_code, append: ...} (or string-keyed equivalent)"
+    end
+  end
+
+  defp add_append_system_prompt_args(args, %{
+         append_system_prompt: nil,
+         system_prompt: %{} = preset
+       }) do
+    case normalize_system_prompt_preset(preset) do
+      {:preset, _preset, append} when is_binary(append) and append != "" ->
+        args ++ ["--append-system-prompt", append]
+
+      {:preset, _preset, _append} ->
+        args
+
+      :invalid ->
+        args
+    end
+  end
 
   defp add_append_system_prompt_args(args, %{append_system_prompt: nil}), do: args
 
   defp add_append_system_prompt_args(args, %{append_system_prompt: prompt}),
     do: args ++ ["--append-system-prompt", prompt]
+
+  defp normalize_system_prompt_preset(%{"type" => "preset"} = preset),
+    do: normalize_system_prompt_preset(string_keyed_to_atom_keyed(preset))
+
+  defp normalize_system_prompt_preset(%{type: "preset"} = preset),
+    do: normalize_system_prompt_preset(%{preset | type: :preset})
+
+  defp normalize_system_prompt_preset(%{type: :preset, preset: preset} = map) do
+    preset_atom =
+      cond do
+        preset == :claude_code -> :claude_code
+        preset == "claude_code" -> :claude_code
+        true -> nil
+      end
+
+    if preset_atom != :claude_code do
+      :invalid
+    else
+      append =
+        case Map.fetch(map, :append) do
+          {:ok, value} when is_binary(value) -> value
+          _ -> nil
+        end
+
+      {:preset, :claude_code, append}
+    end
+  end
+
+  defp normalize_system_prompt_preset(_), do: :invalid
+
+  defp string_keyed_to_atom_keyed(map) do
+    Enum.reduce(map, %{}, fn {k, v}, acc ->
+      case k do
+        "type" -> Map.put(acc, :type, v)
+        "preset" -> Map.put(acc, :preset, v)
+        "append" -> Map.put(acc, :append, v)
+        _other -> acc
+      end
+    end)
+  end
 
   defp add_tools_args(args, %{tools: nil}), do: args
 
@@ -558,7 +631,9 @@ defmodule ClaudeAgentSDK.Options do
 
   defp deep_stringify_keys(value), do: value
 
-  defp add_setting_sources_args(args, %{setting_sources: nil}), do: args
+  # Python parity: always emit setting sources, defaulting to empty (load no filesystem settings).
+  defp add_setting_sources_args(args, %{setting_sources: nil}),
+    do: args ++ ["--setting-sources", ""]
 
   defp add_setting_sources_args(args, %{setting_sources: sources}) when is_list(sources) do
     value = Enum.map_join(sources, ",", &to_string/1)

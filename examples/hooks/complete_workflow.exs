@@ -1,60 +1,82 @@
 #!/usr/bin/env elixir
 
-# Example 5: Complete Workflow - All Hooks Together with LIVE CLI
+# Example: Complete Workflow - All Hooks Together with LIVE CLI
 #
-# This example demonstrates multiple hooks working together to create
-# a secure, monitored, and intelligent agent system with the actual Claude CLI.
+# Demonstrates multiple hooks working together to build a secure, audited workflow:
+# - `user_prompt_submit` context injection
+# - `pre_tool_use` audit logging + security allow/deny
+# - `post_tool_use` monitoring
 #
 # Run: mix run examples/hooks/complete_workflow.exs
 
-alias ClaudeAgentSDK.{Client, Options}
+Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
+
+alias ClaudeAgentSDK.{Client, ContentExtractor, Message, Options}
 alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+alias Examples.Support
 
-defmodule CompleteWorkflow do
-  @moduledoc """
-  Complete hooks workflow demonstrating security, logging, context, and
-  per-matcher hook timeouts.
-  """
+Support.ensure_live!()
+Support.header!("Hooks Example: Complete Workflow (live)")
 
-  require Logger
+defmodule CompleteWorkflowHooks do
+  @moduledoc false
 
-  # Security policy
+  @table :claude_agent_sdk_examples_complete_workflow
   @forbidden_patterns ["rm -rf", "dd if=", "mkfs"]
-  @allowed_sandbox "/tmp/sandbox"
-  @pre_tool_timeout_ms 1_200
-  @context_timeout_ms 3_000
-  def pre_tool_timeout_ms, do: @pre_tool_timeout_ms
-  def context_timeout_ms, do: @context_timeout_ms
 
-  @doc """
-  Security validation hook (PreToolUse).
-  Validates bash commands and file operations.
-  """
-  def security_validation(input, tool_use_id, _context) do
-    Logger.info("Security check", tool_use_id: tool_use_id, tool: input["tool_name"])
+  def table_name, do: @table
 
+  def put_allowed_dir!(dir) when is_binary(dir) do
+    :ets.insert(@table, {:allowed_dir, dir})
+  end
+
+  defp allowed_dir do
+    case :ets.lookup(@table, :allowed_dir) do
+      [{:allowed_dir, dir}] when is_binary(dir) -> dir
+      _ -> "/tmp"
+    end
+  end
+
+  defp inc(key) when is_atom(key) do
+    _ = :ets.update_counter(@table, key, {2, 1}, {key, 0})
+    :ok
+  end
+
+  # PreToolUse: audit log (always allow)
+  def audit_log(input, tool_use_id, _context) do
+    inc(:pre)
+    tool = input["tool_name"]
+    IO.puts("\n📝 [AUDIT] tool=#{tool} id=#{tool_use_id}")
+    %{}
+  end
+
+  # PreToolUse: security validation (allow/deny)
+  def security_validation(input, _tool_use_id, _context) do
     case input do
-      %{"tool_name" => "Bash", "tool_input" => %{"command" => cmd}} ->
+      %{"tool_name" => "Bash", "tool_input" => %{"command" => cmd}} when is_binary(cmd) ->
         if Enum.any?(@forbidden_patterns, &String.contains?(cmd, &1)) do
+          inc(:denied)
           IO.puts("\n🚫 SECURITY: Blocked dangerous command: #{cmd}")
 
           Output.deny("Dangerous command blocked")
           |> Output.with_system_message("🔒 Security policy violation")
         else
+          inc(:allowed)
           IO.puts("\n✅ SECURITY: Approved bash command")
-          %{}
+          Output.allow("Security check passed")
         end
 
-      %{"tool_name" => tool, "tool_input" => %{"file_path" => path}}
-      when tool in ["Write", "Edit"] ->
-        if not String.starts_with?(path, @allowed_sandbox) do
-          IO.puts("\n🚫 SECURITY: File access outside sandbox: #{path}")
-
-          Output.deny("Must operate within #{@allowed_sandbox}")
-          |> Output.with_system_message("🔒 Sandbox restriction")
+      %{"tool_name" => "Write", "tool_input" => %{"file_path" => path}} when is_binary(path) ->
+        if String.starts_with?(path, allowed_dir()) do
+          inc(:allowed)
+          IO.puts("\n✅ SECURITY: Approved file write: #{path}")
+          Output.allow("Sandbox check passed")
         else
-          IO.puts("\n✅ SECURITY: Approved file operation: #{path}")
-          %{}
+          inc(:denied)
+          IO.puts("\n🚫 SECURITY: Blocked write outside sandbox: #{path}")
+
+          Output.deny("Must operate within #{allowed_dir()}")
+          |> Output.with_system_message("🔒 Sandbox restriction")
         end
 
       _ ->
@@ -62,131 +84,192 @@ defmodule CompleteWorkflow do
     end
   end
 
-  @doc """
-  Audit logging hook (PreToolUse).
-  Logs all tool invocations.
-  """
-  def audit_log(input, tool_use_id, _context) do
-    # Simulate modest work to show timebox still succeeds under timeout
-    Process.sleep(200)
-    timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
-    tool_name = input["tool_name"]
-
-    IO.puts("\n📝 [AUDIT] #{timestamp} - #{tool_name} (#{tool_use_id})")
-    Logger.info("Tool invoked", timestamp: timestamp, tool: tool_name, id: tool_use_id)
-
-    %{}
-  end
-
-  @doc """
-  Context injection hook (UserPromptSubmit).
-  Adds security and environment context to prompts.
-  """
+  # UserPromptSubmit: context injection
   def add_context(_input, _tool_use_id, _context) do
-    # Simulate a slower context collection to demonstrate custom timeout budget
-    Process.sleep(500)
+    inc(:context)
 
     context_text = """
     ## 🔒 Security Context
-    - Bash commands restricted: No rm -rf, dd, mkfs
-    - File operations sandboxed to: #{@allowed_sandbox}
-    - All operations are logged
-    - Environment: #{System.get_env("MIX_ENV", "dev")}
+    - Bash restricted: #{Enum.join(@forbidden_patterns, ", ")}
+    - Writes sandboxed to: #{allowed_dir()}
     """
-
-    IO.puts("\n📎 Injecting security context...")
 
     Output.add_context("UserPromptSubmit", context_text)
   end
 
-  @doc """
-  Execution monitoring hook (PostToolUse).
-  Tracks tool execution and adds metadata.
-  """
+  # PostToolUse: monitoring
   def monitor_execution(input, tool_use_id, _context) do
-    tool_name = input["tool_name"]
-    tool_response = input["tool_response"]
-
-    is_error = get_in(tool_response, ["is_error"]) || false
-    status = if is_error, do: "❌ FAILED", else: "✅ SUCCESS"
-
-    IO.puts("\n📊 MONITOR: #{tool_name} - #{status} (#{tool_use_id})")
-    Logger.info("Tool completed", tool: tool_name, success: not is_error, id: tool_use_id)
-
+    inc(:post)
+    tool = input["tool_name"]
+    is_error = get_in(input, ["tool_response", "is_error"]) || false
+    status = if is_error, do: "❌", else: "✅"
+    IO.puts("\n📊 MONITOR: tool=#{tool} #{status} id=#{tool_use_id}")
     %{}
   end
 end
 
-# Configure complete workflow with all hooks
+table = CompleteWorkflowHooks.table_name()
+
+case :ets.whereis(table) do
+  :undefined -> :ok
+  tid -> :ets.delete(tid)
+end
+
+:ets.new(table, [:named_table, :public, :set])
+
+sandbox_dir =
+  Path.join(
+    System.tmp_dir!(),
+    "claude_agent_sdk_complete_workflow_#{System.unique_integer([:positive])}"
+  )
+
+File.mkdir_p!(sandbox_dir)
+CompleteWorkflowHooks.put_allowed_dir!(sandbox_dir)
+
 hooks = %{
-  # Security validation and audit logging (both run on PreToolUse)
   pre_tool_use: [
-    Matcher.new("*", [&CompleteWorkflow.audit_log/3, &CompleteWorkflow.security_validation/3],
-      timeout_ms: CompleteWorkflow.pre_tool_timeout_ms()
-    )
+    Matcher.new("*", [
+      &CompleteWorkflowHooks.audit_log/3,
+      &CompleteWorkflowHooks.security_validation/3
+    ])
   ],
-  # Context injection on prompts
   user_prompt_submit: [
-    Matcher.new(nil, [&CompleteWorkflow.add_context/3],
-      timeout_ms: CompleteWorkflow.context_timeout_ms()
-    )
+    Matcher.new(nil, [&CompleteWorkflowHooks.add_context/3])
   ],
-  # Execution monitoring
   post_tool_use: [
-    Matcher.new("*", [&CompleteWorkflow.monitor_execution/3])
+    Matcher.new("*", [&CompleteWorkflowHooks.monitor_execution/3])
   ]
 }
 
 options = %Options{
-  allowed_tools: ["Bash", "Read", "Write"],
-  hooks: hooks
+  tools: ["Bash", "Write"],
+  allowed_tools: ["Bash", "Write"],
+  hooks: hooks,
+  model: "haiku",
+  max_turns: 2,
+  permission_mode: :default
 }
 
-IO.puts("=" <> String.duplicate("=", 79))
-IO.puts("🎣 Hooks Example: Complete Workflow (LIVE)")
-IO.puts("=" <> String.duplicate("=", 79))
-IO.puts("\nStarting Claude CLI with complete hooks workflow...")
-IO.puts("  - Security validation (PreToolUse)")
-IO.puts("  - Audit logging (PreToolUse)")
-IO.puts("    • Per-matcher timeout: #{CompleteWorkflow.pre_tool_timeout_ms()} ms")
-IO.puts("  - Context injection (UserPromptSubmit)")
-IO.puts("    • Per-matcher timeout: #{CompleteWorkflow.context_timeout_ms()} ms")
-IO.puts("  - Execution monitoring (PostToolUse)\n")
-
-# Start client with hooks
 {:ok, client} = Client.start_link(options)
 
-IO.puts("✅ Client started with complete workflow\n")
+run_prompt = fn prompt ->
+  task =
+    Task.async(fn ->
+      Client.stream_messages(client)
+      |> Enum.reduce_while([], fn message, acc ->
+        acc = [message | acc]
 
-# Test 1: Safe operation
-IO.puts("\n📝 Test 1: Safe bash command")
-IO.puts("-" <> String.duplicate("-", 79))
+        case message do
+          %Message{type: :assistant} = msg ->
+            text = ContentExtractor.extract_text(msg)
+            if is_binary(text) and text != "", do: IO.puts("\nAssistant:\n#{text}\n")
+            {:cont, acc}
 
-Client.send_message(client, "Echo 'Hello from complete workflow'")
-Process.sleep(2000)
+          %Message{type: :result} ->
+            {:halt, Enum.reverse(acc)}
 
-# Test 2: File operation in sandbox
-IO.puts("\n\n📝 Test 2: File operation (sandboxed)")
-IO.puts("-" <> String.duplicate("-", 79))
+          _ ->
+            {:cont, acc}
+        end
+      end)
+    end)
 
-Client.send_message(client, "Write 'test data' to /tmp/sandbox/file.txt")
-Process.sleep(2000)
+  Process.sleep(50)
+  :ok = Client.send_message(client, prompt)
+  Task.await(task, 180_000)
+end
 
-# Test 3: Dangerous command (will be blocked)
-IO.puts("\n\n📝 Test 3: Dangerous command (will be blocked)")
-IO.puts("-" <> String.duplicate("-", 79))
+IO.puts("Sandbox directory: #{sandbox_dir}\n")
 
-Client.send_message(client, "Run: rm -rf /tmp/data")
-Process.sleep(2000)
+IO.puts("Test 1: Safe bash command\n")
 
-# Clean up
-IO.puts("\n\nStopping client...")
+messages1 =
+  run_prompt.("Use the Bash tool to run this exact command: echo 'hello from complete workflow'")
+
+IO.puts("\nTest 2: Sandboxed file write\n")
+
+messages2 =
+  run_prompt.("Use the Write tool to write exactly 'ok' to #{Path.join(sandbox_dir, "ok.txt")}.")
+
+IO.puts("\nTest 3: Dangerous bash command (should be denied)\n")
+
+messages3 =
+  run_prompt.("Use the Bash tool to run this exact command: rm -rf /tmp/this_should_be_blocked")
+
+for {label, msgs} <- [
+      {"safe bash", messages1},
+      {"sandbox write", messages2},
+      {"dangerous bash", messages3}
+    ] do
+  case Enum.find(msgs, &(&1.type == :result)) do
+    %Message{subtype: :success} ->
+      :ok
+
+    %Message{subtype: other} ->
+      raise "Run #{label} did not succeed (result subtype: #{inspect(other)})"
+
+    nil ->
+      raise "Run #{label} returned no result message."
+  end
+end
+
+pre =
+  :ets.lookup(table, :pre)
+  |> then(fn
+    [{:pre, n}] when is_integer(n) -> n
+    _ -> 0
+  end)
+
+post =
+  :ets.lookup(table, :post)
+  |> then(fn
+    [{:post, n}] when is_integer(n) -> n
+    _ -> 0
+  end)
+
+ctx =
+  :ets.lookup(table, :context)
+  |> then(fn
+    [{:context, n}] when is_integer(n) -> n
+    _ -> 0
+  end)
+
+allowed =
+  :ets.lookup(table, :allowed)
+  |> then(fn
+    [{:allowed, n}] when is_integer(n) -> n
+    _ -> 0
+  end)
+
+denied =
+  :ets.lookup(table, :denied)
+  |> then(fn
+    [{:denied, n}] when is_integer(n) -> n
+    _ -> 0
+  end)
+
+if ctx < 1 do
+  raise "Expected user_prompt_submit hook to fire, but context=#{ctx}."
+end
+
+if pre < 2 do
+  raise "Expected pre_tool_use hooks to fire at least twice, but pre=#{pre}."
+end
+
+if post < 1 do
+  raise "Expected post_tool_use hook to fire at least once, but post=#{post}."
+end
+
+if allowed < 1 or denied < 1 do
+  raise "Expected at least one allowed and one denied decision, but allowed=#{allowed} denied=#{denied}."
+end
+
+IO.puts(
+  "\n✅ Complete workflow checks passed (pre=#{pre} post=#{post} ctx=#{ctx} allowed=#{allowed} denied=#{denied})."
+)
+
 Client.stop(client)
+:ets.delete(table)
 
-IO.puts("\n\n✨ Complete Workflow Demonstration Finished!")
-IO.puts("\n📚 Key Takeaways:")
-IO.puts("   - Multiple hooks can work together seamlessly")
-IO.puts("   - Layered security: validation + logging + context + monitoring")
-IO.puts("   - Hooks compose naturally (multiple callbacks per event)")
-IO.puts("   - Complete control over Claude's execution environment")
-IO.puts("   - Production-ready security and audit capabilities")
+IO.puts("\nDone.")
+Support.halt_if_runner!()

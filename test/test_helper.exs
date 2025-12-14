@@ -14,4 +14,4 @@ Code.ensure_loaded!(ClaudeAgentSDK.TestSupport.CalculatorTools)
 Code.ensure_loaded!(ClaudeAgentSDK.TestSupport.ErrorTools)
 Code.ensure_loaded!(ClaudeAgentSDK.TestSupport.ImageTools)
 
-ExUnit.start(exclude: [:integration, :live])
+ExUnit.start(exclude: [:integration, :live], capture_log: true)

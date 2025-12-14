@@ -170,6 +170,20 @@ defmodule ClaudeAgentSDK.Hooks.OutputTest do
     test "validates empty map" do
       assert Output.validate(%{}) == :ok
     end
+
+    test "validates async deferral output" do
+      assert :ok = Output.validate(%{async: true, asyncTimeout: 60_000})
+    end
+
+    test "rejects asyncTimeout without async true" do
+      assert {:error, msg} = Output.validate(%{asyncTimeout: 60_000})
+      assert msg =~ "asyncTimeout"
+    end
+
+    test "rejects invalid asyncTimeout type" do
+      assert {:error, msg} = Output.validate(%{async: true, asyncTimeout: "60s"})
+      assert msg =~ "asyncTimeout"
+    end
   end
 
   describe "to_json_map/1" do
@@ -223,6 +237,11 @@ defmodule ClaudeAgentSDK.Hooks.OutputTest do
       result = Output.to_json_map(output)
 
       assert result["nested"]["inner_atom"] == "value"
+    end
+
+    test "converts async deferral keys to CLI-compatible JSON" do
+      output = %{async: true, asyncTimeout: 60_000}
+      assert Output.to_json_map(output) == %{"async" => true, "asyncTimeout" => 60_000}
     end
   end
 

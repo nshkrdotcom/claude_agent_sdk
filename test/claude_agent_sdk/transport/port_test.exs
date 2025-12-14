@@ -122,6 +122,7 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
     test "passes env overrides to the spawned process" do
       script =
         create_test_script("""
+        read -r _unused
         printf "%s\\n" "$PORT_ENV_TEST"
         exec cat
         """)
@@ -131,6 +132,7 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
       {:ok, transport} = PortTransport.start_link(command: script, args: [], options: options)
       PortTransport.subscribe(transport, self())
 
+      :ok = PortTransport.send(transport, "ready")
       assert_receive {:transport_message, "from_options"}, 500
       PortTransport.close(transport)
     end
@@ -141,6 +143,7 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
 
       script =
         create_test_script("""
+        read -r _unused
         pwd
         exec cat
         """)
@@ -150,8 +153,58 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
       {:ok, transport} = PortTransport.start_link(command: script, args: [], options: options)
       PortTransport.subscribe(transport, self())
 
+      :ok = PortTransport.send(transport, "ready")
       assert_receive {:transport_message, ^tmp_dir}, 500
       PortTransport.close(transport)
+    end
+
+    test "returns error when cwd does not exist (does not create it)" do
+      tmp_dir =
+        Path.join(System.tmp_dir!(), "port_cwd_missing_#{System.unique_integer([:positive])}")
+
+      refute File.dir?(tmp_dir)
+
+      script =
+        create_test_script("""
+        pwd
+        exec cat
+        """)
+
+      options = %Options{cwd: tmp_dir}
+
+      assert {:error, {:cwd_not_found, ^tmp_dir}} =
+               PortTransport.start_link(command: script, args: [], options: options)
+
+      refute File.dir?(tmp_dir)
+    end
+
+    test "externalizes large --agents payload to @file and cleans it up on close" do
+      script =
+        create_test_script("""
+        read -r _unused
+        printf "%s\\n" "$2"
+        exec cat
+        """)
+
+      agents_json = String.duplicate("x", 50)
+
+      {:ok, transport} =
+        PortTransport.start_link(
+          command: script,
+          args: ["--agents", agents_json],
+          agents_cmd_length_limit: 10,
+          options: %Options{}
+        )
+
+      PortTransport.subscribe(transport, self())
+
+      :ok = PortTransport.send(transport, "ready")
+      assert_receive {:transport_message, "@" <> path}, 500
+      assert File.regular?(path)
+
+      PortTransport.close(transport)
+
+      refute File.exists?(path)
     end
   end
 

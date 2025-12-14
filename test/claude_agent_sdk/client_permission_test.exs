@@ -119,22 +119,49 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         permission_mode: :default
       }
 
-      {:ok, client} = Client.start_link(options)
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
 
-      # Change mode to :plan
-      assert :ok = Client.set_permission_mode(client, :plan)
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      assert_receive {:mock_transport_send, init_json}, 200
 
-      # Verify mode changed (via state inspection or behavior)
-      # In real implementation, this would affect tool execution flow
+      init_request_id = Jason.decode!(String.trim(init_json))["request_id"]
 
-      # Change mode to :accept_edits
-      assert :ok = Client.set_permission_mode(client, :accept_edits)
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => init_request_id,
+          "response" => %{}
+        }
+      }
 
-      # Change mode to :bypass_permissions
-      assert :ok = Client.set_permission_mode(client, :bypass_permissions)
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
 
-      # Change back to :default
-      assert :ok = Client.set_permission_mode(client, :default)
+      for mode <- [:plan, :accept_edits, :bypass_permissions, :default] do
+        task = Task.async(fn -> Client.set_permission_mode(client, mode) end)
+
+        assert_receive {:mock_transport_send, set_mode_json}, 200
+        set_request_id = Jason.decode!(String.trim(set_mode_json))["request_id"]
+
+        response = %{
+          "type" => "control_response",
+          "response" => %{
+            "subtype" => "success",
+            "request_id" => set_request_id,
+            "response" => %{}
+          }
+        }
+
+        MockTransport.push_message(transport_pid, Jason.encode!(response))
+        assert :ok = Task.await(task, 500)
+
+        state = :sys.get_state(client)
+        assert state.current_permission_mode == mode
+      end
 
       Client.stop(client)
     end
@@ -271,6 +298,183 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
       {:ok, client} = Client.start_link(options)
 
       assert {:error, :invalid_permission_mode} = Client.set_permission_mode(client, nil)
+
+      Client.stop(client)
+    end
+  end
+
+  describe "can_use_tool response encoding" do
+    alias ClaudeAgentSDK.TestSupport.MockTransport
+
+    test "allow response includes updatedInput defaulting to original input" do
+      callback = fn _context -> Result.allow() end
+
+      options = %Options{
+        can_use_tool: callback,
+        permission_mode: :default
+      }
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
+
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      assert_receive {:mock_transport_send, init_json}, 200
+
+      init_request_id = Jason.decode!(String.trim(init_json))["request_id"]
+
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => init_request_id,
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+
+      request_id = "perm_req_1"
+
+      can_use_tool_request = %{
+        "type" => "control_request",
+        "request_id" => request_id,
+        "request" => %{
+          "subtype" => "can_use_tool",
+          "tool_name" => "Bash",
+          "input" => %{"command" => "ls"},
+          "permission_suggestions" => []
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(can_use_tool_request))
+
+      assert_receive {:mock_transport_send, response_json}, 500
+      decoded = Jason.decode!(String.trim(response_json))
+
+      assert decoded["type"] == "control_response"
+      assert decoded["response"]["subtype"] == "success"
+      assert decoded["response"]["request_id"] == request_id
+      assert decoded["response"]["result"]["behavior"] == "allow"
+      assert decoded["response"]["result"]["updatedInput"] == %{"command" => "ls"}
+      refute Map.has_key?(decoded["response"]["result"], "updated_input")
+
+      Client.stop(client)
+    end
+
+    test "allow response uses camelCase updatedPermissions" do
+      callback = fn _context ->
+        Result.allow(updated_permissions: [%{"type" => "setMode", "mode" => "plan"}])
+      end
+
+      options = %Options{
+        can_use_tool: callback,
+        permission_mode: :default
+      }
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
+
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      assert_receive {:mock_transport_send, init_json}, 200
+
+      init_request_id = Jason.decode!(String.trim(init_json))["request_id"]
+
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => init_request_id,
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+
+      request_id = "perm_req_2"
+
+      can_use_tool_request = %{
+        "type" => "control_request",
+        "request_id" => request_id,
+        "request" => %{
+          "subtype" => "can_use_tool",
+          "tool_name" => "Write",
+          "input" => %{"file_path" => "/tmp/x.txt", "content" => "hi"},
+          "permission_suggestions" => []
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(can_use_tool_request))
+
+      assert_receive {:mock_transport_send, response_json}, 500
+      decoded = Jason.decode!(String.trim(response_json))
+
+      assert decoded["response"]["result"]["updatedPermissions"] == [
+               %{"type" => "setMode", "mode" => "plan"}
+             ]
+
+      refute Map.has_key?(decoded["response"]["result"], "updated_permissions")
+
+      Client.stop(client)
+    end
+
+    test "can_use_tool context includes blocked_path when provided by CLI" do
+      test_pid = self()
+
+      callback = fn context ->
+        send(test_pid, {:blocked_path, context.blocked_path})
+        Result.allow()
+      end
+
+      options = %Options{
+        can_use_tool: callback,
+        permission_mode: :default
+      }
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
+
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      assert_receive {:mock_transport_send, init_json}, 200
+
+      init_request_id = Jason.decode!(String.trim(init_json))["request_id"]
+
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => init_request_id,
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+
+      request_id = "perm_req_blocked"
+
+      can_use_tool_request = %{
+        "type" => "control_request",
+        "request_id" => request_id,
+        "request" => %{
+          "subtype" => "can_use_tool",
+          "tool_name" => "Write",
+          "input" => %{"file_path" => "/tmp/blocked.txt", "content" => "hi"},
+          "permission_suggestions" => [],
+          "blocked_path" => "/tmp/blocked.txt"
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(can_use_tool_request))
+
+      assert_receive {:blocked_path, "/tmp/blocked.txt"}, 500
 
       Client.stop(client)
     end
@@ -582,6 +786,8 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
   end
 
   describe "mode switching during execution" do
+    alias ClaudeAgentSDK.TestSupport.MockTransport
+
     test "switching from default to bypass_permissions" do
       callback = fn _context -> Result.allow() end
 
@@ -590,16 +796,46 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         permission_mode: :default
       }
 
-      {:ok, client} = Client.start_link(options)
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
 
-      # Start in default mode (callbacks invoked)
-      assert :ok = Client.set_permission_mode(client, :default)
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      assert_receive {:mock_transport_send, init_json}, 200
 
-      # Switch to bypass (no callbacks)
-      assert :ok = Client.set_permission_mode(client, :bypass_permissions)
+      init_request_id = Jason.decode!(String.trim(init_json))["request_id"]
 
-      # Future tool uses should bypass callback
-      # Verified through integration tests
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => init_request_id,
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+
+      task = Task.async(fn -> Client.set_permission_mode(client, :bypass_permissions) end)
+
+      assert_receive {:mock_transport_send, set_mode_json}, 200
+      set_request_id = Jason.decode!(String.trim(set_mode_json))["request_id"]
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => set_request_id,
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(response))
+
+      assert :ok = Task.await(task, 500)
+      assert :sys.get_state(client).current_permission_mode == :bypass_permissions
 
       Client.stop(client)
     end
@@ -612,12 +848,46 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         permission_mode: :plan
       }
 
-      {:ok, client} = Client.start_link(options)
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
 
-      assert :ok = Client.set_permission_mode(client, :accept_edits)
+      assert_receive {:mock_transport_started, transport_pid}, 200
+      assert_receive {:mock_transport_send, init_json}, 200
 
-      # Mode change affects subsequent tool execution
-      # Verified through integration tests
+      init_request_id = Jason.decode!(String.trim(init_json))["request_id"]
+
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => init_request_id,
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+
+      task = Task.async(fn -> Client.set_permission_mode(client, :accept_edits) end)
+
+      assert_receive {:mock_transport_send, set_mode_json}, 200
+      set_request_id = Jason.decode!(String.trim(set_mode_json))["request_id"]
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => set_request_id,
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(response))
+
+      assert :ok = Task.await(task, 500)
+      assert :sys.get_state(client).current_permission_mode == :accept_edits
 
       Client.stop(client)
     end

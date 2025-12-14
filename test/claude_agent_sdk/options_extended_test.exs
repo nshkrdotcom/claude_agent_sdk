@@ -33,6 +33,13 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
       refute "--settings" in args
     end
 
+    test "setting_sources default emits --setting-sources with empty string" do
+      options = %Options{setting_sources: nil}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--setting-sources", "")
+    end
+
     test "settings path maps to --settings" do
       options = %Options{settings: "/tmp/settings.json"}
       args = Options.to_args(options)
@@ -44,6 +51,49 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
       args = Options.to_args(options)
 
       assert flag_with_value?(args, "--setting-sources", "user,project,local")
+    end
+  end
+
+  describe "system prompt controls" do
+    test "system_prompt default emits --system-prompt with empty string" do
+      options = %Options{system_prompt: nil}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--system-prompt", "")
+    end
+
+    test "system_prompt string emits --system-prompt value" do
+      options = %Options{system_prompt: "You are helpful"}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--system-prompt", "You are helpful")
+    end
+
+    test "system_prompt preset with no append omits --system-prompt" do
+      options = %Options{system_prompt: %{type: :preset, preset: :claude_code}}
+      args = Options.to_args(options)
+
+      refute "--system-prompt" in args
+      refute "--append-system-prompt" in args
+    end
+
+    test "system_prompt preset with append emits --append-system-prompt and omits --system-prompt" do
+      options = %Options{system_prompt: %{type: :preset, preset: :claude_code, append: "Do X"}}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--append-system-prompt", "Do X")
+      refute "--system-prompt" in args
+    end
+
+    test "system_prompt preset supports string-keyed map" do
+      options = %Options{
+        system_prompt: %{"type" => "preset", "preset" => "claude_code", "append" => "Do X"}
+      }
+
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--append-system-prompt", "Do X")
+      refute "--system-prompt" in args
     end
   end
 

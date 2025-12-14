@@ -77,6 +77,72 @@ defmodule ClaudeAgentSDK.SDKMCPRoutingTest do
     assert result["resources"] == []
   end
 
+  test "accepts Python MCP control request subtype and snake_case server_name" do
+    server =
+      ClaudeAgentSDK.create_sdk_mcp_server(
+        name: "calc",
+        version: "1.0.0",
+        tools: [CalculatorTools.Add]
+      )
+
+    options = %Options{
+      mcp_servers: %{"calc" => server}
+    }
+
+    {:ok, client} =
+      Client.start_link(options,
+        transport: MockTransport,
+        transport_opts: [test_pid: self()]
+      )
+
+    on_exit(fn -> safe_stop(client) end)
+
+    transport =
+      receive do
+        {:mock_transport_started, pid} -> pid
+      after
+        500 -> flunk("Transport did not start")
+      end
+
+    _ = :sys.get_state(client)
+
+    request_id = "req_resources_list_py"
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => request_id,
+      "request" => %{
+        "subtype" => "mcp_message",
+        "server_name" => "calc",
+        "message" => %{
+          "jsonrpc" => "2.0",
+          "id" => "1",
+          "method" => "resources/list",
+          "params" => %{}
+        }
+      }
+    }
+
+    MockTransport.push_message(transport, Jason.encode!(request))
+
+    response =
+      SupertesterCase.eventually(
+        fn ->
+          transport
+          |> MockTransport.recorded_messages()
+          |> Enum.map(&Jason.decode!/1)
+          |> Enum.find(fn
+            %{"type" => "control_response", "id" => ^request_id} -> true
+            _ -> false
+          end)
+        end,
+        timeout: 5_000
+      )
+
+    result = response["response"]["result"]
+    assert result["resources"] == []
+  end
+
   defp safe_stop(client) do
     Client.stop(client)
   catch

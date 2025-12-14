@@ -1,6 +1,10 @@
 #!/usr/bin/env elixir
 
-# Usage: mix run.live examples/assistant_error_live.exs
+# Run: mix run examples/assistant_error_live.exs
+
+Code.require_file(Path.expand("support/example_helper.exs", __DIR__))
+
+alias Examples.Support
 
 defmodule AssistantErrorLiveExample do
   @moduledoc """
@@ -19,15 +23,12 @@ defmodule AssistantErrorLiveExample do
   """
 
   @options %Options{
-    model: "sonnet",
-    max_turns: 2,
+    model: "haiku",
+    max_turns: 1,
     include_partial_messages: true
   }
 
   def run do
-    # Force live mode even if tests configure mocks
-    Application.put_env(:claude_agent_sdk, :use_mock, false)
-
     IO.puts("\nAssistant error field demo (live CLI)")
     IO.puts("Tip: trigger an auth or rate-limit error to see the enum values.\n")
 
@@ -117,4 +118,6 @@ defmodule AssistantErrorLiveExample do
   end
 end
 
+Support.ensure_live!()
 AssistantErrorLiveExample.run()
+Support.halt_if_runner!()

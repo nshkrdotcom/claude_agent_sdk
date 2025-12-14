@@ -1,3 +1,9 @@
+#!/usr/bin/env elixir
+
+Code.require_file(Path.expand("support/example_helper.exs", __DIR__))
+
+alias Examples.Support
+
 defmodule StructuredOutputLiveExample do
   @moduledoc """
   Live example: request structured JSON validated by Claude Code CLI with --json-schema.
@@ -23,9 +29,6 @@ defmodule StructuredOutputLiveExample do
   }
 
   def run do
-    # Force live CLI even if the test config has mocks enabled
-    Application.put_env(:claude_agent_sdk, :use_mock, false)
-
     prompt = """
     You are a release assistant. Return JSON that matches the provided schema: a one-sentence
     summary and exactly 3 next_steps (short bullet phrases). Do not use tools or read files;
@@ -34,8 +37,8 @@ defmodule StructuredOutputLiveExample do
 
     options = %Options{
       output_format: %{type: :json_schema, schema: @schema},
-      model: "sonnet",
-      max_turns: 4,
+      model: "haiku",
+      max_turns: 2,
       allowed_tools: []
     }
 
@@ -83,4 +86,7 @@ defmodule StructuredOutputLiveExample do
   end
 end
 
+Support.ensure_live!()
+Support.header!("Structured Output Example (live)")
 StructuredOutputLiveExample.run()
+Support.halt_if_runner!()

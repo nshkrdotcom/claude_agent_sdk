@@ -69,8 +69,10 @@ defmodule ClaudeAgentSDK.Client do
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
   alias ClaudeAgentSDK.Permission.{Context, Result}
   alias ClaudeAgentSDK.Streaming.EventParser
+  alias ClaudeAgentSDK.Transport.AgentsFile
   @default_hook_timeout_ms 60_000
   @default_init_timeout_ms 60_000
+  @default_control_request_timeout_ms 60_000
   @init_timeout_env_var "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT"
 
   @typedoc """
@@ -180,6 +182,44 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @doc """
+  Sends a request in streaming mode, injecting `session_id` when missing.
+
+  Matches Python SDK behavior:
+  - String prompts are wrapped as a `"user"` message with `parent_tool_use_id: nil`
+  - Map prompts (or enumerables of maps) get `session_id` injected if absent
+  """
+  @spec query(pid(), String.t() | Enumerable.t(), String.t()) :: :ok | {:error, term()}
+  def query(client, prompt, session_id \\ "default")
+
+  def query(client, prompt, session_id)
+      when is_pid(client) and is_binary(prompt) and is_binary(session_id) do
+    message = %{
+      "type" => "user",
+      "message" => %{"role" => "user", "content" => prompt},
+      "parent_tool_use_id" => nil,
+      "session_id" => session_id
+    }
+
+    send_message(client, message)
+  end
+
+  def query(client, prompts, session_id) when is_pid(client) and is_binary(session_id) do
+    Enum.reduce_while(prompts, :ok, fn msg, :ok ->
+      msg =
+        if is_map(msg) and not Map.has_key?(msg, "session_id") do
+          Map.put(msg, "session_id", session_id)
+        else
+          msg
+        end
+
+      case send_message(client, msg) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  @doc """
   Returns a stream of messages from Claude.
 
   Subscribes to the client and yields messages as they arrive.
@@ -253,6 +293,8 @@ defmodule ClaudeAgentSDK.Client do
   @spec stop(pid()) :: :ok
   def stop(client) when is_pid(client) do
     GenServer.stop(client, :normal, 5000)
+  catch
+    :exit, {:noproc, _} -> :ok
   end
 
   @doc """
@@ -316,7 +358,7 @@ defmodule ClaudeAgentSDK.Client do
   @spec set_permission_mode(pid(), ClaudeAgentSDK.Permission.permission_mode()) ::
           :ok | {:error, :invalid_permission_mode}
   def set_permission_mode(client, mode) when is_pid(client) do
-    GenServer.call(client, {:set_permission_mode, mode})
+    GenServer.call(client, {:set_permission_mode, mode}, :infinity)
   end
 
   @doc """
@@ -412,7 +454,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp do_init(options, opts) do
-    transport_module = Keyword.get(opts, :transport)
+    transport_module = Keyword.get(opts, :transport) || default_transport_module(options)
     transport_opts = Keyword.get(opts, :transport_opts, [])
 
     # Validate hooks and permission callback configuration before starting
@@ -450,7 +492,8 @@ defmodule ClaudeAgentSDK.Client do
         server_info: nil,
         init_request_id: nil,
         init_timeout_ref: nil,
-        init_timeout_ms: nil
+        init_timeout_ms: nil,
+        temp_files: []
       }
 
       {:ok, state, {:continue, :start_cli}}
@@ -465,6 +508,11 @@ defmodule ClaudeAgentSDK.Client do
         {:stop, {:validation_failed, reason}}
     end
   end
+
+  defp default_transport_module(%Options{user: user}) when is_binary(user),
+    do: ClaudeAgentSDK.Transport.Erlexec
+
+  defp default_transport_module(_), do: ClaudeAgentSDK.Transport.Port
 
   @impl true
   def handle_continue(:start_cli, state) do
@@ -548,8 +596,14 @@ defmodule ClaudeAgentSDK.Client do
 
         case send_payload(state, json) do
           :ok ->
+            timer_ref = schedule_control_request_timeout(request_id)
+
             pending_requests =
-              Map.put(state.pending_requests, request_id, {:set_permission_mode, from, mode})
+              Map.put(
+                state.pending_requests,
+                request_id,
+                {:set_permission_mode, from, mode, timer_ref}
+              )
 
             {:noreply,
              %{
@@ -607,7 +661,11 @@ defmodule ClaudeAgentSDK.Client do
 
     case send_payload(state, json) do
       :ok ->
-        pending_requests = Map.put(state.pending_requests, request_id, {:interrupt, from})
+        timer_ref = schedule_control_request_timeout(request_id)
+
+        pending_requests =
+          Map.put(state.pending_requests, request_id, {:interrupt, from, timer_ref})
+
         {:noreply, %{state | pending_requests: pending_requests}}
 
       {:error, reason} ->
@@ -629,7 +687,11 @@ defmodule ClaudeAgentSDK.Client do
 
         case send_payload(state, json) do
           :ok ->
-            pending_requests = Map.put(state.pending_requests, request_id, {:rewind_files, from})
+            timer_ref = schedule_control_request_timeout(request_id)
+
+            pending_requests =
+              Map.put(state.pending_requests, request_id, {:rewind_files, from, timer_ref})
+
             {:noreply, %{state | pending_requests: pending_requests}}
 
           {:error, reason} ->
@@ -665,8 +727,10 @@ defmodule ClaudeAgentSDK.Client do
     with {:ok, normalized} <- Model.validate(model_string),
          {request_id, json} = Protocol.encode_set_model_request(normalized),
          :ok <- send_payload(state, json) do
+      timer_ref = schedule_control_request_timeout(request_id)
+
       pending_requests =
-        Map.put(state.pending_requests, request_id, {:set_model, from, normalized})
+        Map.put(state.pending_requests, request_id, {:set_model, from, normalized, timer_ref})
 
       {:noreply,
        %{
@@ -787,7 +851,10 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @impl true
-  def handle_info({:callback_result, request_id, :permission, signal, result}, state) do
+  def handle_info(
+        {:callback_result, request_id, :permission, signal, original_input, result},
+        state
+      ) do
     {pending, updated_state} = pop_pending_callback(state, request_id)
 
     cond do
@@ -804,7 +871,8 @@ defmodule ClaudeAgentSDK.Client do
               encode_permission_response(
                 request_id,
                 permission_result.behavior,
-                permission_result
+                permission_result,
+                original_input
               )
 
             _ = send_payload(updated_state, json)
@@ -827,8 +895,52 @@ defmodule ClaudeAgentSDK.Client do
   @impl true
   def handle_info({:transport_exit, reason}, state) do
     Logger.info("Transport disconnected", reason: inspect(reason))
-    state = cancel_pending_callbacks(state)
+
+    state =
+      state
+      |> cancel_pending_callbacks()
+      |> fail_pending_control_requests({:transport_exit, reason})
+
     {:stop, :normal, %{state | transport: nil}}
+  end
+
+  @impl true
+  def handle_info({:control_request_timeout, request_id}, state) when is_binary(request_id) do
+    {pending_entry, pending_requests} = Map.pop(state.pending_requests, request_id)
+    state = %{state | pending_requests: pending_requests}
+
+    case pending_entry do
+      nil ->
+        {:noreply, state}
+
+      {:set_model, from, _requested_model, _timer_ref} ->
+        Logger.warning("Control request timed out", request_id: request_id, subtype: "set_model")
+        GenServer.reply(from, {:error, :timeout})
+        {:noreply, %{state | pending_model_change: nil}}
+
+      {:set_permission_mode, from, _requested_mode, _timer_ref} ->
+        Logger.warning("Control request timed out",
+          request_id: request_id,
+          subtype: "set_permission_mode"
+        )
+
+        GenServer.reply(from, {:error, :timeout})
+        {:noreply, %{state | pending_permission_change: nil}}
+
+      {:interrupt, from, _timer_ref} ->
+        Logger.warning("Control request timed out", request_id: request_id, subtype: "interrupt")
+        GenServer.reply(from, {:error, :timeout})
+        {:noreply, state}
+
+      {:rewind_files, from, _timer_ref} ->
+        Logger.warning("Control request timed out",
+          request_id: request_id,
+          subtype: "rewind_files"
+        )
+
+        GenServer.reply(from, {:error, :timeout})
+        {:noreply, state}
+    end
   end
 
   @impl true
@@ -843,8 +955,7 @@ defmodule ClaudeAgentSDK.Client do
         {:noreply, state}
 
       {:error, reason} ->
-        Logger.warning("Failed to decode message: #{inspect(reason)}")
-        {:noreply, state}
+        {:noreply, handle_decode_error(line, reason, state)}
     end
   end
 
@@ -852,43 +963,9 @@ defmodule ClaudeAgentSDK.Client do
     # Accumulate data in buffer (for non-EOL mode)
     full_data = state.buffer <> data
 
-    # Split by newlines and process complete messages
-    lines = String.split(full_data, "\n")
+    {complete_lines, remaining} = split_complete_lines(full_data)
 
-    # Last element might be incomplete
-    {complete_lines, remaining} =
-      if lines == [] do
-        {[], ""}
-      else
-        case List.pop_at(lines, -1) do
-          {last, rest} when last == "" ->
-            # Ends with newline, all complete
-            {rest, ""}
-
-          {last, rest} when is_binary(last) and is_list(rest) ->
-            # Last line might be incomplete
-            {rest, last}
-
-          _ ->
-            {[], ""}
-        end
-      end
-
-    # Process each complete line
-    new_state =
-      Enum.reduce(complete_lines, state, fn line, acc_state ->
-        case Protocol.decode_message(line) do
-          {:ok, {message_type, message_data}} ->
-            handle_decoded_message(message_type, message_data, acc_state)
-
-          {:error, :empty_message} ->
-            acc_state
-
-          {:error, reason} ->
-            Logger.warning("Failed to decode message: #{inspect(reason)}")
-            acc_state
-        end
-      end)
+    new_state = Enum.reduce(complete_lines, state, &process_message_line/2)
 
     {:noreply, %{new_state | buffer: remaining}}
   end
@@ -896,13 +973,56 @@ defmodule ClaudeAgentSDK.Client do
   @impl true
   def handle_info({port, {:exit_status, status}}, %{port: port} = state) do
     Logger.info("CLI process exited with status: #{status}")
+    state = fail_pending_control_requests(state, {:exit_status, status})
     {:stop, :normal, state}
   end
 
   @impl true
   def handle_info({:EXIT, port, reason}, %{port: port} = state) do
     Logger.info("CLI process terminated: #{inspect(reason)}")
+    state = fail_pending_control_requests(state, {:exit, reason})
     {:stop, :normal, state}
+  end
+
+  defp split_complete_lines(full_data) do
+    lines = String.split(full_data, "\n")
+
+    case List.pop_at(lines, -1) do
+      {nil, _rest} ->
+        {[], ""}
+
+      {"", rest} ->
+        {rest, ""}
+
+      {last, rest} when is_binary(last) and is_list(rest) ->
+        {rest, last}
+
+      _ ->
+        {[], ""}
+    end
+  end
+
+  defp process_message_line(line, state) do
+    case Protocol.decode_message(line) do
+      {:ok, {message_type, message_data}} ->
+        handle_decoded_message(message_type, message_data, state)
+
+      {:error, :empty_message} ->
+        state
+
+      {:error, reason} ->
+        handle_decode_error(line, reason, state)
+    end
+  end
+
+  defp handle_decode_error(line, reason, state) do
+    if is_function(state.options.stderr, 1) do
+      state.options.stderr.(line)
+      state
+    else
+      Logger.warning("Failed to decode message: #{inspect(reason)}")
+      state
+    end
   end
 
   @impl true
@@ -963,6 +1083,8 @@ defmodule ClaudeAgentSDK.Client do
         :ok
     end
 
+    _ = AgentsFile.cleanup_temp_files(state.temp_files || [])
+
     :ok
   end
 
@@ -974,6 +1096,8 @@ defmodule ClaudeAgentSDK.Client do
     if Mix.env() != :test do
       Logger.debug("Terminating client (no port)", reason: reason)
     end
+
+    _ = AgentsFile.cleanup_temp_files(state.temp_files || [])
 
     :ok
   end
@@ -1060,6 +1184,68 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
+  defp control_request_timeout_ms do
+    Application.get_env(
+      :claude_agent_sdk,
+      :control_request_timeout_ms,
+      @default_control_request_timeout_ms
+    )
+  end
+
+  defp schedule_control_request_timeout(request_id) when is_binary(request_id) do
+    Process.send_after(
+      self(),
+      {:control_request_timeout, request_id},
+      control_request_timeout_ms()
+    )
+  end
+
+  defp cancel_control_request_timeout(nil), do: :ok
+
+  defp cancel_control_request_timeout({:set_model, _from, _requested_model, timer_ref}),
+    do: Process.cancel_timer(timer_ref)
+
+  defp cancel_control_request_timeout({:set_permission_mode, _from, _requested_mode, timer_ref}),
+    do: Process.cancel_timer(timer_ref)
+
+  defp cancel_control_request_timeout({:interrupt, _from, timer_ref}),
+    do: Process.cancel_timer(timer_ref)
+
+  defp cancel_control_request_timeout({:rewind_files, _from, timer_ref}),
+    do: Process.cancel_timer(timer_ref)
+
+  defp cancel_control_request_timeout(_other), do: :ok
+
+  defp fail_pending_control_requests(state, reason) do
+    Enum.each(state.pending_requests, fn {_request_id, pending_entry} ->
+      _ = cancel_control_request_timeout(pending_entry)
+
+      case pending_entry do
+        {:set_model, from, _requested_model, _timer_ref} ->
+          GenServer.reply(from, {:error, reason})
+
+        {:set_permission_mode, from, _requested_mode, _timer_ref} ->
+          GenServer.reply(from, {:error, reason})
+
+        {:interrupt, from, _timer_ref} ->
+          GenServer.reply(from, {:error, reason})
+
+        {:rewind_files, from, _timer_ref} ->
+          GenServer.reply(from, {:error, reason})
+
+        _ ->
+          :ok
+      end
+    end)
+
+    %{
+      state
+      | pending_requests: %{},
+        pending_model_change: nil,
+        pending_permission_change: nil
+    }
+  end
+
   defp cancel_init_timeout(%{init_timeout_ref: ref} = state) when is_reference(ref) do
     _ = Process.cancel_timer(ref)
     %{state | init_timeout_ref: nil, init_timeout_ms: nil}
@@ -1109,15 +1295,25 @@ defmodule ClaudeAgentSDK.Client do
 
     # Build CLI command
     case build_cli_command(state.options) do
-      {:ok, cmd} ->
-        port =
-          Port.open({:spawn, cmd}, [
+      {:ok, {cmd, temp_files}} ->
+        port_opts =
+          [
             :binary,
             :exit_status,
             {:line, 65_536},
             :use_stdio,
             :hide
-          ])
+          ]
+
+        port_opts =
+          if is_function(state.options.stderr, 1) do
+            [:stderr_to_stdout | port_opts]
+          else
+            port_opts
+          end
+
+        port =
+          Port.open({:spawn, cmd}, port_opts)
 
         hooks_config = build_hooks_config(registry, state.options.hooks)
         sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
@@ -1138,7 +1334,8 @@ defmodule ClaudeAgentSDK.Client do
              initialized: false,
              init_request_id: init_request_id,
              init_timeout_ref: init_timeout_ref,
-             init_timeout_ms: init_timeout_ms
+             init_timeout_ms: init_timeout_ms,
+             temp_files: temp_files
          }}
 
       {:error, reason} ->
@@ -1207,17 +1404,36 @@ defmodule ClaudeAgentSDK.Client do
   defp build_cli_command(options) do
     case CLI.find_executable() do
       {:ok, executable} ->
-        # Build arguments for streaming mode
-        args = ["--output-format", "stream-json", "--input-format", "stream-json", "--verbose"]
+        # Build arguments for streaming mode.
+        #
+        # Claude Code CLI only enables stream-json input/output in `--print` mode.
+        # (see `claude --help` for the current semantics)
+        args = [
+          "--print",
+          "--output-format",
+          "stream-json",
+          "--input-format",
+          "stream-json",
+          "--replay-user-messages",
+          "--verbose"
+        ]
 
         # Add other options
         args = args ++ Options.to_args(options)
+        {args, temp_files} = AgentsFile.externalize_agents_if_needed(args)
 
         # Redirect stderr to /dev/null to suppress benign EPIPE errors during cleanup
         # These errors occur when the Elixir side closes the connection while the CLI
         # is still writing output - they're harmless but noisy
-        cmd = Enum.join([executable | args], " ") <> " 2>/dev/null"
-        {:ok, cmd}
+        stderr_redirect =
+          if is_function(options.stderr, 1) do
+            ""
+          else
+            " 2>/dev/null"
+          end
+
+        cmd = Enum.join([executable | args], " ") <> stderr_redirect
+        {:ok, {cmd, temp_files}}
 
       {:error, :not_found} ->
         {:error, :claude_not_found}
@@ -1268,6 +1484,10 @@ defmodule ClaudeAgentSDK.Client do
       "sdk_mcp_request" ->
         handle_sdk_mcp_request(request_id, request, state)
 
+      # Python parity: accept the Python SDK MCP request subtype as well.
+      "mcp_message" ->
+        handle_sdk_mcp_request(request_id, request, state)
+
       other ->
         Logger.warning("Unsupported control request subtype", subtype: other)
         send_error_response(state, request_id, "Unsupported request: #{other}")
@@ -1302,11 +1522,13 @@ defmodule ClaudeAgentSDK.Client do
       |> Map.put(:pending_requests, pending_requests)
       |> maybe_cancel_init_timeout(request_id)
 
+    _ = cancel_control_request_timeout(pending_entry)
+
     dispatch_control_response(pending_entry, response_data, response, request_id, updated_state)
   end
 
   defp dispatch_control_response(
-         {:set_model, from, requested_model},
+         {:set_model, from, requested_model, _timer_ref},
          response_data,
          response,
          request_id,
@@ -1316,7 +1538,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp dispatch_control_response(
-         {:set_permission_mode, from, requested_mode},
+         {:set_permission_mode, from, requested_mode, _timer_ref},
          _response_data,
          response,
          request_id,
@@ -1325,12 +1547,18 @@ defmodule ClaudeAgentSDK.Client do
     handle_set_permission_mode_response(from, requested_mode, response, request_id, state)
   end
 
-  defp dispatch_control_response({:interrupt, from}, _response_data, response, request_id, state) do
+  defp dispatch_control_response(
+         {:interrupt, from, _timer_ref},
+         _response_data,
+         response,
+         request_id,
+         state
+       ) do
     handle_simple_control_response(:interrupt, from, response, request_id, state)
   end
 
   defp dispatch_control_response(
-         {:rewind_files, from},
+         {:rewind_files, from, _timer_ref},
          _response_data,
          response,
          request_id,
@@ -1549,6 +1777,7 @@ defmodule ClaudeAgentSDK.Client do
     tool_name = request["tool_name"]
     tool_input = request["input"]
     suggestions = request["permission_suggestions"] || []
+    blocked_path = request["blocked_path"]
     session_id = state.session_id || "unknown"
 
     Logger.debug("Permission request for tool",
@@ -1560,7 +1789,7 @@ defmodule ClaudeAgentSDK.Client do
     case state.options.can_use_tool do
       nil ->
         # No callback, default to allow
-        json = encode_permission_response(request_id, :allow, nil)
+        json = encode_permission_response(request_id, :allow, nil, tool_input)
         _ = send_payload(state, json)
         Logger.debug("No permission callback, allowing tool", tool: tool_name)
         state
@@ -1577,11 +1806,12 @@ defmodule ClaudeAgentSDK.Client do
                 tool_name,
                 tool_input,
                 suggestions,
+                blocked_path,
                 session_id,
                 signal
               )
 
-            send(server, {:callback_result, request_id, :permission, signal, result})
+            send(server, {:callback_result, request_id, :permission, signal, tool_input, result})
           end)
 
         put_pending_callback(state, request_id, pid, signal, :permission)
@@ -1627,6 +1857,7 @@ defmodule ClaudeAgentSDK.Client do
          tool_name,
          tool_input,
          suggestions,
+         blocked_path,
          session_id,
          signal
        ) do
@@ -1639,6 +1870,7 @@ defmodule ClaudeAgentSDK.Client do
               tool_input: tool_input,
               session_id: session_id,
               suggestions: suggestions,
+              blocked_path: blocked_path,
               signal: signal
             )
 
@@ -1669,20 +1901,28 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  defp encode_permission_response(request_id, :allow, result) do
+  defp encode_permission_response(request_id, :allow, result, original_input) do
+    original_input = if is_map(original_input), do: original_input, else: %{}
+
+    result_map =
+      result
+      |> then(&(&1 || Result.allow()))
+      |> Result.to_json_map()
+      |> Map.put_new("updatedInput", original_input)
+
     response = %{
       "type" => "control_response",
       "response" => %{
         "request_id" => request_id,
         "subtype" => "success",
-        "result" => Result.to_json_map(result || Result.allow())
+        "result" => result_map
       }
     }
 
     Jason.encode!(response)
   end
 
-  defp encode_permission_response(request_id, :deny, result) do
+  defp encode_permission_response(request_id, :deny, result, _original_input) do
     response = %{
       "type" => "control_response",
       "response" => %{
@@ -1768,7 +2008,8 @@ defmodule ClaudeAgentSDK.Client do
         {[message], {client, ref}}
 
       {:stream_event, ^ref, event} ->
-        {[%{type: :stream_event, event: event}], {client, ref}}
+        {[%Message{type: :stream_event, subtype: nil, data: %{event: event}, raw: %{}}],
+         {client, ref}}
     after
       30_000 ->
         # No message for 30 seconds, check if client still alive
@@ -1813,7 +2054,7 @@ defmodule ClaudeAgentSDK.Client do
   @doc false
   @spec handle_sdk_mcp_request(String.t(), map(), state()) :: state()
   defp handle_sdk_mcp_request(request_id, request, state) do
-    server_name = request["serverName"]
+    server_name = request["serverName"] || request["server_name"]
     message = request["message"]
 
     Logger.debug("SDK MCP request",

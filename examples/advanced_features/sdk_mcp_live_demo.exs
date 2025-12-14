@@ -1,15 +1,14 @@
 #!/usr/bin/env elixir
-# SDK MCP Live Demo - REAL Claude API Usage
-# Demonstrates SDK MCP tools with actual Claude CLI integration
+# SDK MCP Example (LIVE)
+# Demonstrates SDK MCP tools with real Claude CLI integration.
 #
-# Usage:
-#   MIX_ENV=test mix run.live examples/advanced_features/sdk_mcp_live_demo.exs
-#
-# Prerequisites:
-#   - Claude CLI installed and authenticated (claude login)
-#   - ANTHROPIC_API_KEY environment variable set
-#
-# Note: Uses MIX_ENV=test to ensure compiled modules are available
+# Run: mix run examples/advanced_features/sdk_mcp_live_demo.exs
+
+Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
+
+alias ClaudeAgentSDK.Options
+alias ClaudeAgentSDK.Message
+alias Examples.Support
 
 defmodule MathTools do
   @moduledoc """
@@ -70,22 +69,8 @@ defmodule MathTools do
   end
 end
 
-# Check if we're in mock mode - these are LIVE examples only
-if Application.get_env(:claude_agent_sdk, :use_mock, false) do
-  IO.puts("\n🎭 This is a LIVE example - it requires real API calls")
-  IO.puts("   Mock mode cannot demonstrate SDK MCP tool integration properly\n")
-  IO.puts("💡 To run this example:")
-  IO.puts("   MIX_ENV=test mix run.live examples/advanced_features/sdk_mcp_live_demo.exs\n")
-  IO.puts("   Prerequisites:")
-  IO.puts("   - Claude CLI installed: claude --version")
-  IO.puts("   - Authenticated: claude login\n")
-  System.halt(0)
-end
-
-IO.puts("🔴 Running in LIVE mode (real API calls)")
-IO.puts("⚠️  Warning: This will make actual API calls and may incur costs!\n")
-
-IO.puts("\n=== SDK MCP Live Demo ===\n")
+Support.ensure_live!()
+Support.header!("SDK MCP Example (live)")
 
 # Create SDK MCP server with math tools
 IO.puts("📦 Creating SDK MCP server...")
@@ -103,9 +88,11 @@ IO.puts("   Registry PID: #{inspect(server.registry_pid)}\n")
 
 # Create options with SDK MCP server
 options =
-  ClaudeAgentSDK.Options.new(
+  Options.new(
     mcp_servers: %{"math-tools" => server},
-    max_turns: 5
+    model: "haiku",
+    max_turns: 3,
+    allowed_tools: []
   )
 
 IO.puts("🤖 Configured Claude with SDK MCP server")
@@ -129,72 +116,90 @@ IO.puts("Prompt: #{String.slice(prompt, 0..100)}...\n")
 IO.puts("💬 Claude's response:\n")
 
 try do
-  ClaudeAgentSDK.query(prompt, options)
-  |> Enum.each(fn msg ->
-    case msg do
-      %{type: :assistant, data: %{message: message}} ->
-        content = message["content"]
+  summary =
+    ClaudeAgentSDK.query(prompt, options)
+    |> Enum.reduce(%{tool_uses: 0, tool_results: 0, result_subtype: nil}, fn
+      %Message{type: :assistant} = msg, acc ->
+        Message.content_blocks(msg)
+        |> Enum.reduce(acc, fn
+          %{type: :text, text: text}, acc2 ->
+            text = String.trim(text || "")
+            if text != "", do: IO.puts("Claude: #{text}\n")
+            acc2
 
-        # Handle both string content and array of content blocks
-        blocks =
-          cond do
-            is_binary(content) ->
-              # Plain text response - wrap in text block
-              [%{"type" => "text", "text" => content}]
+          %{type: :tool_use, name: name, input: input}, acc2 ->
+            IO.puts("🛠️  Claude is using tool: #{name}")
+            IO.puts("   Input: #{inspect(input)}\n")
+            %{acc2 | tool_uses: acc2.tool_uses + 1}
 
-            is_list(content) ->
-              # Array of content blocks
-              content
+          _other, acc2 ->
+            acc2
+        end)
 
-            is_nil(content) ->
-              []
+      %Message{type: :user} = msg, acc ->
+        Message.content_blocks(msg)
+        |> Enum.reduce(acc, fn
+          %{type: :tool_result, tool_use_id: tool_use_id, is_error: is_error, content: content},
+          acc2 ->
+            status = if is_error, do: "❌", else: "✅"
+            IO.puts("#{status} Tool result (tool_use_id=#{tool_use_id})")
+            IO.puts("   Content: #{inspect(content)}\n")
+            %{acc2 | tool_results: acc2.tool_results + 1}
 
-            true ->
-              # Unknown format
-              IO.puts("⚠️  Unexpected content format: #{inspect(content)}\n")
-              []
-          end
+          _other, acc2 ->
+            acc2
+        end)
 
-        for block <- blocks do
-          case block do
-            %{"type" => "text", "text" => text} ->
-              IO.puts("Claude: #{text}\n")
+      %Message{type: :result, subtype: subtype}, acc ->
+        IO.puts("\nResult: #{inspect(subtype)}")
+        %{acc | result_subtype: subtype}
 
-            %{"type" => "tool_use", "name" => name, "input" => input} ->
-              IO.puts("🛠️  Claude is using tool: #{name}")
-              IO.puts("   Input: #{inspect(input)}\n")
+      _msg, acc ->
+        acc
+    end)
 
-            _ ->
-              :ok
-          end
+  cond do
+    summary.result_subtype != :success ->
+      raise "Query did not complete successfully (result subtype: #{inspect(summary.result_subtype)})"
+
+    summary.tool_uses == 0 ->
+      cli_version =
+        case ClaudeAgentSDK.CLI.version() do
+          {:ok, v} -> v
+          _ -> "unknown"
         end
 
-      %{type: :tool_result, data: %{tool_name: tool_name}} ->
-        IO.puts("✅ Tool #{tool_name} completed\n")
+      IO.puts("\n⚠️  Warning: Claude did not use the SDK MCP tools.")
 
-      %{type: :result, subtype: :success} ->
-        IO.puts("\n✅ Query completed successfully!")
+      IO.puts(
+        "   This may indicate the CLI (v#{cli_version}) does not fully support SDK MCP servers."
+      )
 
-      %{type: :result, subtype: subtype} ->
-        IO.puts("\n⚠️  Query ended with status: #{subtype}")
+      IO.puts("   The SDK sent sdkMcpServers in the initialize request, but the CLI")
+      IO.puts("   did not query the SDK for tools/list.")
+      IO.puts("\n   This is a known limitation - SDK MCP support requires CLI updates.")
 
-      _ ->
-        :ok
-    end
-  end)
+    summary.tool_results == 0 and summary.tool_uses > 0 ->
+      raise "No MCP tool_result blocks observed; expected at least one SDK MCP tool result."
 
-  IO.puts("\n🎉 SDK MCP Live Demo completed successfully!")
-  IO.puts("\nWhat happened:")
-  IO.puts("  1. We created an SDK MCP server with 2 math tools")
-  IO.puts("  2. The server was passed to Claude via mcp_servers option")
-  IO.puts("  3. Claude discovered the tools via MCP 'tools/list' request")
-  IO.puts("  4. Claude used the tools via MCP 'tools/call' requests")
-  IO.puts("  5. Tool execution happened in-process (no subprocess overhead)")
-  IO.puts("\n💡 Key Benefits:")
-  IO.puts("  - Tools run in the same Elixir process")
-  IO.puts("  - No subprocess spawning or IPC overhead")
-  IO.puts("  - Direct access to Elixir ecosystem")
-  IO.puts("  - Easier debugging and testing")
+    true ->
+      :ok
+  end
+
+  if summary.tool_uses > 0 do
+    IO.puts("\n🎉 SDK MCP Live Demo completed successfully!")
+    IO.puts("\nWhat happened:")
+    IO.puts("  1. We created an SDK MCP server with 2 math tools")
+    IO.puts("  2. The server was passed to Claude via mcp_servers option")
+    IO.puts("  3. Claude discovered the tools via MCP 'tools/list' request")
+    IO.puts("  4. Claude used the tools via MCP 'tools/call' requests")
+    IO.puts("  5. Tool execution happened in-process (no subprocess overhead)")
+    IO.puts("\n💡 Key Benefits:")
+    IO.puts("  - Tools run in the same Elixir process")
+    IO.puts("  - No subprocess spawning or IPC overhead")
+    IO.puts("  - Direct access to Elixir ecosystem")
+    IO.puts("  - Easier debugging and testing")
+  end
 rescue
   e ->
     IO.puts("\n❌ Error: #{Exception.message(e)}")
@@ -204,6 +209,9 @@ rescue
     IO.puts("\n💡 Troubleshooting:")
     IO.puts("  - Ensure Claude CLI is installed: claude --version")
     IO.puts("  - Ensure you're authenticated: claude login")
-    IO.puts("  - Check API key: echo $ANTHROPIC_API_KEY")
-    IO.puts("  - Try with mock mode first: mix run (without .live)")
+    IO.puts("  - Check auth env vars: echo $ANTHROPIC_API_KEY / $CLAUDE_AGENT_OAUTH_TOKEN")
+
+    reraise e, __STACKTRACE__
 end
+
+Support.halt_if_runner!()

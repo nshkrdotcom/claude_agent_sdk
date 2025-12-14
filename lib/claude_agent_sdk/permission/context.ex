@@ -76,11 +76,12 @@ defmodule ClaudeAgentSDK.Permission.Context do
           tool_input: map(),
           session_id: String.t(),
           suggestions: [map()],
+          blocked_path: String.t() | nil,
           signal: ClaudeAgentSDK.AbortSignal.t() | nil
         }
 
   @enforce_keys [:tool_name, :tool_input, :session_id]
-  defstruct [:tool_name, :tool_input, :session_id, :signal, suggestions: []]
+  defstruct [:tool_name, :tool_input, :session_id, :signal, :blocked_path, suggestions: []]
 
   @doc """
   Creates a new permission context.

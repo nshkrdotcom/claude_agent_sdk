@@ -1,21 +1,22 @@
 #!/usr/bin/env elixir
 
-# Basic Example - Simple Claude SDK usage
-# Usage: mix run.live examples/basic_example.exs
+# Basic Example - Simple Claude SDK usage (LIVE)
+# Usage: mix run examples/basic_example.exs
+#
+# Prereqs:
+#   - Claude CLI installed (`claude --version`)
+#   - Authenticated (`claude login` or `ANTHROPIC_API_KEY`)
+
+Code.require_file(Path.expand("support/example_helper.exs", __DIR__))
 
 alias ClaudeAgentSDK.{ContentExtractor, OptionBuilder}
+alias Examples.Support
 
-# Check if we're in live mode
-if Application.get_env(:claude_agent_sdk, :use_mock, false) do
-  {:ok, _} = ClaudeAgentSDK.Mock.start_link()
-  IO.puts("🎭 Mock mode enabled")
-else
-  IO.puts("🔴 Live mode enabled")
-end
+Support.ensure_live!()
 
 defmodule BasicExample do
   def run do
-    IO.puts("🚀 Basic Claude SDK Example")
+    IO.puts("Basic Claude SDK Example (live)")
     IO.puts("Asking Claude for a simple response...")
 
     # Create simple options for basic usage
@@ -65,3 +66,4 @@ end
 
 # Run the example
 BasicExample.run()
+Support.halt_if_runner!()

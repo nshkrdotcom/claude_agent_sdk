@@ -64,7 +64,18 @@ defmodule ClaudeAgentSDK.PermissionTest do
 
       assert json_map == %{
                "behavior" => "allow",
-               "updated_input" => %{"key" => "value"}
+               "updatedInput" => %{"key" => "value"}
+             }
+    end
+
+    test "to_json_map/1 uses camelCase keys for updated permissions" do
+      updated_permissions = [%{"type" => "setMode", "mode" => "plan", "destination" => "session"}]
+      result = Result.allow(updated_permissions: updated_permissions)
+      json_map = Result.to_json_map(result)
+
+      assert json_map == %{
+               "behavior" => "allow",
+               "updatedPermissions" => updated_permissions
              }
     end
 

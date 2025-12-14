@@ -1,4 +1,17 @@
-alias ClaudeAgentSDK.{CLI, ContentExtractor, Options}
+#!/usr/bin/env elixir
+
+# Run: mix run examples/tools_and_betas_live.exs
+#
+# Optional:
+#   - Set `CLAUDE_CODE_BETAS` to a comma-separated list of beta flags to include.
+
+Code.require_file(Path.expand("support/example_helper.exs", __DIR__))
+
+alias ClaudeAgentSDK.{ContentExtractor, Options}
+alias Examples.Support
+
+Support.ensure_live!()
+Support.header!("Tools (and optional betas) Example (live)")
 
 defmodule ToolsAndBetasLive do
   defp display_text(text) when is_binary(text) do
@@ -41,22 +54,26 @@ defmodule ToolsAndBetasLive do
   end
 end
 
-base =
-  IO.inspect(CLI.find_executable(), label: "Claude CLI (resolved)")
+betas =
+  case System.get_env("CLAUDE_CODE_BETAS") do
+    nil -> []
+    "" -> []
+    value -> String.split(value, ",", trim: true)
+  end
 
-IO.inspect(CLI.version(), label: "Claude CLI (version)")
-IO.puts("")
-
-%Options{
+base = %Options{
+  model: "haiku",
   max_turns: 1,
   output_format: :stream_json,
-  betas: ["context-1m-2025-08-07"]
+  betas: betas
 }
 
-ToolsAndBetasLive.run_case("tools: list", %{base | tools: ["Read", "Glob", "Grep"]})
+ToolsAndBetasLive.run_case("tools: explicit list", %{base | tools: ["Read", "Glob", "Grep"]})
 ToolsAndBetasLive.run_case("tools: [] (disable built-ins)", %{base | tools: []})
 
 ToolsAndBetasLive.run_case("tools: preset (:claude_code -> default)", %{
   base
   | tools: %{type: :preset, preset: :claude_code}
 })
+
+Support.halt_if_runner!()

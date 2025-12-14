@@ -29,6 +29,9 @@ priv/_bundled/
 # Ignore any .beam files
 *.beam
 
+# Live examples write runtime artifacts here
+examples/_output/
+
 # Ignore IDE files
 .vscode/
 .idea/

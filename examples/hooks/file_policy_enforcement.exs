@@ -2,173 +2,244 @@
 
 # Example 3: File Policy Enforcement with LIVE CLI
 #
-# This example demonstrates how to write file policy hooks and shows
-# them working with test data (simulated tool calls).
+# Demonstrates enforcing file access policies via `pre_tool_use` hooks:
+# - allow writes/edits inside a sandbox directory
+# - deny writes to sensitive filenames (e.g. `.env`)
+# - deny writes outside the sandbox
 #
 # Run: mix run examples/hooks/file_policy_enforcement.exs
 
-alias ClaudeAgentSDK.Hooks.Output
+Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
+
+alias ClaudeAgentSDK.{Client, ContentExtractor, Message, Options}
+alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+alias Examples.Support
+
+Support.ensure_live!()
+Support.header!("Hooks Example: File Policy Enforcement (live)")
 
 defmodule FilePolicyHooks do
-  @moduledoc """
-  Security policy enforcement for file operations.
-  """
+  @moduledoc false
 
-  # Define allowed and forbidden paths
-  @allowed_directory "/tmp/sandbox"
+  @table :claude_agent_sdk_examples_file_policy_enforcement
   @forbidden_files [".env", "secrets.yml", "credentials.json"]
 
-  @doc """
-  PreToolUse hook that enforces file access policies.
+  def table_name, do: @table
 
-  Policy rules:
-  1. Cannot modify .env, secrets, or credential files
-  2. Must operate within /tmp/sandbox directory for writes
+  def put_allowed_dir!(dir) when is_binary(dir) do
+    :ets.insert(@table, {:allowed_dir, dir})
+  end
 
-  Returns:
-  - deny output if policy violated
-  - allow output if policy satisfied
-  """
+  defp allowed_dir do
+    case :ets.lookup(@table, :allowed_dir) do
+      [{:allowed_dir, dir}] when is_binary(dir) -> dir
+      _ -> "/tmp"
+    end
+  end
+
+  defp inc(key) when is_atom(key) do
+    _ = :ets.update_counter(@table, key, {2, 1}, {key, 0})
+    :ok
+  end
+
   def enforce_file_policy(input, _tool_use_id, _context) do
     case input do
-      %{"tool_name" => tool_name, "tool_input" => %{"file_path" => path}}
-      when tool_name in ["Write", "Edit"] ->
-        check_write_policy(tool_name, path)
+      %{"tool_name" => tool, "tool_input" => %{"file_path" => path}}
+      when tool in ["Write", "Edit"] and is_binary(path) ->
+        check_write_policy(tool, path)
 
       _ ->
-        # Not a file write operation, allow
         %{}
     end
   end
 
   defp check_write_policy(tool_name, path) do
     cond do
-      # Check forbidden file names
       Enum.any?(@forbidden_files, &String.ends_with?(path, &1)) ->
+        inc(:denied)
         filename = Path.basename(path)
-
         IO.puts("\n🚫 BLOCKED: Cannot modify #{filename}")
 
         Output.deny("Cannot modify #{filename}")
         |> Output.with_system_message("🔒 Security policy: Sensitive file")
         |> Output.with_reason("Modification of #{filename} is forbidden by policy")
 
-      # Check allowed directory
-      not String.starts_with?(path, @allowed_directory) ->
-        IO.puts("\n🚫 BLOCKED: Must operate within #{@allowed_directory}")
+      not String.starts_with?(path, allowed_dir()) ->
+        inc(:denied)
+        dir = allowed_dir()
+        IO.puts("\n🚫 BLOCKED: Must operate within #{dir}")
 
-        Output.deny("Can only modify files in #{@allowed_directory}")
+        Output.deny("Can only modify files in #{dir}")
         |> Output.with_system_message("🔒 Security policy: Sandbox restriction")
         |> Output.with_reason("File path #{path} is outside allowed directory")
 
-      # Passes all checks
       true ->
+        inc(:allowed)
         IO.puts("\n✅ ALLOWED: #{tool_name} #{path}")
-
         Output.allow("File policy check passed")
     end
   end
 end
 
-IO.puts("=" <> String.duplicate("=", 79))
-IO.puts("🎣 Hooks Example: File Policy Enforcement")
-IO.puts("=" <> String.duplicate("=", 79))
-IO.puts("\nThis example demonstrates file access policy enforcement using hooks.")
-IO.puts("We'll test the policy logic with simulated tool calls.\n")
+table = FilePolicyHooks.table_name()
 
-IO.puts("📋 Policy Rules:")
-IO.puts("  ✓ Allow writes to: #{"/tmp/sandbox"}")
-IO.puts("  ✗ Block writes to: .env, secrets.yml, credentials.json")
-IO.puts("  ✗ Block writes outside sandbox\n")
+case :ets.whereis(table) do
+  :undefined -> :ok
+  tid -> :ets.delete(tid)
+end
 
-# Test the hook with simulated inputs
-IO.puts(String.duplicate("=", 80))
-IO.puts("🧪 Testing File Policy Hook")
-IO.puts(String.duplicate("=", 80))
+:ets.new(table, [:named_table, :public, :set])
 
-# Test 1: Allowed write
-IO.puts("\n📝 Test 1: Write to allowed location")
-IO.puts("-" <> String.duplicate("-", 79))
+sandbox_dir =
+  Path.join(
+    System.tmp_dir!(),
+    "claude_agent_sdk_file_policy_#{System.unique_integer([:positive])}"
+  )
 
-input1 = %{
-  "tool_name" => "Write",
-  "tool_input" => %{"file_path" => "/tmp/sandbox/test.txt"}
+File.mkdir_p!(sandbox_dir)
+FilePolicyHooks.put_allowed_dir!(sandbox_dir)
+
+outside_dir =
+  Path.join(
+    System.tmp_dir!(),
+    "claude_agent_sdk_file_policy_outside_#{System.unique_integer([:positive])}"
+  )
+
+File.mkdir_p!(outside_dir)
+
+ok_file = Path.join(sandbox_dir, "ok.txt")
+env_file = Path.join(sandbox_dir, ".env")
+outside_file = Path.join(outside_dir, "outside.txt")
+
+hooks = %{
+  pre_tool_use: [
+    Matcher.new("*", [&FilePolicyHooks.enforce_file_policy/3])
+  ]
 }
 
-result1 = FilePolicyHooks.enforce_file_policy(input1, "test_001", %{})
-
-IO.puts(
-  "\nHook result: #{inspect(get_in(result1, [:hookSpecificOutput, :permissionDecision]) || "allow")}"
-)
-
-# Test 2: Blocked - .env file
-IO.puts("\n\n📝 Test 2: Try to write .env file (should be blocked)")
-IO.puts("-" <> String.duplicate("-", 79))
-
-input2 = %{
-  "tool_name" => "Write",
-  "tool_input" => %{"file_path" => "/tmp/project/.env"}
+options = %Options{
+  tools: ["Write", "Edit"],
+  allowed_tools: ["Write", "Edit"],
+  hooks: hooks,
+  model: "haiku",
+  max_turns: 2,
+  permission_mode: :default
 }
 
-result2 = FilePolicyHooks.enforce_file_policy(input2, "test_002", %{})
+{:ok, client} = Client.start_link(options)
 
-IO.puts(
-  "\nHook result: #{inspect(get_in(result2, [:hookSpecificOutput, :permissionDecision]) || "allow")}"
-)
+run_prompt = fn prompt ->
+  task =
+    Task.async(fn ->
+      Client.stream_messages(client)
+      |> Enum.reduce_while([], fn message, acc ->
+        acc = [message | acc]
 
-# Test 3: Blocked - outside sandbox
-IO.puts("\n\n📝 Test 3: Try to write outside sandbox (should be blocked)")
-IO.puts("-" <> String.duplicate("-", 79))
+        case message do
+          %Message{type: :assistant} = msg ->
+            text = ContentExtractor.extract_text(msg)
+            if is_binary(text) and text != "", do: IO.puts("\nAssistant:\n#{text}\n")
+            {:cont, acc}
 
-input3 = %{
-  "tool_name" => "Write",
-  "tool_input" => %{"file_path" => "/home/user/file.txt"}
-}
+          %Message{type: :result} ->
+            {:halt, Enum.reverse(acc)}
 
-result3 = FilePolicyHooks.enforce_file_policy(input3, "test_003", %{})
+          _ ->
+            {:cont, acc}
+        end
+      end)
+    end)
 
-IO.puts(
-  "\nHook result: #{inspect(get_in(result3, [:hookSpecificOutput, :permissionDecision]) || "allow")}"
-)
+  Process.sleep(50)
+  :ok = Client.send_message(client, prompt)
+  Task.await(task, 120_000)
+end
 
-# Test 4: Allowed - another sandbox file
-IO.puts("\n\n📝 Test 4: Edit within sandbox (should be allowed)")
-IO.puts("-" <> String.duplicate("-", 79))
+IO.puts("Sandbox directory: #{sandbox_dir}\n")
 
-input4 = %{
-  "tool_name" => "Edit",
-  "tool_input" => %{"file_path" => "/tmp/sandbox/config.json"}
-}
+IO.puts("Test 1: Allowed write within sandbox\n")
 
-result4 = FilePolicyHooks.enforce_file_policy(input4, "test_004", %{})
+messages1 =
+  run_prompt.("""
+  Use the Write tool to create a file at #{ok_file}.
+  Put exactly this content (including the newline): ok
+  """)
 
-IO.puts(
-  "\nHook result: #{inspect(get_in(result4, [:hookSpecificOutput, :permissionDecision]) || "allow")}"
-)
+IO.puts("\nTest 2: Denied write to sensitive filename (.env)\n")
 
-IO.puts("\n\n" <> String.duplicate("=", 80))
-IO.puts("✨ Testing Complete!")
-IO.puts(String.duplicate("=", 80))
+messages2 =
+  run_prompt.("""
+  Use the Write tool to create a file at #{env_file}.
+  Put exactly: SECRET=1
+  """)
 
-IO.puts("""
+IO.puts("\nTest 3: Denied write outside sandbox\n")
 
-📊 Summary:
-  Test 1 (sandbox write):      ✅ ALLOWED
-  Test 2 (.env file):          🚫 BLOCKED
-  Test 3 (outside sandbox):    🚫 BLOCKED
-  Test 4 (sandbox edit):       ✅ ALLOWED
+messages3 =
+  run_prompt.("""
+  Use the Write tool to create a file at #{outside_file}.
+  Put exactly: outside
+  """)
 
-📚 Key Takeaways:
-   - Hooks can enforce complex security policies
-   - Pattern matching makes policy logic clear
-   - Deny responses prevent dangerous operations
-   - systemMessage and reason provide context to user and Claude
+for {label, msgs} <- [
+      {"allowed write", messages1},
+      {"sensitive file", messages2},
+      {"outside write", messages3}
+    ] do
+  case Enum.find(msgs, &(&1.type == :result)) do
+    %Message{subtype: :success} ->
+      :ok
 
-💡 Integration with Live CLI:
-   When connected to Claude CLI with these hooks configured, the policy
-   will automatically enforce whenever Claude tries to use Write or Edit tools.
+    %Message{subtype: other} ->
+      raise "Run #{label} did not succeed (result subtype: #{inspect(other)})"
 
-   To see it in action with live Claude, configure the hooks in your Options
-   and start a Client - the hooks will fire automatically when Claude attempts
-   file operations!
-""")
+    nil ->
+      raise "Run #{label} returned no result message."
+  end
+end
+
+allowed =
+  case :ets.lookup(table, :allowed) do
+    [{:allowed, n}] when is_integer(n) -> n
+    _ -> 0
+  end
+
+denied =
+  case :ets.lookup(table, :denied) do
+    [{:denied, n}] when is_integer(n) -> n
+    _ -> 0
+  end
+
+if allowed < 1 do
+  raise "Expected at least 1 allowed file operation, but allowed=#{allowed}."
+end
+
+if denied < 2 do
+  raise "Expected at least 2 denied file operations, but denied=#{denied}."
+end
+
+case File.read(ok_file) do
+  {:ok, contents} ->
+    if String.trim_trailing(contents) != "ok" do
+      raise "Expected #{ok_file} to contain \"ok\", got: #{inspect(contents)}"
+    end
+
+  {:error, reason} ->
+    raise "Expected #{ok_file} to exist, but read failed: #{inspect(reason)}"
+end
+
+if File.exists?(env_file) do
+  raise "Expected #{env_file} to be blocked and not written, but it exists."
+end
+
+if File.exists?(outside_file) do
+  raise "Expected #{outside_file} to be blocked and not written, but it exists."
+end
+
+IO.puts("\n✅ File policy enforcement checks passed (allowed=#{allowed}, denied=#{denied}).")
+
+Client.stop(client)
+:ets.delete(table)
+
+IO.puts("\nDone.")
+Support.halt_if_runner!()

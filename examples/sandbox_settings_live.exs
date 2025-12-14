@@ -1,4 +1,9 @@
+#!/usr/bin/env elixir
+
+Code.require_file(Path.expand("support/example_helper.exs", __DIR__))
+
 alias ClaudeAgentSDK.{CLI, ContentExtractor, Options}
+alias Examples.Support
 
 defmodule SandboxSettingsLive do
   defp settings_value(%Options{} = options) do
@@ -62,6 +67,7 @@ defmodule SandboxSettingsLive do
     ClaudeAgentSDK.query(
       "Say hello in one sentence.",
       %Options{
+        model: "haiku",
         max_turns: 1,
         output_format: :stream_json,
         sandbox: sandbox
@@ -81,4 +87,7 @@ defmodule SandboxSettingsLive do
   end
 end
 
+Support.ensure_live!()
+Support.header!("Sandbox + Settings Example (live)")
 SandboxSettingsLive.run()
+Support.halt_if_runner!()

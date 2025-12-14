@@ -5,8 +5,11 @@
 #
 # Run with: mix run examples/streaming_tools/basic_streaming_with_hooks.exs
 
+Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
+
 alias ClaudeAgentSDK.{Streaming, Options}
 alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+alias Examples.Support
 
 defmodule StreamingHooksExample do
   # Hook callback: Log all tool usage
@@ -45,6 +48,8 @@ defmodule StreamingHooksExample do
   end
 
   def run do
+    Support.ensure_live!()
+
     IO.puts("=" |> String.duplicate(70))
     IO.puts("Streaming + Hooks Example (v0.6.0)")
     IO.puts("=" |> String.duplicate(70))
@@ -53,7 +58,11 @@ defmodule StreamingHooksExample do
 
     # Configure options with hooks
     options = %Options{
-      allowed_tools: ["Bash", "Read", "Write"],
+      model: "haiku",
+      max_turns: 2,
+      permission_mode: :default,
+      tools: ["Bash"],
+      allowed_tools: ["Bash"],
       hooks: %{
         pre_tool_use: [
           Matcher.new("*", [&log_tool_use/3]),
@@ -67,46 +76,51 @@ defmodule StreamingHooksExample do
     # Start session - automatically uses control client
     {:ok, session} = Streaming.start_session(options)
 
-    IO.puts("✓ Session started (transport: control client)\n")
-    IO.puts("Sending: 'List the files in the current directory'\n")
-    IO.puts("-" |> String.duplicate(70))
+    try do
+      IO.puts("✓ Session started (transport: control client)\n")
+      IO.puts("Sending: 'List the files in the current directory'\n")
+      IO.puts("-" |> String.duplicate(70))
 
-    # Send message and stream response AS IT ARRIVES
-    Streaming.send_message(session, "List the files in the current directory")
-    |> Stream.take_while(fn event ->
-      # Process each event immediately as it arrives
-      case event do
-        %{type: :text_delta, text: text} ->
-          IO.write(text)
-          # Continue
-          true
+      summary =
+        Streaming.send_message(session, "List the files in the current directory")
+        |> Enum.reduce_while(%{tool_use_starts: 0, message_stop: false}, fn event, acc ->
+          case event do
+            %{type: :text_delta, text: text} ->
+              IO.write(text)
+              {:cont, acc}
 
-        %{type: :tool_use_start, name: name} ->
-          IO.puts("\n\n🛠️  Tool: #{name}")
-          # Continue
-          true
+            %{type: :tool_use_start, name: name} ->
+              IO.puts("\n\n🛠️  Tool: #{name}")
+              {:cont, %{acc | tool_use_starts: acc.tool_use_starts + 1}}
 
-        %{type: :message_stop} ->
-          IO.puts("\n" <> ("-" |> String.duplicate(70)))
-          IO.puts("\n✓ Message complete")
-          # Stop - message is done
-          false
+            %{type: :message_stop} ->
+              IO.puts("\n" <> ("-" |> String.duplicate(70)))
+              IO.puts("\n✓ Message complete")
+              {:halt, %{acc | message_stop: true}}
 
-        _ ->
-          # Continue for other events
-          true
+            %{type: :error, error: reason} ->
+              raise "Streaming error: #{inspect(reason)}"
+
+            _ ->
+              {:cont, acc}
+          end
+        end)
+
+      if summary.tool_use_starts < 1 do
+        raise "Expected at least 1 tool_use_start event, but saw #{summary.tool_use_starts}."
       end
-    end)
-    # Consume the stream
-    |> Stream.run()
 
-    # Close session
-    Streaming.close_session(session)
-
-    IO.puts("\n✓ Session closed")
-    IO.puts("=" |> String.duplicate(70))
+      if summary.message_stop != true do
+        raise "Expected message_stop event, but did not observe one."
+      end
+    after
+      Streaming.close_session(session)
+      IO.puts("\n✓ Session closed")
+      IO.puts("=" |> String.duplicate(70))
+    end
   end
 end
 
 # Auto-run when executed with mix run
 StreamingHooksExample.run()
+Support.halt_if_runner!()

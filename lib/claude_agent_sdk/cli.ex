@@ -9,8 +9,9 @@ defmodule ClaudeAgentSDK.CLI do
 
   require Logger
 
-  @minimum_version "1.0.0"
+  @minimum_version "2.0.0"
   @executable_candidates ["claude-code", "claude"]
+  @skip_version_check_env "CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK"
 
   @doc """
   Attempts to find the Claude CLI executable.
@@ -20,16 +21,12 @@ defmodule ClaudeAgentSDK.CLI do
   """
   @spec find_executable() :: {:ok, String.t()} | {:error, :not_found}
   def find_executable do
-    @executable_candidates
-    |> Enum.find_value(fn candidate ->
-      case System.find_executable(candidate) do
-        nil -> nil
-        path -> {:ok, path}
-      end
-    end)
-    |> case do
-      nil -> {:error, :not_found}
-      result -> result
+    with nil <- find_bundled_executable(),
+         nil <- find_on_path(@executable_candidates),
+         nil <- find_in_known_locations() do
+      {:error, :not_found}
+    else
+      path when is_binary(path) -> {:ok, path}
     end
   end
 
@@ -43,7 +40,9 @@ defmodule ClaudeAgentSDK.CLI do
         path
 
       {:error, :not_found} ->
-        raise "Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code"
+        raise ClaudeAgentSDK.Errors.CLINotFoundError,
+          message:
+            "Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code"
     end
   end
 
@@ -102,6 +101,14 @@ defmodule ClaudeAgentSDK.CLI do
   """
   @spec warn_if_outdated() :: :ok
   def warn_if_outdated do
+    if System.get_env(@skip_version_check_env) do
+      :ok
+    else
+      do_warn_if_outdated()
+    end
+  end
+
+  defp do_warn_if_outdated do
     case version() do
       {:ok, installed} ->
         warn_for_installed_version(installed)
@@ -116,6 +123,68 @@ defmodule ClaudeAgentSDK.CLI do
     end
 
     :ok
+  end
+
+  defp find_bundled_executable do
+    case Application.get_env(:claude_agent_sdk, :cli_bundled_path) do
+      path when is_binary(path) ->
+        if File.regular?(path), do: path, else: nil
+
+      _ ->
+        bundled_path = default_bundled_path()
+        if is_binary(bundled_path) and File.regular?(bundled_path), do: bundled_path, else: nil
+    end
+  end
+
+  defp default_bundled_path do
+    cli_name =
+      if match?({:win32, _}, :os.type()) do
+        "claude.exe"
+      else
+        "claude"
+      end
+
+    case :code.priv_dir(:claude_agent_sdk) do
+      dir when is_list(dir) ->
+        dir
+        |> List.to_string()
+        |> Path.join("_bundled")
+        |> Path.join(cli_name)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp find_on_path(candidates) when is_list(candidates) do
+    Enum.find_value(candidates, fn candidate ->
+      System.find_executable(candidate)
+    end)
+  end
+
+  defp find_in_known_locations do
+    known =
+      case Application.get_env(:claude_agent_sdk, :cli_known_locations) do
+        paths when is_list(paths) -> paths
+        _ -> default_known_locations()
+      end
+
+    Enum.find_value(known, fn path ->
+      if is_binary(path) and File.regular?(path), do: path, else: nil
+    end)
+  end
+
+  defp default_known_locations do
+    home = System.user_home!()
+
+    [
+      Path.join([home, ".npm-global", "bin", "claude"]),
+      "/usr/local/bin/claude",
+      Path.join([home, ".local", "bin", "claude"]),
+      Path.join([home, "node_modules", ".bin", "claude"]),
+      Path.join([home, ".yarn", "bin", "claude"]),
+      Path.join([home, ".claude", "local", "claude"])
+    ]
   end
 
   defp warn_for_installed_version(installed) do

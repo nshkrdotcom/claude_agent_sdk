@@ -7,13 +7,24 @@
 #
 # Run: mix run examples/hooks/basic_bash_blocking.exs
 
+Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
+
 alias ClaudeAgentSDK.{Client, Options}
 alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+alias ClaudeAgentSDK.{ContentExtractor, Message}
+alias Examples.Support
+
+Support.ensure_live!()
+Support.header!("Hooks Example: Basic Bash Command Blocking (live)")
 
 defmodule SecurityHooks do
   @moduledoc """
   Security hooks for blocking dangerous commands.
   """
+
+  @table :claude_agent_sdk_examples_basic_bash_blocking
+
+  def table_name, do: @table
 
   @doc """
   PreToolUse hook that blocks dangerous bash commands.
@@ -34,6 +45,8 @@ defmodule SecurityHooks do
         dangerous_patterns = ["rm -rf", "dd if=", "mkfs", "> /dev/"]
 
         if Enum.any?(dangerous_patterns, &String.contains?(command, &1)) do
+          _ = :ets.update_counter(@table, :denied, {2, 1}, {:denied, 0})
+
           IO.puts("\n🚫 BLOCKED: Dangerous command detected!")
           IO.puts("   Command: #{command}\n")
 
@@ -41,6 +54,8 @@ defmodule SecurityHooks do
           |> Output.with_system_message("🔒 Security policy violation")
           |> Output.with_reason("This command could cause data loss or system damage")
         else
+          _ = :ets.update_counter(@table, :allowed, {2, 1}, {:allowed, 0})
+
           IO.puts("\n✅ ALLOWED: Safe command")
           IO.puts("   Command: #{command}\n")
 
@@ -54,6 +69,15 @@ defmodule SecurityHooks do
   end
 end
 
+table = SecurityHooks.table_name()
+
+case :ets.whereis(table) do
+  :undefined -> :ok
+  tid -> :ets.delete(tid)
+end
+
+:ets.new(table, [:named_table, :public, :set])
+
 # Configure hooks for use with live Client
 hooks = %{
   pre_tool_use: [
@@ -62,60 +86,101 @@ hooks = %{
 }
 
 options = %Options{
+  tools: ["Bash"],
   allowed_tools: ["Bash"],
-  hooks: hooks
+  hooks: hooks,
+  model: "haiku",
+  max_turns: 2,
+  permission_mode: :default
 }
-
-IO.puts("=" <> String.duplicate("=", 79))
-IO.puts("🎣 Hooks Example: Basic Bash Command Blocking (LIVE)")
-IO.puts("=" <> String.duplicate("=", 79))
-IO.puts("\nThis example demonstrates PreToolUse hooks with the actual Claude CLI.")
-IO.puts("The hook will be invoked when Claude tries to use the Bash tool.\n")
 
 # Start client with hooks
 {:ok, client} = Client.start_link(options)
 
-IO.puts("✅ Client started with PreToolUse hook for Bash commands")
+IO.puts("Client started with PreToolUse hook for Bash commands.\n")
 
-# Start a task to listen for messages
-listener =
-  Task.async(fn ->
-    Client.stream_messages(client)
-    # Take first 5 messages
-    |> Enum.take(5)
-    |> Enum.to_list()
-  end)
+run_prompt = fn prompt ->
+  task =
+    Task.async(fn ->
+      Client.stream_messages(client)
+      |> Enum.reduce_while([], fn message, acc ->
+        acc = [message | acc]
 
-# Give it a moment to initialize
-Process.sleep(1000)
+        case message do
+          %Message{type: :assistant} = msg ->
+            text = ContentExtractor.extract_text(msg)
+            if is_binary(text) and text != "", do: IO.puts("\nAssistant:\n#{text}\n")
+            {:cont, acc}
 
-# Test 1: Send a message that will cause Claude to use Bash (safe command)
-IO.puts("\n📝 Test 1: Asking Claude to run a safe command")
-IO.puts("-" <> String.duplicate("-", 79))
+          %Message{type: :result} ->
+            {:halt, Enum.reverse(acc)}
 
-Client.send_message(
-  client,
-  "Please use the Bash tool to run this exact command: echo 'Hello from hooks!'"
-)
+          _ ->
+            {:cont, acc}
+        end
+      end)
+    end)
 
-IO.puts("\nWaiting for Claude to respond and invoke the Bash tool...")
-IO.puts("(The hook will be called when Claude tries to use the tool)\n")
+  Process.sleep(50)
+  :ok = Client.send_message(client, prompt)
+  Task.await(task, 120_000)
+end
 
-# Wait for responses
-messages = Task.await(listener, 30_000)
+IO.puts("Test 1: safe command (should be allowed)\n")
 
-IO.puts("\n📊 Received #{length(messages)} messages from Claude")
+messages1 =
+  run_prompt.("Use the Bash tool to run this exact command: echo 'Hello from hooks!'")
+
+IO.puts("\nTest 2: dangerous command (should be blocked by hook)\n")
+
+messages2 =
+  run_prompt.("Use the Bash tool to run this exact command: rm -rf /tmp/this_should_be_blocked")
+
+case Enum.find(messages1, &(&1.type == :result)) do
+  %Message{subtype: :success} ->
+    :ok
+
+  %Message{subtype: other} ->
+    raise "Safe command run did not succeed (result subtype: #{inspect(other)})"
+
+  nil ->
+    raise "Safe command run returned no result message."
+end
+
+case Enum.find(messages2, &(&1.type == :result)) do
+  %Message{subtype: :success} ->
+    :ok
+
+  %Message{subtype: other} ->
+    raise "Dangerous command run did not succeed (result subtype: #{inspect(other)})"
+
+  nil ->
+    raise "Dangerous command run returned no result message."
+end
+
+allowed =
+  case :ets.lookup(table, :allowed) do
+    [{:allowed, n}] when is_integer(n) -> n
+    _ -> 0
+  end
+
+denied =
+  case :ets.lookup(table, :denied) do
+    [{:denied, n}] when is_integer(n) -> n
+    _ -> 0
+  end
+
+if allowed < 1 do
+  raise "Expected PreToolUse hook to allow at least one Bash command, but allowed=#{allowed}."
+end
+
+if denied < 1 do
+  raise "Expected PreToolUse hook to deny at least one Bash command, but denied=#{denied}."
+end
 
 # Clean up
-IO.puts("\nStopping client...")
-Client.stop(client)
+if Process.alive?(client), do: Client.stop(client)
+:ets.delete(table)
 
-IO.puts("\n\n✨ Example completed!")
-IO.puts("\n📚 Key Takeaways:")
-IO.puts("   - Hooks are invoked when Claude tries to use tools")
-IO.puts("   - PreToolUse hooks can allow or deny tool usage")
-IO.puts("   - Hooks run BEFORE the actual tool execution")
-IO.puts("   - This provides a security layer for tool usage")
-IO.puts("\n⚠️  Note: To see dangerous command blocking, Claude would need to")
-IO.puts("   decide to run a dangerous command. For a full demo, try using")
-IO.puts("   the complete_workflow.exs example which shows multiple scenarios.")
+IO.puts("\nDone.")
+Support.halt_if_runner!()
