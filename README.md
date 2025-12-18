@@ -11,199 +11,465 @@
 [![CI](https://github.com/nshkrdotcom/claude_agent_sdk/actions/workflows/elixir.yaml/badge.svg)](https://github.com/nshkrdotcom/claude_agent_sdk/actions/workflows/elixir.yaml)
 [![Last Commit](https://img.shields.io/github/last-commit/nshkrdotcom/claude_agent_sdk.svg)](https://github.com/nshkrdotcom/claude_agent_sdk/commits/main)
 
-An Elixir SDK for programmatically interacting with Claude Code. This library provides a simple interface to query Claude and handle responses using the familiar Elixir streaming patterns.
+`claude_agent_sdk` is an Elixir SDK for programmatically interacting with **Claude Code** via the **Claude Code CLI**. It provides:
+
+- A clean, streaming-first API (`ClaudeAgentSDK.query/2`, `ClaudeAgentSDK.Streaming`)
+- A full **bidirectional control client** for advanced features (hooks, permissions, SDK MCP tooling)
+- Operational tooling (auth diagnostics, debug mode, orchestration, session persistence)
+
+## Quick links
+
+- HexDocs: https://hexdocs.pm/claude_agent_sdk
+- Hex package: https://hex.pm/packages/claude_agent_sdk
+- Claude Code SDK docs (upstream): https://docs.anthropic.com/en/docs/claude-code/sdk
+- Claude Code hooks (upstream): https://docs.anthropic.com/en/docs/claude-code/hooks
+
+---
 
 ## Architecture
 
+The SDK has two “lanes”:
+
+- **CLI-only lane** (fast path): simple queries and pure streaming
+- **Control-client lane** (feature path): hooks, permissions, SDK MCP servers, runtime control
+
 ```mermaid
 flowchart TB
-    subgraph "Elixir Application"
-        SDK["ClaudeAgentSDK API"]
-        Router["Streaming Router<br>(auto CLI vs control)"]
-        Transport["Transport Behaviour<br>(Port, Process, Mock)"]
-        ClientCtrl["Control Client<br>(GenServer + Hooks + MCP)"]
-        Streaming["Streaming Facade"]
-        Options["Options + Runtime Control"]
-        Tests["Supertester Mock Harness"]
-    end
+  App[Your Elixir app] --> SDK[ClaudeAgentSDK API]
 
-    subgraph "Claude Code CLI"
-        CLI["claude executable<br>(Node.js CLI)"]
-        CLI --> API["Claude Service"]
-        API --> CLI
-    end
+  SDK -->|"query/continue/resume"| Query[ClaudeAgentSDK.Query]
+  SDK -->|"start_session/send_message"| StreamAPI[ClaudeAgentSDK.Streaming]
 
-    SDK --> Options
-    SDK --> Router
-    Router -->|CLI path| Transport
-    Router -->|Control path| ClientCtrl
-    ClientCtrl --> Transport
-    Transport --> CLI
-    CLI --> Transport
-    Transport --> Streaming
-    Streaming --> SDK
+  Query --> Router["StreamingRouter / feature detection"]
+  StreamAPI --> Router
 
-    ClientCtrl --> Hooks[Hooks Registry]
-    ClientCtrl --> MCP[SDK MCP Bridge]
-    ClientCtrl --> Permissions[Permission Callback]
-    Options --> Transport
-    Options --> ClientCtrl
-    Tests --> Transport
-    Tests --> SDK
+  Router -->|"CLI-only path"| Proc["Process / Streaming.Session"]
+  Router -->|"Control path"| Client["Client (GenServer + control protocol)"]
 
-    style SDK fill:#4a9eff,stroke:#2d7dd2,stroke-width:2px,color:#000
-    style CLI fill:#f08b54,stroke:#c36c34,stroke-width:2px,color:#000
-    style API fill:#ff6b6b,stroke:#ff4757,stroke-width:2px,color:#000
-```
+  Client --> Transport["Transport (Port or Erlexec)"]
+  Proc --> CLI["Claude Code CLI"]
+
+  Transport --> CLI
+  CLI --> Claude["Claude service"]
+
+  Client --> Hooks["Hooks callbacks"]
+  Client --> Perms["Permission callback"]
+  Client --> MCP["SDK MCP bridge"]
+````
+
+---
 
 ## Prerequisites
 
-This SDK requires the Claude Code CLI to be installed:
+### Install Claude Code CLI
+
+This library shells out to the Claude Code CLI. Install it first:
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
-### CLI discovery & version checks
+### CLI discovery and version checks
 
-- The SDK now centralizes CLI lookup in `ClaudeAgentSDK.CLI`, trying `claude-code` first and then `claude`.
-- Minimum supported CLI version: `2.0.0`. Check with `ClaudeAgentSDK.CLI.version_supported?/0` or print the detected version via `ClaudeAgentSDK.CLI.version/0`.
-- Recommended CLI version: `2.0.72`. Check with `ClaudeAgentSDK.CLI.recommended_version/0`.
-- Emit an upgrade hint for operators with `ClaudeAgentSDK.CLI.warn_if_outdated/0`.
-- Any example (e.g., `mix run examples/basic_example.exs`) will use the same discovery logic, so running one is a quick end-to-end verification of your install.
+The SDK centralizes CLI discovery in `ClaudeAgentSDK.CLI`:
 
-### Claude CLI Version
+* Candidate executables: `claude-code`, then `claude`
+* Minimum supported version: `2.0.0`
+* Recommended version: `2.0.72`
 
-This SDK requires Claude Code CLI. Recommended version: **2.0.72**
+You can verify what the SDK sees:
 
-Install via npm (for version pinning):
-```bash
-npm install -g @anthropic-ai/claude-code@2.0.72
-```
-
-Or via official installer (installs latest):
-```bash
-curl -fsSL https://claude.ai/install.sh | bash
-```
-
-Check installed version:
 ```elixir
-ClaudeAgentSDK.CLI.recommended_version()  # => "2.0.72"
-ClaudeAgentSDK.CLI.version()              # => {:ok, "2.0.XX"}
+{:ok, path} = ClaudeAgentSDK.CLI.find_executable()
+{:ok, version} = ClaudeAgentSDK.CLI.version()
+
+ClaudeAgentSDK.CLI.version_supported?()
+ClaudeAgentSDK.CLI.warn_if_outdated()
 ```
+
+---
 
 ## Installation
 
-Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
+Add the dependency to `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.6.7"}
+    {:claude_agent_sdk, "~> 0.6"}
   ]
 end
 ```
 
-Then run:
+Then:
 
 ```bash
 mix deps.get
 ```
 
-## Quick Start
+---
 
-1. **Authenticate the CLI** (do this once):
-   ```bash
-   claude login
-   ```
+## Authentication
 
-2. **Install dependencies**:
-   ```bash
-   mix deps.get
-   ```
+The SDK supports three approaches (in precedence order):
 
-3. **Run the showcase**:
-   ```bash
-   mix showcase
-   ```
+1. **Environment variable credentials** (best for CI/CD)
+2. **Stored OAuth token via AuthManager** (best for local dev without re-login)
+3. **Existing `claude login` session** (legacy/manual)
 
-4. **Try the script runner**:
-   ```bash
-   mix run examples/basic_example.exs
-   bash examples/run_all.sh
-   ```
+### Recommended for CI/CD: environment variables
 
-## Streaming + Tools (v0.6.0)
+Anthropic:
 
-The SDK now supports streaming WITH control features like hooks, SDK MCP servers, and permissions! Previously, you had to choose between fast streaming (CLI-only) or control features (blocking). Now you get both automatically.
+```bash
+export CLAUDE_AGENT_OAUTH_TOKEN="sk-ant-oat01-..."
+# or legacy:
+export ANTHROPIC_API_KEY="sk-ant-api03-..."
+```
 
-### Automatic Transport Selection
+AWS Bedrock:
 
-The SDK intelligently routes your streaming requests:
+```bash
+export CLAUDE_AGENT_USE_BEDROCK=1
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=us-west-2
+# or AWS_PROFILE / ~/.aws/credentials
+```
 
-- **CLI-only path**: Fast streaming without control features
-  - No hooks, SDK MCP, permissions, or agents configured
-  - Direct subprocess streaming (lowest latency)
+Google Vertex AI:
 
-- **Control client path**: Streaming WITH all features
-  - Hooks enabled
-  - SDK MCP servers configured
-  - Permission callbacks active
-  - Runtime agents configured
+```bash
+export CLAUDE_AGENT_USE_VERTEX=1
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+export GOOGLE_CLOUD_PROJECT=your-project-id
+```
 
-### Quick Example: Streaming with Hooks
+### Local dev: one-time OAuth token setup
+
+The SDK includes a Mix task that runs `claude setup-token` and persists the token securely:
+
+```bash
+mix claude.setup_token
+```
+
+Status and health checks:
 
 ```elixir
-alias ClaudeAgentSDK.{Streaming, Options}
-alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+alias ClaudeAgentSDK.AuthManager
 
-# Define a pre-tool hook
-def log_tool_use(input, _tool_id, _context) do
-  tool_name = input["tool_name"]
-  IO.puts("🔧 Executing tool: #{tool_name}")
-  Output.allow()
-end
+:ok = AuthManager.ensure_authenticated()
+status = AuthManager.status()
+```
 
-# Configure options with hooks
-options = %Options{
-  hooks: %{
-    pre_tool_use: [Matcher.new("*", [&log_tool_use/3])]
-  }
+### Diagnostics
+
+If you want a clear, actionable environment report:
+
+```elixir
+alias ClaudeAgentSDK.AuthChecker
+
+diagnosis = AuthChecker.diagnose()
+AuthChecker.ensure_ready!()
+```
+
+---
+
+## Core API
+
+### `ClaudeAgentSDK.query/2`
+
+`query/2` returns a **lazy stream** of `ClaudeAgentSDK.Message` structs.
+
+```elixir
+alias ClaudeAgentSDK.{ContentExtractor, Options}
+
+opts = %Options{max_turns: 3, output_format: :stream_json}
+
+ClaudeAgentSDK.query("Say hello from Elixir", opts)
+|> Enum.each(fn msg ->
+  case msg.type do
+    :assistant ->
+      IO.puts(ContentExtractor.extract_text(msg) || "")
+
+    :result ->
+      IO.inspect(msg.data, label: "result")
+      :ok
+
+    _ ->
+      :ok
+  end
+end)
+```
+
+### `continue/2` and `resume/3`
+
+```elixir
+# Continue the last conversation
+ClaudeAgentSDK.continue("Add error handling")
+|> Enum.to_list()
+
+# Resume a specific session
+ClaudeAgentSDK.resume("session-id", "Now add tests")
+|> Enum.to_list()
+```
+
+---
+
+## Options: configuring behavior
+
+`ClaudeAgentSDK.Options` maps directly to CLI flags (plus higher-level SDK routing):
+
+Common fields you will likely use:
+
+* `max_turns`
+* `system_prompt` / `append_system_prompt`
+* `output_format` (`:text | :json | :stream_json | %{type: :json_schema, schema: ...}`)
+* `model` / `fallback_model`
+* `allowed_tools` / `disallowed_tools`
+* `permission_mode`
+* `cwd`
+* `timeout_ms`
+* `include_partial_messages` (streaming)
+* `preferred_transport` (`:auto | :cli | :control`)
+
+Example:
+
+```elixir
+alias ClaudeAgentSDK.Options
+
+opts = %Options{
+  model: "sonnet",
+  fallback_model: "haiku",
+  max_turns: 5,
+  permission_mode: :plan,
+  output_format: :stream_json,
+  allowed_tools: ["Read", "Grep"],
+  cwd: "/path/to/project"
 }
+```
 
-# Start streaming session - automatically uses control client
-{:ok, session} = Streaming.start_session(options)
+### Option presets with `OptionBuilder`
 
-# Send message and get streaming response with hook execution
-Streaming.send_message(session, "Create a hello.ex file")
+If you want sensible defaults per environment / use case:
+
+```elixir
+alias ClaudeAgentSDK.OptionBuilder
+
+dev_opts  = OptionBuilder.build_development_options()
+prod_opts = OptionBuilder.build_production_options()
+analysis  = OptionBuilder.build_analysis_options()
+env_opts  = OptionBuilder.for_environment()
+```
+
+---
+
+## Streaming (typewriter / incremental UX)
+
+`ClaudeAgentSDK.Streaming` provides persistent sessions and `text_delta` events.
+
+```elixir
+alias ClaudeAgentSDK.Streaming
+
+{:ok, session} = Streaming.start_session()
+
+Streaming.send_message(session, "Write a one-sentence summary of OTP.")
 |> Stream.each(fn
-  %{type: :text_delta, text: text} ->
-    IO.write(text)  # Typewriter effect
-
-  %{type: :tool_complete, tool_name: name} ->
-    IO.puts("\n✅ Tool #{name} completed")
-
-  %{type: :message_stop} ->
-    IO.puts("\n[Complete]")
+  %{type: :text_delta, text: chunk} -> IO.write(chunk)
+  %{type: :message_stop} -> IO.puts("\n")
+  _ -> :ok
 end)
 |> Stream.run()
 
-Streaming.close_session(session)
+:ok = Streaming.close_session(session)
 ```
 
-### Streaming with SDK MCP Servers
+### Automatic transport selection
+
+Streaming uses `ClaudeAgentSDK.Transport.StreamingRouter` to select:
+
+* **CLI streaming session** when you do not require control features
+* **Control client** when you enable hooks, permissions, SDK MCP servers, or certain runtime agent/permission settings
+
+You can override selection:
 
 ```elixir
-# Define an SDK MCP tool
-defmodule Calculator do
+alias ClaudeAgentSDK.Options
+
+# Force CLI-only
+opts = %Options{preferred_transport: :cli}
+
+# Force control client
+opts = %Options{preferred_transport: :control}
+```
+
+---
+
+## Control-client features
+
+If you need hooks, permission gating, SDK MCP tools, runtime model switching, or bidirectional control protocol support, use `ClaudeAgentSDK.Client`.
+
+### Bidirectional client lifecycle
+
+```elixir
+alias ClaudeAgentSDK.{Client, Options}
+
+{:ok, client} = Client.start_link(%Options{model: "sonnet"})
+:ok = Client.send_message(client, "Summarize this repository in 3 bullets.")
+
+Client.stream_messages(client)
+|> Enum.take_while(&(&1.type != :result))
+|> Enum.each(&IO.inspect/1)
+
+:ok = Client.stop(client)
+```
+
+---
+
+## Hooks
+
+Hooks are callback functions invoked by the Claude Code CLI during agent execution (tool calls, prompt submission, lifecycle events). They are configured through `Options.hooks` using matchers.
+
+```elixir
+alias ClaudeAgentSDK.{Client, Options}
+alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+
+defmodule MyHooks do
+  def block_dangerous_bash(%{"tool_name" => "Bash", "tool_input" => %{"command" => cmd}}, _id, _ctx) do
+    if String.contains?(cmd, "rm -rf") do
+      Output.deny("Blocked potentially destructive command")
+      |> Output.with_system_message("Command blocked by policy.")
+    else
+      Output.allow()
+    end
+  end
+
+  def block_dangerous_bash(_input, _id, _ctx), do: %{}
+end
+
+opts = %Options{
+  hooks: %{
+    pre_tool_use: [
+      Matcher.new("Bash", [&MyHooks.block_dangerous_bash/3], timeout_ms: 1_500)
+    ]
+  }
+}
+
+{:ok, client} = Client.start_link(opts)
+:ok = Client.send_message(client, "Try running rm -rf /tmp (do not actually do it).")
+Client.stream_messages(client) |> Enum.to_list()
+Client.stop(client)
+```
+
+Supported hook events (see `ClaudeAgentSDK.Hooks`):
+
+* `:session_start`, `:session_end`
+* `:notification`
+* `:pre_tool_use`, `:post_tool_use`
+* `:user_prompt_submit`
+* `:stop`, `:subagent_stop`
+* `:pre_compact`
+
+---
+
+## Permission system
+
+The permission system allows you to centrally control tool execution with a callback.
+
+* Callback: `t:ClaudeAgentSDK.Permission.callback/0`
+* Context: `ClaudeAgentSDK.Permission.Context`
+* Result: `ClaudeAgentSDK.Permission.Result`
+* Modes: `:default | :accept_edits | :plan | :bypass_permissions`
+
+```elixir
+alias ClaudeAgentSDK.{Client, Options}
+alias ClaudeAgentSDK.Permission.Result
+
+permission_callback = fn ctx ->
+  case {ctx.tool_name, ctx.tool_input} do
+    {"Bash", %{"command" => cmd}} when is_binary(cmd) and String.contains?(cmd, "rm -rf") ->
+      Result.deny("Command blocked by policy", interrupt: true)
+
+    _ ->
+      Result.allow()
+  end
+end
+
+opts = %Options{
+  permission_mode: :default,
+  can_use_tool: permission_callback
+}
+
+{:ok, client} = Client.start_link(opts)
+:ok = Client.send_message(client, "Try a bash command.")
+Client.stream_messages(client) |> Enum.to_list()
+Client.stop(client)
+```
+
+Runtime mode switching is supported:
+
+```elixir
+:ok = ClaudeAgentSDK.Client.set_permission_mode(client, :plan)
+```
+
+---
+
+## Agents (custom personas)
+
+Agents are first-class structs (`ClaudeAgentSDK.Agent`) you can attach to options and switch at runtime.
+
+```elixir
+alias ClaudeAgentSDK.{Agent, Client, Options}
+
+coder =
+  Agent.new(
+    name: :coder,
+    description: "Implementation-focused engineering assistant",
+    prompt: "You are a pragmatic senior engineer. Prefer small, safe changes.",
+    allowed_tools: ["Read", "Write", "Grep"],
+    model: "sonnet"
+  )
+
+reviewer =
+  Agent.new(
+    name: :reviewer,
+    description: "Strict code reviewer",
+    prompt: "You review code for correctness, safety, and clarity. Be precise.",
+    allowed_tools: ["Read", "Grep"],
+    model: "sonnet"
+  )
+
+opts = %Options{agents: %{coder: coder, reviewer: reviewer}, agent: :reviewer}
+
+{:ok, client} = Client.start_link(opts)
+:ok = Client.set_agent(client, :coder)
+{:ok, active} = Client.get_agent(client)
+Client.stop(client)
+```
+
+---
+
+## SDK MCP servers (in-process tools)
+
+The SDK includes a lightweight in-process MCP tool system:
+
+* Define tools via `use ClaudeAgentSDK.Tool` + `deftool`
+* Create a server via `ClaudeAgentSDK.create_sdk_mcp_server/1`
+* Provide it via `Options.mcp_servers`
+
+> Note: SDK MCP support depends on CLI control-protocol messages; the SDK implements routing and JSON-RPC responses, but availability depends on your Claude Code CLI version and feature set.
+
+```elixir
+defmodule MyTools do
   use ClaudeAgentSDK.Tool
 
-  deftool :add, "Adds two numbers", %{
+  deftool :add, "Add two numbers", %{
     type: "object",
     properties: %{
       a: %{type: "number"},
       b: %{type: "number"}
-    }
+    },
+    required: ["a", "b"]
   } do
     def execute(%{"a" => a, "b" => b}) do
       {:ok, %{"content" => [%{"type" => "text", "text" => "#{a + b}"}]}}
@@ -211,1263 +477,149 @@ defmodule Calculator do
   end
 end
 
-# Create SDK MCP server
-server = ClaudeAgentSDK.create_sdk_mcp_server(
-  name: "calculator",
-  version: "1.0.0",
-  tools: [Calculator.Add]
-)
-
-# Configure streaming with MCP
-options = %Options{
-  mcp_servers: %{"calculator" => server}
-}
-
-# Streaming automatically uses control client
-{:ok, session} = Streaming.start_session(options)
-
-Streaming.send_message(session, "What is 123 + 456?")
-|> Stream.each(fn event ->
-  case event.type do
-    :text_delta -> IO.write(event.text)
-    :tool_use_start -> IO.puts("\n🛠️ Using #{event.name}")
-    :message_stop -> IO.puts("\n")
-  end
-end)
-|> Stream.run()
-
-Streaming.close_session(session)
-```
-
-### Configuration Options
-
-```elixir
-# Force CLI-only mode (fast, no control features)
-options = %Options{
-  preferred_transport: :cli,
-  include_partial_messages: true  # Auto-set by start_session
-}
-
-# Force control client mode (even without features)
-options = %Options{
-  preferred_transport: :control
-}
-
-# Automatic selection (default, recommended)
-options = %Options{}  # Analyzes your config and chooses best transport
-```
-
-### Migration from v0.5.x
-
-No breaking changes! Your existing streaming code works as-is:
-
-```elixir
-# v0.5.x code - still works!
-{:ok, session} = Streaming.start_session()
-Streaming.send_message(session, "Hello") |> Enum.to_list()
-Streaming.close_session(session)
-
-# v0.6.0 - just add hooks and they work automatically
-options = %Options{hooks: %{pre_tool_use: [my_hook]}}
-{:ok, session} = Streaming.start_session(options)
-# Now streaming includes hook execution!
-```
-
-### Event Types with Tools
-
-The streaming events now include tool-related events when using control client:
-
-```elixir
-# Standard streaming events (both transports)
-%{type: :text_delta, text: "...", accumulated: "..."}
-%{type: :message_start, model: "..."}
-%{type: :message_stop, final_text: "..."}
-
-# Tool events (control client only)
-%{type: :tool_use_start, name: "Bash", id: "..."}
-%{type: :tool_input_delta, json: "..."}
-%{type: :tool_complete, tool_name: "Bash", result: "..."}
-
-# Hook events (control client only)
-%{type: :hook_invoked, event: :pre_tool_use, result: :allow}
-```
-
-### Examples
-
-See working examples in `examples/streaming_tools/`:
-- `basic_streaming_with_hooks.exs` - Streaming with pre-tool hooks
-- `sdk_mcp_streaming.exs` - Streaming with SDK MCP servers
-- `quick_demo.exs` - Minimal streaming demo
-- `examples/archive/streaming_tools/liveview_pattern.exs` - Phoenix LiveView integration pattern (pseudo-code)
-
-## Implementation Status
-
-### ✅ **Currently Implemented (v0.6.0)**
-- **Streaming + Tools Unification**: Automatic transport selection for streaming with hooks/MCP/permissions
-- **StreamingRouter**: Intelligent routing between CLI-only and control client transports
-- **Polymorphic API**: Same `Streaming` API works with both transports seamlessly
-- **Core SDK Functions**: `query/2`, `continue/2`, `resume/3` with stdin support
-- **Live Script Runner**: `mix run` for executing scripts with real API calls
-- **Message Processing**: Structured message types with proper parsing
-- **Options Configuration**: Full CLI argument mapping with smart presets and correct CLI formats
-- **Subprocess Management**: Robust erlexec integration with stdin support
-- **JSON Parsing**: Custom parser without external dependencies
-- **Authentication Management**: AutoManager with OAuth token support (v2.0.10+)
-  - Automatic token setup via `mix claude.setup_token`
-  - Token persistence and auto-refresh (1 year validity)
-  - Multi-provider support (Anthropic/Bedrock/Vertex)
-  - Environment variable fallback (`CLAUDE_AGENT_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`)
-- **Model Selection**: Choose Opus, Sonnet, Haiku, or specific versions
-  - Automatic fallback when model overloaded
-  - Full model name support (e.g., `claude-sonnet-4-5-20250929`)
-- **Custom Agents**: Define specialized agents with custom prompts
-- **Concurrent Orchestration**: Parallel query execution and workflows
-  - `Orchestrator.query_parallel/2` - Run queries concurrently (3-5x faster)
-  - `Orchestrator.query_pipeline/2` - Sequential workflows with context passing
-  - `Orchestrator.query_with_retry/3` - Automatic retry with exponential backoff
-- **Session Persistence** (v0.2.0): Save and resume sessions across restarts
-  - `SessionStore` GenServer for session management
-  - Save/load sessions with tags and metadata
-  - Search by tags, date range, cost
-  - Automatic cleanup of old sessions
-- **Advanced Session Flags** (v0.2.0): Additional CLI capabilities
-  - Session forking (`fork_session`) - Experiment with different approaches
-  - Multiple directories (`add_dir`) - Work across project boundaries
-  - Strict MCP config (`strict_mcp_config`) - Isolated MCP testing
-- **Bidirectional Streaming** (v0.2.1): Real-time character-by-character streaming
-  - `ClaudeAgentSDK.Streaming` module with persistent sessions
-  - Text delta events for typewriter effects
-  - Multi-turn conversations with context preservation
-  - Message queueing for sequential processing
-  - Multiple concurrent sessions for parallelism
-- **Hooks System** (v0.3.0): Lifecycle callbacks for security and monitoring
-  - 6 hook events: PreToolUse, PostToolUse, UserPromptSubmit, Stop, SubagentStop, PreCompact
-  - Pattern-based matching with regex support
-  - Permission control (allow/deny/ask)
-  - Context injection and execution control
-  - Complete type safety with 102 passing tests
-  - 5 working examples and comprehensive documentation
-- **Control Protocol** (v0.3.0): Bidirectional CLI communication
-  - Message encoding/decoding for control messages
-  - Initialize requests with hooks configuration
-  - Hook callback request/response handling
-  - JSON protocol over stdin/stdout
-- **Client GenServer** (v0.3.0): Persistent bidirectional connection
-  - Port-based CLI process management
-  - Message streaming with subscriber pattern
-  - Runtime hook callback invocation
-  - Graceful shutdown and error recovery
-- **MCP Tool System** (v0.4.0): In-process MCP tools with deftool macro
-  - `deftool` macro for declarative tool definition
-  - `create_sdk_mcp_server/1` for SDK-based MCP servers
-  - Tool.Registry GenServer for tool management
-  - 42 tests covering all tool scenarios
-  - **Note:** SDK MCP infrastructure complete, awaiting CLI support
-- **Agent Definitions** (v0.4.0): Multi-agent support with runtime switching
-  - Define agent profiles with custom prompts, tools, and models
-  - `Client.set_agent/2` for runtime agent switching
-  - Context preservation across agent switches
-  - 38 tests covering agent workflows
-- **Permission System** (v0.4.0): Fine-grained tool permission control
-  - Permission callbacks for security control
-  - 4 permission modes (default, accept_edits, plan, bypass_permissions)
-  - Tool input modification and execution interrupts
-  - `Client.set_permission_mode/2` for runtime mode changes
-  - 49 tests covering security scenarios
-- **Runtime Control** (v0.6.6): Change models/transports, rewind files, and cooperatively cancel callbacks
-  - `Client.set_model/2` to switch models mid-conversation
-  - `Client.get_model/1` to introspect active configuration
-  - `Client.interrupt/1` to stop runaway tool executions
-  - `Client.rewind_files/2` to rewind tracked files (requires `enable_file_checkpointing: true`)
-  - `Client.get_server_info/1` to read CLI command/output-style metadata
-  - `Client.receive_response/1` to collect a single response without manual streaming loops
-  - Cooperative cancellation for hooks/permissions via `control_cancel_request` + abort signals
-  - SessionStart/SessionEnd/Notification hooks supported
-  - Pluggable transports via `ClaudeAgentSDK.Transport`
-  - Mock transport for fully offline test suites
-- **Error Handling**: Improved error detection and timeout handling
-- **Stream Processing**: Lazy evaluation with Elixir Streams
-- **Mocking System**: Comprehensive testing without API calls (supports stdin workflows)
-- **Code Quality**: Full dialyzer and credo compliance with refactored complex functions
-- **Developer Tools**: ContentExtractor, AuthChecker, OptionBuilder, DebugMode, AuthManager
-- **Smart Configuration**: Environment-aware defaults and preset configurations
-
-### 🎉 **v0.4.0 Milestone: 95%+ Feature Parity with Python SDK**
-
-All three critical features now implemented with full test coverage!
-- MCP Tool System (infrastructure ready, awaiting CLI support)
-- Agent Definitions (fully working)
-- Permission System (fully working)
-
-### 🔮 **Planned Features (v0.7.0+)**
-- **Partial Message Streaming**: Character-level deltas sourced directly from the CLI (pending upstream support)
-- **Telemetry Integration**: First-class :telemetry events + dashboards
-- **Additional Transports**: HTTP/WebSocket bridges and multi-tenant gateways
-- **Advanced Examples**: Phoenix LiveView dashboards, CI/CD analyzers, refactoring assistants
-- **Plugin System Enhancements**: Hot-reloadable local plugins, richer config merging
-
-## Basic Usage
-
-```elixir
-# Simple query with smart content extraction
-alias ClaudeAgentSDK.{ContentExtractor, OptionBuilder}
-
-# Use preset development options
-options = OptionBuilder.build_development_options()
-
-ClaudeAgentSDK.query("Say exactly: Hello from Elixir!", options)
-|> Enum.each(fn msg ->
-  case msg.type do
-    :assistant ->
-      content = ContentExtractor.extract_text(msg)
-      IO.puts("🤖 Claude: #{content}")
-      
-    :result ->
-      if msg.subtype == :success do
-        IO.puts("✅ Success! Cost: $#{msg.data.total_cost_usd}")
-      end
-  end
-end)
-```
-
-## Runtime Control & Custom Transports
-
-Change models on the fly and plug in alternative transports without restarting your client:
-
-```elixir
-{:ok, client} =
-  ClaudeAgentSDK.Client.start_link(%ClaudeAgentSDK.Options{model: "claude-sonnet-4"},
-    transport: ClaudeAgentSDK.Transport.Port
+server =
+  ClaudeAgentSDK.create_sdk_mcp_server(
+    name: "calculator",
+    version: "1.0.0",
+    tools: [MyTools.Add]
   )
 
-:ok = ClaudeAgentSDK.Client.set_model(client, "opus")
-```
-
-To experiment with your own transport or to write deterministic tests, take a look at:
-
-- `docs/RUNTIME_CONTROL.md`
-- `docs/CUSTOM_TRANSPORTS.md`
-- `docs/MIGRATION_V0_5.md`
-
-You can try the runtime control examples directly:
-
-```bash
-# Live parity + runtime permission mode switching
-mix run examples/runtime_control/control_parity_live.exs
-
-# Archived / deterministic custom-transport demos (mocked)
-mix run examples/archive/runtime_control/model_switcher.exs
-mix run examples/archive/runtime_control/transport_swap.exs
-mix run examples/archive/runtime_control/subscriber_broadcast.exs
-mix run examples/archive/runtime_control/cancellable_callbacks.exs
-```
-
-The model switcher prints the model before and after calling `set_model/2`, making it easy to confirm the change succeeded in real time.
-
-## Runtime Control Enhancements (v0.6.4)
-
-The 0.6.4 release adds cooperative cancellation and broader control protocol coverage:
-
-- **Control cancel + abort signals** — `control_cancel_request` now cancels in-flight hooks/permissions and surfaces an abort signal to callbacks.
-- **Session/notification hooks** — SessionStart, SessionEnd, and Notification hooks are supported and validated.
-- **MCP routing** — SDK MCP servers respond to `resources/list`, `prompts/list`, and `notifications/initialized` for forward compatibility.
-- **Graceful shutdown** — Pending callbacks are cancelled when the client stops to avoid leaked work.
-
-See [CHANGELOG.md](CHANGELOG.md#064---2025-11-29) for the complete diff.
-
-## Testing with Mocks
-
-The SDK includes a comprehensive mocking system for testing without making actual API calls.
-
-### Running Tests
-
-```bash
-# Run tests with mocks (default)
-mix test
-
-# Run live tests (real API calls; disables mocks; runs only @tag :live)
-mix test.live
-
-# Run a specific test file in live mode
-mix test.live test/specific_test.exs
-```
-
-### Using Mocks in Your Code
-
-```elixir
-# Enable mocking
-Application.put_env(:claude_agent_sdk, :use_mock, true)
-
-# Start the mock server
-{:ok, _} = ClaudeAgentSDK.Mock.start_link()
-
-# Set a mock response
-ClaudeAgentSDK.Mock.set_response("hello", [
-  %{
-    "type" => "assistant",
-    "message" => %{"content" => "Hello from mock!"}
-  }
-])
-
-# Query will return mock response
-ClaudeAgentSDK.query("say hello") |> Enum.to_list()
-```
-
-### Mock Demo
-
-Run the included demo to see mocking in action:
-
-```bash
-mix run demo_mock.exs
-```
-
-For detailed documentation about the mocking system, see [MOCKING.md](MOCKING.md).
-
-## Examples
-
-Examples in `examples/` are **live** (they talk to the real Claude Code CLI), so authenticate first (`claude login`) and expect API costs.
-
-- Run everything: `bash examples/run_all.sh`
-- Run one: `mix run examples/basic_example.exs`
-- Curated list: `examples/README.md`
-- Archived / mock / experimental scripts: `examples/archive/`
-
-## API Reference
-
-### Main Functions
-
-#### `ClaudeAgentSDK.query(prompt, options \\ nil)`
-Runs a query against Claude Code and returns a stream of messages.
-
-```elixir
-# Simple query
-ClaudeAgentSDK.query("Write a hello world function")
-|> Enum.to_list()
-
-# With options
-options = %ClaudeAgentSDK.Options{max_turns: 5, verbose: true}
-ClaudeAgentSDK.query("Complex task", options)
-|> Enum.to_list()
-```
-
-#### `ClaudeAgentSDK.continue(prompt \\ nil, options \\ nil)`
-Continues the most recent conversation.
-
-```elixir
-ClaudeAgentSDK.continue("Now add error handling")
-|> Enum.to_list()
-```
-
-#### `ClaudeAgentSDK.resume(session_id, prompt \\ nil, options \\ nil)`
-Resumes a specific conversation by session ID.
-
-```elixir
-ClaudeAgentSDK.resume("session-id-here", "Add tests")
-|> Enum.to_list()
-```
-
-### Options & Smart Presets
-
-Configure requests with `ClaudeAgentSDK.Options` or use smart presets:
-
-```elixir
-# Manual configuration
-%ClaudeAgentSDK.Options{
-  max_turns: 10,              # Maximum conversation turns
-  system_prompt: "Custom...", # Override system prompt
-  output_format: :stream_json,# Output format
-  verbose: true,              # Enable verbose logging
-  cwd: "/path/to/project"     # Working directory
+opts = %ClaudeAgentSDK.Options{
+  mcp_servers: %{"calculator" => server}
 }
-
-# Smart presets with OptionBuilder
-alias ClaudeAgentSDK.OptionBuilder
-
-# Development: permissive settings, verbose logging
-options = OptionBuilder.build_development_options()
-
-# Production: restricted settings, minimal tools
-options = OptionBuilder.build_production_options()
-
-# Analysis: read-only tools for code analysis
-options = OptionBuilder.build_analysis_options()
-
-# Chat: simple conversations
-options = OptionBuilder.build_chat_options()
-
-# Auto-detect based on Mix.env()
-options = OptionBuilder.for_environment()
-
-# Custom combinations
-options = OptionBuilder.merge(:development, %{max_turns: 5})
-```
-
-#### Tools, Betas, and Sandbox Settings (v0.6.6)
-
-Python SDK parity options:
-
-```elixir
-alias ClaudeAgentSDK.Options
-
-%Options{
-  # Base tools set selection (separate from allowed_tools/disallowed_tools filtering)
-  tools: ["Read", "Edit"],                 # -> --tools Read,Edit
-  # tools: [],                             # -> --tools ""
-  # tools: %{type: :preset, preset: :claude_code}, # -> --tools default
-
-  # SDK beta feature flags
-  betas: ["context-1m-2025-08-07"],        # -> --betas context-1m-2025-08-07
-
-  # Sandbox settings (merged into --settings JSON when present)
-  settings: ~s({"foo":"bar"}),             # JSON string or file path
-  sandbox: %{enabled: true, excludedCommands: ["docker"]}
-}
-
-# Demos:
-# mix run.live examples/tools_and_betas_live.exs
-# mix run.live examples/sandbox_settings_live.exs
-```
-
-#### File Checkpointing + `rewind_files` (v0.6.6)
-
-Enable file checkpointing via an environment flag and rewind tracked files with a control request:
-
-```elixir
-alias ClaudeAgentSDK.{Client, Options}
-
-{:ok, client} = Client.start_link(%Options{enable_file_checkpointing: true})
-:ok = Client.send_message(client, "Edit a file, then stop.")
-
-# Capture the user message id from incoming frames (CLI payload varies by version).
-# Inspect `message.raw` for a UUID-like field and pass it to rewind_files/2.
-:ok = Client.rewind_files(client, user_message_id)
-```
-
-# Demo:
-# mix run.live examples/file_checkpointing_live.exs
-
-#### Structured outputs (JSON Schema)
-Request validated JSON responses using a schema (CLI must support `--json-schema`, as in the Python SDK 0.1.10 feature set):
-
-```elixir
-schema = %{
-  "type" => "object",
-  "properties" => %{"answer" => %{"type" => "string"}},
-  "required" => ["answer"]
-}
-
-options = %ClaudeAgentSDK.Options{
-  output_format: %{type: :json_schema, schema: schema}
-}
-
-# Demo (pretty prints structured_output)
-# mix run examples/structured_output_live.exs
-# Tip: set CLAUDE_CODE_STREAM_CLOSE_TIMEOUT=120000 for slow MCP/server startups.
-```
-
-### Message Types
-
-The SDK returns a stream of `ClaudeAgentSDK.Message` structs with these types:
-
-- **`:system`** - Session initialization (session_id, model, tools)
-- **`:user`** - User messages  
-- **`:assistant`** - Claude's responses (data includes `:message`, `:session_id`, and optional `:error` parsed from the CLI `message.error` field for rate-limit detection parity)
-- **`:result`** - Final result with cost/duration stats
-
-Handle assistant errors surfaced mid-stream to tailor UX (e.g., retry prompts on rate limits):
-
-```elixir
-case message do
-  %ClaudeAgentSDK.Message{type: :assistant, data: %{error: :rate_limit}} ->
-    IO.puts("Rate limited — prompt the user to retry or wait.")
-
-  %ClaudeAgentSDK.Message{type: :assistant, data: %{error: :authentication_failed}} ->
-    IO.puts("Auth error — show login helper or token setup instructions.")
-
-  %ClaudeAgentSDK.Message{type: :assistant} ->
-    :ok
-end
-
-# Demo: `mix run examples/assistant_error_live.exs`
-```
-
-### Message Processing
-
-Use the built-in `ContentExtractor` for easy message processing:
-
-```elixir
-alias ClaudeAgentSDK.ContentExtractor
-
-# Extract all assistant responses
-content = ClaudeAgentSDK.query("Your prompt")
-|> Stream.filter(fn msg -> msg.type == :assistant end)
-|> Stream.map(&ContentExtractor.extract_text/1)
-|> Enum.join("\n")
-
-# Check if message has text content
-if ContentExtractor.has_text?(message) do
-  text = ContentExtractor.extract_text(message)
-  IO.puts("Response: #{text}")
-end
-```
-
-## Authentication
-
-### Automatic Authentication (v0.1.0+)
-
-The SDK now provides automatic token management with the AuthManager:
-
-```bash
-# One-time setup (requires Claude subscription)
-$ mix claude.setup_token
-```
-
-This generates a long-lived OAuth token (1 year) and stores it securely. The SDK automatically uses this token for all queries.
-
-### Environment Variable (Recommended for CI/CD)
-
-```bash
-# Set OAuth token
-export CLAUDE_AGENT_OAUTH_TOKEN=sk-ant-oat01-your-token-here
-
-# Or use API key (legacy)
-export ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
-```
-
-The SDK automatically detects and uses these environment variables.
-
-### Legacy: Manual CLI Login
-
-```bash
-# Still supported but requires re-authentication
-$ claude login
-```
-
-This SDK also supports your already-authenticated Claude CLI session.
-
-### Authentication Checking
-
-Use `AuthManager` to check status:
-
-```elixir
-alias ClaudeAgentSDK.AuthManager
-
-# Check authentication status
-status = AuthManager.status()
-# => %{
-#   authenticated: true,
-#   provider: :anthropic,
-#   token_present: true,
-#   expires_at: ~U[2026-10-07 ...],
-#   time_until_expiry_hours: 8760.0
-# }
-
-# Ensure authenticated (auto-setup if needed)
-:ok = AuthManager.ensure_authenticated()
-```
-
-## Model Selection (v0.1.0+)
-
-Choose the best Claude model for your task:
-
-```elixir
-alias ClaudeAgentSDK.OptionBuilder
-
-# Opus - Most capable, complex reasoning
-options = OptionBuilder.with_opus()
-ClaudeAgentSDK.query("Design a complex system architecture", options)
-
-# Sonnet - Balanced, cost-effective (default)
-options = OptionBuilder.with_sonnet()
-ClaudeAgentSDK.query("Review this code", options)
-
-# Haiku - Fastest, lowest cost
-options = OptionBuilder.with_haiku()
-ClaudeAgentSDK.query("What is 2+2?", options)
-
-# Custom model with automatic fallback
-options = %Options{
-  model: "opus",
-  fallback_model: "sonnet"  # If opus is overloaded
-}
-
-# Use specific model version
-options = %Options{
-  model: "claude-sonnet-4-5-20250929"
-}
-```
-
-## Custom Agents (v0.1.0+)
-
-Define specialized agents with custom prompts:
-
-```elixir
-# Define a security-focused agent
-options = %Options{
-  agents: %{
-    "security_reviewer" => %{
-      description: "Security vulnerability scanner",
-      prompt: """
-      You are a security expert specializing in OWASP Top 10.
-      Review code for vulnerabilities and provide specific fixes.
-      """
-    }
-  }
-}
-
-ClaudeAgentSDK.query("Review this authentication code", options)
-
-# Or use OptionBuilder helper
-options = OptionBuilder.build_analysis_options()
-|> OptionBuilder.with_agent("security_reviewer", %{
-  description: "Security expert",
-  prompt: "Review for OWASP Top 10 vulnerabilities"
-})
-```
-
-## Bidirectional Client (v0.3.0+)
-
-The `Client` GenServer provides bidirectional streaming communication with Claude Code, enabling hooks and interactive conversations:
-
-```elixir
-alias ClaudeAgentSDK.{Client, Options}
-
-# Start client
-{:ok, client} = Client.start_link(%Options{
-  allowed_tools: ["Bash", "Write", "Read"]
-})
-
-# Send message
-Client.send_message(client, "Create a hello.ex file")
-
-# Receive messages as stream
-Client.stream_messages(client)
-|> Stream.filter(&(&1.type == :assistant))
-|> Enum.each(&IO.inspect/1)
-
-# Stop client
-Client.stop(client)
-```
-
-**Features:**
-- Persistent bidirectional connection
-- Message streaming with backpressure
-- Control protocol support
-- Hook integration
-- Automatic cleanup
-
-## Hooks (v0.3.0+)
-
-Hooks are callback functions that execute at specific lifecycle events during Claude's execution, enabling security policies, context injection, and monitoring:
-
-```elixir
-alias ClaudeAgentSDK.{Client, Options}
-alias ClaudeAgentSDK.Hooks.{Matcher, Output}
-
-# Define a hook callback
-def check_bash_command(input, _tool_use_id, _context) do
-  case input do
-    %{"tool_name" => "Bash", "tool_input" => %{"command" => cmd}} ->
-      if String.contains?(cmd, "rm -rf") do
-        Output.deny("Dangerous command blocked")
-        |> Output.with_system_message("🔒 Security policy violation")
-      else
-        Output.allow()
-      end
-    _ -> %{}
-  end
-end
-
-# Configure hooks
-options = %Options{
-  allowed_tools: ["Bash", "Write", "Read"],
-  hooks: %{
-    # Block dangerous commands before execution
-    pre_tool_use: [
-      Matcher.new("Bash", [&check_bash_command/3])
-    ],
-    # Add context after operations
-    post_tool_use: [
-      Matcher.new("*", [&log_tool_usage/3])
-    ],
-    # Inject project context automatically
-    user_prompt_submit: [
-      Matcher.new(nil, [&add_project_context/3])
-    ]
-  }
-}
-
-# Start client with hooks
-{:ok, client} = Client.start_link(options)
-
-# Hooks automatically invoke when CLI triggers them
-Client.send_message(client, "Run a bash command")
-
-# The check_bash_command hook will be called before execution!
-Client.stream_messages(client) |> Enum.to_list()
-Client.stop(client)
-```
-
-Each matcher can override the default 60_000 ms timeout by passing `timeout_ms` (minimum 1 second) to `Matcher.new/3`; the sanitized value (floored to 1s) is included as `"timeout"` in the initialize payload and used to bound the hook callback `Task.yield/2`.
-
-```elixir
-# Tighten the pre-tool hook budget to 1.5s while leaving others at the 60s default
-Matcher.new("Bash", [&check_bash_command/3], timeout_ms: 1_500)
-```
-
-**Supported Hook Events:**
-- `pre_tool_use` - Before tool execution (can block)
-- `post_tool_use` - After tool execution (can add context)
-- `user_prompt_submit` - When user submits prompt (can add context)
-- `stop` - When agent finishes (can force continuation)
-- `subagent_stop` - When subagent finishes
-- `pre_compact` - Before context compaction
-
-**Hook Capabilities:**
-- Permission control (allow/deny/ask)
-- Context injection for intelligent conversations
-- Execution control (stop/continue)
-- Pattern-based tool matching with regex
-- Multiple hooks per event
-- Complete type safety with 102 passing tests
-- Error handling with timeouts
-
-See [HOOKS_GUIDE.md](HOOKS_GUIDE.md) for complete documentation, examples, and API reference.
-
-### Working Examples
-
-The SDK includes 5 complete hook examples demonstrating real-world patterns:
-
-```bash
-# 1. Basic command blocking with live CLI
-mix run examples/hooks/basic_bash_blocking.exs
-
-# 2. Auto-inject context into conversations
-mix run examples/hooks/context_injection.exs
-
-# 3. File access policy enforcement (tests hook logic)
-mix run examples/hooks/file_policy_enforcement.exs
-
-# 4. Comprehensive audit logging
-mix run examples/hooks/logging_and_audit.exs
-
-# 5. Complete workflow (all hooks together, per-matcher timeouts, live CLI)
-mix run examples/hooks/complete_workflow.exs
-```
-
-**Example Output:**
-- Shows hooks intercepting real tool usage
-- Demonstrates security policies in action
-- Displays audit logs and context injection
-- All examples include clear explanations
-
----
-
-## MCP Tool System (v0.4.0+)
-
-> **⚠️ Important:** SDK MCP servers require Claude Code CLI support (not yet available as of CLI v2.0.22). Our infrastructure is complete and will work automatically when CLI adds support. Use external MCP servers for now.
-
-Create in-process MCP tools without subprocess overhead using the `deftool` macro.
-
-```elixir
-defmodule MyTools do
-  use ClaudeAgentSDK.Tool
-
-  deftool :calculator,
-          "Performs calculations",
-          %{
-            type: "object",
-            properties: %{
-              expression: %{type: "string"}
-            },
-            required: ["expression"]
-          } do
-    def execute(%{"expression" => expr}) do
-      # Evaluate and return result
-      result = eval_math(expr)
-      {:ok, %{"content" => [%{"type" => "text", "text" => "Result: #{result}"}]}}
-    end
-
-    defp eval_math(expr), do: # ... implementation
-  end
-end
-
-# Create SDK MCP server
-server = ClaudeAgentSDK.create_sdk_mcp_server(
-  name: "my-tools",
-  version: "1.0.0",
-  tools: [MyTools.Calculator]
-)
-
-# Use in options
-options = Options.new(
-  mcp_config: %{"my-tools" => server}
-)
-```
-
-**Key benefits:**
-- Tools run in the same process (no subprocess overhead)
-- Easier debugging and testing
-- Direct function calls
-- Full Elixir ecosystem access
-
-**Example:**
-```bash
-mix run examples/advanced_features/sdk_mcp_live_demo.exs
 ```
 
 ---
 
-## Agent Definitions (v0.4.0+)
+## Orchestration (parallelism, pipelines, retry)
 
-Define multiple agent profiles and switch between them at runtime.
-
-```elixir
-alias ClaudeAgentSDK.{Agent, Options, Client}
-
-# Define agents
-code_agent = Agent.new(
-  name: :coder,
-  description: "Expert programmer",
-  prompt: "You are an expert programmer...",
-  allowed_tools: ["Read", "Write", "Bash"],
-  model: "claude-sonnet-4"
-)
-
-research_agent = Agent.new(
-  name: :researcher,
-  description: "Research specialist",
-  prompt: "You excel at research...",
-  allowed_tools: ["WebSearch", "WebFetch"],
-  model: "claude-opus-4"
-)
-
-# Configure options with multiple agents
-options = Options.new(
-  agents: %{
-    coder: code_agent,
-    researcher: research_agent
-  },
-  agent: :coder  # Start with coder
-)
-
-{:ok, client} = Client.start_link(options)
-
-# Switch agents at runtime
-Client.set_agent(client, :researcher)
-
-# Check current agent
-{:ok, current} = Client.get_agent(client)  # => {:ok, :researcher}
-
-# List available agents
-{:ok, agents} = Client.get_available_agents(client)  # => {:ok, [:coder, :researcher]}
-```
-
-**Key benefits:**
-- Specialized behavior for different tasks
-- Runtime agent switching
-- Context preservation
-- Per-agent tool and model configuration
-
-**Example:**
-```bash
-mix run examples/advanced_features/agents_live.exs
-```
-
----
-
-## Permission System (v0.4.0+)
-
-Control tool execution with fine-grained permission callbacks.
-
-```elixir
-alias ClaudeAgentSDK.{Options, Permission}
-alias ClaudeAgentSDK.Permission.{Context, Result}
-
-# Define permission callback
-permission_callback = fn context ->
-  case {context.tool_name, context.tool_input} do
-    {"Bash", %{"command" => cmd}} ->
-      if String.contains?(cmd, "rm -rf") do
-        Result.deny("Dangerous command blocked")
-      else
-        Result.allow()
-      end
-
-    {"Write", %{"file_path" => path}} ->
-      if String.starts_with?(path, "/etc/") do
-        # Redirect to safe location
-        safe_path = "/tmp/" <> Path.basename(path)
-        Result.allow(updated_input: %{context.tool_input | "file_path" => safe_path})
-      else
-        Result.allow()
-      end
-
-    _ ->
-      Result.allow()
-  end
-end
-
-# Use in options
-options = Options.new(
-  permission_mode: :default,
-  can_use_tool: permission_callback
-)
-
-{:ok, client} = Client.start_link(options)
-
-# Change mode at runtime
-Client.set_permission_mode(client, :plan)  # Require user approval
-Client.set_permission_mode(client, :accept_edits)  # Auto-allow edits
-Client.set_permission_mode(client, :bypass_permissions)  # Allow all
-```
-
-**Permission modes:**
-- `:default` - All tools checked by callback
-- `:accept_edits` - Edit operations auto-allowed
-- `:plan` - User approval required
-- `:bypass_permissions` - All tools allowed
-
-**Example:**
-```bash
-mix run examples/advanced_features/permissions_live.exs
-```
-
----
-
-## Control Protocol (v0.3.0+)
-
-The Control Protocol enables bidirectional communication between the Elixir SDK and Claude Code CLI for advanced features like hooks:
-
-**Protocol Messages:**
-- `control_request` - CLI requesting hook callback execution
-- `control_response` - Responses to control requests (success/error)
-- `initialize` - Setup with hooks configuration
-- `hook_callback` - Runtime hook invocation with context
-
-**Implemented in:**
-- `ClaudeAgentSDK.ControlProtocol.Protocol` - Message encoding/decoding
-- `ClaudeAgentSDK.Client` - Protocol handler and message router
-- `ClaudeAgentSDK.Hooks.Registry` - Callback ID management
-
-The protocol runs over the same stdin/stdout channel as regular messages, using JSON with type discrimination to route messages appropriately.
-
-## Concurrent Orchestration (v0.1.0+)
-
-Execute multiple queries in parallel for 3-5x speedup:
+For application-level workflows:
 
 ```elixir
 alias ClaudeAgentSDK.Orchestrator
 
-# Parallel execution
 queries = [
-  {"Analyze file1.ex", analysis_opts},
-  {"Analyze file2.ex", analysis_opts},
-  {"Analyze file3.ex", analysis_opts}
+  {"Analyze module A", %ClaudeAgentSDK.Options{max_turns: 3}},
+  {"Analyze module B", %ClaudeAgentSDK.Options{max_turns: 3}}
 ]
 
-{:ok, results} = Orchestrator.query_parallel(queries, max_concurrent: 3)
+{:ok, results} = Orchestrator.query_parallel(queries, max_concurrent: 2)
 
-Enum.each(results, fn result ->
-  IO.puts("Prompt: #{result.prompt}")
-  IO.puts("Success: #{result.success}")
-  IO.puts("Cost: $#{result.cost}")
-  IO.puts("Duration: #{result.duration_ms}ms")
-end)
+{:ok, final} =
+  Orchestrator.query_pipeline(
+    [
+      {"Summarize this code", %ClaudeAgentSDK.Options{}},
+      {"Suggest refactors", %ClaudeAgentSDK.Options{}}
+    ],
+    use_context: true
+  )
 
-# Pipeline workflows (output → next input)
-{:ok, final_result} = Orchestrator.query_pipeline([
-  {"Analyze code quality", analysis_opts},
-  {"Suggest refactorings", refactor_opts},
-  {"Generate tests for refactored code", test_opts}
-], use_context: true)
-
-# Retry with exponential backoff
-{:ok, result} = Orchestrator.query_with_retry(
-  prompt,
-  options,
-  max_retries: 3,
-  backoff_ms: 1000
-)
+{:ok, messages} =
+  Orchestrator.query_with_retry(
+    "Do a quick review",
+    %ClaudeAgentSDK.Options{},
+    max_retries: 3,
+    backoff_ms: 1_000
+  )
 ```
 
-## Session Persistence (v0.2.0+)
+---
 
-Save and resume Claude conversations across application restarts:
+## Session persistence
+
+`ClaudeAgentSDK.SessionStore` persists message histories and metadata.
 
 ```elixir
-alias ClaudeAgentSDK.{SessionStore, Session}
+alias ClaudeAgentSDK.{Session, SessionStore}
 
-# Start the session store
-{:ok, _pid} = SessionStore.start_link()
+{:ok, _} = SessionStore.start_link()
 
-# Execute a query
-messages = ClaudeAgentSDK.query("Build a user authentication system")
-|> Enum.to_list()
-
-# Save the session with tags
+messages = ClaudeAgentSDK.query("Draft an implementation plan") |> Enum.to_list()
 session_id = Session.extract_session_id(messages)
 
-:ok = SessionStore.save_session(session_id, messages,
-  tags: ["feature-dev", "auth", "important"],
-  description: "Building user authentication"
-)
+:ok =
+  SessionStore.save_session(session_id, messages,
+    tags: ["planning", "important"],
+    description: "Implementation plan draft"
+  )
 
-# Later... load and resume
 {:ok, session_data} = SessionStore.load_session(session_id)
-# session_data.messages - Full conversation history
-# session_data.metadata - Tags, cost, timestamps
-
-# Resume the conversation
-ClaudeAgentSDK.resume(session_id, "Now add password reset functionality")
-
-# Search sessions
-security_sessions = SessionStore.search(tags: ["auth", "security"])
-expensive_sessions = SessionStore.search(min_cost: 0.10)
-recent_sessions = SessionStore.search(after: ~D[2025-10-01])
-
-# Session forking - experiment with different approaches
-fork_options = %Options{
-  fork_session: true  # Creates new session ID, preserves context
-}
-
-ClaudeAgentSDK.resume(session_id, "Try a different approach", fork_options)
+sessions = SessionStore.search(tags: ["important"])
 ```
 
-## Error Handling
+---
 
-```elixir
-ClaudeAgentSDK.query("prompt")
-|> Enum.each(fn msg ->
-  case msg do
-    %{type: :result, subtype: :success} ->
-      IO.puts("✅ Success!")
-      
-    %{type: :result, subtype: error_type} when error_type in [:error_max_turns, :error_during_execution] ->
-      IO.puts("❌ Error: #{error_type}")
-      
-    _ -> 
-      # Process other message types
-  end
-end)
-```
+## Debugging and diagnostics
 
-## Architecture
-
-The SDK works by:
-1. Spawning the Claude CLI as a subprocess using `erlexec`
-2. Communicating via JSON messages over stdout/stderr  
-3. Parsing responses into Elixir structs
-4. Returning lazy Streams for efficient processing
-
-Key benefits:
-- ✅ Uses existing CLI authentication
-- ✅ Efficient streaming processing
-- ✅ No external JSON dependencies
-- ✅ Robust subprocess management with erlexec
-
-## Troubleshooting
-
-**Module not available error**: Run with `mix run` instead of plain `elixir`:
-```bash
-# ❌ Won't work
-elixir final_test.exs
-
-# ✅ Works
-mix run final_test.exs
-```
-
-**Authentication errors**: Make sure Claude CLI is authenticated:
-```bash
-claude login
-```
-
-**Process errors**: Ensure Claude CLI is installed:
-```bash
-npm install -g @anthropic-ai/claude-code
-```
-
-**Slow initialize responses (MCP/server startup)**: Increase the initialize wait by setting `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` (milliseconds). The value is converted to seconds with a 60-second floor and is useful when the CLI needs extra time to bring up MCP servers or slow environments.
-
-**CLI argument format errors**: Recent improvements have fixed common CLI format issues:
-- Output format: Now correctly uses `stream-json` instead of `stream_json`
-- Permission modes: Now correctly uses `acceptEdits` instead of `accept_edits`
-- These fixes ensure compatibility with the latest Claude CLI versions
-
-**Calls failing**: Confirm `claude login` succeeds, then rerun `mix run examples/basic_example.exs`.
-
-### Debug Mode
-
-Use `DebugMode` for detailed troubleshooting:
+### DebugMode
 
 ```elixir
 alias ClaudeAgentSDK.DebugMode
 
-# Run full diagnostics
 DebugMode.run_diagnostics()
-
-# Debug a specific query with timing
-messages = DebugMode.debug_query("Hello")
-
-# Benchmark performance
-results = DebugMode.benchmark("Test query", nil, 3)
-# Returns timing and cost statistics
-
-# Analyze message statistics
+messages = DebugMode.debug_query("Explain supervision trees")
 stats = DebugMode.analyze_messages(messages)
+bench = DebugMode.benchmark("hello", nil, 3)
 ```
 
-## Developer Tools
-
-The SDK includes four powerful modules to enhance your development experience:
-
-### 🔧 OptionBuilder - Smart Configuration
-Pre-configured option sets for common use cases:
-- `build_development_options()` - Permissive settings for dev work
-- `build_production_options()` - Secure settings for production  
-- `build_analysis_options()` - Read-only tools for code analysis
-- `build_chat_options()` - Simple conversation settings
-- `for_environment()` - Auto-detects based on Mix.env()
-- `merge/2` - Combine presets with custom options
-
-### 🔍 AuthChecker - Environment Validation  
-Prevents authentication errors with proactive checking:
-- `authenticated?/0` - Quick boolean check
-- `diagnose/0` - Full diagnostic with recommendations
-- `ensure_ready!/0` - Raises if not ready for queries
-- Helpful error messages and setup instructions
-
-### 📜 ContentExtractor - Message Processing
-Simplifies extracting text from complex message formats:
-- `extract_text/1` - Get text from any message type
-- `has_text?/1` - Check if message contains text content
-- Handles strings, arrays, tool responses gracefully
-- No more manual message parsing
-
-### 🐛 DebugMode - Troubleshooting Tools
-Comprehensive debugging and performance analysis:
-- `debug_query/2` - Execute queries with detailed logging
-- `run_diagnostics/0` - Full environment health check
-- `benchmark/3` - Performance testing with statistics
-- `analyze_messages/1` - Extract insights from message streams
-
-## Main Use Cases
-
-### 🔍 Code Analysis & Review
-```elixir
-# Analyze code quality and security with smart configuration
-alias ClaudeAgentSDK.{OptionBuilder, ContentExtractor}
-
-# Use analysis-specific options (read-only tools)
-options = OptionBuilder.build_analysis_options()
-
-analysis_result = ClaudeAgentSDK.query("""
-Review this code for security vulnerabilities and performance issues:
-#{File.read!("lib/user_auth.ex")}
-""", options)
-|> Stream.filter(&(&1.type == :assistant))
-|> Stream.map(&ContentExtractor.extract_text/1)
-|> Enum.join("\n")
-
-IO.puts("📊 Analysis Result:\n#{analysis_result}")
-```
-
-### 📚 Documentation Generation **(FUTURE/PLANNED)**
-```elixir
-# Generate API documentation - FUTURE/PLANNED
-ClaudeAgentSDK.query("Generate comprehensive docs for this module: #{file_content}")
-|> Enum.filter(&(&1.type == :assistant))
-|> Enum.map(&extract_content/1)  # extract_content helper not yet implemented
-```
-
-### 🧪 Test Generation **(FUTURE/PLANNED)**
-```elixir
-# Create test suites automatically - FUTURE/PLANNED
-options = %ClaudeAgentSDK.Options{max_turns: 5}
-ClaudeAgentSDK.query("Generate ExUnit tests for this module", options)
-```
-
-### 🔄 Code Refactoring **(FUTURE/PLANNED)**
-```elixir
-# Multi-step refactoring with session management - FUTURE/PLANNED
-session_id = start_refactoring_session("lib/legacy_code.ex")  # Not yet implemented
-ClaudeAgentSDK.resume(session_id, "Now optimize for performance")
-ClaudeAgentSDK.resume(session_id, "Add proper error handling")
-```
-
-### 🤖 Interactive Development Assistant **(FUTURE/PLANNED)**
-```elixir
-# Pair programming sessions - FUTURE/PLANNED
-ClaudeAgentSDK.query("I'm working on a GenServer. Help me implement proper state management")
-|> Stream.each(&IO.puts(extract_content(&1)))  # extract_content helper not yet implemented
-|> Stream.run()
-```
-
-### 🏗️ Project Scaffolding **(FUTURE/PLANNED)**
-```elixir
-# Generate boilerplate code - FUTURE/PLANNED  
-ClaudeAgentSDK.query("""
-Create a Phoenix LiveView component for user authentication with:
-- Login/logout functionality  
-- Session management
-- Form validation
-""")
-```
-
-## Testing and Development
-
-### Environment Configuration
-
-The SDK supports different configurations for different environments:
-
-- **Test Environment**: Mocks enabled by default (`config/test.exs`)
-- **Development Environment**: Real API calls (`config/dev.exs`)
-- **Production Environment**: Real API calls (`config/prod.exs`)
-
-### Writing Tests with Mocks
+### Content extraction helper
 
 ```elixir
-defmodule MyAppTest do
-  use ExUnit.Case
-  alias ClaudeAgentSDK.Mock
+alias ClaudeAgentSDK.ContentExtractor
 
-  setup do
-    # Clear any existing mock responses
-    Mock.clear_responses()
-    :ok
-  end
-
-  test "my feature works correctly" do
-    # Set up mock response
-    Mock.set_response("analyze", [
-      %{
-        "type" => "assistant",
-        "message" => %{"content" => "Analysis complete: No issues found."}
-      }
-    ])
-    
-    # Your code that uses ClaudeAgentSDK
-    result = MyApp.analyze_code("def hello, do: :world")
-    
-    # Assertions
-    assert result == "Analysis complete: No issues found."
-  end
-end
+text =
+  ClaudeAgentSDK.query("Write a haiku about BEAM")
+  |> Stream.filter(&ContentExtractor.has_text?/1)
+  |> Stream.map(&ContentExtractor.extract_text/1)
+  |> Enum.join("\n")
 ```
 
-## 📖 Comprehensive Documentation
+---
 
-For detailed documentation covering all features, advanced patterns, and integration examples, see:
+## Mix tasks (included)
 
-**[📋 COMPREHENSIVE_MANUAL.md](COMPREHENSIVE_MANUAL.md)**
+This repository ships operational Mix tasks you can run directly:
 
-The comprehensive manual includes:
-- 🏗️ **Architecture Deep Dive** - Internal workings and design patterns ✅ **IMPLEMENTED**
-- ⚙️ **Advanced Configuration** - MCP support, security, performance tuning **(FUTURE/PLANNED)**
-- 🔧 **Integration Patterns** - Phoenix LiveView, OTP applications, task pipelines **(FUTURE/PLANNED)**
-- 🛡️ **Security & Best Practices** - Input validation, permission management **(FUTURE/PLANNED)**
-- 🐛 **Troubleshooting Guide** - Common issues and debugging techniques **(FUTURE/PLANNED)**
-- 💡 **Real-World Examples** - Code analysis, test generation, refactoring tools **(FUTURE/PLANNED)**
+* `mix claude.setup_token`
+  Interactive OAuth token acquisition + persistence (uses `claude setup-token`)
+
+* `mix showcase [--live]`
+  Run a comprehensive feature demo in mock mode (default) or live mode
+
+* `mix run.live path/to/script.exs [args...]`
+  Runs scripts with mocking disabled (live API calls)
+
+* `mix test.live [mix test args...]`
+  Runs tests with mocking disabled; defaults to `--only live` unless overridden
+
+---
+
+## Security and operational guidance
+
+* Prefer `permission_mode: :plan` or explicit `allowed_tools` in production workloads.
+* Treat tokens as secrets; the default token store writes `~/.claude_sdk/token.json` with user-only permissions.
+* Use hooks and/or the permission callback to centrally enforce policy (file access rules, command allow-lists, audit logging).
+* When running live in CI, use environment variables and avoid interactive flows.
+
+---
+
+## Repository reference links
+
+If you are browsing this repository, these files are the best entry points:
+
+* Core public API: `claude_agent_sdk.ex`
+* Options and CLI flag mapping: `claude_agent_sdk/options.ex`
+* Query routing: `claude_agent_sdk/query.ex`
+* Streaming API and session backend: `claude_agent_sdk/streaming.ex`, `claude_agent_sdk/streaming/session.ex`
+* Control client (hooks, permissions, MCP): `claude_agent_sdk/client.ex`
+* Hooks system: `claude_agent_sdk/hooks/*`
+* Permission system: `claude_agent_sdk/permission/*`
+* Auth tooling: `claude_agent_sdk/auth_manager.ex`, `claude_agent_sdk/auth_checker.ex`, `claude_agent_sdk/auth/*`
+* Orchestration: `claude_agent_sdk/orchestrator.ex`
+* Persistence: `claude_agent_sdk/session_store.ex`
+* Diagnostics: `claude_agent_sdk/debug_mode.ex`
+
+---
 
 ## License
 

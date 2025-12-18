@@ -1,82 +1,93 @@
-<svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Claude Agent SDK for Elixir logo">
+<svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Claude Agent SDK Logo">
   <defs>
-    <linearGradient id="hex-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#120C2C"/>
-      <stop offset="55%" stop-color="#3B1F66"/>
-      <stop offset="100%" stop-color="#7A4BFF"/>
+    <!-- Main Body Gradient: Deep Elixir Purple -->
+    <linearGradient id="body-grad" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#36205D"/>
+      <stop offset="100%" stop-color="#1A0F2E"/>
     </linearGradient>
-    <linearGradient id="inner-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1D133F"/>
-      <stop offset="100%" stop-color="#261A4F"/>
+
+    <!-- Stroke Gradient: Subtle highlighting -->
+    <linearGradient id="stroke-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#704D9D"/>
+      <stop offset="100%" stop-color="#3E2663"/>
     </linearGradient>
-    <linearGradient id="droplet-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#AC76FF"/>
-      <stop offset="50%" stop-color="#D18BFF"/>
-      <stop offset="100%" stop-color="#F5D8FF"/>
+
+    <!-- The "Intelligence" Glow (Cyan/White) -->
+    <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="40%" stop-color="#66F9FF"/>
+      <stop offset="100%" stop-color="#66F9FF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Network Gradient (Magenta to Purple) -->
+    <linearGradient id="network-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#D799FF"/>
+      <stop offset="100%" stop-color="#8F6BFF"/>
     </linearGradient>
-    <filter id="hex-shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#0B051A" flood-opacity="0.55"/>
-    </filter>
-    <filter id="symbol-glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="6" result="blur"/>
-      <feColorMatrix type="matrix" values="
-        0 0 0 0 0.71
-        0 0 0 0 0.46
-        0 0 0 0 1
-        0 0 0 0.35 0"/>
-      <feBlend in="SourceGraphic" in2="blur" mode="screen"/>
+
+    <!-- Soft Shadow for depth -->
+    <filter id="soft-shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#000" flood-opacity="0.4"/>
     </filter>
   </defs>
 
-  <!-- Outer hexagon -->
+  <!-- 1. The Container: Rounded Hexagon -->
   <path
-    d="M110 10 L198 60 L198 160 L110 210 L22 160 L22 60 Z"
-    fill="url(#hex-gradient)"
-    stroke="#A47DFF"
-    stroke-width="1.5"
-    filter="url(#hex-shadow)"
+    d="M110 15 
+       L192.2 62.5 
+       L192.2 157.5 
+       L110 205 
+       L27.8 157.5 
+       L27.8 62.5 
+       Z"
+    fill="url(#body-grad)"
+    stroke="url(#stroke-grad)"
+    stroke-width="2"
+    filter="url(#soft-shadow)"
   />
 
-  <!-- Inner recessed hex -->
-  <path
-    d="M110 36 L174 73 L174 147 L110 184 L46 147 L46 73 Z"
-    fill="url(#inner-gradient)"
-    stroke="#6C4ACF"
-    stroke-width="1.2"
-    opacity="0.95"
-  />
-
-  <!-- Orbiting nodes representing tool/agent coordination -->
-  <g stroke="#8F6BFF" stroke-width="1.8" opacity="0.85">
-    <path d="M70 120 Q110 60 150 120 Q110 180 70 120 Z" fill="none"/>
-    <path d="M78 105 Q110 150 142 105" fill="none" opacity="0.75"/>
-    <circle cx="70" cy="120" r="5" fill="#E9D7FF"/>
-    <circle cx="150" cy="120" r="5" fill="#E9D7FF"/>
-    <circle cx="110" cy="65" r="6" fill="#E9D7FF"/>
+  <!-- 2. Technical Detail: Background Circuitry (Subtle) -->
+  <g stroke="#533980" stroke-width="1.5" opacity="0.2" fill="none">
+    <path d="M110 205 L110 160"/>
+    <path d="M27.8 62.5 L70 90"/>
+    <path d="M192.2 62.5 L150 90"/>
+    <circle cx="110" cy="110" r="60" stroke-dasharray="4 6"/>
   </g>
 
-  <!-- Central Elixir-inspired droplet with circuitry -->
-  <g filter="url(#symbol-glow)">
-    <!-- Central glyph inspired by Elixir + circuit hub -->
-    <path
-      d="M110 86 L96 118 L110 168 L124 118 Z"
-      fill="url(#droplet-gradient)"
-      stroke="#F8E7FF"
-      stroke-width="1.2"
-      opacity="0.95"
-    />
-
-    <!-- Concentric arcs -->
-    <g stroke="#3B1F66" stroke-width="2" fill="none" opacity="0.7">
-      <path d="M98 125 Q110 105 122 125"/>
-      <path d="M103 140 Q110 130 117 140"/>
+  <!-- 3. The Symbol: Elixir Drop Network -->
+  <!-- This translates the iconic drop shape into a node-graph -->
+  <g transform="translate(110, 118)">
+    
+    <!-- Connectivity Lines -->
+    <g stroke="#A37ACC" stroke-width="3" stroke-linecap="round">
+      <!-- Left to Top -->
+      <path d="M-35 15 Q-30 -20 0 -65"/>
+      <!-- Right to Top -->
+      <path d="M35 15 Q30 -20 0 -65"/>
+      <!-- Left to Right (Base) -->
+      <path d="M-35 15 Q0 35 35 15"/>
+      <!-- Center connections -->
+      <line x1="0" y1="-10" x2="-35" y2="15" stroke-width="1.5" opacity="0.6"/>
+      <line x1="0" y1="-10" x2="35" y2="15" stroke-width="1.5" opacity="0.6"/>
+      <line x1="0" y1="-10" x2="0" y2="-65" stroke-width="1.5" opacity="0.6"/>
     </g>
 
-    <!-- Node anchors -->
-    <circle cx="110" cy="100" r="4" fill="#F7EAFF"/>
-    <circle cx="100" cy="136" r="3" fill="#F7EAFF"/>
-    <circle cx="120" cy="136" r="3" fill="#F7EAFF"/>
-    <circle cx="110" cy="158" r="4" fill="#F7EAFF"/>
+    <!-- The Nodes (Agents/Processes) -->
+    <!-- Top Node (The Source/CLI) -->
+    <circle cx="0" cy="-65" r="7" fill="url(#network-grad)"/>
+    
+    <!-- Bottom Left Node (Input) -->
+    <circle cx="-35" cy="15" r="7" fill="url(#network-grad)"/>
+    
+    <!-- Bottom Right Node (Output) -->
+    <circle cx="35" cy="15" r="7" fill="url(#network-grad)"/>
+
+    <!-- 4. The Core Intelligence (Claude) -->
+    <!-- Central processing node with AI glow -->
+    <circle cx="0" cy="-10" r="14" fill="#2E1A4F" stroke="#7A4BFF" stroke-width="1.5"/>
+    <circle cx="0" cy="-10" r="5" fill="#FFFFFF"/>
+    <!-- The glow effect -->
+    <circle cx="0" cy="-10" r="12" fill="url(#core-glow)" opacity="0.6" style="mix-blend-mode: screen;"/>
   </g>
 
 </svg>
