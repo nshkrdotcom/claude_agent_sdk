@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.7] - 2025-12-17
+
+### Added
+
+- `ClaudeAgentSDK.CLI.recommended_version/0` - Returns recommended CLI version (2.0.72)
+- `ClaudeAgentSDK.Message.user_uuid/1` - Helper to extract checkpoint UUID from user messages
+- Unit tests for user message UUID parsing
+- Integration test for filesystem agents loaded via `setting_sources`
+- Docker test infrastructure (`Dockerfile.test`, `scripts/test-docker.sh`)
+
+### Changed
+
+- Improved documentation for file checkpointing workflow
+
+### Python SDK Parity
+
+- Ports changes from Python SDK f834ba9..0434749 (v0.1.17-v0.1.18)
+- Adds UUID parsing test parity with `test_parse_user_message_with_uuid`
+- Adds CLI version tracking parity with `_cli_version.py`
+- Adds filesystem agents regression test parity with `test_filesystem_agent_loading`
+
 ## [0.6.6] - 2025-12-14
 
 ### Added

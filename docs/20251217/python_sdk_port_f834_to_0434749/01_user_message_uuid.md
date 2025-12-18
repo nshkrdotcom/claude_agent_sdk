@@ -2,11 +2,12 @@
 
 ## Background
 
-The Claude Code control protocol supports **file checkpointing** (`CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true`) and **rewind** via a `rewind_files` control request that targets a specific **user message id** (checkpoint).
+The Claude Code control protocol supports **file checkpointing** (`enable_file_checkpointing: true`) and **rewind** via a `rewind_files` control request that targets a specific **user message id** (checkpoint).
 
 In the Python SDK, issue #414 prompted a devX improvement:
-- user message frames can include a top-level `"uuid"`
-- the SDK now surfaces that value on the typed `UserMessage` object
+- User message frames can include a top-level `"uuid"` field
+- The SDK surfaces that value on the typed `UserMessage` object
+- The uuid is only present when `--replay-user-messages` is passed to the CLI
 
 This makes it easy to capture checkpoint ids while streaming and later call `rewind_files(uuid)`.
 
@@ -14,92 +15,118 @@ This makes it easy to capture checkpoint ids while streaming and later call `rew
 
 Files touched:
 
-- `src/claude_agent_sdk/types.py`
+- `src/claude_agent_sdk/types.py:565`
   - `UserMessage` dataclass gains `uuid: str | None = None`
-- `src/claude_agent_sdk/_internal/message_parser.py`
+- `src/claude_agent_sdk/_internal/message_parser.py:51,78,83`
   - On `"type": "user"` messages: `uuid = data.get("uuid")` → `UserMessage(uuid=uuid, ...)`
-- `tests/test_message_parser.py`
-  - Adds `test_parse_user_message_with_uuid`
-- `src/claude_agent_sdk/client.py`
-  - `rewind_files()` docs explain how to obtain and use the uuid (notably via `--replay-user-messages`)
+- `tests/test_message_parser.py:34-46`
+  - Adds `test_parse_user_message_with_uuid` (unit test, no CLI needed)
+- `src/claude_agent_sdk/client.py:264-297`
+  - Updates `rewind_files()` docstring to clarify:
+    - Requires `enable_file_checkpointing=True`
+    - Requires `extra_args={"replay-user-messages": None}` to receive `uuid` in UserMessage objects
+    - Example code shows `if isinstance(msg, UserMessage) and msg.uuid:` pattern
+
+**Key insight from Python docstring change:** The uuid field is only populated when `--replay-user-messages` is used. Without it, user messages may not include the uuid.
 
 ## Elixir Current State
 
 ### What already works
 
-- `ClaudeAgentSDK.Message` extracts `"uuid"` into `%Message{type: :user}.data.uuid`:
-  - `lib/claude_agent_sdk/message.ex` includes `maybe_put_uuid/2`
-- The streaming client command line includes `--replay-user-messages` by default in streaming mode:
-  - `lib/claude_agent_sdk/client.ex` (command builder)
+- **UUID parsing:** `ClaudeAgentSDK.Message` extracts `"uuid"` into `%Message{type: :user}.data.uuid`:
+  - `lib/claude_agent_sdk/message.ex:276-284` - `parse_by_type(message, :user, raw)` calls `maybe_put_uuid/2`
+  - `lib/claude_agent_sdk/message.ex:347-351` - `maybe_put_uuid/2` extracts uuid when present and non-empty
 
-### What’s missing (parity gaps)
+- **`--replay-user-messages` already included:** The streaming client always includes this flag:
+  - `lib/claude_agent_sdk/client.ex:1417` - hardcoded in `build_cli_command/1` args list
+  - This means Elixir users don't need `extra_args` like Python users do
 
-1. **Regression test coverage**
-   - No ExUnit test asserts that user message `"uuid"` is parsed and surfaced.
-2. **Documented, stable API surface**
-   - Current public docs/examples do not consistently instruct users to use `message.data.uuid` as the checkpoint id.
-3. **Ergonomics**
-   - Users currently need to “know” where the id lives (`message.data.uuid`) and fall back to digging in `message.raw`.
+### What's missing (parity gaps)
+
+1. **Unit test coverage**
+   - No ExUnit test asserts that `Message.from_json/1` parses user message `"uuid"` into `data.uuid`
+
+2. **Optional ergonomic helper**
+   - No `Message.user_uuid/1` helper function (Python doesn't have one either, but Elixir tends toward helper functions)
+
+3. **Documentation clarity**
+   - Existing `examples/file_checkpointing_live.exs` works but searches multiple candidate fields
+   - Could be simplified to prefer `message.data.uuid` directly
 
 ## Port Design (Elixir)
 
-### 1) Define a stable accessor
-
-Add a small helper to reduce “hunt the id” friction:
-
-- `ClaudeAgentSDK.Message.user_uuid/1 :: Message.t() -> String.t() | nil`
-  - returns `message.data.uuid` when present
-  - otherwise checks `message.raw["uuid"]` (defensive)
-
-This keeps the core message shape stable while providing a discoverable API.
-
-### 2) Add a unit test for parsing
+### 1) Add a unit test for parsing (required)
 
 Add an ExUnit test that covers:
 
 - `Message.from_json/1` parsing a `"type":"user"` payload that contains `"uuid"`
-- assert `%Message{type: :user, data: %{uuid: "msg-..."}}`
+- Assert `%Message{type: :user, data: %{uuid: "msg-..."}}`
 
-This is independent of live CLI access and should run in default CI.
+This is independent of live CLI access and should run in default CI (no tags needed).
 
-Suggested fixture JSON:
+Suggested test location: `test/claude_agent_sdk/message_test.exs` (add to existing or create new)
 
-```json
-{
-  "type": "user",
-  "uuid": "msg-abc123-def456",
-  "message": {"content": [{"type": "text", "text": "Hello"}]}
-}
+```elixir
+test "parses uuid from user message" do
+  json = ~s({"type":"user","uuid":"msg-abc123-def456","message":{"content":[{"type":"text","text":"Hello"}]}})
+  assert {:ok, message} = Message.from_json(json)
+  assert message.type == :user
+  assert message.data.uuid == "msg-abc123-def456"
+end
+
+test "handles user message without uuid" do
+  json = ~s({"type":"user","message":{"content":[{"type":"text","text":"Hello"}]}})
+  assert {:ok, message} = Message.from_json(json)
+  assert message.type == :user
+  refute Map.has_key?(message.data, :uuid)
+end
 ```
 
-### 3) Update file-checkpointing docs & example(s)
+### 2) Optional: Add `user_uuid/1` helper
 
-Update the public guidance so the recommended path is:
+Add a small helper to `ClaudeAgentSDK.Message`:
 
-1. Start a client with `%Options{enable_file_checkpointing: true, ...}`
-2. While streaming, capture the checkpoint id from `%Message{type: :user}`:
-   - `ClaudeAgentSDK.Message.user_uuid(message)` (preferred)
-   - or `message.data.uuid` (direct)
-3. Call `Client.rewind_files(client, checkpoint_id)`
+```elixir
+@doc """
+Returns the checkpoint UUID from a user message, or nil.
+"""
+@spec user_uuid(t()) :: String.t() | nil
+def user_uuid(%__MODULE__{type: :user, data: %{uuid: uuid}}) when is_binary(uuid), do: uuid
+def user_uuid(%__MODULE__{type: :user, raw: %{"uuid" => uuid}}) when is_binary(uuid), do: uuid
+def user_uuid(_), do: nil
+```
 
-The existing live example (`examples/file_checkpointing_live.exs`) already searches multiple candidates; it can be simplified to prefer `Message.user_uuid/1` and only fall back to raw inspection as a last resort.
+This is purely ergonomic; `message.data.uuid` works fine without it.
+
+### 3) Update file-checkpointing example (optional cleanup)
+
+The existing `examples/file_checkpointing_live.exs` already works. Minor cleanup could:
+- Simplify to prefer `message.data.uuid` directly
+- Add a comment noting that uuid is present because `--replay-user-messages` is included by default
 
 ## Proposed Elixir Touchpoints
 
-- Update (docs/tests): `lib/claude_agent_sdk/message.ex` (already parses uuid; add `user_uuid/1` helper)
-- New: `test/claude_agent_sdk/message_uuid_test.exs` (or add to an existing message parsing test module)
-- Update (docs): `examples/file_checkpointing_live.exs` to prefer the helper and document the expectation that user frames include `"uuid"` when replay-user-messages is enabled
+| File | Change |
+|------|--------|
+| `test/claude_agent_sdk/message_test.exs` | Add unit tests for uuid parsing |
+| `lib/claude_agent_sdk/message.ex` | (Optional) Add `user_uuid/1` helper |
+| `examples/file_checkpointing_live.exs` | (Optional) Simplify uuid extraction |
 
 ## Compatibility Notes
 
-- The `"uuid"` field is optional and should remain so in Elixir.
-- Existing code that ignores `uuid` is unaffected.
-- If a user disables `--replay-user-messages` in the future (or uses a transport path that doesn’t include it), `uuid` may not appear; helpers must tolerate `nil`.
+- The `"uuid"` field is optional in the wire protocol and should remain so in Elixir
+- Existing code that ignores `uuid` is unaffected
+- Elixir already includes `--replay-user-messages` by default, so users don't need extra config (unlike Python)
+- If a future transport path doesn't include `--replay-user-messages`, uuid may be absent; code must tolerate `nil`
 
 ## Test Plan
 
-- Unit:
-  - `Message.from_json/1` parses user uuid into `data.uuid`
-  - helper `Message.user_uuid/1` returns it
-- Live/integration (optional):
-  - A targeted “file checkpointing” integration test can assert at least one user message contains a uuid when file checkpointing is enabled.
+| Test type | What to test | Tag |
+|-----------|--------------|-----|
+| Unit | `Message.from_json/1` parses user uuid into `data.uuid` | (none - runs by default) |
+| Unit | `Message.from_json/1` handles missing uuid gracefully | (none - runs by default) |
+| Unit (optional) | `Message.user_uuid/1` returns uuid or nil | (none - runs by default) |
+
+## Risks / Open Questions
+
+None significant. The core parsing already works; this is purely about test coverage and optional ergonomics.

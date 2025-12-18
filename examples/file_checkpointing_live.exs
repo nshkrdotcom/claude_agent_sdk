@@ -3,6 +3,7 @@
 Code.require_file(Path.expand("support/example_helper.exs", __DIR__))
 
 alias ClaudeAgentSDK.{CLI, Client, ContentExtractor, Options}
+alias ClaudeAgentSDK.Message
 alias Examples.Support
 
 defmodule FileCheckpointingLive do
@@ -39,14 +40,14 @@ defmodule FileCheckpointingLive do
     checkpoint_id =
       run_step(
         client,
-        "Create a file demo.txt with the single line: one. Then say done.",
+        "Create the file at #{file_path} with the single line: one. Use that exact path. Then say done.",
         file_path
       )
 
     _ =
       run_step(
         client,
-        "Replace demo.txt so it contains the single line: two. Then say done.",
+        "Replace the file at #{file_path} so it contains the single line: two. Use that exact path. Then say done.",
         file_path
       )
 
@@ -59,12 +60,17 @@ defmodule FileCheckpointingLive do
     task =
       Task.async(fn ->
         Client.stream_messages(client)
-        |> Enum.reduce_while(nil, fn message, acc ->
+        |> Enum.reduce_while(%{checkpoint_id: nil}, fn message, acc ->
           case message do
             %{type: :user} ->
               candidates = extract_user_message_id_candidates(message)
               Enum.each(candidates, &IO.puts("Captured user_message_id candidate: #{&1}"))
-              {:cont, List.first(candidates) || acc}
+
+              if acc.checkpoint_id do
+                {:cont, acc}
+              else
+                {:cont, %{acc | checkpoint_id: List.first(candidates)}}
+              end
 
             %{type: :assistant} ->
               text =
@@ -76,7 +82,7 @@ defmodule FileCheckpointingLive do
               {:cont, acc}
 
             %{type: :result} ->
-              {:halt, acc}
+              {:halt, acc.checkpoint_id}
 
             _ ->
               {:cont, acc}
@@ -85,7 +91,7 @@ defmodule FileCheckpointingLive do
       end)
 
     Process.sleep(50)
-    :ok = Client.send_message(client, prompt)
+    :ok = Client.query(client, prompt)
     user_message_id = Task.await(task, 180_000)
 
     print_file(file_path, "demo.txt after step")
@@ -94,6 +100,7 @@ defmodule FileCheckpointingLive do
 
   defp extract_user_message_id_candidates(message) do
     [
+      Message.user_uuid(message),
       get_in(message.data || %{}, [:uuid]),
       get_in(message.data || %{}, [:message, "id"]),
       get_in(message.raw, ["message", "id"]),
@@ -119,6 +126,9 @@ defmodule FileCheckpointingLive do
   defp attempt_rewind(_client, nil, file_path) do
     IO.puts("""
     No user_message_id found in incoming frames.
+
+    The CLI should emit a per-user-message UUID (when `--replay-user-messages` is enabled),
+    which the SDK parses into `%ClaudeAgentSDK.Message{type: :user}.data.uuid`.
 
     Inspect `%ClaudeAgentSDK.Message{type: :user}.raw` while running this example to find the correct ID field
     to pass to Client.rewind_files/2.

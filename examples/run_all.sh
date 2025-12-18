@@ -81,6 +81,7 @@ examples=(
   "examples/runtime_control/control_parity_live.exs"
   "examples/assistant_error_live.exs"
   "examples/file_checkpointing_live.exs"
+  "examples/filesystem_agents_live.exs"
 )
 
 for ex in "${examples[@]}"; do

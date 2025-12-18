@@ -1,0 +1,12 @@
+.git
+_build
+deps
+cover
+.elixir_ls
+*.beam
+*.ez
+*.log
+.DS_Store
+priv/_bundled/
+doc/
+

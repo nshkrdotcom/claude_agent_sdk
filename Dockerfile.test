@@ -1,0 +1,34 @@
+# Dockerfile.test - Run SDK tests in containerized environment
+FROM hexpm/elixir:1.18.3-erlang-27.3.3-debian-bookworm-20251208
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    build-essential \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code CLI
+RUN curl -fsSL https://claude.ai/install.sh | bash
+RUN install -m 0755 /root/.local/bin/claude /usr/local/bin/claude
+
+RUN useradd -m -u 1000 app
+
+RUN mkdir -p /app && chown -R app:app /app
+WORKDIR /app
+COPY --chown=app:app . .
+
+USER app
+ENV HOME="/home/app"
+ENV SHELL="/bin/bash"
+
+# Install Elixir tooling and dependencies
+RUN mix local.hex --force && mix local.rebar --force
+RUN mix deps.get
+RUN mix compile --warnings-as-errors
+
+# Verify CLI installation
+RUN claude -v
+
+# Default: run unit tests
+CMD ["mix", "test"]

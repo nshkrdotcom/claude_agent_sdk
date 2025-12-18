@@ -37,6 +37,7 @@ These examples are **live** (they talk to the real Claude Code CLI).
 - `examples/runtime_control/control_parity_live.exs` — Query/control parity + runtime permission mode switching
 - `examples/assistant_error_live.exs` — assistant error metadata (streaming vs aggregated)
 - `examples/file_checkpointing_live.exs` — `rewind_files/2` (best-effort; depends on CLI support)
+- `examples/filesystem_agents_live.exs` — filesystem agents loaded via `setting_sources: ["project"]`
 
 ## Archived / Mock
 

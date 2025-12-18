@@ -1,6 +1,6 @@
 # Port: Filesystem Agents + `--setting-sources` Regression Coverage (Issue #406 Class)
 
-## Background (Python)
+## Background (Python, commit a0ce44a)
 
 Python added an end-to-end regression for a failure mode described in issue #406:
 
@@ -10,148 +10,211 @@ Python added an end-to-end regression for a failure mode described in issue #406
   - ResultMessage
 
 Python mitigations in v0.1.18:
-- Adds a Docker harness to reproduce container-specific behavior
-- Adds `e2e-tests/test_agents_and_settings.py::test_filesystem_agent_loading`
-- Adds an example `examples/filesystem_agents.py`
-- Adds a fixture agent file `.claude/agents/test-agent.md`
+- Adds `e2e-tests/test_agents_and_settings.py::test_filesystem_agent_loading` (lines 28-96)
+- Adds example `examples/filesystem_agents.py` (107 lines)
+- Adds fixture `.claude/agents/test-agent.md` (9 lines)
+- Adds Docker harness (`Dockerfile.test`, `scripts/test-docker.sh`) to reproduce container behavior
 
 ## Elixir Current State
 
-### Good news
+### What already works
 
-- Elixir supports `Options.setting_sources` and emits `--setting-sources` (default empty string).
-- Elixir supports inline `Options.agents` (`--agents`) and active `--agent`.
-- CLI discovery already checks `~/.claude/local/claude` and supports an optional `priv/_bundled/claude`.
+- **`setting_sources` option:** `Options.setting_sources` at `lib/claude_agent_sdk/options.ex:85`
+  - Emits `--setting-sources` flag via `add_setting_sources_args/2` at lines 635-641
+  - Defaults to empty string `""` (no filesystem settings loaded)
 
-### Gaps relevant to porting the regression
+- **Inline agents:** `Options.agents` and `Options.agent` supported
+  - `add_agents_args/2` at lines 750-763 serializes to `--agents` JSON
+  - `add_agent_args/2` at lines 766-769 emits `--agent`
 
-1. No Elixir integration test that exercises:
-   - `setting_sources: ["project"]`
-   - a `.claude/agents/*.md` file on disk
-   - asserts **init → assistant → result**
-2. Init metadata ergonomics:
+- **CLI discovery:** `ClaudeAgentSDK.CLI.find_executable/0` checks:
+  - `priv/_bundled/claude` (bundled)
+  - PATH (`claude-code`, `claude`)
+  - Known locations including `~/.claude/local/claude`
+
+### Gaps
+
+1. **No regression test** for filesystem agents loaded via `setting_sources: ["project"]`
+
+2. **Init metadata not exposed in `Message.data`:**
    - Python reads `SystemMessage.data["agents"]`, `["slash_commands"]`, `["output_style"]`
-   - Elixir currently retains this in `Message.raw` but only normalizes a small subset into `Message.data`
+   - Elixir's `build_system_data(:init, raw)` at `message.ex:426-435` only extracts:
+     - `api_key_source`, `cwd`, `session_id`, `tools`, `mcp_servers`, `model`, `permission_mode`
+   - `agents`, `output_style`, `slash_commands` only available in `Message.raw`
 
 ## Port Design (Elixir)
 
-### 1) Add a targeted live/integration test
+### 1) Add a targeted integration test (required)
 
-Add a new integration test module, e.g.:
-
-- `test/integration/filesystem_agents_live_test.exs`
-
-Test mechanics (mirrors Python’s tempdir approach):
-
-1. Create a temp directory `project_dir`
-2. Write `.claude/agents/fs-test-agent.md` with minimal frontmatter:
-   ```md
-   ---
-   name: fs-test-agent
-   description: Filesystem test agent
-   tools: Read
-   ---
-   You are a simple test agent.
-   ```
-3. Run a query with:
-   - `%Options{cwd: project_dir, setting_sources: ["project"], max_turns: 1, output_format: :stream_json}`
-4. Collect emitted messages into a list
-5. Assert:
-   - at least one `%Message{type: :system, subtype: :init}`
-   - at least one `%Message{type: :assistant}`
-   - a final `%Message{type: :result, subtype: :success}` (or at least `:result`)
-6. Verify the agent was loaded:
-   - Preferred (if we add it): `init.data.agents`
-   - Otherwise: `init.raw["agents"]` includes `"fs-test-agent"`
-
-Tagging:
-- `@moduletag :integration`
-- `@moduletag :live`
-
-#### Agent extraction helper (robust to shapes)
-
-Python treats `agents` as “list of strings (names) or dicts with `name`”.
-To avoid coupling to the exact shape, the Elixir test should normalize similarly:
+Add `test/integration/filesystem_agents_test.exs`:
 
 ```elixir
-defp extract_agent_names(init_message) do
-  agents = init_message.raw["agents"] || init_message.data[:agents] || []
+defmodule ClaudeAgentSDK.Integration.FilesystemAgentsTest do
+  use ExUnit.Case, async: false
 
-  agents
-  |> List.wrap()
-  |> Enum.flat_map(fn
-    name when is_binary(name) -> [name]
-    %{"name" => name} when is_binary(name) -> [name]
-    %{ "name" => name } when is_binary(name) -> [name]
-    _ -> []
-  end)
-  |> Enum.reject(&(&1 == ""))
+  @moduletag :integration
+
+  alias ClaudeAgentSDK.{Client, Message, Options}
+
+  describe "filesystem agents via setting_sources" do
+    setup do
+      # Create temp directory with agent file
+      tmp_dir = Path.join(System.tmp_dir!(), "claude_test_#{:rand.uniform(100_000)}")
+      agents_dir = Path.join([tmp_dir, ".claude", "agents"])
+      File.mkdir_p!(agents_dir)
+
+      agent_content = """
+      ---
+      name: fs-test-agent
+      description: Filesystem test agent for SDK testing
+      tools: Read
+      ---
+
+      # Filesystem Test Agent
+
+      You are a simple test agent. When asked a question, provide a brief answer.
+      """
+
+      File.write!(Path.join(agents_dir, "fs-test-agent.md"), agent_content)
+
+      on_exit(fn -> File.rm_rf!(tmp_dir) end)
+
+      {:ok, tmp_dir: tmp_dir}
+    end
+
+    test "loads agent and produces full response", %{tmp_dir: tmp_dir} do
+      options = %Options{
+        cwd: tmp_dir,
+        setting_sources: ["project"],
+        max_turns: 1,
+        output_format: :stream_json
+      }
+
+      {:ok, client} = Client.start_link(options)
+      :ok = Client.query(client, "Say hello in exactly 3 words")
+      {:ok, messages} = Client.receive_response(client)
+      Client.stop(client)
+
+      # Collect message types
+      message_types = Enum.map(messages, & &1.type)
+
+      # Must have init, assistant, result
+      assert :system in message_types, "Missing system (init) message"
+      assert :assistant in message_types,
+        "Missing assistant message - got only: #{inspect(message_types)}. " <>
+        "This may indicate issue #406 (silent failure with filesystem agents)."
+      assert :result in message_types, "Missing result message"
+
+      # Verify agent was loaded from filesystem
+      init = Enum.find(messages, &(&1.type == :system and &1.subtype == :init))
+      agent_names = extract_agent_names(init)
+      assert "fs-test-agent" in agent_names,
+        "fs-test-agent not loaded from filesystem. Found: #{inspect(agent_names)}"
+    end
+  end
+
+  # Extract agent names from init message (robust to different shapes)
+  defp extract_agent_names(%Message{raw: raw}) do
+    agents = raw["agents"] || []
+
+    agents
+    |> List.wrap()
+    |> Enum.flat_map(fn
+      name when is_binary(name) -> [name]
+      %{"name" => name} when is_binary(name) -> [name]
+      _ -> []
+    end)
+  end
 end
 ```
 
-### 2) Add settings-source behavioral tests (optional)
+**Tagging note:** Use `@moduletag :integration` (excluded by default in `test_helper.exs`). Run with `mix test --include integration`.
 
-Python also verifies settings source semantics:
+### 2) Optional: Improve init metadata ergonomics
 
-- default (empty sources) loads no local settings
-- `["user"]` excludes project commands
-- `["user","project","local"]` includes local settings like `outputStyle`
+Extend `build_system_data(:init, raw)` in `message.ex` to include additional fields:
 
-We can add similar Elixir integration tests, but keep them minimal:
+```elixir
+defp build_system_data(:init, raw) do
+  %{
+    api_key_source: raw["apiKeySource"],
+    cwd: raw["cwd"],
+    session_id: raw["session_id"],
+    tools: raw["tools"] || [],
+    mcp_servers: raw["mcp_servers"] || [],
+    model: raw["model"],
+    permission_mode: raw["permissionMode"],
+    # New fields for parity
+    agents: raw["agents"] || [],
+    output_style: raw["output_style"],
+    slash_commands: raw["slash_commands"] || []
+  }
+end
+```
 
-- Use a temp dir with `.claude/settings.local.json` containing:
-  - `{"outputStyle":"local-test-style"}`
-- Assert `init.raw["output_style"]` (or normalized data) matches expectations.
+This allows tests and user code to access `message.data.agents` directly instead of `message.raw["agents"]`.
 
-### 3) Improve init metadata ergonomics (recommended)
+### 3) Optional: Add example script
 
-To make Elixir parity closer to Python, extend `ClaudeAgentSDK.Message` system init normalization to include:
+Add `examples/filesystem_agents_live.exs` for manual testing:
 
-- `agents`
-- `slash_commands`
-- `output_style`
+```elixir
+#!/usr/bin/env elixir
+# Example: Loading filesystem-based agents via setting_sources
+# Usage: elixir examples/filesystem_agents_live.exs
 
-Design options:
+Mix.install([{:claude_agent_sdk, path: "."}])
 
-1. **Minimal additive** (lowest risk)
-   - Keep existing atom-keyed fields
-   - Add pass-through keys for these fields only
-2. **Full pass-through**
-   - Store the whole init payload under `data.init_raw` (still keep `message.raw` as-is)
+alias ClaudeAgentSDK.{Client, Options}
 
-The minimal additive approach is enough to support the regression test and improves devX without changing existing keys.
+# Use repo's .claude/agents/ if it exists, or create temp
+cwd = if File.dir?(".claude/agents"), do: ".", else: System.tmp_dir!()
 
-### 4) Add an Elixir example script (optional but useful)
+options = %Options{
+  cwd: cwd,
+  setting_sources: ["project"],
+  max_turns: 1,
+  output_format: :stream_json
+}
 
-Add `examples/filesystem_agents_live.exs` mirroring Python’s `examples/filesystem_agents.py`:
+{:ok, client} = Client.start_link(options)
+:ok = Client.query(client, "Say hello in exactly 3 words")
+{:ok, messages} = Client.receive_response(client)
+Client.stop(client)
 
-- runs with `setting_sources: ["project"]`
-- points `cwd` at a directory containing `.claude/agents`
-- prints which message types were received
-- prints loaded agents from init payload
+IO.puts("Message types received: #{inspect(Enum.map(messages, & &1.type))}")
 
-This becomes a practical repro script when debugging container-only issues.
+init = Enum.find(messages, &(&1.type == :system and &1.subtype == :init))
+IO.puts("Agents loaded: #{inspect(init.raw["agents"])}")
+```
 
 ## Proposed Elixir Touchpoints
 
-- New: `test/integration/filesystem_agents_live_test.exs`
-- Update (recommended): `lib/claude_agent_sdk/message.ex` (`build_system_data/2` for subtype `:init`) to include `agents`, `slash_commands`, `output_style`
-- Update (if we normalize init fields): `lib/claude_agent_sdk/mock.ex` default system init payload should include representative `agents`/`output_style` keys so unit tests and examples stay realistic
-- New (optional): `examples/filesystem_agents_live.exs`
+| File | Change | Priority |
+|------|--------|----------|
+| `test/integration/filesystem_agents_test.exs` | Regression test | Required |
+| `lib/claude_agent_sdk/message.ex` | Add `agents`, `output_style`, `slash_commands` to init data | Optional |
+| `examples/filesystem_agents_live.exs` | Example script | Optional |
 
 ## Docker Connection
 
-Once the above integration test exists, it becomes the primary target for:
+Once the integration test exists, it's the primary target for:
 
 - `./scripts/test-docker.sh integration`
-- a CI docker integration job (when credentials exist)
+- CI docker integration job (when secrets configured)
 
 ## Failure Signatures To Detect
 
-The regression should explicitly fail if we see:
+The regression should explicitly fail if:
 
-- Only init message received
-- No assistant message
+- Only init message received (no assistant)
 - No result message
+- Agent not loaded from filesystem
 
-The test should print the observed message types on failure for diagnosis.
+The test prints observed message types on failure for diagnosis.
+
+## Risks / Open Questions
+
+1. **Exact agent wire format** - The CLI may return agents as strings or objects. The test's `extract_agent_names/1` handles both.
+
+2. **Temp directory cleanup on Windows** - May need `Process.sleep(500)` before cleanup if file handles are held open (Python does this).

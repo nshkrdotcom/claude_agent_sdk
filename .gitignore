@@ -24,6 +24,8 @@ claude_code_sdk-*.tar
 
 # Dialyzer PLT files
 /priv/plts/
+
+# Bundled CLI binaries (not committed)
 priv/_bundled/
 
 # Ignore any .beam files

@@ -10,6 +10,7 @@ defmodule ClaudeAgentSDK.CLI do
   require Logger
 
   @minimum_version "2.0.0"
+  @recommended_version "2.0.72"
   @executable_candidates ["claude-code", "claude"]
   @skip_version_check_env "CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK"
 
@@ -81,6 +82,15 @@ defmodule ClaudeAgentSDK.CLI do
   """
   @spec minimum_version() :: String.t()
   def minimum_version, do: @minimum_version
+
+  @doc """
+  Returns the recommended Claude CLI version for this SDK release.
+
+  This version is tested and known to work with all SDK features including
+  file checkpointing, streaming control protocol, and partial messages.
+  """
+  @spec recommended_version() :: String.t()
+  def recommended_version, do: @recommended_version
 
   @doc """
   True if the installed version meets or exceeds the minimum.

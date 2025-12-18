@@ -67,9 +67,30 @@ npm install -g @anthropic-ai/claude-code
 ### CLI discovery & version checks
 
 - The SDK now centralizes CLI lookup in `ClaudeAgentSDK.CLI`, trying `claude-code` first and then `claude`.
-- Minimum supported CLI version: `1.0.0`. Check with `ClaudeAgentSDK.CLI.version_supported?/0` or print the detected version via `ClaudeAgentSDK.CLI.version/0`.
+- Minimum supported CLI version: `2.0.0`. Check with `ClaudeAgentSDK.CLI.version_supported?/0` or print the detected version via `ClaudeAgentSDK.CLI.version/0`.
+- Recommended CLI version: `2.0.72`. Check with `ClaudeAgentSDK.CLI.recommended_version/0`.
 - Emit an upgrade hint for operators with `ClaudeAgentSDK.CLI.warn_if_outdated/0`.
 - Any example (e.g., `mix run examples/basic_example.exs`) will use the same discovery logic, so running one is a quick end-to-end verification of your install.
+
+### Claude CLI Version
+
+This SDK requires Claude Code CLI. Recommended version: **2.0.72**
+
+Install via npm (for version pinning):
+```bash
+npm install -g @anthropic-ai/claude-code@2.0.72
+```
+
+Or via official installer (installs latest):
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+Check installed version:
+```elixir
+ClaudeAgentSDK.CLI.recommended_version()  # => "2.0.72"
+ClaudeAgentSDK.CLI.version()              # => {:ok, "2.0.XX"}
+```
 
 ## Installation
 
@@ -78,7 +99,7 @@ Add `claude_agent_sdk` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.6.6"}
+    {:claude_agent_sdk, "~> 0.6.7"}
   ]
 end
 ```

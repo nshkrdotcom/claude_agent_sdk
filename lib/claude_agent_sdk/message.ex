@@ -475,4 +475,20 @@ defmodule ClaudeAgentSDK.Message do
   """
   def session_id(%__MODULE__{data: %{session_id: id}}), do: id
   def session_id(_), do: nil
+
+  @doc """
+  Returns the checkpoint UUID from a user message, or nil.
+
+  Used with file checkpointing to identify rewind targets.
+  """
+  @spec user_uuid(t()) :: String.t() | nil
+  def user_uuid(%__MODULE__{type: :user, data: %{uuid: uuid}})
+      when is_binary(uuid) and uuid != "",
+      do: uuid
+
+  def user_uuid(%__MODULE__{type: :user, raw: %{"uuid" => uuid}})
+      when is_binary(uuid) and uuid != "",
+      do: uuid
+
+  def user_uuid(_), do: nil
 end

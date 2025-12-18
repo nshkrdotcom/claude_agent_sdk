@@ -2,17 +2,16 @@
 
 ## Background
 
-The Python SDK bundles Claude Code and tracks the bundled version in code:
+The Python SDK tracks a bundled CLI version in code:
 
-- `anthropics/claude-agent-sdk-python/src/claude_agent_sdk/_cli_version.py`
-  - `__cli_version__ = "2.0.72"` (as of `91e65b1`)
+- `src/claude_agent_sdk/_cli_version.py`: `__cli_version__ = "2.0.72"` (as of `91e65b1`)
 
-Within this port range, Python bumped the bundled CLI from **2.0.69 → 2.0.72**.
+Within this port range, Python bumped from **2.0.69 → 2.0.72** across three commits.
 
-Even when Elixir does not ship the binary, keeping a *pinned reference version* is valuable:
+Even when Elixir does not ship the binary on Hex, keeping a *pinned reference version* is valuable:
 
-- Reproducible integration test environment (“use the same CLI Python bundles”)
-- A single place to document “known-good” CLI versions for features like:
+- Reproducible integration test environment ("use the same CLI Python bundles")
+- A single place to document "known-good" CLI versions for features like:
   - streaming control protocol (hooks/permissions)
   - file checkpointing + rewind
   - partial message streaming
@@ -21,105 +20,124 @@ Even when Elixir does not ship the binary, keeping a *pinned reference version* 
 
 ### Already present
 
-- `ClaudeAgentSDK.CLI` supports bundled binary discovery:
-  - default path: `priv/_bundled/claude` (or `claude.exe` on Windows)
-  - override: `Application.get_env(:claude_agent_sdk, :cli_bundled_path)`
-  - also searches PATH and common locations including `~/.claude/local/claude`
-- Minimum version warning:
-  - `@minimum_version "2.0.0"`
-  - `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK` supported
+- **Bundled binary discovery** in `ClaudeAgentSDK.CLI` (`lib/claude_agent_sdk/cli.ex`):
+  - `find_bundled_executable/0` at line 128-136 checks `priv/_bundled/claude` (or `claude.exe` on Windows)
+  - Override via `Application.get_env(:claude_agent_sdk, :cli_bundled_path)`
+  - `find_in_known_locations/0` at line 165-175 searches PATH and common locations including `~/.claude/local/claude`
 
-Related prior design work:
-- `docs/20251129/elixir_port_sync/adrs/0005-bundled-cli.md` proposes an opt-in bundling workflow and a tracked CLI version constant; this port supplies the concrete “what version?” input (2.0.72) and extends it with Docker-driven regression testing needs.
+- **Minimum version warning** at `cli.ex:12-14`:
+  - `@minimum_version "2.0.0"`
+  - `@skip_version_check_env "CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK"`
 
 ### Missing / not yet standardized
 
-1. **Tracked “recommended/bundled CLI version” constant** in the Elixir codebase
-2. **A repeatable “install/bundle CLI” workflow** (mix task / script)
-3. **Docs that tie feature requirements to versions** (we have scattered notes; no single source of truth)
+1. **Tracked "recommended/bundled CLI version" constant** - No `@recommended_version` or `recommended_version/0` function
+2. **A repeatable "install/bundle CLI" workflow** - No mix task for installing/bundling
+3. **Docs that tie feature requirements to versions** - Scattered notes, no single source of truth
 
 ## Port Design
 
-### 1) Add a pinned CLI version module
+### 1) Add a recommended CLI version constant (required)
 
-Add `lib/claude_agent_sdk/cli_version.ex` (or similar) that exposes:
+**Option A: Add to existing `cli.ex` (simpler)**
 
-- `ClaudeAgentSDK.CLIVersion.bundled/0 :: String.t()` → `"2.0.72"`
-- (optional) `ClaudeAgentSDK.CLIVersion.minimum_supported/0 :: String.t()` → `"2.0.0"`
+```elixir
+# In lib/claude_agent_sdk/cli.ex
+@recommended_version "2.0.72"
 
-Rationale:
-- Mirrors Python’s `_cli_version.py` and makes “what version should I use?” discoverable.
-- Lets docs/tests reference a single constant.
+@doc """
+Returns the recommended Claude CLI version for this SDK release.
+"""
+@spec recommended_version() :: String.t()
+def recommended_version, do: @recommended_version
+```
 
-### 2) Add an opt-in bundling task (developer/CI convenience)
+**Option B: New module (mirrors Python structure)**
 
-Add a mix task:
+Add `lib/claude_agent_sdk/cli_version.ex`:
 
-- `mix claude.bundle_cli`
+```elixir
+defmodule ClaudeAgentSDK.CLIVersion do
+  @moduledoc "Tracks recommended CLI versions for SDK features."
 
-Behavior:
-- Determines desired CLI version:
-  - default: `ClaudeAgentSDK.CLIVersion.bundled()`
-  - override: `--version 2.0.72`
-- Installs Claude Code using an official channel
-  - Unix: `curl -fsSL https://claude.ai/install.sh | bash`
-  - Windows: `irm https://claude.ai/install.ps1 | iex`
-- Locates the installed `claude` executable (typically `$HOME/.local/bin/claude`)
-- Copies it into `priv/_bundled/claude` (or `priv/_bundled/claude.exe`)
-- Ensures execute permissions on Unix
-- Verifies `priv/_bundled/claude --version` matches the requested version (or prints a warning if the installer cannot pin)
+  @recommended "2.0.72"
 
-Notes / constraints:
-- The official installer may install “latest” rather than a specific version; if so, we have two options:
-  1. Treat `bundled` as “known-good minimum” and accept newer versions
-  2. Prefer version pinning via `npm install -g @anthropic-ai/claude-code@<version>` when Node is available
+  def recommended, do: @recommended
+  def minimum, do: "2.0.0"
+end
+```
 
-The design should support both:
-- `--strategy installer` (default, simple)
-- `--strategy npm` (pinned, requires Node)
+**Recommendation:** Option A is sufficient and avoids adding a new module for a single constant.
 
-### 3) `.gitignore` policy for bundled binaries
+### 2) Optional: Add a bundling helper task
 
-Add a `priv/_bundled/.gitignore` (or update root `.gitignore`) so the binary is not committed.
+**Important constraint:** The official installer (`curl https://claude.ai/install.sh | bash`) does **not** support version pinning. It always installs the latest version.
 
-### 4) Use the pinned version in docs and diagnostics
+To pin a specific version, you must use npm:
+```bash
+npm install -g @anthropic-ai/claude-code@2.0.72
+```
 
-Update documentation to explicitly state:
-- “Recommended CLI version: `ClaudeAgentSDK.CLIVersion.bundled()` (2.0.72)”
-- “Minimum supported: 2.0.0 (warnings only, unless a feature requires more)”
+Given this, a mix task would have limited utility:
+- `--strategy installer` - Installs latest (not the pinned version)
+- `--strategy npm` - Requires Node.js, defeats some of the simplicity
 
-Optionally update `ClaudeAgentSDK.AuthChecker.diagnose/0` output to show:
-- installed CLI version
-- pinned recommended version
+**Recommendation:** Document the npm approach for users who need version pinning. A mix task is lower priority.
 
-### 5) Feature-specific version expectations (optional follow-on)
+If implemented, keep it simple:
 
-Python’s pinned CLI bumps often accompany new control protocol capabilities.
+```elixir
+# lib/mix/tasks/claude.install_cli.ex
+defmodule Mix.Tasks.Claude.InstallCli do
+  use Mix.Task
 
-For Elixir, consider adding *feature-level* version notes/warnings (non-blocking):
-- if `enable_file_checkpointing: true`, warn when CLI < 2.0.69 (or whichever version introduced checkpointing)
-- if `include_partial_messages: true`, warn when CLI < the first supporting version
+  @shortdoc "Installs Claude CLI to priv/_bundled/"
 
-This is strictly a devX enhancement; it’s not required for parity with Python’s “minimum version” check but aligns with the motivation of tracking a bundled version.
+  def run(_args) do
+    # 1. Run: curl -fsSL https://claude.ai/install.sh | bash
+    # 2. Copy ~/.local/bin/claude to priv/_bundled/claude
+    # 3. Verify with --version
+    # NOTE: This installs latest, not necessarily @recommended_version
+  end
+end
+```
+
+### 3) `.gitignore` policy
+
+The bundled binary path is already covered if `.gitignore` includes `priv/_bundled/`. Verify this exists; if not, add:
+
+```gitignore
+# Bundled CLI binaries (not committed)
+priv/_bundled/
+```
+
+### 4) Update diagnostics (optional)
+
+`ClaudeAgentSDK.AuthChecker.diagnose/0` could show:
+- Installed CLI version: `2.0.XX`
+- Recommended version: `2.0.72`
+- Status: ✓ (or warning if below recommended)
 
 ## Test Plan
 
-- Unit:
-  - `ClaudeAgentSDK.CLIVersion.bundled/0` returns a semver string
-  - `ClaudeAgentSDK.CLI.find_executable/0` prefers `priv/_bundled` when present (already partially covered indirectly; add explicit unit coverage if needed)
-- Integration (tagged):
-  - `mix claude.bundle_cli` actually installs/copies/verifies (network + platform dependent)
-
-## Rollout / Migration
-
-- Ship `CLIVersion` module + docs first (safe).
-- Add `mix claude.bundle_cli` next (opt-in).
-- Consider CI integration only after the task is stable across platforms.
+| Test type | What to test | Tag |
+|-----------|--------------|-----|
+| Unit | `ClaudeAgentSDK.CLI.recommended_version/0` returns a semver string | (none) |
+| Unit | `ClaudeAgentSDK.CLI.find_executable/0` prefers `priv/_bundled` when present | (none) |
 
 ## Proposed Elixir Touchpoints
 
-- New: `lib/claude_agent_sdk/cli_version.ex`
-- New: `lib/mix/tasks/claude.bundle_cli.ex` (or `claude.install_cli.ex`)
-- Update (optional): `lib/claude_agent_sdk/cli.ex` to expose `recommended_version/0` and/or include it in warnings/diagnostics
-- Update: `.gitignore` and/or add `priv/_bundled/.gitignore`
-- Update (optional): `lib/claude_agent_sdk/auth_checker.ex` to display recommended/bundled CLI version in `diagnose/0`
+| File | Change | Priority |
+|------|--------|----------|
+| `lib/claude_agent_sdk/cli.ex` | Add `@recommended_version` and `recommended_version/0` | Required |
+| `.gitignore` | Ensure `priv/_bundled/` is ignored | Required |
+| `lib/mix/tasks/claude.install_cli.ex` | Bundling task | Optional |
+| `lib/claude_agent_sdk/auth_checker.ex` | Show recommended vs installed version | Optional |
+
+## Risks / Open Questions
+
+1. **Installer doesn't support version pinning** - The official installer always installs latest. This limits the utility of a bundling task. Document npm approach for users who need reproducibility.
+
+2. **Version drift** - If recommended version isn't updated when Python bumps theirs, we drift. Consider a process note to bump when Python does.
+
+3. **Hex doesn't ship binaries** - Unlike Python (PyPI can include binaries), Hex packages are source-only. Users must install CLI separately. This is a known limitation, not a bug.

@@ -1,55 +1,43 @@
 # Port: Docker-Based E2E Harness (Catch Container-Specific Regressions)
 
-## Background (Python v0.1.18)
+## Background (Python v0.1.18, commit a0ce44a)
 
 Python added Docker-based testing to catch container-only failures (notably issue #406):
 
-- `Dockerfile.test` builds an image that:
-  - installs Claude Code (`curl https://claude.ai/install.sh | bash`)
-  - installs the SDK
-  - runs tests in a container
-- `scripts/test-docker.sh` runs unit/e2e/all modes
-- CI adds a `test-e2e-docker` job that runs e2e tests inside Docker with `ANTHROPIC_API_KEY`
+- `Dockerfile.test` (29 lines) builds an image that:
+  - Uses `python:3.12-slim` base
+  - Installs Claude Code via `curl -fsSL https://claude.ai/install.sh | bash`
+  - Installs SDK with `pip install -e ".[dev]"`
+  - Verifies CLI with `claude -v`
+- `scripts/test-docker.sh` (77 lines) provides unit/e2e/all modes
+- `.github/workflows/test.yml` adds `test-e2e-docker` job that runs e2e tests with `ANTHROPIC_API_KEY`
+- `.dockerignore` (49 lines) excludes `.git`, `__pycache__`, virtual envs, etc.
 
 ## Why This Matters For Elixir
 
-Elixir’s transports (Port / erlexec / streaming control) depend on OS process semantics.
-Historically, container environments surface edge cases:
+Elixir's transports (Port / erlexec / streaming control) depend on OS process semantics.
+Container environments surface edge cases:
 
 - PATH differences (CLI discovery)
-- permissions/exec bits
-- working directory and filesystem behaviors
+- Permissions/exec bits
+- Working directory and filesystem behaviors
 - stdout/stderr buffering and process lifecycle (early termination symptoms)
 
-Adding a Docker harness provides a cheap “repro environment” that developers and CI can share.
+A Docker harness provides a reproducible "repro environment" that developers and CI can share.
 
 ## Port Design (Elixir)
 
 ### 1) Add `Dockerfile.test` at repo root
 
 Goals:
-- deterministic runtime for `mix test`
-- ability to run a small subset of live/integration tests when credentials are provided
+- Deterministic runtime for `mix test`
+- Ability to run integration tests when credentials are provided
 
-Recommended structure:
-
-1. Base image with Erlang/Elixir (pick the repo’s CI versions):
-   - `hexpm/elixir:1.18.3-erlang-27.3.3-debian-bookworm-202...` (or similar)
-2. Install OS dependencies:
-   - `curl`, `git`, `ca-certificates`
-3. Install Claude Code CLI:
-   - `curl -fsSL https://claude.ai/install.sh | bash`
-   - `ENV PATH="/root/.local/bin:$PATH"`
-4. Copy repo into container and run:
-   - `mix deps.get`
-   - `mix compile --warnings-as-errors`
-5. Default command:
-   - `mix test --exclude requires_cli`
-
-Example skeleton:
+Use CI versions from `.github/workflows/elixir.yaml` (currently Elixir 1.18.3, OTP 27.3.3).
 
 ```dockerfile
-FROM hexpm/elixir:1.18.3-erlang-27.3.3-debian-bookworm-20241002
+# Dockerfile.test - Run SDK tests in containerized environment
+FROM hexpm/elixir:1.18.3-erlang-27.3.3-debian-bookworm-20241016
 
 RUN apt-get update && apt-get install -y \
     curl \
@@ -64,70 +52,114 @@ ENV PATH="/root/.local/bin:$PATH"
 WORKDIR /app
 COPY . .
 
+# Install dependencies and compile
+RUN mix local.hex --force && mix local.rebar --force
 RUN mix deps.get
 RUN mix compile --warnings-as-errors
 
-CMD ["mix", "test", "--exclude", "requires_cli"]
+# Verify CLI installation
+RUN claude -v
+
+# Default: run unit tests (excludes integration/live/requires_cli)
+CMD ["mix", "test"]
 ```
+
+**Note on test exclusions:** The default `mix test` already excludes `:integration` and `:live` tags via `test/test_helper.exs:17`. The CI also adds `--exclude requires_cli`.
 
 ### 2) Add `scripts/test-docker.sh`
 
-Mirror Python’s ergonomics:
+```bash
+#!/bin/bash
+# Run SDK tests in Docker container
+set -e
 
-- `./scripts/test-docker.sh unit`
-  - builds image
-  - runs `mix test --exclude requires_cli`
-- `./scripts/test-docker.sh integration`
-  - requires a credential env var (see below)
-  - runs `mix test --include integration`
-- `./scripts/test-docker.sh all`
-  - runs unit first, then integration if credentials exist
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_DIR"
 
-Credential environment variable:
-- Prefer supporting both:
-  - `CLAUDE_AGENT_OAUTH_TOKEN` (CLI OAuth token)
-  - `ANTHROPIC_API_KEY` (if the CLI accepts it; the Elixir SDK already passes it through)
+echo "Building Docker test image..."
+docker build -f Dockerfile.test -t claude-sdk-elixir-test .
 
-### 3) CI wiring (optional but recommended)
+case "${1:-unit}" in
+    unit)
+        echo "Running unit tests in Docker..."
+        docker run --rm claude-sdk-elixir-test mix test
+        ;;
+    integration)
+        if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "Error: ANTHROPIC_API_KEY required for integration tests"
+            exit 1
+        fi
+        echo "Running integration tests in Docker..."
+        docker run --rm -e ANTHROPIC_API_KEY \
+            claude-sdk-elixir-test mix test --include integration
+        ;;
+    *)
+        echo "Usage: $0 [unit|integration]"
+        exit 1
+        ;;
+esac
 
-Add an additional GitHub Actions job (separate from the main CI job) so it can be gated by secrets:
+echo "Done!"
+```
 
-- `docker-unit` (no secrets)
-  - builds `Dockerfile.test`
-  - runs unit tests in docker
-- `docker-integration` (requires secret)
-  - same image, runs `mix test --include integration`
-  - uses repository secret `ANTHROPIC_API_KEY` or `CLAUDE_AGENT_OAUTH_TOKEN`
+### 3) Add `.dockerignore`
 
-Important: keep the current “pure unit” CI job; Docker is additive, not a replacement.
+```dockerignore
+.git
+_build
+deps
+cover
+.elixir_ls
+*.beam
+*.ez
+*.log
+.DS_Store
+priv/_bundled/
+```
 
-### 4) Keep integration scope small and purposeful
+### 4) CI wiring (optional)
 
-Rather than running the full integration suite in Docker, target the regressions we care about:
+Add to `.github/workflows/elixir.yaml`:
 
-- filesystem agents + setting sources scenario (see `04_filesystem_agents_regression.md`)
+```yaml
+  test-docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker test image
+        run: docker build -f Dockerfile.test -t claude-sdk-test .
+      - name: Run unit tests in Docker
+        run: docker run --rm claude-sdk-test mix test
+```
 
-This minimizes CI cost and reduces flakiness.
+Integration tests in CI require secrets and are optional.
 
 ## Proposed Elixir Touchpoints
 
-- New: `Dockerfile.test`
-- New: `scripts/test-docker.sh`
-- New (optional): `.dockerignore`
-- Update (optional): `.github/workflows/elixir.yaml` to add docker unit + docker integration jobs
+| File | Change | Priority |
+|------|--------|----------|
+| `Dockerfile.test` | Docker test image | Required |
+| `scripts/test-docker.sh` | Test runner script | Required |
+| `.dockerignore` | Exclude build artifacts | Required |
+| `.github/workflows/elixir.yaml` | Docker CI job | Optional |
 
 ## Test Plan
 
-- Local:
-  - `./scripts/test-docker.sh unit` works without credentials
-  - `./scripts/test-docker.sh integration` succeeds when token is provided
-- CI:
-  - docker unit job always runs
-  - docker integration job runs only when secret is configured
+| Test | What it verifies |
+|------|------------------|
+| `./scripts/test-docker.sh unit` | Unit tests pass in container |
+| `./scripts/test-docker.sh integration` | Integration tests pass with API key |
+| Docker build succeeds | CLI installs correctly in container |
 
 ## Risks / Open Questions
 
-- Does the official installer allow pinning to `2.0.72`? If not, Docker runs “latest CLI”, which can drift.
-  - Mitigation: in Dockerfile, optionally pin via npm when Node is available.
-- Running live tests in CI can be costly and flaky.
-  - Mitigation: keep the docker integration subset small and put strong timeouts around prompts.
+1. **CLI version drift** - The installer installs latest CLI, not a pinned version. For reproducibility, could add npm approach in Dockerfile:
+   ```dockerfile
+   RUN apt-get install -y nodejs npm && npm install -g @anthropic-ai/claude-code@2.0.72
+   ```
+
+2. **CI cost** - Integration tests use API credits. Keep scope minimal (filesystem agents regression only).
+
+3. **Base image updates** - Track hexpm/elixir releases to keep image current with CI versions.
