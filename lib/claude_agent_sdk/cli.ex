@@ -10,7 +10,7 @@ defmodule ClaudeAgentSDK.CLI do
   require Logger
 
   @minimum_version "2.0.0"
-  @recommended_version "2.0.72"
+  @recommended_version "2.0.75"
   @executable_candidates ["claude-code", "claude"]
   @skip_version_check_env "CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK"
 

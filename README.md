@@ -55,7 +55,7 @@ flowchart TB
   Client --> Hooks["Hooks callbacks"]
   Client --> Perms["Permission callback"]
   Client --> MCP["SDK MCP bridge"]
-````
+```
 
 ---
 
@@ -75,7 +75,7 @@ The SDK centralizes CLI discovery in `ClaudeAgentSDK.CLI`:
 
 * Candidate executables: `claude-code`, then `claude`
 * Minimum supported version: `2.0.0`
-* Recommended version: `2.0.72`
+* Recommended version: `2.0.75`
 
 You can verify what the SDK sees:
 
@@ -96,7 +96,7 @@ Add the dependency to `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.6.7"}
+    {:claude_agent_sdk, "~> 0.6.8"}
   ]
 end
 ```

@@ -38,8 +38,8 @@ defmodule StructuredOutputLiveExample do
     options = %Options{
       output_format: %{type: :json_schema, schema: @schema},
       model: "haiku",
-      max_turns: 2,
-      allowed_tools: []
+      max_turns: 5,
+      tools: []
     }
 
     IO.puts("\n🧪 Structured output demo (live CLI)…")

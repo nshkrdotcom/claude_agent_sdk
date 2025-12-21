@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.8] - 2025-12-20
+
+### Changed
+
+- Bumped recommended Claude CLI version from 2.0.72 to 2.0.75
+
+### Python SDK Parity
+
+- Ports CLI version tracking from Python SDK commits `57e8b6e` and `3eb12c5`
+- Recommended CLI version updated to 2.0.75 (tested and verified)
+
 ## [0.6.7] - 2025-12-17
 
 ### Added

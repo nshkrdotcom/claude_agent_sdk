@@ -16,8 +16,8 @@ defmodule ClaudeAgentSDK.CLIVersionTest do
       assert Version.compare(recommended, minimum) in [:eq, :gt]
     end
 
-    test "recommended_version is 2.0.72" do
-      assert CLI.recommended_version() == "2.0.72"
+    test "recommended_version is 2.0.75" do
+      assert CLI.recommended_version() == "2.0.75"
     end
   end
 end
