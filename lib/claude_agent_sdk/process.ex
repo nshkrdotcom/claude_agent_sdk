@@ -562,7 +562,28 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp parse_json_line(line) do
-    case ClaudeAgentSDK.JSON.decode(line) do
+    result = ClaudeAgentSDK.JSON.decode(line)
+
+    # Debug: Try with OTP :json directly to see actual error
+    case result do
+      {:error, _} ->
+        try do
+          :json.decode(line)
+        rescue
+          e ->
+            Logger.error(
+              "JSON parse failed. Line length: #{String.length(line)}, Error: #{inspect(e)}"
+            )
+        catch
+          kind, error ->
+            Logger.error("JSON parse caught #{kind}: #{inspect(error)}")
+        end
+
+      _ ->
+        :ok
+    end
+
+    case result do
       {:ok, json_obj} when is_map(json_obj) ->
         case Message.from_json(line) do
           {:ok, message} ->

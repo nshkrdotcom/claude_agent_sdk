@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.9] - 2025-12-23
+
+### Added
+
+- README: API comparison table showing when to use `query/2` vs `Streaming` vs `Client`
+- README: Available models documentation (sonnet, opus, haiku)
+- README: Message types reference (`:system`, `:assistant`, `:tool_use`, `:tool_result`, `:result`)
+- README: Full example for multi-turn agent with real-time output using `Client` + `Task.async` pattern
+
+### Fixed
+
+- Improved debug logging for failed transport message decoding - now shows payload preview (first 500 chars) instead of just the error reason
+
 ## [0.6.8] - 2025-12-20
 
 ### Changed

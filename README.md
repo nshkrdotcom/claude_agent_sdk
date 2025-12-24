@@ -96,7 +96,7 @@ Add the dependency to `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.6.8"}
+    {:claude_agent_sdk, "~> 0.6.9"}
   ]
 end
 ```
@@ -177,9 +177,35 @@ AuthChecker.ensure_ready!()
 
 ## Core API
 
+The SDK provides three main APIs. Choose based on your use case:
+
+| API | Use Case | Tool Support | Real-time Output |
+|-----|----------|--------------|------------------|
+| `query/2` | Simple queries, batch processing | Yes | No (buffers) |
+| `Streaming` | Typewriter UX, chat interfaces | Limited | Yes (text_delta) |
+| `Client` | Multi-turn agents with tools | Full | Yes (per-message) |
+
+### Available Models
+
+Set via `%Options{model: "..."}`. When `nil`, uses CLI default.
+
+* `"sonnet"` - Claude Sonnet (recommended for coding tasks)
+* `"opus"` - Claude Opus (most capable)
+* `"haiku"` - Claude Haiku (fastest, cheapest)
+
+### Message Types
+
+When processing messages, you'll see these types:
+
+* `:system` - Session initialization (subtype: `:init`)
+* `:assistant` - Claude's text responses
+* `:tool_use` - Claude requesting a tool (data includes `:tool` name)
+* `:tool_result` - Result from tool execution
+* `:result` - Final result (subtype: `:success` or error type)
+
 ### `ClaudeAgentSDK.query/2`
 
-`query/2` returns a **lazy stream** of `ClaudeAgentSDK.Message` structs.
+`query/2` returns a **lazy stream** of `ClaudeAgentSDK.Message` structs. Best for simple queries or when you don't need real-time output.
 
 ```elixir
 alias ClaudeAgentSDK.{ContentExtractor, Options}
@@ -201,6 +227,8 @@ ClaudeAgentSDK.query("Say hello from Elixir", opts)
   end
 end)
 ```
+
+> **Note**: For multi-turn tool use with real-time output, use `Client` instead (see below).
 
 ### `continue/2` and `resume/3`
 
@@ -307,9 +335,66 @@ opts = %Options{preferred_transport: :control}
 
 ## Control-client features
 
-If you need hooks, permission gating, SDK MCP tools, runtime model switching, or bidirectional control protocol support, use `ClaudeAgentSDK.Client`.
+Use `ClaudeAgentSDK.Client` when you need:
+- **Multi-turn tool use with real-time output** (recommended for agents)
+- Hooks, permission gating, SDK MCP tools
+- Runtime model switching or bidirectional control
 
-### Bidirectional client lifecycle
+### Multi-turn agent with real-time output
+
+This is the recommended pattern for running an agent that uses tools and shows each step as it happens:
+
+```elixir
+alias ClaudeAgentSDK.{Client, ContentExtractor, Message, Options}
+
+options = %Options{model: "sonnet", cwd: "/path/to/project"}
+{:ok, client} = Client.start_link(options)
+
+# Start streaming in a Task (messages arrive as agent works)
+task = Task.async(fn ->
+  Client.stream_messages(client)
+  |> Enum.reduce_while(:ok, fn message, acc ->
+    case message do
+      %Message{type: :assistant} = msg ->
+        text = ContentExtractor.extract_text(msg)
+        if text && text != "", do: IO.puts(text)
+        {:cont, acc}
+
+      %Message{type: :tool_use} = msg ->
+        tool = msg.data[:tool] || "unknown"
+        IO.puts("🔧 Using: #{tool}")
+        {:cont, acc}
+
+      %Message{type: :tool_result} ->
+        IO.puts("📋 Tool completed")
+        {:cont, acc}
+
+      %Message{type: :result, subtype: :success} ->
+        IO.puts("✅ Done")
+        {:halt, :ok}
+
+      %Message{type: :result, subtype: subtype} ->
+        IO.puts("❌ Failed: #{subtype}")
+        {:halt, {:error, subtype}}
+
+      _ ->
+        {:cont, acc}
+    end
+  end)
+end)
+
+# Send the prompt
+:ok = Client.send_message(client, "Read the README and summarize it.")
+
+# Wait for completion (10 minute timeout)
+result = Task.await(task, 600_000)
+
+Client.stop(client)
+```
+
+### Simple client lifecycle
+
+For simpler cases where you don't need real-time output:
 
 ```elixir
 alias ClaudeAgentSDK.{Client, Options}

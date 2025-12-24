@@ -817,7 +817,17 @@ defmodule ClaudeAgentSDK.Client do
         {:noreply, state}
 
       {:error, reason} ->
-        Logger.warning("Failed to decode transport message", reason: inspect(reason))
+        # Log both the reason AND the payload (truncated) for debugging
+        payload_preview =
+          if is_binary(payload),
+            do: String.slice(payload, 0, 500),
+            else: inspect(payload, limit: 50)
+
+        Logger.warning("Failed to decode transport message",
+          reason: inspect(reason),
+          payload_preview: payload_preview
+        )
+
         {:noreply, state}
     end
   end
