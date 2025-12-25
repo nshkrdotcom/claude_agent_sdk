@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.10] - 2025-12-24
+
+### Fixed
+
+- Fixed `mix claude.setup_token` crashing with `invalid option :timeout` error - `System.cmd/3` does not support the `:timeout` option
+- Fixed `mix claude.setup_token` not opening browser - was clearing environment variables needed for browser launch
+- Changed token setup to prompt-based flow since Claude CLI requires interactive TTY (Ink/React UI)
+- Token input now loops on invalid format or empty input instead of crashing
+- Cleaned up setup messaging to be consistent and minimal
+
 ## [0.6.9] - 2025-12-23
 
 ### Added

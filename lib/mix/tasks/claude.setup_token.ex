@@ -85,16 +85,6 @@ defmodule Mix.Tasks.Claude.SetupToken do
   end
 
   defp setup_new_token do
-    Mix.shell().info("🔐 Setting up Claude Code authentication...")
-    Mix.shell().info("")
-    Mix.shell().info("This will:")
-    Mix.shell().info("  1. Open your browser for OAuth authentication")
-    Mix.shell().info("  2. Generate a long-lived OAuth token (1 year)")
-    Mix.shell().info("  3. Store the token for automatic use")
-    Mix.shell().info("")
-    Mix.shell().info("⚠️  This requires an active Claude subscription")
-    Mix.shell().info("")
-
     case ClaudeAgentSDK.AuthManager.setup_token() do
       {:ok, token} ->
         Mix.shell().info("✅ Authentication successful!")
@@ -110,23 +100,11 @@ defmodule Mix.Tasks.Claude.SetupToken do
 
         show_status()
 
+      {:error, :no_input} ->
+        Mix.shell().error("Cancelled.")
+
       {:error, reason} ->
-        Mix.shell().error("❌ Authentication failed: #{inspect(reason)}")
-        Mix.shell().error("")
-        Mix.shell().error("Troubleshooting:")
-
-        Mix.shell().error(
-          "  • Ensure Claude CLI is installed: npm install -g @anthropic-ai/claude-code"
-        )
-
-        Mix.shell().error("  • Verify you have an active Claude subscription")
-        Mix.shell().error("  • Check that you're in an interactive terminal")
-        Mix.shell().error("")
-        Mix.shell().error("Alternative: Set environment variable manually:")
-        Mix.shell().error("  export CLAUDE_AGENT_OAUTH_TOKEN=<your-token>")
-        Mix.shell().error("  or")
-        Mix.shell().error("  export ANTHROPIC_API_KEY=<your-api-key>")
-        Mix.raise("Authentication setup failed")
+        Mix.shell().error("Authentication failed: #{inspect(reason)}")
     end
   end
 
