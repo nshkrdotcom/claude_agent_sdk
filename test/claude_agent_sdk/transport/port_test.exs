@@ -7,6 +7,9 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Transport.Port, as: PortTransport
 
+  # Tests spawn real processes (cat executable) via Port.open
+  @moduletag :live_cli
+
   @cat_executable System.find_executable("cat") || "/bin/cat"
 
   describe "start_link/1" do

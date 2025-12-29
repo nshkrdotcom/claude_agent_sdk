@@ -44,9 +44,38 @@ args = Options.to_args(options)
 
 idx = Enum.find_index(args, &(&1 == "--mcp-config"))
 
-if is_integer(idx) do
-  raise "Did not expect --mcp-config for SDK MCP servers (they are carried via the control protocol)"
+# SDK MCP servers ARE passed via --mcp-config so Claude knows the tools exist
+# The control protocol handles tool EXECUTION, but CLI needs server metadata
+# This matches Python SDK behavior (see subprocess_cli.py lines 246-268)
+if !is_integer(idx) do
+  raise "Expected --mcp-config for SDK MCP servers (CLI needs to know about them)"
 end
 
-IO.inspect(args, label: "CLI args (SDK MCP omitted)")
-IO.puts("\n✓ SDK MCP servers are not emitted as --mcp-config (control protocol handles them)")
+mcp_config_json = Enum.at(args, idx + 1)
+mcp_config = Jason.decode!(mcp_config_json)
+
+# Verify the config has the mcpServers wrapper and correct structure
+if !Map.has_key?(mcp_config, "mcpServers") do
+  raise "Expected mcpServers wrapper in --mcp-config"
+end
+
+servers = mcp_config["mcpServers"]
+
+if !Map.has_key?(servers, "math-tools") do
+  raise "Expected math-tools server in mcpServers"
+end
+
+server_config = servers["math-tools"]
+
+if server_config["type"] != "sdk" do
+  raise "Expected type=sdk for SDK MCP server"
+end
+
+# Verify registry_pid is stripped (internal only)
+if Map.has_key?(server_config, "registry_pid") do
+  raise "Expected registry_pid to be stripped from CLI args"
+end
+
+IO.puts("CLI args includes --mcp-config with SDK servers")
+IO.puts("Server config: #{inspect(server_config)}")
+IO.puts("\n✓ SDK MCP servers are emitted via --mcp-config (matching Python SDK behavior)")

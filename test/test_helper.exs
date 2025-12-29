@@ -14,4 +14,9 @@ Code.ensure_loaded!(ClaudeAgentSDK.TestSupport.CalculatorTools)
 Code.ensure_loaded!(ClaudeAgentSDK.TestSupport.ErrorTools)
 Code.ensure_loaded!(ClaudeAgentSDK.TestSupport.ImageTools)
 
-ExUnit.start(exclude: [:integration, :live], capture_log: true)
+# Tags:
+# - :live - Tests using actual Claude API inference (slow, costs money)
+# - :live_cli - Tests that spawn real CLI/processes but no inference
+# - :slow - Tests that are intentionally slow (timeout testing, etc.)
+# - :integration - End-to-end integration tests
+ExUnit.start(exclude: [:integration, :live, :live_cli, :slow], capture_log: true)

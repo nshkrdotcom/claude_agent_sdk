@@ -5,6 +5,9 @@ defmodule ClaudeAgentSDK.CLITest do
 
   alias ClaudeAgentSDK.CLI
 
+  # Tests spawn fake CLI scripts via System.cmd - requires process spawning
+  @moduletag :live_cli
+
   setup do
     original_path = System.get_env("PATH") || ""
     original_home = System.get_env("HOME") || ""

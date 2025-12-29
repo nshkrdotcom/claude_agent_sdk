@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
-  @version "0.6.10"
+  @version "0.7.0"
 
   def project do
     [
@@ -39,7 +39,7 @@ defmodule ClaudeAgentSdk.MixProject do
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
-      {:supertester, "~> 0.3.1", only: :test},
+      {:supertester, "~> 0.4.0", only: :test},
       {:stream_data, "~> 1.0", only: :test}
     ]
   end
@@ -54,8 +54,7 @@ defmodule ClaudeAgentSdk.MixProject do
         "Claude Code" => "https://claude.ai/code"
       },
       maintainers: [{"NSHkr", "ZeroTrust@NSHkr.com"}],
-      files:
-        ~w(lib mix.exs README.md HOOKS_GUIDE.md LICENSE CHANGELOG.md .formatter.exs assets docs/design examples/hooks examples/runtime_control test/claude_agent_sdk/hooks)
+      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs assets guides)
     ]
   end
 
@@ -70,15 +69,39 @@ defmodule ClaudeAgentSdk.MixProject do
       logo: "assets/claude_agent_sdk.svg",
       extras: [
         "README.md",
-        "HOOKS_GUIDE.md",
-        "COMPREHENSIVE_MANUAL.md",
-        "MOCKING.md",
+        "guides/getting-started.md",
+        "guides/streaming.md",
+        "guides/hooks.md",
+        "guides/mcp-tools.md",
+        "guides/permissions.md",
+        "guides/configuration.md",
+        "guides/agents.md",
+        "guides/sessions.md",
+        "guides/testing.md",
+        "guides/error-handling.md",
         "CHANGELOG.md",
         "LICENSE"
       ],
       groups_for_extras: [
-        Guides: ["README.md", "HOOKS_GUIDE.md"],
-        Documentation: ["COMPREHENSIVE_MANUAL.md", "MOCKING.md"],
+        "Getting Started": [
+          "README.md",
+          "guides/getting-started.md"
+        ],
+        "Core Guides": [
+          "guides/streaming.md",
+          "guides/hooks.md",
+          "guides/mcp-tools.md",
+          "guides/permissions.md"
+        ],
+        "Advanced Topics": [
+          "guides/configuration.md",
+          "guides/agents.md",
+          "guides/sessions.md"
+        ],
+        "Testing & Errors": [
+          "guides/testing.md",
+          "guides/error-handling.md"
+        ],
         "Release Notes": ["CHANGELOG.md", "LICENSE"]
       ],
       groups_for_modules: [

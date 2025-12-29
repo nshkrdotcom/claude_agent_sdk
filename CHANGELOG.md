@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-12-29
+
+### Added
+- Subagents: Added `subagent_spawning_live.exs` example demonstrating parallel orchestration via the Task tool.
+- Web Tools: Added `web_tools_live.exs` example for `WebSearch` and `WebFetch` usage.
+- API: Added `ClaudeAgentSDK.list_sessions/1` to list persisted sessions.
+
+### Changed
+- MCP Protocol: Updated `Client` to nest SDK MCP responses (`response.response.mcp_response`) to match Python SDK/CLI parity.
+- CLI Args: Updated `Options` to pass in-process SDK MCP servers to the CLI via `--mcp-config` to ensure tool discovery.
+- Testing: Introduced `:live_cli` tag to better isolate tests that spawn real processes.
+
+### Documentation
+- Overhaul: Refactored root-level documentation into comprehensive `guides/` (Streaming, Hooks, Permissions, Agents, etc.).
+- Cleanup: Removed legacy root markdown files (`AGENTS.md`, `COMPREHENSIVE_MANUAL.md`, `HOOKS_GUIDE.md`, etc.).
+- ExDoc: Updated configuration with organized groups for modules and guides.
+
 ## [0.6.10] - 2025-12-24
 
 ### Fixed
@@ -862,4 +879,27 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.10...v0.7.0
+[0.6.10]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.9...v0.6.10
+[0.6.9]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.8...v0.6.9
+[0.6.8]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.7...v0.6.8
+[0.6.7]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.6...v0.6.7
+[0.6.6]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.5...v0.6.6
+[0.6.5]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.4...v0.6.5
+[0.6.4]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.3...v0.6.4
+[0.6.3]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.2...v0.6.3
+[0.6.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.5.3...v0.6.0
+[0.5.3]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.5.2...v0.5.3
+[0.5.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.5.1...v0.5.2
+[0.5.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.2.2...v0.3.0
+[0.2.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/nshkrdotcom/claude_agent_sdk/releases/tag/v0.0.1

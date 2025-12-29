@@ -642,26 +642,20 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   # MCP Configuration - handles both mcp_servers (v0.5.0+) and mcp_config (backward compat)
+  # IMPORTANT: ALL servers (including SDK type) must be passed to the CLI so Claude knows
+  # the tools exist. The control protocol handles execution, but the CLI needs the server
+  # metadata to expose tools to Claude. This matches the Python SDK behavior.
   defp add_mcp_args(args, options) do
     cond do
       # Priority 1: mcp_servers (new programmatic API)
       options.mcp_servers != nil and map_size(options.mcp_servers) > 0 ->
-        # Filter out SDK servers - they require Client with control protocol
-        # Only external servers can be passed via --mcp-config
-        external_servers_only =
-          options.mcp_servers
-          |> Enum.filter(fn {_name, config} -> config.type != :sdk end)
-          |> Map.new()
-
-        if map_size(external_servers_only) > 0 do
-          servers_for_cli = prepare_servers_for_cli(external_servers_only)
-          json_config = Jason.encode!(servers_for_cli)
-          args ++ ["--mcp-config", json_config]
-        else
-          # Only SDK servers - nothing to pass to CLI
-          # (SDK servers require Client with bidirectional control protocol)
-          args
-        end
+        # Pass ALL servers to CLI (both SDK and external)
+        # SDK servers get their registry_pid stripped, external servers pass through as-is
+        # This matches Python SDK behavior in subprocess_cli.py lines 246-268
+        servers_for_cli = prepare_servers_for_cli(options.mcp_servers)
+        # Wrap in {"mcpServers": ...} format like Python SDK does
+        json_config = Jason.encode!(%{"mcpServers" => servers_for_cli})
+        args ++ ["--mcp-config", json_config]
 
       # Priority 2: mcp_config file path (backward compat)
       is_binary(options.mcp_config) ->

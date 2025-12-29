@@ -2214,10 +2214,17 @@ defmodule ClaudeAgentSDK.Client do
   @spec send_sdk_mcp_response(state(), String.t(), map()) :: :ok
   defp send_sdk_mcp_response(state, request_id, jsonrpc_response) do
     # Wrap JSONRPC response in control protocol response
+    # Must match Python SDK format: {"type": "control_response", "response": {"subtype": "success", ...}}
+    # The mcp_response is nested inside response.response.mcp_response (see Python query.py line 311)
     response = %{
       "type" => "control_response",
-      "id" => request_id,
-      "response" => jsonrpc_response
+      "response" => %{
+        "subtype" => "success",
+        "request_id" => request_id,
+        "response" => %{
+          "mcp_response" => jsonrpc_response
+        }
+      }
     }
 
     json = Jason.encode!(response)

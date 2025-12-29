@@ -1,93 +1,239 @@
-<svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Claude Agent SDK Logo">
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Claude Agent SDK">
   <defs>
-    <!-- Main Body Gradient: Deep Elixir Purple -->
-    <linearGradient id="body-grad" x1="50%" y1="0%" x2="50%" y2="100%">
-      <stop offset="0%" stop-color="#36205D"/>
-      <stop offset="100%" stop-color="#1A0F2E"/>
+    <!-- Anthropic-inspired dark background gradient -->
+    <linearGradient id="hexBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1918"/>
+      <stop offset="50%" stop-color="#141413"/>
+      <stop offset="100%" stop-color="#0d0d0c"/>
     </linearGradient>
 
-    <!-- Stroke Gradient: Subtle highlighting -->
-    <linearGradient id="stroke-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#704D9D"/>
-      <stop offset="100%" stop-color="#3E2663"/>
+    <!-- Primary accent gradient (Anthropic orange) -->
+    <linearGradient id="accentOrange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e8886a"/>
+      <stop offset="50%" stop-color="#d97757"/>
+      <stop offset="100%" stop-color="#CC785C"/>
     </linearGradient>
 
-    <!-- The "Intelligence" Glow (Cyan/White) -->
-    <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="40%" stop-color="#66F9FF"/>
-      <stop offset="100%" stop-color="#66F9FF" stop-opacity="0"/>
+    <!-- Secondary accent gradient (Anthropic blue) -->
+    <linearGradient id="accentBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7eaad6"/>
+      <stop offset="50%" stop-color="#6a9bcc"/>
+      <stop offset="100%" stop-color="#5688b8"/>
+    </linearGradient>
+
+    <!-- Core glow radial for central intelligence -->
+    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#faf9f5"/>
+      <stop offset="30%" stop-color="#d97757"/>
+      <stop offset="70%" stop-color="#d97757" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#d97757" stop-opacity="0"/>
     </radialGradient>
 
-    <!-- Network Gradient (Magenta to Purple) -->
-    <linearGradient id="network-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#D799FF"/>
-      <stop offset="100%" stop-color="#8F6BFF"/>
+    <!-- Agent node glow -->
+    <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#faf9f5" stop-opacity="0.9"/>
+      <stop offset="40%" stop-color="#6a9bcc" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#6a9bcc" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Hexagon border gradient -->
+    <linearGradient id="hexBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d97757" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#6a9bcc" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#d97757" stop-opacity="0.8"/>
     </linearGradient>
 
-    <!-- Soft Shadow for depth -->
-    <filter id="soft-shadow" x="-50%" y="-50%" width="200%" height="200%">
-      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#000" flood-opacity="0.4"/>
+    <!-- Subtle circuit pattern for tech feel -->
+    <pattern id="circuitPattern" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="10" r="0.5" fill="#b0aea5" opacity="0.15"/>
+      <line x1="10" y1="10" x2="20" y2="10" stroke="#b0aea5" stroke-width="0.3" opacity="0.1"/>
+      <line x1="10" y1="10" x2="10" y2="20" stroke="#b0aea5" stroke-width="0.3" opacity="0.1"/>
+    </pattern>
+
+    <!-- Soft outer shadow -->
+    <filter id="outerShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.35"/>
     </filter>
+
+    <!-- Inner glow for depth -->
+    <filter id="innerGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <!-- Pulsing core animation glow -->
+    <filter id="pulseGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Connection line glow -->
+    <filter id="lineGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Hexagon clip path for background effects -->
+    <clipPath id="hexClip">
+      <polygon points="100,8 173.3,50 173.3,150 100,192 26.7,150 26.7,50"/>
+    </clipPath>
+
+    <!-- Mask for creating depth layers -->
+    <mask id="fadeMask">
+      <radialGradient id="fadeGrad" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="white"/>
+        <stop offset="100%" stop-color="black"/>
+      </radialGradient>
+      <rect x="0" y="0" width="200" height="200" fill="url(#fadeGrad)"/>
+    </mask>
   </defs>
 
-  <!-- 1. The Container: Rounded Hexagon -->
-  <path
-    d="M110 15 
-       L192.2 62.5 
-       L192.2 157.5 
-       L110 205 
-       L27.8 157.5 
-       L27.8 62.5 
-       Z"
-    fill="url(#body-grad)"
-    stroke="url(#stroke-grad)"
-    stroke-width="2"
-    filter="url(#soft-shadow)"
+  <!-- Main Hexagon Container with shadow -->
+  <polygon 
+    points="100,8 173.3,50 173.3,150 100,192 26.7,150 26.7,50" 
+    fill="url(#hexBg)" 
+    stroke="url(#hexBorder)" 
+    stroke-width="1.5"
+    filter="url(#outerShadow)"
   />
 
-  <!-- 2. Technical Detail: Background Circuitry (Subtle) -->
-  <g stroke="#533980" stroke-width="1.5" opacity="0.2" fill="none">
-    <path d="M110 205 L110 160"/>
-    <path d="M27.8 62.5 L70 90"/>
-    <path d="M192.2 62.5 L150 90"/>
-    <circle cx="110" cy="110" r="60" stroke-dasharray="4 6"/>
+  <!-- Subtle circuit pattern background -->
+  <g clip-path="url(#hexClip)">
+    <rect x="0" y="0" width="200" height="200" fill="url(#circuitPattern)"/>
   </g>
 
-  <!-- 3. The Symbol: Elixir Drop Network -->
-  <!-- This translates the iconic drop shape into a node-graph -->
-  <g transform="translate(110, 118)">
+  <!-- Concentric hexagonal rings for depth -->
+  <g clip-path="url(#hexClip)" opacity="0.15">
+    <polygon points="100,30 155,60 155,140 100,170 45,140 45,60" fill="none" stroke="#b0aea5" stroke-width="0.5" stroke-dasharray="3 3"/>
+    <polygon points="100,45 140,68 140,132 100,155 60,132 60,68" fill="none" stroke="#b0aea5" stroke-width="0.4" stroke-dasharray="2 4"/>
+  </g>
+
+  <!-- Agent Network Visualization -->
+  <g transform="translate(100, 100)">
     
-    <!-- Connectivity Lines -->
-    <g stroke="#A37ACC" stroke-width="3" stroke-linecap="round">
-      <!-- Left to Top -->
-      <path d="M-35 15 Q-30 -20 0 -65"/>
-      <!-- Right to Top -->
-      <path d="M35 15 Q30 -20 0 -65"/>
-      <!-- Left to Right (Base) -->
-      <path d="M-35 15 Q0 35 35 15"/>
-      <!-- Center connections -->
-      <line x1="0" y1="-10" x2="-35" y2="15" stroke-width="1.5" opacity="0.6"/>
-      <line x1="0" y1="-10" x2="35" y2="15" stroke-width="1.5" opacity="0.6"/>
-      <line x1="0" y1="-10" x2="0" y2="-65" stroke-width="1.5" opacity="0.6"/>
+    <!-- Orbital paths (agent communication channels) -->
+    <g fill="none" stroke="#6a9bcc" opacity="0.25">
+      <ellipse cx="0" cy="0" rx="55" ry="55" stroke-width="0.5" stroke-dasharray="4 2"/>
+      <ellipse cx="0" cy="0" rx="40" ry="40" stroke-width="0.5" stroke-dasharray="2 3"/>
+      <ellipse cx="0" cy="0" rx="25" ry="25" stroke-width="0.5" stroke-dasharray="1 2"/>
     </g>
 
-    <!-- The Nodes (Agents/Processes) -->
-    <!-- Top Node (The Source/CLI) -->
-    <circle cx="0" cy="-65" r="7" fill="url(#network-grad)"/>
-    
-    <!-- Bottom Left Node (Input) -->
-    <circle cx="-35" cy="15" r="7" fill="url(#network-grad)"/>
-    
-    <!-- Bottom Right Node (Output) -->
-    <circle cx="35" cy="15" r="7" fill="url(#network-grad)"/>
+    <!-- Agent connection lines (showing orchestration) -->
+    <g stroke="url(#accentBlue)" stroke-width="1.5" opacity="0.7" fill="none" filter="url(#lineGlow)">
+      <!-- Core to outer agents -->
+      <line x1="0" y1="0" x2="0" y2="-50" stroke-linecap="round"/>
+      <line x1="0" y1="0" x2="43.3" y2="25" stroke-linecap="round"/>
+      <line x1="0" y1="0" x2="-43.3" y2="25" stroke-linecap="round"/>
+      <line x1="0" y1="0" x2="43.3" y2="-25" stroke-linecap="round"/>
+      <line x1="0" y1="0" x2="-43.3" y2="-25" stroke-linecap="round"/>
+      <line x1="0" y1="0" x2="0" y2="50" stroke-linecap="round"/>
+    </g>
 
-    <!-- 4. The Core Intelligence (Claude) -->
-    <!-- Central processing node with AI glow -->
-    <circle cx="0" cy="-10" r="14" fill="#2E1A4F" stroke="#7A4BFF" stroke-width="1.5"/>
-    <circle cx="0" cy="-10" r="5" fill="#FFFFFF"/>
-    <!-- The glow effect -->
-    <circle cx="0" cy="-10" r="12" fill="url(#core-glow)" opacity="0.6" style="mix-blend-mode: screen;"/>
+    <!-- Secondary connection lines (agent-to-agent) -->
+    <g stroke="#6a9bcc" stroke-width="0.8" opacity="0.35" fill="none">
+      <!-- Hexagonal connections between outer agents -->
+      <line x1="0" y1="-50" x2="43.3" y2="-25"/>
+      <line x1="43.3" y1="-25" x2="43.3" y2="25"/>
+      <line x1="43.3" y1="25" x2="0" y2="50"/>
+      <line x1="0" y1="50" x2="-43.3" y2="25"/>
+      <line x1="-43.3" y1="25" x2="-43.3" y2="-25"/>
+      <line x1="-43.3" y1="-25" x2="0" y2="-50"/>
+    </g>
+
+    <!-- Data flow particles (small dots along connections) -->
+    <g fill="#faf9f5" opacity="0.6">
+      <circle cx="0" cy="-25" r="1.2"/>
+      <circle cx="21.65" cy="12.5" r="1.2"/>
+      <circle cx="-21.65" cy="12.5" r="1.2"/>
+      <circle cx="21.65" cy="-12.5" r="1.2"/>
+      <circle cx="-21.65" cy="-12.5" r="1.2"/>
+      <circle cx="0" cy="25" r="1.2"/>
+    </g>
+
+    <!-- Outer Agent Nodes (6 agents in hexagonal formation) -->
+    <g filter="url(#innerGlow)">
+      <!-- Top agent -->
+      <circle cx="0" cy="-50" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
+      <circle cx="0" cy="-50" r="4" fill="#6a9bcc"/>
+      <circle cx="0" cy="-50" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
+      
+      <!-- Top-right agent -->
+      <circle cx="43.3" cy="-25" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
+      <circle cx="43.3" cy="-25" r="4" fill="#6a9bcc"/>
+      <circle cx="43.3" cy="-25" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
+      
+      <!-- Bottom-right agent -->
+      <circle cx="43.3" cy="25" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
+      <circle cx="43.3" cy="25" r="4" fill="#6a9bcc"/>
+      <circle cx="43.3" cy="25" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
+      
+      <!-- Bottom agent -->
+      <circle cx="0" cy="50" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
+      <circle cx="0" cy="50" r="4" fill="#6a9bcc"/>
+      <circle cx="0" cy="50" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
+      
+      <!-- Bottom-left agent -->
+      <circle cx="-43.3" cy="25" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
+      <circle cx="-43.3" cy="25" r="4" fill="#6a9bcc"/>
+      <circle cx="-43.3" cy="25" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
+      
+      <!-- Top-left agent -->
+      <circle cx="-43.3" cy="-25" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
+      <circle cx="-43.3" cy="-25" r="4" fill="#6a9bcc"/>
+      <circle cx="-43.3" cy="-25" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
+    </g>
+
+    <!-- Central Claude Core (The orchestrator) -->
+    <g filter="url(#pulseGlow)">
+      <!-- Outer ring -->
+      <circle cx="0" cy="0" r="20" fill="none" stroke="url(#accentOrange)" stroke-width="1" opacity="0.6"/>
+      
+      <!-- Main core body -->
+      <circle cx="0" cy="0" r="16" fill="#141413" stroke="url(#accentOrange)" stroke-width="2"/>
+      
+      <!-- Inner glow -->
+      <circle cx="0" cy="0" r="14" fill="url(#coreGlow)" opacity="0.8"/>
+      
+      <!-- Claude "spark" - stylized anthropic inspired symbol -->
+      <g fill="#faf9f5">
+        <!-- Central star/spark pattern representing intelligence -->
+        <polygon points="0,-8 2,-2 8,0 2,2 0,8 -2,2 -8,0 -2,-2" opacity="0.95"/>
+        <!-- Radiating micro-details -->
+        <line x1="0" y1="-6" x2="0" y2="-10" stroke="#faf9f5" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
+        <line x1="6" y1="0" x2="10" y2="0" stroke="#faf9f5" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
+        <line x1="0" y1="6" x2="0" y2="10" stroke="#faf9f5" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
+        <line x1="-6" y1="0" x2="-10" y2="0" stroke="#faf9f5" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
+        <!-- Diagonal rays -->
+        <line x1="4.24" y1="-4.24" x2="7.07" y2="-7.07" stroke="#faf9f5" stroke-width="0.8" stroke-linecap="round" opacity="0.4"/>
+        <line x1="4.24" y1="4.24" x2="7.07" y2="7.07" stroke="#faf9f5" stroke-width="0.8" stroke-linecap="round" opacity="0.4"/>
+        <line x1="-4.24" y1="4.24" x2="-7.07" y2="7.07" stroke="#faf9f5" stroke-width="0.8" stroke-linecap="round" opacity="0.4"/>
+        <line x1="-4.24" y1="-4.24" x2="-7.07" y2="-7.07" stroke="#faf9f5" stroke-width="0.8" stroke-linecap="round" opacity="0.4"/>
+      </g>
+    </g>
+
+  </g>
+
+  <!-- Hexagon edge highlights for premium glass effect -->
+  <g clip-path="url(#hexClip)">
+    <!-- Top edge highlight -->
+    <line x1="26.7" y1="50" x2="100" y2="8" stroke="#faf9f5" stroke-width="0.5" opacity="0.15"/>
+    <line x1="100" y1="8" x2="173.3" y2="50" stroke="#faf9f5" stroke-width="0.5" opacity="0.1"/>
+  </g>
+
+  <!-- Subtle corner accents -->
+  <g fill="#d97757" opacity="0.4">
+    <circle cx="100" cy="8" r="2"/>
+    <circle cx="173.3" cy="50" r="1.5"/>
+    <circle cx="173.3" cy="150" r="1.5"/>
+    <circle cx="100" cy="192" r="2"/>
+    <circle cx="26.7" cy="150" r="1.5"/>
+    <circle cx="26.7" cy="50" r="1.5"/>
   </g>
 
 </svg>

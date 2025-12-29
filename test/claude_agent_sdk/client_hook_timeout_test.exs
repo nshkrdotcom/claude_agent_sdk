@@ -69,6 +69,8 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
            end)
   end
 
+  # Intentionally slow: tests timeout behavior with 1.3s sleep
+  @tag :slow
   test "uses matcher-specific timeout when executing hook callbacks" do
     callback = fn _input, _tool_use_id, _context ->
       Process.sleep(1_300)
@@ -115,6 +117,8 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
     assert response["response"]["error"] =~ "1.1"
   end
 
+  # Intentionally slow: tests 1s timeout floor with 1.2s sleep
+  @tag :slow
   test "applies floor for extremely small matcher timeout values" do
     callback = fn _input, _tool_use_id, _context ->
       Process.sleep(1_200)

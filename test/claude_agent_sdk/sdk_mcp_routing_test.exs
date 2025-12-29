@@ -66,14 +66,17 @@ defmodule ClaudeAgentSDK.SDKMCPRoutingTest do
           |> MockTransport.recorded_messages()
           |> Enum.map(&Jason.decode!/1)
           |> Enum.find(fn
-            %{"type" => "control_response", "id" => ^request_id} -> true
+            # New Python SDK-compatible format: request_id is inside response.response
+            %{"type" => "control_response", "response" => %{"request_id" => ^request_id}} -> true
             _ -> false
           end)
         end,
         timeout: 5_000
       )
 
-    result = response["response"]["result"]
+    # Navigate to mcp_response which contains the JSONRPC response
+    mcp_response = response["response"]["response"]["mcp_response"]
+    result = mcp_response["result"]
     assert result["resources"] == []
   end
 
@@ -132,14 +135,17 @@ defmodule ClaudeAgentSDK.SDKMCPRoutingTest do
           |> MockTransport.recorded_messages()
           |> Enum.map(&Jason.decode!/1)
           |> Enum.find(fn
-            %{"type" => "control_response", "id" => ^request_id} -> true
+            # New Python SDK-compatible format: request_id is inside response.response
+            %{"type" => "control_response", "response" => %{"request_id" => ^request_id}} -> true
             _ -> false
           end)
         end,
         timeout: 5_000
       )
 
-    result = response["response"]["result"]
+    # Navigate to mcp_response which contains the JSONRPC response
+    mcp_response = response["response"]["response"]["mcp_response"]
+    result = mcp_response["result"]
     assert result["resources"] == []
   end
 

@@ -8,6 +8,8 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
   use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
   @moduletag :requires_cli
+  # Most tests spawn real CLI process (no MockTransport)
+  @moduletag :live_cli
 
   alias ClaudeAgentSDK.{Agent, Client, Options}
 

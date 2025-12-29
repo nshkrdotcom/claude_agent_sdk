@@ -8,6 +8,8 @@ defmodule ClaudeAgentSDK.ClientTest do
   @moduletag :requires_cli
 
   describe "start_link/1" do
+    # Tests in this describe block spawn real CLI process
+    @describetag :live_cli
     test "starts client with valid options" do
       options = %Options{}
 

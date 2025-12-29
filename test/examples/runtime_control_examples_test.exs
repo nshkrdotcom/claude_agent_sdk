@@ -1,6 +1,9 @@
 defmodule Examples.ExamplesSmokeTest do
   use ExUnit.Case, async: false
 
+  # Spawns mix run processes via System.cmd
+  @moduletag :live_cli
+
   @scripts [
     {"control client demo", "examples/archive/mock_demos/control_client_demo.exs",
      "Control Client Demo"},

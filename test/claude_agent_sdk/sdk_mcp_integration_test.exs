@@ -110,7 +110,9 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
       assert prepared["external"]["type"] == "stdio"
     end
 
-    test "Options.to_args does NOT include SDK servers in --mcp-config" do
+    test "Options.to_args includes SDK servers in --mcp-config" do
+      # SDK servers MUST be passed to CLI so Claude knows the tools exist
+      # This matches Python SDK behavior - control protocol handles execution
       sdk_server =
         ClaudeAgentSDK.create_sdk_mcp_server(
           name: "test",
@@ -121,9 +123,20 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
       options = Options.new(mcp_servers: %{"test" => sdk_server})
       args = Options.to_args(options)
 
-      # SDK servers should NOT be passed to CLI via --mcp-config
-      # They are handled via control protocol in Client
-      refute "--mcp-config" in args
+      # SDK servers ARE passed to CLI via --mcp-config (matching Python SDK)
+      assert "--mcp-config" in args
+      config_index = Enum.find_index(args, &(&1 == "--mcp-config"))
+      json_config = Enum.at(args, config_index + 1)
+
+      # Should be wrapped in {"mcpServers": ...} format like Python SDK
+      config = Jason.decode!(json_config)
+      assert Map.has_key?(config, "mcpServers")
+      servers = config["mcpServers"]
+      assert servers["test"]["type"] == "sdk"
+      assert servers["test"]["name"] == "test"
+      assert servers["test"]["version"] == "1.0.0"
+      # registry_pid should be stripped (internal only)
+      refute Map.has_key?(servers["test"], "registry_pid")
     end
 
     test "Options.to_args includes external servers in --mcp-config" do
@@ -141,13 +154,15 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
       config_index = Enum.find_index(args, &(&1 == "--mcp-config"))
       json_config = Enum.at(args, config_index + 1)
 
-      # Should be valid JSON
-      servers = Jason.decode!(json_config)
+      # Should be wrapped in {"mcpServers": ...} format like Python SDK
+      config = Jason.decode!(json_config)
+      assert Map.has_key?(config, "mcpServers")
+      servers = config["mcpServers"]
       assert servers["time"]["type"] == "stdio"
       assert servers["time"]["command"] == "uvx"
     end
 
-    test "Options.to_args includes only external servers when mixed with SDK servers" do
+    test "Options.to_args includes both SDK and external servers when mixed" do
       sdk_server =
         ClaudeAgentSDK.create_sdk_mcp_server(
           name: "sdk-server",
@@ -166,15 +181,18 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
 
       args = Options.to_args(options)
 
-      # Should have --mcp-config with only external server
+      # Should have --mcp-config with both servers
       assert "--mcp-config" in args
       config_index = Enum.find_index(args, &(&1 == "--mcp-config"))
       json_config = Enum.at(args, config_index + 1)
 
-      servers = Jason.decode!(json_config)
-      # Only external server should be in config
+      config = Jason.decode!(json_config)
+      servers = config["mcpServers"]
+      # Both servers should be in config
       assert Map.has_key?(servers, "external")
-      refute Map.has_key?(servers, "sdk")
+      assert Map.has_key?(servers, "sdk")
+      assert servers["sdk"]["type"] == "sdk"
+      assert servers["external"]["type"] == "stdio"
     end
   end
 

@@ -26,6 +26,8 @@ These examples are **live** (they talk to the real Claude Code CLI).
 - `examples/advanced_features/agents_live.exs` — multi-agent workflow via `resume/3`
 - `examples/advanced_features/permissions_live.exs` — tool permission callback (`can_use_tool`)
 - `examples/advanced_features/sdk_mcp_live_demo.exs` — SDK MCP tools invoked in-process
+- `examples/advanced_features/subagent_spawning_live.exs` — Task tool for parallel subagent spawning (research-agent pattern)
+- `examples/advanced_features/web_tools_live.exs` — WebSearch and WebFetch for web access
 - `examples/streaming_tools/quick_demo.exs` — minimal streaming session (no tools/hooks)
 - `examples/streaming_tools/sdk_mcp_streaming.exs` — Streaming + SDK MCP tools (stream events + tool lifecycle)
 - `examples/hooks/context_injection.exs` — `user_prompt_submit` context injection hook

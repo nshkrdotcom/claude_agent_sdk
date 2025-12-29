@@ -109,6 +109,33 @@ defmodule ClaudeAgentSDK do
   end
 
   @doc """
+  Lists saved Claude sessions from the SessionStore.
+
+  Starts the SessionStore automatically when needed.
+  """
+  @spec list_sessions(keyword()) ::
+          {:ok, [ClaudeAgentSDK.SessionStore.session_metadata()]} | {:error, term()}
+  def list_sessions(opts \\ []) do
+    with :ok <- ensure_session_store_started(opts) do
+      {:ok, ClaudeAgentSDK.SessionStore.list_sessions()}
+    end
+  end
+
+  defp ensure_session_store_started(opts) do
+    case Process.whereis(ClaudeAgentSDK.SessionStore) do
+      nil ->
+        case ClaudeAgentSDK.SessionStore.start_link(opts) do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      _pid ->
+        :ok
+    end
+  end
+
+  @doc """
   Creates an SDK-based MCP server for in-process tool execution.
 
   Unlike external MCP servers that require separate processes, SDK servers
