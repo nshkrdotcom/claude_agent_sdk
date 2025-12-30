@@ -50,6 +50,8 @@ defmodule ClaudeAgentSDK.Permission.Result do
       Result.deny("Security violation detected", interrupt: true)
   """
 
+  alias ClaudeAgentSDK.Permission.Update
+
   @typedoc """
   Permission result behavior.
   """
@@ -61,7 +63,7 @@ defmodule ClaudeAgentSDK.Permission.Result do
   For allow results:
   - `behavior` - `:allow`
   - `updated_input` - Optional modified tool input
-  - `updated_permissions` - Optional permission updates
+  - `updated_permissions` - Optional permission updates (list of Update.t() or maps)
 
   For deny results:
   - `behavior` - `:deny`
@@ -71,7 +73,7 @@ defmodule ClaudeAgentSDK.Permission.Result do
   @type t :: %__MODULE__{
           behavior: behavior(),
           updated_input: map() | nil,
-          updated_permissions: [map()] | nil,
+          updated_permissions: [Update.t() | map()] | nil,
           message: String.t() | nil,
           interrupt: boolean()
         }
@@ -170,7 +172,7 @@ defmodule ClaudeAgentSDK.Permission.Result do
 
     base
     |> maybe_add("updatedInput", result.updated_input)
-    |> maybe_add("updatedPermissions", result.updated_permissions)
+    |> maybe_add_permissions(result.updated_permissions)
   end
 
   def to_json_map(%__MODULE__{behavior: :deny} = result) do
@@ -183,6 +185,21 @@ defmodule ClaudeAgentSDK.Permission.Result do
 
   defp maybe_add(map, _key, nil), do: map
   defp maybe_add(map, key, value), do: Map.put(map, key, value)
+
+  defp maybe_add_permissions(map, nil), do: map
+
+  defp maybe_add_permissions(map, permissions) when is_list(permissions) do
+    serialized =
+      Enum.map(permissions, fn
+        %Update{} = update ->
+          Update.to_map(update)
+
+        m when is_map(m) ->
+          m
+      end)
+
+    Map.put(map, "updatedPermissions", serialized)
+  end
 
   @doc """
   Validates a permission result.

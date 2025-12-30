@@ -5,7 +5,7 @@ defmodule Integration.BackwardCompatTest do
 
   @moduletag :integration
 
-  @tag :skip
+  @tag :live_cli
   test "should work without transport option" do
     # Requires Claude CLI to be installed and available in PATH.
     # Skipped in automated environments.

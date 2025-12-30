@@ -83,7 +83,7 @@ defmodule ClaudeAgentSDK.Client do
   - `options` - Configuration options
   - `registry` - Hook callback registry
   - `hook_callback_timeouts` - Map of callback_id => timeout_ms
-  - `subscribers` - Map of ref => pid for streaming subscriptions, or list of pids for legacy
+  - `subscribers` - Map of ref => pid for streaming subscriptions
   - `pending_requests` - Map of request_id => {from, ref}
   - `pending_callbacks` - Map of request_id => %{pid, signal, type} for in-flight control callbacks
   - `initialized` - Whether initialization handshake completed
@@ -101,7 +101,7 @@ defmodule ClaudeAgentSDK.Client do
           options: Options.t(),
           registry: Registry.t(),
           hook_callback_timeouts: %{String.t() => pos_integer()},
-          subscribers: %{reference() => pid()} | [pid()],
+          subscribers: %{reference() => pid()},
           pending_requests: %{String.t() => {GenServer.from(), reference()}},
           pending_callbacks: %{
             String.t() => %{
@@ -527,19 +527,18 @@ defmodule ClaudeAgentSDK.Client do
 
   @impl true
   def handle_call({:send_message, message}, _from, state) do
-    if connected?(state) do
-      json = encode_outgoing_message(message)
+    json = encode_outgoing_message(message)
 
-      case send_payload(state, json) do
-        :ok ->
-          {:reply, :ok, state}
+    case send_payload(state, json) do
+      :ok ->
+        {:reply, :ok, state}
 
-        {:error, reason} ->
-          Logger.error("Failed to send message", reason: inspect(reason))
-          {:reply, {:error, :send_failed}, state}
-      end
-    else
-      {:reply, {:error, :not_connected}, state}
+      {:error, :not_connected} ->
+        {:reply, {:error, :not_connected}, state}
+
+      {:error, reason} ->
+        Logger.error("Failed to send message", reason: inspect(reason))
+        {:reply, {:error, :send_failed}, state}
     end
   end
 
@@ -818,10 +817,7 @@ defmodule ClaudeAgentSDK.Client do
 
       {:error, reason} ->
         # Log both the reason AND the payload (truncated) for debugging
-        payload_preview =
-          if is_binary(payload),
-            do: String.slice(payload, 0, 500),
-            else: inspect(payload, limit: 50)
+        payload_preview = inspect(payload, limit: 50)
 
         Logger.warning("Failed to decode transport message",
           reason: inspect(reason),
@@ -1055,9 +1051,7 @@ defmodule ClaudeAgentSDK.Client do
   def terminate(reason, %{port: port} = state) when is_port(port) do
     _state = state |> cancel_init_timeout() |> cancel_pending_callbacks()
 
-    if Mix.env() != :test do
-      Logger.debug("Terminating client", reason: reason)
-    end
+    Logger.debug("Terminating client", reason: reason)
 
     # Graceful shutdown to avoid EPIPE errors in Claude CLI
     #
@@ -1077,11 +1071,7 @@ defmodule ClaudeAgentSDK.Client do
       after
         200 ->
           # If CLI doesn't exit within 200ms, force close
-          # Don't log in test env - this is expected behavior when stopping quickly
-          if Mix.env() != :test do
-            Logger.debug("CLI didn't exit within timeout, forcing close")
-          end
-
+          Logger.debug("CLI didn't exit within timeout, forcing close")
           :ok
       end
 
@@ -1103,9 +1093,7 @@ defmodule ClaudeAgentSDK.Client do
     |> cancel_init_timeout()
     |> cancel_pending_callbacks()
 
-    if Mix.env() != :test do
-      Logger.debug("Terminating client (no port)", reason: reason)
-    end
+    Logger.debug("Terminating client (no port)", reason: reason)
 
     _ = AgentsFile.cleanup_temp_files(state.temp_files || [])
 
@@ -2296,12 +2284,16 @@ defmodule ClaudeAgentSDK.Client do
       EventParser.parse_event(event_data, state.accumulated_text)
 
     # Broadcast to active subscriber only (queue model)
-    if state.active_subscriber do
-      broadcast_events_to_subscriber(
-        state.active_subscriber,
-        state.subscribers,
-        events
-      )
+    case state.active_subscriber do
+      nil ->
+        :ok
+
+      ref ->
+        broadcast_events_to_subscriber(
+          ref,
+          state.subscribers,
+          events
+        )
     end
 
     # Check for message completion

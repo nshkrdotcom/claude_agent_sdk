@@ -64,13 +64,13 @@ defmodule ClaudeAgentSDK.Model do
   ## Examples
 
       iex> ClaudeAgentSDK.Model.validate("opus")
-      {:ok, "claude-opus-4-20250514"}
+      {:ok, "opus"}
 
       iex> ClaudeAgentSDK.Model.validate("sonnet")
-      {:ok, "claude-sonnet-4-20250514"}
+      {:ok, "sonnet"}
 
-      iex> ClaudeAgentSDK.Model.validate("claude-haiku-4-20250514")
-      {:ok, "claude-haiku-4-20250514"}
+      iex> ClaudeAgentSDK.Model.validate("claude-haiku-4-5-20251001")
+      {:ok, "claude-haiku-4-5-20251001"}
 
       iex> ClaudeAgentSDK.Model.validate("invalid-model")
       {:error, :invalid_model}

@@ -134,9 +134,13 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
       end
     end
   rescue
-    _ -> {:error, :client_not_alive}
+    e ->
+      Logger.debug("Client state check failed: #{Exception.message(e)}")
+      {:error, :client_not_alive}
   catch
-    :exit, _ -> {:error, :client_not_alive}
+    :exit, reason ->
+      Logger.debug("Client exited during state check: #{inspect(reason)}")
+      {:error, :client_not_alive}
   end
 
   defp stream_next({:error, [msg | rest]}), do: {[msg], {:error, rest}}

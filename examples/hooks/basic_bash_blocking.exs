@@ -1,9 +1,17 @@
 #!/usr/bin/env elixir
 
-# Example 1: Block Dangerous Bash Commands with LIVE CLI
+# Example: Hook-based Bash Command Blocking with LIVE CLI
 #
-# This example demonstrates using a PreToolUse hook to block dangerous
+# This example demonstrates using a PreToolUse hook to block specific
 # bash commands before they execute using the actual Claude CLI.
+#
+# The example shows:
+# 1. Allowing a safe command (echo 'Hello from hooks!')
+# 2. Blocking a command matching a security policy pattern (./blocked.sh)
+#
+# Note: We use "blocked.sh" as the pattern (similar to Python SDK's "./foo.sh")
+# rather than dangerous commands like "rm -rf" because Claude's built-in safety
+# may refuse those commands before the hook is even invoked.
 #
 # Run: mix run examples/hooks/basic_bash_blocking.exs
 
@@ -19,7 +27,16 @@ Support.header!("Hooks Example: Basic Bash Command Blocking (live)")
 
 defmodule SecurityHooks do
   @moduledoc """
-  Security hooks for blocking dangerous commands.
+  Security hooks for Bash command validation.
+
+  Demonstrates a PreToolUse hook that:
+  - Allows safe commands (echo, ls, etc.)
+  - Blocks commands matching security policy patterns
+
+  This example uses "blocked.sh" as the blocked pattern (matching the Python
+  SDK's hooks example which uses "./foo.sh"). We use this instead of dangerous
+  commands like "rm -rf" because Claude's built-in safety may refuse those
+  commands before the hook is even invoked.
   """
 
   @table :claude_agent_sdk_examples_basic_bash_blocking
@@ -27,32 +44,32 @@ defmodule SecurityHooks do
   def table_name, do: @table
 
   @doc """
-  PreToolUse hook that blocks dangerous bash commands.
+  PreToolUse hook that blocks Bash commands matching security policy patterns.
 
-  Checks for patterns like:
-  - rm -rf
-  - dd if=
-  - mkfs
-  - > /dev/
+  Blocks commands containing "blocked.sh" pattern (similar to Python SDK's
+  "./foo.sh" pattern). We use this pattern instead of dangerous commands
+  because Claude's built-in safety may refuse rm -rf, dd, etc. before the
+  hook is even invoked.
 
   Returns:
-  - deny output if dangerous pattern found
+  - deny output if blocked pattern found
   - allow output otherwise
   """
   def check_bash_command(input, _tool_use_id, _context) do
     case input do
       %{"tool_name" => "Bash", "tool_input" => %{"command" => command}} ->
-        dangerous_patterns = ["rm -rf", "dd if=", "mkfs", "> /dev/"]
+        # Block any command containing "blocked.sh" - matches Python SDK pattern
+        blocked_patterns = ["blocked.sh"]
 
-        if Enum.any?(dangerous_patterns, &String.contains?(command, &1)) do
+        if Enum.any?(blocked_patterns, &String.contains?(command, &1)) do
           _ = :ets.update_counter(@table, :denied, {2, 1}, {:denied, 0})
 
-          IO.puts("\n🚫 BLOCKED: Dangerous command detected!")
+          IO.puts("\n🚫 BLOCKED: Command blocked by security policy!")
           IO.puts("   Command: #{command}\n")
 
-          Output.deny("Dangerous command blocked: #{command}")
+          Output.deny("Command blocked by security policy: #{command}")
           |> Output.with_system_message("🔒 Security policy violation")
-          |> Output.with_reason("This command could cause data loss or system damage")
+          |> Output.with_reason("This command is not allowed by the security policy")
         else
           _ = :ets.update_counter(@table, :allowed, {2, 1}, {:allowed, 0})
 
@@ -85,12 +102,18 @@ hooks = %{
   ]
 }
 
+# Note: We don't set max_turns here to match Python SDK behavior.
+# With hooks enabled, the conversation needs multiple turns:
+# 1. Claude responds with tool_use
+# 2. Hook is invoked and processes
+# 3. Tool executes
+# 4. Claude responds to tool result
+# Setting max_turns too low (e.g., 2) causes error_max_turns failures.
 options = %Options{
   tools: ["Bash"],
   allowed_tools: ["Bash"],
   hooks: hooks,
   model: "haiku",
-  max_turns: 2,
   permission_mode: :default
 }
 
@@ -131,10 +154,10 @@ IO.puts("Test 1: safe command (should be allowed)\n")
 messages1 =
   run_prompt.("Use the Bash tool to run this exact command: echo 'Hello from hooks!'")
 
-IO.puts("\nTest 2: dangerous command (should be blocked by hook)\n")
+IO.puts("\nTest 2: blocked command (should be blocked by hook)\n")
 
 messages2 =
-  run_prompt.("Use the Bash tool to run this exact command: rm -rf /tmp/this_should_be_blocked")
+  run_prompt.("Use the Bash tool to run this exact command: ./blocked.sh --help")
 
 case Enum.find(messages1, &(&1.type == :result)) do
   %Message{subtype: :success} ->
@@ -152,10 +175,10 @@ case Enum.find(messages2, &(&1.type == :result)) do
     :ok
 
   %Message{subtype: other} ->
-    raise "Dangerous command run did not succeed (result subtype: #{inspect(other)})"
+    raise "Blocked command run did not succeed (result subtype: #{inspect(other)})"
 
   nil ->
-    raise "Dangerous command run returned no result message."
+    raise "Blocked command run returned no result message."
 end
 
 allowed =

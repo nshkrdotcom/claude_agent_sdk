@@ -10,7 +10,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
   alias ClaudeAgentSDK.TestSupport.{MockTransport, TestFixtures}
 
   describe "start_session/1 with router integration" do
-    @tag :skip
+    @tag :live_cli
     test "selects CLI-only session for simple streaming" do
       # No control features - should use Session (fast path)
       # SKIPPED: Requires real CLI process
@@ -69,7 +69,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
       close_session_safe(session)
     end
 
-    @tag :skip
+    @tag :live_cli
     test "forces include_partial_messages to true" do
       # Even if not specified, start_session should enable it
       # SKIPPED: Requires real CLI process
@@ -85,14 +85,14 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
   end
 
   describe "send_message/2 polymorphism" do
-    @tag :skip
+    @tag :live_cli
     test "works with CLI-only session (PID)" do
       # SKIPPED: Requires real CLI
       {:ok, session} = Streaming.start_session()
 
-      # Should return a stream
+      # Should return a stream (Stream.resource/3 returns a function, not a struct)
       stream = Streaming.send_message(session, "Hello")
-      assert %Stream{} = stream
+      assert is_function(stream) or match?(%Stream{}, stream)
 
       # Don't enumerate (would need real CLI)
       Streaming.close_session(session)
@@ -114,7 +114,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
   end
 
   describe "close_session/1 polymorphism" do
-    @tag :skip
+    @tag :live_cli
     test "closes CLI-only session (PID)" do
       # SKIPPED: Requires real CLI
       {:ok, session} = Streaming.start_session()
@@ -140,7 +140,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
   end
 
   describe "get_session_id/1 polymorphism" do
-    @tag :skip
+    @tag :live_cli
     test "gets session ID from CLI-only session" do
       # SKIPPED: Requires real CLI
       {:ok, session} = Streaming.start_session()
@@ -163,7 +163,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
   end
 
   describe "backwards compatibility" do
-    @tag :skip
+    @tag :live_cli
     test "existing code using start_session still works" do
       # SKIPPED: Requires real CLI
       # Test that old usage patterns still work
@@ -172,7 +172,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
       Streaming.close_session(session)
     end
 
-    @tag :skip
+    @tag :live_cli
     test "existing code with options still works" do
       # SKIPPED: Requires real CLI
       options = %Options{model: "sonnet", max_turns: 3}

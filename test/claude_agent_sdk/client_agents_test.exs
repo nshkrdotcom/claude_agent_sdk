@@ -278,7 +278,7 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
   end
 
   describe "Agent integration with message streaming" do
-    @tag :skip
+    @tag :live_cli
     # This test would require actual CLI integration
     test "switches agent mid-conversation and continues correctly", %{
       code_agent: code_agent,

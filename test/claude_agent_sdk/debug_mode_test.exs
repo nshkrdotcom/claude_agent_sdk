@@ -36,7 +36,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
   end
 
   describe "debug_query/2" do
-    @tag :skip
+    @tag :live_cli
     test "executes query with debug output (skipped - calls AuthChecker)" do
       # Capture IO to verify debug output
       output =
@@ -51,7 +51,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
       assert String.contains?(output, "Debug completed")
     end
 
-    @tag :skip
+    @tag :live_cli
     test "shows timing information (skipped - calls AuthChecker)" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
@@ -62,7 +62,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
       assert Regex.match?(~r/\[\d+ms\]/, output)
     end
 
-    @tag :skip
+    @tag :live_cli
     test "handles errors gracefully (skipped - calls AuthChecker)" do
       Mock.set_response("error", [
         %{
@@ -132,7 +132,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
   end
 
   describe "run_diagnostics/0" do
-    @tag :skip
+    @tag :live_cli
     test "runs diagnostic checks (skipped in test env)" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
@@ -143,11 +143,11 @@ defmodule ClaudeAgentSDK.DebugModeTest do
       assert String.contains?(output, "CLI Status:")
       assert String.contains?(output, "Authentication:")
       assert String.contains?(output, "Environment:")
-      assert String.contains?(output, "Mix env:")
+      assert String.contains?(output, "Build env:")
       assert String.contains?(output, "Testing basic connectivity")
     end
 
-    @tag :skip
+    @tag :live_cli
     test "shows mock status in diagnostics (skipped in test env)" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
@@ -282,7 +282,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
   end
 
   describe "edge cases" do
-    @tag :skip
+    @tag :live_cli
     test "debug_query handles nil options (skipped - calls AuthChecker)" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
@@ -290,7 +290,8 @@ defmodule ClaudeAgentSDK.DebugModeTest do
           assert is_list(messages)
         end)
 
-      assert String.contains?(output, "Options: nil")
+      # When nil options passed, debug_query shows defaults
+      assert String.contains?(output, "Options:")
     end
 
     test "analyze_messages handles mixed content formats" do
@@ -508,7 +509,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
   end
 
   describe "enhanced debugging output" do
-    @tag :skip
+    @tag :live_cli
     test "debug_query shows comprehensive timing (skipped - calls AuthChecker)" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
@@ -524,7 +525,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
       assert String.contains?(output, "🏁 Debug completed")
     end
 
-    @tag :skip
+    @tag :live_cli
     test "debug_query shows error handling (skipped - calls AuthChecker)" do
       # Mock an error scenario
       output =
@@ -559,7 +560,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
   end
 
   describe "diagnostic functionality" do
-    @tag :skip
+    @tag :live_cli
     test "run_diagnostics provides comprehensive system check (skipped in test env)" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->
@@ -570,14 +571,14 @@ defmodule ClaudeAgentSDK.DebugModeTest do
       assert String.contains?(output, "CLI Status:")
       assert String.contains?(output, "Authentication:")
       assert String.contains?(output, "📋 Environment:")
-      assert String.contains?(output, "Mix env:")
+      assert String.contains?(output, "Build env:")
       assert String.contains?(output, "Mock enabled:")
       assert String.contains?(output, "Elixir:")
       assert String.contains?(output, "OTP:")
       assert String.contains?(output, "🔌 Testing basic connectivity...")
     end
 
-    @tag :skip
+    @tag :live_cli
     test "run_diagnostics shows recommendations when issues found (skipped in test env)" do
       output =
         ExUnit.CaptureIO.capture_io(fn ->

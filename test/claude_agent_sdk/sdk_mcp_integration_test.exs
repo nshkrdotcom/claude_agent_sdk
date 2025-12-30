@@ -200,7 +200,7 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
 
   describe "SDK MCP tool integration (LIVE TESTS)" do
     @tag :integration
-    @tag :skip
+    @tag :live_cli
     test "SDK MCP server responds to initialize request" do
       # This test would require simulating control protocol messages
       # For now, we rely on manual testing with live examples
@@ -208,7 +208,7 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
     end
 
     @tag :integration
-    @tag :skip
+    @tag :live_cli
     test "SDK MCP server lists tools correctly" do
       # This test would require simulating control protocol messages
       # For now, we rely on manual testing with live examples
@@ -216,7 +216,7 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
     end
 
     @tag :integration
-    @tag :skip
+    @tag :live_cli
     test "SDK MCP server executes tools correctly" do
       # This test would require simulating control protocol messages
       # For now, we rely on manual testing with live examples

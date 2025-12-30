@@ -7,7 +7,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   # and test the logic rather than actual CLI calls
 
   describe "check_auth/0" do
-    @tag :skip
+    @tag :live_cli
     test "returns ok when authenticated (skipped in test env)" do
       # This test would need actual CLI or mocking
       # For now, we test the function exists and returns expected format
@@ -18,7 +18,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   end
 
   describe "authenticated?/0" do
-    @tag :skip
+    @tag :live_cli
     test "returns boolean based on auth status (skipped in test env)" do
       result = AuthChecker.authenticated?()
       assert is_boolean(result)
@@ -26,7 +26,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   end
 
   describe "check_cli_installation/0" do
-    @tag :skip
+    @tag :live_cli
     test "returns expected format (skipped in test env)" do
       result = AuthChecker.check_cli_installation()
 
@@ -35,7 +35,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   end
 
   describe "diagnose/0" do
-    @tag :skip
+    @tag :live_cli
     test "returns comprehensive diagnostic map (skipped in test env)" do
       diagnosis = AuthChecker.diagnose()
 
@@ -49,7 +49,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
       assert is_list(diagnosis.recommendations)
     end
 
-    @tag :skip
+    @tag :live_cli
     test "includes CLI info when installed (skipped in test env)" do
       diagnosis = AuthChecker.diagnose()
 
@@ -61,7 +61,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
       end
     end
 
-    @tag :skip
+    @tag :live_cli
     test "includes auth info based on status (skipped in test env)" do
       diagnosis = AuthChecker.diagnose()
 
@@ -74,7 +74,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   end
 
   describe "ensure_ready!/0" do
-    @tag :skip
+    @tag :live_cli
     test "returns :ok or raises error (skipped in test env)" do
       # This will either succeed or raise
       try do
@@ -92,7 +92,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   # Test private helper functions indirectly
 
   describe "parse_auth_error/1 (indirect)" do
-    @tag :skip
+    @tag :live_cli
     test "diagnose provides helpful auth error messages (skipped in test env)" do
       diagnosis = AuthChecker.diagnose()
 
@@ -105,7 +105,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   end
 
   describe "recommendations" do
-    @tag :skip
+    @tag :live_cli
     test "provides install recommendation when CLI not found (skipped in test env)" do
       diagnosis = AuthChecker.diagnose()
 
@@ -114,7 +114,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
       end
     end
 
-    @tag :skip
+    @tag :live_cli
     test "provides login recommendation when not authenticated (skipped in test env)" do
       diagnosis = AuthChecker.diagnose()
 
@@ -123,18 +123,19 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
       end
     end
 
-    @tag :skip
+    @tag :live_cli
     test "no recommendations when ready (skipped in test env)" do
       diagnosis = AuthChecker.diagnose()
 
       if diagnosis.status == :ready do
-        assert diagnosis.recommendations == []
+        # When ready, the only recommendation is a positive confirmation message
+        assert diagnosis.recommendations == ["Environment is ready for Claude queries"]
       end
     end
   end
 
   describe "auth_method_available?/1" do
-    @tag :skip
+    @tag :live_cli
     test "returns boolean for valid auth methods (skipped - calls CLI)" do
       assert is_boolean(AuthChecker.auth_method_available?(:anthropic))
       assert is_boolean(AuthChecker.auth_method_available?(:bedrock))
@@ -149,7 +150,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   end
 
   describe "get_api_key_source/0" do
-    @tag :skip
+    @tag :live_cli
     test "returns tuple with ok or error (skipped - calls CLI)" do
       result = AuthChecker.get_api_key_source()
       assert match?({:ok, _}, result) or match?({:error, _}, result)
@@ -211,7 +212,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   end
 
   describe "diagnosis struct validation" do
-    @tag :skip
+    @tag :live_cli
     test "diagnosis contains all required fields (skipped in test env)" do
       diagnosis = AuthChecker.diagnose()
 
@@ -251,7 +252,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
       assert %DateTime{} = diagnosis.last_checked
     end
 
-    @tag :skip
+    @tag :live_cli
     test "diagnosis fields are consistent (skipped in test env)" do
       diagnosis = AuthChecker.diagnose()
 
@@ -285,7 +286,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   end
 
   describe "enhanced multi-provider auth support" do
-    @tag :skip
+    @tag :live_cli
     test "supports multiple authentication providers (skipped - calls CLI)" do
       # Test that all expected providers are recognized
       providers = [:anthropic, :bedrock, :vertex]
@@ -297,7 +298,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
       end
     end
 
-    @tag :skip
+    @tag :live_cli
     test "provides provider-specific recommendations (skipped in test env)" do
       # Test with Bedrock environment
       System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")

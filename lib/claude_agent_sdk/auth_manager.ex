@@ -197,9 +197,7 @@ defmodule ClaudeAgentSDK.AuthManager do
     state =
       case storage_backend.load() do
         {:ok, token_data} ->
-          if Mix.env() != :test do
-            Logger.info("AuthManager: Loaded existing token from storage")
-          end
+          Logger.info("AuthManager: Loaded existing token from storage")
 
           %__MODULE__{
             token: token_data.token,
@@ -209,10 +207,7 @@ defmodule ClaudeAgentSDK.AuthManager do
           }
 
         {:error, :not_found} ->
-          if Mix.env() != :test do
-            Logger.info("AuthManager: No stored token found, will authenticate on demand")
-          end
-
+          Logger.info("AuthManager: No stored token found, will authenticate on demand")
           %__MODULE__{storage_backend: storage_backend}
 
         {:error, reason} ->

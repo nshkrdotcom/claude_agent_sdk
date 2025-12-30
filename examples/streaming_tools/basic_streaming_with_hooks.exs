@@ -57,9 +57,10 @@ defmodule StreamingHooksExample do
     IO.puts("The SDK automatically selects the control client transport.\n")
 
     # Configure options with hooks
+    # Note: We don't set max_turns to match Python SDK behavior.
+    # With hooks enabled, the conversation needs multiple turns.
     options = %Options{
       model: "haiku",
-      max_turns: 2,
       permission_mode: :default,
       tools: ["Bash"],
       allowed_tools: ["Bash"],

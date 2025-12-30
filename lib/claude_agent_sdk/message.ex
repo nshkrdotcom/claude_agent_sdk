@@ -115,7 +115,7 @@ defmodule ClaudeAgentSDK.Message do
           raw = parse_json_manual(String.trim(json_string))
           {:ok, parse_message(raw)}
         rescue
-          e -> {:error, e}
+          e -> {:error, {:parse_error, Exception.message(e)}}
         end
     end
   end
@@ -463,7 +463,11 @@ defmodule ClaudeAgentSDK.Message do
 
   @doc """
   Checks if the message indicates an error.
+
+  Returns `true` for result messages with error subtypes
+  (`:error_max_turns` or `:error_during_execution`).
   """
+  @spec error?(t()) :: boolean()
   def error?(%__MODULE__{type: :result, subtype: subtype})
       when subtype in [:error_max_turns, :error_during_execution],
       do: true
@@ -472,7 +476,10 @@ defmodule ClaudeAgentSDK.Message do
 
   @doc """
   Gets the session ID from a message.
+
+  Returns `nil` if the message does not contain a session ID.
   """
+  @spec session_id(t()) :: String.t() | nil
   def session_id(%__MODULE__{data: %{session_id: id}}), do: id
   def session_id(_), do: nil
 

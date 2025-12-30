@@ -94,12 +94,13 @@ hooks = %{
   ]
 }
 
+# Note: We don't set max_turns here to match Python SDK behavior.
+# With hooks enabled, the conversation needs multiple turns for tool use + response.
 options = %Options{
   tools: ["Bash", "Read"],
   allowed_tools: ["Bash", "Read"],
   hooks: hooks,
   model: "haiku",
-  max_turns: 2,
   permission_mode: :default
 }
 

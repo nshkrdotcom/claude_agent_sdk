@@ -65,11 +65,12 @@ hooks = %{
   ]
 }
 
+# Note: We don't set max_turns here to match Python SDK behavior.
+# Even without tool use, hooks still need proper turn handling.
 options = %Options{
   allowed_tools: [],
   hooks: hooks,
   model: "haiku",
-  max_turns: 1,
   permission_mode: :default
 }
 

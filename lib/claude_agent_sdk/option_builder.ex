@@ -57,7 +57,7 @@ defmodule ClaudeAgentSDK.OptionBuilder do
 
   """
 
-  alias ClaudeAgentSDK.Options
+  alias ClaudeAgentSDK.{BuildEnv, Options}
 
   # Environment-specific presets
 
@@ -291,9 +291,10 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   # Builder utilities and combinators
 
   @doc """
-  Builds options for a specific environment based on Mix.env().
+  Builds options for the configured build environment.
 
-  Automatically selects appropriate options based on current environment:
+  Automatically selects appropriate options based on the configured
+  environment (defaults to `MIX_ENV` or `:prod` when unset):
   - `:dev` -> development options (permissive, verbose)
   - `:test` -> staging options (moderate restrictions)
   - `:prod` -> production options (restrictive, safe)
@@ -311,12 +312,10 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   """
   @spec for_environment() :: Options.t()
   def for_environment do
-    case Mix.env() do
+    case BuildEnv.current() do
       :dev -> build_development_options()
       :test -> build_staging_options()
       :prod -> build_production_options()
-      # Safe default for unknown environments
-      _ -> build_production_options()
     end
   end
 

@@ -46,7 +46,7 @@ defmodule ClaudeAgentSDK.DebugMode do
          Version: 1.2.3
       ✅ Authentication: Authenticated as user@example.com
       📋 Environment:
-         Mix env: dev
+         Build env: dev
          Mock enabled: false
          Elixir: 1.15.0
          OTP: 26
@@ -56,7 +56,7 @@ defmodule ClaudeAgentSDK.DebugMode do
 
   """
 
-  alias ClaudeAgentSDK.{AuthChecker, ContentExtractor, Message, Options}
+  alias ClaudeAgentSDK.{AuthChecker, BuildEnv, ContentExtractor, Message, Options}
 
   @doc """
   Executes a query in debug mode with detailed logging and timing.
@@ -302,7 +302,7 @@ defmodule ClaudeAgentSDK.DebugMode do
 
     # Check environment
     IO.puts("📋 Environment:")
-    IO.puts("   Mix env: #{Mix.env()}")
+    IO.puts("   Build env: #{BuildEnv.current()}")
     IO.puts("   Mock enabled: #{Application.get_env(:claude_agent_sdk, :use_mock, false)}")
     IO.puts("   Elixir: #{System.version()}")
     IO.puts("   OTP: #{System.otp_release()}")
@@ -494,7 +494,7 @@ defmodule ClaudeAgentSDK.DebugMode do
     mock_status =
       if Application.get_env(:claude_agent_sdk, :use_mock, false), do: "mock", else: "live"
 
-    "#{Mix.env()}/#{mock_status}"
+    "#{BuildEnv.current()}/#{mock_status}"
   end
 
   defp execute_debug_query(prompt, options, start_time) do

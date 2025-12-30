@@ -69,7 +69,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
       end
     end
 
-    @tag :skip
+    @tag :live_cli
     # This test requires mock CLI process, will be implemented with integration test helpers
     test "Client invokes callback on can_use_tool control request" do
       test_pid = self()

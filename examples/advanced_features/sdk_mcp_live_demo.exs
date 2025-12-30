@@ -87,16 +87,21 @@ IO.puts("   Type: #{server.type}")
 IO.puts("   Registry PID: #{inspect(server.registry_pid)}\n")
 
 # Create options with SDK MCP server
+allowed_tools = [
+  "mcp__math-tools__add",
+  "mcp__math-tools__multiply"
+]
+
 options =
   Options.new(
     mcp_servers: %{"math-tools" => server},
     model: "haiku",
-    max_turns: 3,
-    allowed_tools: []
+    allowed_tools: allowed_tools
   )
 
 IO.puts("🤖 Configured Claude with SDK MCP server")
-IO.puts("   MCP servers: #{inspect(Map.keys(options.mcp_servers))}\n")
+IO.puts("   MCP servers: #{inspect(Map.keys(options.mcp_servers))}")
+IO.puts("   Allowed tools: #{inspect(allowed_tools)}\n")
 
 # Query Claude to use the tools
 prompt = """

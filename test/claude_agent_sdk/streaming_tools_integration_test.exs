@@ -19,7 +19,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
   @moduletag :integration
 
   describe "streaming with tools (basic scenarios)" do
-    @tag :skip
+    @tag :live_cli
     test "streams text while executing tools" do
       # This test should FAIL until Phase 2 is complete
       # That's expected - it drives our implementation
@@ -50,7 +50,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
       Streaming.close_session(session)
     end
 
-    @tag :skip
+    @tag :live_cli
     test "router selects CLI-only for simple streaming" do
       # No control features - should use fast CLI-only path
       opts = %Options{include_partial_messages: true}
@@ -64,7 +64,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
       Streaming.close_session(session)
     end
 
-    @tag :skip
+    @tag :live_cli
     test "router selects control client for hooks" do
       hook = TestFixtures.allow_all_hook()
 
@@ -83,7 +83,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
   end
 
   describe "event stream assertions (using mock CLI)" do
-    @tag :skip
+    @tag :live_cli
     test "receives text_delta events in sequence" do
       # Build a simple text streaming script
       _script = CLIScriptBuilder.simple_text_scenario("Hello World")
@@ -101,7 +101,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
       assert true, "Placeholder for future implementation"
     end
 
-    @tag :skip
+    @tag :live_cli
     test "receives interleaved text and tool events" do
       # Build script with text + tool
       _script =
@@ -118,7 +118,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
   end
 
   describe "hook invocation during streaming" do
-    @tag :skip
+    @tag :live_cli
     test "hooks are invoked for tool use during streaming" do
       # When implemented, this will test that:
       # 1. Streaming is active (text deltas flowing)
@@ -131,7 +131,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
   end
 
   describe "permission callbacks during streaming" do
-    @tag :skip
+    @tag :live_cli
     test "permission callback invoked for tool use" do
       # Tests permission system integration with streaming
       assert true, "Placeholder for future implementation"
@@ -139,7 +139,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
   end
 
   describe "SDK MCP integration with streaming" do
-    @tag :skip
+    @tag :live_cli
     test "SDK MCP tool callable during streaming" do
       # Tests that SDK MCP servers work with streaming enabled
       assert true, "Placeholder for future implementation"
@@ -147,13 +147,13 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
   end
 
   describe "error handling in streaming + tools" do
-    @tag :skip
+    @tag :live_cli
     test "handles tool errors gracefully during streaming" do
       # Tests error propagation in mixed streams
       assert true, "Placeholder for future implementation"
     end
 
-    @tag :skip
+    @tag :live_cli
     test "handles CLI disconnect during streaming" do
       # Tests resilience to connection issues
       assert true, "Placeholder for future implementation"
@@ -161,7 +161,7 @@ defmodule ClaudeAgentSDK.StreamingToolsIntegrationTest do
   end
 
   describe "performance characteristics" do
-    @tag :skip
+    @tag :live_cli
     test "streaming latency is acceptable with control protocol" do
       # Benchmarks time to first event
       assert true, "Placeholder for future implementation"

@@ -120,8 +120,10 @@ defmodule ClaudeAgentSDK.Hooks do
   Returns:
   - Hook output map controlling behavior (see `Output`)
   """
+  @type hook_output :: Output.t() | term()
+
   @type hook_callback ::
-          (hook_input(), String.t() | nil, hook_context() -> Output.t())
+          (hook_input(), String.t() | nil, hook_context() -> hook_output())
 
   @typedoc """
   Hook configuration map.

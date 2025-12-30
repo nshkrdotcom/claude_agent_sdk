@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2025-12-29
+
+### Added
+
+- **Python SDK Parity**: Full gap analysis and alignment with official Python SDK
+  - `Permission.Update` struct for programmatic permission rule management
+  - `Permission.RuleValue` struct for permission rule definitions
+  - `Permission.Result` now accepts `Update.t()` structs in `updated_permissions`
+  - Types: `:user_settings`, `:project_settings`, `:local_settings`, `:session` destinations
+  - Types: `:add_rules`, `:replace_rules`, `:remove_rules`, `:set_mode`, `:add_directories`, `:remove_directories` update types
+- **Documentation**: Added `@moduledoc` to all error struct modules (`CLIConnectionError`, `CLINotFoundError`, `ProcessError`, `CLIJSONDecodeError`, `MessageParseError`)
+- **Typespecs**: Added `@spec` to `Message.error?/1` and `Message.session_id/1`
+- **Gap Analysis Docs**: Comprehensive SDK comparison documentation in `docs/20251229/`
+
+### Fixed
+
+- **Release Compatibility**: Removed all runtime `Mix.env()` calls that caused `UndefinedFunctionError` in OTP releases (fixes #4)
+  - Logging conditionals in `Client`, `AuthManager`, `Tool.Registry` now use Logger directly
+  - Environment detection in `OptionBuilder` and `DebugMode` uses compile-time `@env` attribute
+- **Error Handling**: Improved error handling across the codebase
+  - `Transport.AgentsFile`: Now logs warnings instead of silently swallowing file errors
+  - `Message.from_json/1`: Returns structured `{:error, {:parse_error, reason}}` instead of raw exception
+  - `Query.ClientStream`: Logs specific error details before returning generic `:client_not_alive`
+- **Documentation**: Fixed `Model.validate/1` examples that showed incorrect return values
+- **Types**: Fixed `Client.state` type - removed legacy `[pid()]` variant from `subscribers` field
+
+### Python SDK Parity Notes
+
+Features already present in Elixir SDK matching Python SDK:
+- `Client.get_server_info/1` - Returns initialization info from CLI
+- CLI version check with minimum version warning (2.0.0+)
+- `CLAUDE_CODE_ENTRYPOINT=sdk-elixir` environment variable
+- `CLAUDE_AGENT_SDK_VERSION` environment variable for telemetry
+- Windows command length limit handling (8000 char limit with temp file fallback)
+- `control_cancel_request` handling for cooperative callback cancellation
+
 ## [0.7.0] - 2025-12-29
 
 ### Added
@@ -879,7 +915,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.10...v0.7.0
 [0.6.10]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.9...v0.6.10
 [0.6.9]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.8...v0.6.9

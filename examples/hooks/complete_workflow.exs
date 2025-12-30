@@ -22,7 +22,10 @@ defmodule CompleteWorkflowHooks do
   @moduledoc false
 
   @table :claude_agent_sdk_examples_complete_workflow
-  @forbidden_patterns ["rm -rf", "dd if=", "mkfs"]
+  # Use "blocked.sh" pattern (like Python SDK's "./foo.sh") instead of dangerous
+  # commands like "rm -rf" because Claude's built-in safety may refuse those
+  # before the hook is even invoked.
+  @forbidden_patterns ["blocked.sh"]
 
   def table_name, do: @table
 
@@ -56,9 +59,9 @@ defmodule CompleteWorkflowHooks do
       %{"tool_name" => "Bash", "tool_input" => %{"command" => cmd}} when is_binary(cmd) ->
         if Enum.any?(@forbidden_patterns, &String.contains?(cmd, &1)) do
           inc(:denied)
-          IO.puts("\n🚫 SECURITY: Blocked dangerous command: #{cmd}")
+          IO.puts("\n🚫 SECURITY: Blocked command by policy: #{cmd}")
 
-          Output.deny("Dangerous command blocked")
+          Output.deny("Command blocked by security policy")
           |> Output.with_system_message("🔒 Security policy violation")
         else
           inc(:allowed)
@@ -141,12 +144,13 @@ hooks = %{
   ]
 }
 
+# Note: We don't set max_turns here to match Python SDK behavior.
+# With hooks enabled, the conversation needs multiple turns for tool use + response.
 options = %Options{
   tools: ["Bash", "Write"],
   allowed_tools: ["Bash", "Write"],
   hooks: hooks,
   model: "haiku",
-  max_turns: 2,
   permission_mode: :default
 }
 
@@ -191,15 +195,15 @@ IO.puts("\nTest 2: Sandboxed file write\n")
 messages2 =
   run_prompt.("Use the Write tool to write exactly 'ok' to #{Path.join(sandbox_dir, "ok.txt")}.")
 
-IO.puts("\nTest 3: Dangerous bash command (should be denied)\n")
+IO.puts("\nTest 3: Blocked bash command (should be denied by hook)\n")
 
 messages3 =
-  run_prompt.("Use the Bash tool to run this exact command: rm -rf /tmp/this_should_be_blocked")
+  run_prompt.("Use the Bash tool to run this exact command: ./blocked.sh --help")
 
 for {label, msgs} <- [
       {"safe bash", messages1},
       {"sandbox write", messages2},
-      {"dangerous bash", messages3}
+      {"blocked bash", messages3}
     ] do
   case Enum.find(msgs, &(&1.type == :result)) do
     %Message{subtype: :success} ->

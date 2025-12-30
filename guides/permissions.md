@@ -8,11 +8,12 @@ The Claude Agent SDK for Elixir provides a comprehensive permission system for c
 2. [Permission Callback (`can_use_tool`)](#permission-callback-can_use_tool)
 3. [Permission.Context Struct](#permissioncontext-struct)
 4. [Permission.Result Module](#permissionresult-module)
-5. [Input Modification and Redirection](#input-modification-and-redirection)
-6. [File Path Sandboxing Example](#file-path-sandboxing-example)
-7. [Command Blocking Example](#command-blocking-example)
-8. [Combining Permissions with Hooks](#combining-permissions-with-hooks)
-9. [Best Practices](#best-practices)
+5. [Permission.Update Module](#permissionupdate-module)
+6. [Input Modification and Redirection](#input-modification-and-redirection)
+7. [File Path Sandboxing Example](#file-path-sandboxing-example)
+8. [Command Blocking Example](#command-blocking-example)
+9. [Combining Permissions with Hooks](#combining-permissions-with-hooks)
+10. [Best Practices](#best-practices)
 
 ---
 
@@ -330,6 +331,119 @@ json_map = Result.to_json_map(result)
 result = Result.deny("Not allowed", interrupt: true)
 json_map = Result.to_json_map(result)
 # => %{"behavior" => "deny", "message" => "Not allowed", "interrupt" => true}
+```
+
+---
+
+## Permission.Update Module
+
+The `Permission.Update` module provides structs for programmatically updating permission rules through the control protocol. This matches the Python SDK's `PermissionUpdate` type.
+
+### Update Types
+
+| Type | Description |
+|------|-------------|
+| `:add_rules` | Add new permission rules |
+| `:replace_rules` | Replace existing rules |
+| `:remove_rules` | Remove specific rules |
+| `:set_mode` | Change permission mode |
+| `:add_directories` | Add allowed directories |
+| `:remove_directories` | Remove allowed directories |
+
+### Destinations
+
+| Destination | Persistence | Scope |
+|-------------|-------------|-------|
+| `:session` | Temporary | Current session only |
+| `:user_settings` | Persistent | User-level |
+| `:project_settings` | Persistent | Project-level |
+| `:local_settings` | Persistent | Local directory |
+
+### Creating Updates
+
+```elixir
+alias ClaudeAgentSDK.Permission.{Update, RuleValue}
+
+# Add a rule to allow Bash commands
+update = Update.add_rules(
+  rules: [RuleValue.new("Bash", "echo *")],
+  behavior: :allow,
+  destination: :session
+)
+
+# Set permission mode for the session
+update = Update.set_mode(:accept_edits, destination: :session)
+
+# Add allowed directories
+update = Update.add_directories(["/tmp/workspace"], destination: :session)
+
+# Remove rules
+update = Update.remove_rules(
+  rules: [RuleValue.new("Bash")],
+  destination: :session
+)
+```
+
+### Using Updates in Permission Results
+
+```elixir
+alias ClaudeAgentSDK.Permission.{Result, Update, RuleValue}
+
+callback = fn context ->
+  case context.tool_name do
+    "Bash" ->
+      # Allow this command and add a rule for future similar commands
+      Result.allow(
+        updated_permissions: [
+          Update.add_rules(
+            rules: [RuleValue.new("Bash", context.tool_input["command"])],
+            behavior: :allow,
+            destination: :session
+          )
+        ]
+      )
+
+    _ ->
+      Result.allow()
+  end
+end
+```
+
+### RuleValue Struct
+
+The `RuleValue` struct represents a single permission rule:
+
+```elixir
+alias ClaudeAgentSDK.Permission.RuleValue
+
+# Simple rule for a tool
+rule = RuleValue.new("Bash")
+
+# Rule with content pattern
+rule = RuleValue.new("Bash", "ls *")
+rule = RuleValue.new("Write", "/tmp/**")
+```
+
+### Serialization
+
+Updates are automatically serialized when used in permission results:
+
+```elixir
+alias ClaudeAgentSDK.Permission.{Update, RuleValue}
+
+update = Update.add_rules(
+  rules: [RuleValue.new("Bash", "echo *")],
+  behavior: :allow,
+  destination: :session
+)
+
+Update.to_map(update)
+# => %{
+#   "type" => "addRules",
+#   "rules" => [%{"toolName" => "Bash", "ruleContent" => "echo *"}],
+#   "behavior" => "allow",
+#   "destination" => "session"
+# }
 ```
 
 ---
