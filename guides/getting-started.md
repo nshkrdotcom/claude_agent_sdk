@@ -103,7 +103,7 @@ Add `claude_agent_sdk` to your Mix dependencies in `mix.exs`:
 ```elixir
 defp deps do
   [
-    {:claude_agent_sdk, "~> 0.6.10"}
+    {:claude_agent_sdk, "~> 0.7.2"}
   ]
 end
 ```
@@ -244,6 +244,8 @@ Each message in the stream has a `type` field indicating what it represents:
 | `:assistant` | Claude's response | `message` (with `content`), `session_id` |
 | `:result` | Final summary | `total_cost_usd`, `duration_ms`, `num_turns` |
 | `:stream_event` | Streaming event | `event`, `uuid` |
+
+Note: CLI JSON frames are capped by `max_buffer_size` (default 1MB). If a frame exceeds the limit, the stream terminates with a `CLIJSONDecodeError` result.
 
 ### Example: Processing Each Message Type
 
@@ -550,6 +552,8 @@ Once comfortable with the basics, explore:
      permission_mode: :default
    }
    ```
+
+   `can_use_tool` with `query/2` requires streaming prompts (Enumerable) and is mutually exclusive with `permission_prompt_tool`.
 
 ### Getting Help
 

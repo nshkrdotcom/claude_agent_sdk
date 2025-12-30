@@ -28,6 +28,7 @@ defmodule FileCheckpointingLive do
     options = %Options{
       cwd: demo_dir,
       enable_file_checkpointing: true,
+      extra_args: %{"replay-user-messages" => nil},
       permission_mode: :accept_edits,
       tools: ["Read", "Write", "Edit"],
       allowed_tools: ["Read", "Write", "Edit"],

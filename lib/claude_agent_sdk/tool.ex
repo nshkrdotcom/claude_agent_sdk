@@ -44,7 +44,7 @@ defmodule ClaudeAgentSDK.Tool do
 
   Result map should contain:
   - `"content"` - List of content blocks (text, image, etc.)
-  - Optional: `"isError"` - Boolean indicating error state
+  - Optional: `"is_error"` - Boolean indicating error state
   """
 
   @doc """

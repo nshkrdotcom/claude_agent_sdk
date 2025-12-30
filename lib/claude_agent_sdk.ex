@@ -57,10 +57,11 @@ defmodule ClaudeAgentSDK do
       ClaudeAgentSDK.query("Build a web server", opts)
       |> Enum.to_list()
   """
-  @spec query(String.t(), Options.t() | nil) :: Enumerable.t(ClaudeAgentSDK.Message.t())
-  def query(prompt, options \\ nil) do
+  @spec query(String.t() | Enumerable.t(), Options.t() | nil, term() | nil) ::
+          Enumerable.t(ClaudeAgentSDK.Message.t())
+  def query(prompt, options \\ nil, transport \\ nil) do
     opts = options || %Options{}
-    Query.run(prompt, opts)
+    Query.run(prompt, opts, transport)
   end
 
   @doc """
@@ -156,7 +157,7 @@ defmodule ClaudeAgentSDK do
   A map representing the SDK MCP server with:
   - `:type` - Always `:sdk`
   - `:name` - Server name
-  - `:version` - Server version
+  - `:version` - Server version (defaults to "1.0.0")
   - `:registry_pid` - PID of the tool registry GenServer
 
   ## Examples
@@ -198,7 +199,7 @@ defmodule ClaudeAgentSDK do
         }
   def create_sdk_mcp_server(opts) do
     name = Keyword.fetch!(opts, :name)
-    version = Keyword.fetch!(opts, :version)
+    version = Keyword.get(opts, :version, "1.0.0")
     tools = Keyword.get(opts, :tools, [])
 
     # Start a registry for this server

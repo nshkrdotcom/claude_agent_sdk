@@ -24,7 +24,7 @@ defmodule ClaudeAgentSDK.ClientCancelTest do
 
     options = %Options{
       hooks: %{
-        session_start: [
+        user_prompt_submit: [
           Matcher.new(nil, [callback])
         ]
       }
@@ -132,7 +132,7 @@ defmodule ClaudeAgentSDK.ClientCancelTest do
       "request" => %{
         "subtype" => "hook_callback",
         "callback_id" => callback_id,
-        "input" => %{"hook_event_name" => "SessionStart"},
+        "input" => %{"hook_event_name" => "UserPromptSubmit"},
         "tool_use_id" => nil
       }
     }

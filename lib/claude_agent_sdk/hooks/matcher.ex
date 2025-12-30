@@ -8,7 +8,7 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
   - **Regex patterns**: `"Write|Edit"` matches Write or Edit tools
   - **Wildcard**: `"*"` or `nil` matches all tools
   - **Multiple hooks**: Each matcher can have multiple callback functions
-  - **Per-matcher timeout**: Optional `timeout_ms` (default 60s, floored to 1s) for callback execution
+  - **Per-matcher timeout**: Optional `timeout_ms` (default 60s, floored to 1s) for callback execution (serialized to seconds for the CLI)
 
   ## Examples
 
@@ -35,7 +35,7 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
   Fields:
   - `matcher` - Tool name pattern (nil, "*", "ToolName", or regex like "Tool1|Tool2")
   - `hooks` - List of callback functions to invoke when pattern matches
-  - `timeout_ms` - Optional timeout (ms) applied to callbacks matched by this matcher
+  - `timeout_ms` - Optional timeout (ms) applied to callbacks matched by this matcher (sent as seconds to the CLI)
   """
   @type t :: %__MODULE__{
           matcher: String.t() | nil,
@@ -58,7 +58,7 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
     - `"Tool1|Tool2"` - Regex pattern matching multiple tools
   - `hooks` - List of callback functions (each with signature `(input, tool_use_id, context) -> output`)
   - `opts` - Optional keyword list
-    - `:timeout_ms` - Timeout in milliseconds for callbacks matched by this matcher
+    - `:timeout_ms` - Timeout in milliseconds for callbacks matched by this matcher (serialized to seconds for CLI initialization)
 
   ## Examples
 
@@ -99,7 +99,7 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
   Map with CLI-compatible format:
   - `"matcher"` - Tool pattern string or nil
   - `"hookCallbackIds"` - List of callback ID strings
-  - `"timeout"` - Optional timeout in milliseconds
+  - `"timeout"` - Optional timeout in seconds
 
   ## Examples
 
@@ -140,6 +140,6 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
   defp maybe_put_timeout(map, nil), do: map
 
   defp maybe_put_timeout(map, timeout_ms) do
-    Map.put(map, "timeout", timeout_ms)
+    Map.put(map, "timeout", timeout_ms / 1000)
   end
 end

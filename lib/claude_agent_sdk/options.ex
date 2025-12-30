@@ -14,7 +14,7 @@ defmodule ClaudeAgentSDK.Options do
   - `tools` - Base tools set selection (`--tools`) (Python v0.1.12+)
   - `allowed_tools` - List of allowed tool names (list of strings)
   - `disallowed_tools` - List of disallowed tool names (list of strings)
-  - `mcp_servers` - Map of MCP server configurations (SDK and external servers) (v0.5.0+)
+  - `mcp_servers` - Map of MCP server configurations or JSON/path string (v0.5.0+)
   - `mcp_config` - Path to MCP configuration file (string, backward compat)
   - `betas` - SDK beta feature flags (`--betas`) (Python v0.1.12+)
   - `permission_prompt_tool` - Tool for permission prompts (string)
@@ -227,7 +227,7 @@ defmodule ClaudeAgentSDK.Options do
           setting_sources: [String.t() | atom()] | nil,
           sandbox: map() | nil,
           plugins: [plugin_config()],
-          mcp_servers: %{String.t() => mcp_server()} | nil,
+          mcp_servers: %{String.t() => mcp_server()} | String.t() | nil,
           mcp_config: String.t() | nil,
           permission_prompt_tool: String.t() | nil,
           permission_mode: permission_mode() | nil,
@@ -341,6 +341,15 @@ defmodule ClaudeAgentSDK.Options do
     |> add_extra_args(options)
   end
 
+  @doc false
+  @spec to_stream_json_args(t()) :: [String.t()]
+  def to_stream_json_args(%__MODULE__{} = options) do
+    options
+    |> to_args()
+    |> strip_flag_with_value("--output-format")
+    |> Enum.reject(&(&1 == "--verbose"))
+  end
+
   defp add_output_format_args(args, %{output_format: nil}), do: args
 
   defp add_output_format_args(args, %{output_format: format}) do
@@ -423,6 +432,22 @@ defmodule ClaudeAgentSDK.Options do
 
   defp verbose_if_stream(:stream_json), do: ["--verbose"]
   defp verbose_if_stream(_), do: []
+
+  defp strip_flag_with_value(args, flag) do
+    args
+    |> Enum.reduce({[], false}, fn
+      ^flag, {acc, _skip_next} ->
+        {acc, true}
+
+      _value, {acc, true} ->
+        {acc, false}
+
+      value, {acc, false} ->
+        {[value | acc], false}
+    end)
+    |> elem(0)
+    |> Enum.reverse()
+  end
 
   defp add_max_turns_args(args, %{max_turns: nil}), do: args
 
@@ -648,7 +673,7 @@ defmodule ClaudeAgentSDK.Options do
   defp add_mcp_args(args, options) do
     cond do
       # Priority 1: mcp_servers (new programmatic API)
-      options.mcp_servers != nil and map_size(options.mcp_servers) > 0 ->
+      is_map(options.mcp_servers) and map_size(options.mcp_servers) > 0 ->
         # Pass ALL servers to CLI (both SDK and external)
         # SDK servers get their registry_pid stripped, external servers pass through as-is
         # This matches Python SDK behavior in subprocess_cli.py lines 246-268
@@ -656,6 +681,10 @@ defmodule ClaudeAgentSDK.Options do
         # Wrap in {"mcpServers": ...} format like Python SDK does
         json_config = Jason.encode!(%{"mcpServers" => servers_for_cli})
         args ++ ["--mcp-config", json_config]
+
+      # mcp_servers JSON string or file path
+      is_binary(options.mcp_servers) ->
+        args ++ ["--mcp-config", options.mcp_servers]
 
       # Priority 2: mcp_config file path (backward compat)
       is_binary(options.mcp_config) ->
@@ -831,8 +860,11 @@ defmodule ClaudeAgentSDK.Options do
         is_nil(value) ->
           acc ++ [cli_flag]
 
-        is_boolean(value) ->
-          acc ++ [cli_flag, to_string(value)]
+        value == true ->
+          acc ++ [cli_flag]
+
+        value == false ->
+          acc
 
         true ->
           acc ++ [cli_flag, to_string(value)]

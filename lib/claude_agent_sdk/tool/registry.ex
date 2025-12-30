@@ -14,28 +14,30 @@ defmodule ClaudeAgentSDK.Tool.Registry do
       {:ok, pid} = Registry.start_link([])
 
       tool = %{
-        name: :calculator,
+        name: "calculator",
         description: "Calculate",
         input_schema: %{type: "object"},
         module: MyTools.Calculator
       }
 
       :ok = Registry.register_tool(pid, tool)
-      {:ok, result} = Registry.execute_tool(pid, :calculator, %{"expression" => "2+2"})
+      {:ok, result} = Registry.execute_tool(pid, "calculator", %{"expression" => "2+2"})
   """
 
   use GenServer
   require Logger
 
+  @type tool_name :: String.t() | atom()
+
   @type tool_metadata :: %{
-          name: atom(),
+          name: tool_name(),
           description: String.t(),
           input_schema: map(),
           module: module()
         }
 
   @type state :: %{
-          tools: %{atom() => tool_metadata()}
+          tools: %{String.t() => tool_metadata()}
         }
 
   ## Client API
@@ -79,7 +81,7 @@ defmodule ClaudeAgentSDK.Tool.Registry do
   ## Examples
 
       tool = %{
-        name: :add,
+        name: "add",
         description: "Add numbers",
         input_schema: %{type: "object"},
         module: MyTools.Add
@@ -107,9 +109,10 @@ defmodule ClaudeAgentSDK.Tool.Registry do
 
   ## Examples
 
-      {:ok, tool} = Registry.get_tool(pid, :calculator)
+      {:ok, tool} = Registry.get_tool(pid, "calculator")
   """
-  @spec get_tool(GenServer.server(), atom()) :: {:ok, tool_metadata()} | {:error, :not_found}
+  @spec get_tool(GenServer.server(), tool_name()) ::
+          {:ok, tool_metadata()} | {:error, :not_found}
   def get_tool(registry, name) do
     GenServer.call(registry, {:get_tool, name})
   end
@@ -151,9 +154,9 @@ defmodule ClaudeAgentSDK.Tool.Registry do
 
   ## Examples
 
-      {:ok, result} = Registry.execute_tool(pid, :add, %{"a" => 5, "b" => 3})
+      {:ok, result} = Registry.execute_tool(pid, "add", %{"a" => 5, "b" => 3})
   """
-  @spec execute_tool(GenServer.server(), atom(), map()) ::
+  @spec execute_tool(GenServer.server(), tool_name(), map()) ::
           {:ok, map()} | {:error, term()}
   def execute_tool(registry, name, input) do
     GenServer.call(registry, {:execute_tool, name, input}, :infinity)
@@ -168,7 +171,8 @@ defmodule ClaudeAgentSDK.Tool.Registry do
 
   @impl true
   def handle_call({:register_tool, tool}, _from, state) do
-    name = tool.name
+    name = normalize_tool_name(tool.name)
+    tool = Map.put(tool, :name, name)
 
     if Map.has_key?(state.tools, name) do
       {:reply, {:error, :already_registered}, state}
@@ -180,6 +184,8 @@ defmodule ClaudeAgentSDK.Tool.Registry do
 
   @impl true
   def handle_call({:get_tool, name}, _from, state) do
+    name = normalize_tool_name(name)
+
     case Map.get(state.tools, name) do
       nil -> {:reply, {:error, :not_found}, state}
       tool -> {:reply, {:ok, tool}, state}
@@ -194,6 +200,8 @@ defmodule ClaudeAgentSDK.Tool.Registry do
 
   @impl true
   def handle_call({:execute_tool, name, input}, _from, state) do
+    name = normalize_tool_name(name)
+
     case Map.get(state.tools, name) do
       nil ->
         {:reply, {:error, :not_found}, state}
@@ -220,7 +228,11 @@ defmodule ClaudeAgentSDK.Tool.Registry do
              "text" => "Error executing tool: #{Exception.message(error)}"
            }
          ],
-         "isError" => true
+         "is_error" => true
        }}
   end
+
+  defp normalize_tool_name(name) when is_binary(name), do: name
+  defp normalize_tool_name(name) when is_atom(name), do: Atom.to_string(name)
+  defp normalize_tool_name(name), do: to_string(name)
 end

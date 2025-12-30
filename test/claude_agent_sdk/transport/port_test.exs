@@ -4,6 +4,7 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
   """
   use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
+  alias ClaudeAgentSDK.Errors.CLIJSONDecodeError
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Transport.Port, as: PortTransport
 
@@ -61,6 +62,30 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
       PortTransport.close(transport)
       refute Process.alive?(transport)
       assert {:noproc, _} = catch_exit(PortTransport.send(transport, "ping"))
+    end
+  end
+
+  describe "buffer limits" do
+    test "emits a CLIJSONDecodeError when max_buffer_size is exceeded" do
+      options = %Options{max_buffer_size: 10}
+
+      {:ok, transport} =
+        PortTransport.start_link(command: @cat_executable, args: [], options: options)
+
+      on_exit(fn ->
+        try do
+          PortTransport.close(transport)
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      PortTransport.subscribe(transport, self())
+
+      :ok = PortTransport.send(transport, String.duplicate("a", 20))
+
+      assert_receive {:transport_error, %CLIJSONDecodeError{message: message}}, 500
+      assert message =~ "maximum buffer size"
     end
   end
 

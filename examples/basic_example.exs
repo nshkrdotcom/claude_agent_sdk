@@ -19,8 +19,11 @@ defmodule BasicExample do
     IO.puts("Basic Claude SDK Example (live)")
     IO.puts("Asking Claude for a simple response...")
 
-    # Create simple options for basic usage
-    options = OptionBuilder.with_haiku()
+    # Include user settings so `claude login` credentials are available.
+    options = %{
+      OptionBuilder.with_haiku()
+      | setting_sources: ["user"]
+    }
 
     # Make a simple query - just ask for one word back
     response =

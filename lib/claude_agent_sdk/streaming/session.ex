@@ -188,6 +188,8 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   @spec close(pid()) :: :ok
   def close(session) do
     GenServer.stop(session, :normal, @default_timeout)
+  catch
+    :exit, {:noproc, _} -> :ok
   end
 
   @doc """
@@ -333,12 +335,10 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     {_erlexec_pid, subprocess_os_pid} = state.subprocess
 
     if os_pid == subprocess_os_pid do
-      # Log stderr but continue
-      Logger.warning("Claude stderr: #{data}")
-      {:noreply, state}
-    else
-      {:noreply, state}
+      handle_stderr_data(data, state.options.stderr)
     end
+
+    {:noreply, state}
   end
 
   @impl true
@@ -371,6 +371,19 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   ## Private Functions
+
+  defp handle_stderr_data(data, stderr_callback) when is_function(stderr_callback, 1) do
+    data
+    |> IO.iodata_to_binary()
+    |> String.split("\n")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.each(stderr_callback)
+  end
+
+  defp handle_stderr_data(data, _stderr_callback) do
+    Logger.warning("Claude stderr: #{data}")
+  end
 
   defp handle_stdout_data(state, data) do
     new_buffer = state.message_buffer <> data
@@ -449,23 +462,19 @@ defmodule ClaudeAgentSDK.Streaming.Session do
       "--verbose"
     ]
 
-    # Add user options (but skip verbose since we already added it)
-    user_args = Options.to_args(options)
-
-    user_args =
-      user_args
-      |> Enum.reject(&(&1 == "--verbose"))
-      |> strip_flag_with_value("--output-format")
-
+    # Add user options (but skip verbose/output_format since we already added them)
+    user_args = Options.to_stream_json_args(options)
     base_args ++ user_args
   end
 
   defp spawn_subprocess(args, %Options{} = options) do
+    ensure_erlexec_started!()
+
     if is_binary(options.cwd) and not File.dir?(options.cwd) do
       {:error, {:cwd_not_found, options.cwd}}
     else
       # Find claude executable
-      executable = CLI.find_executable!()
+      executable = CLI.resolve_executable!(options)
 
       # Build command string
       quoted_args = Enum.map(args, &shell_escape/1)
@@ -493,22 +502,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     end
   end
 
-  defp strip_flag_with_value(args, flag) do
-    args
-    |> Enum.reduce({[], false}, fn
-      ^flag, {acc, _skip_next} ->
-        {acc, true}
-
-      _value, {acc, true} ->
-        {acc, false}
-
-      value, {acc, false} ->
-        {[value | acc], false}
-    end)
-    |> elem(0)
-    |> Enum.reverse()
-  end
-
   defp shell_escape(arg) when is_binary(arg) do
     # Simple shell escaping - wrap in quotes if contains special chars or is empty
     if arg == "" or
@@ -516,6 +509,13 @@ defmodule ClaudeAgentSDK.Streaming.Session do
       ~s("#{String.replace(arg, "\"", "\\\"")}")
     else
       arg
+    end
+  end
+
+  defp ensure_erlexec_started! do
+    case Application.ensure_all_started(:erlexec) do
+      {:ok, _} -> :ok
+      {:error, reason} -> raise "Failed to start erlexec application: #{inspect(reason)}"
     end
   end
 

@@ -8,18 +8,6 @@ defmodule ClaudeAgentSDK.Hooks.HooksTest do
       assert Hooks.event_to_string(:pre_tool_use) == "PreToolUse"
     end
 
-    test "converts session_start to SessionStart" do
-      assert Hooks.event_to_string(:session_start) == "SessionStart"
-    end
-
-    test "converts session_end to SessionEnd" do
-      assert Hooks.event_to_string(:session_end) == "SessionEnd"
-    end
-
-    test "converts notification to Notification" do
-      assert Hooks.event_to_string(:notification) == "Notification"
-    end
-
     test "converts post_tool_use to PostToolUse" do
       assert Hooks.event_to_string(:post_tool_use) == "PostToolUse"
     end
@@ -44,18 +32,6 @@ defmodule ClaudeAgentSDK.Hooks.HooksTest do
   describe "string_to_event/1" do
     test "converts PreToolUse to pre_tool_use" do
       assert Hooks.string_to_event("PreToolUse") == :pre_tool_use
-    end
-
-    test "converts SessionStart to session_start" do
-      assert Hooks.string_to_event("SessionStart") == :session_start
-    end
-
-    test "converts SessionEnd to session_end" do
-      assert Hooks.string_to_event("SessionEnd") == :session_end
-    end
-
-    test "converts Notification to notification" do
-      assert Hooks.string_to_event("Notification") == :notification
     end
 
     test "converts PostToolUse to post_tool_use" do
@@ -142,7 +118,7 @@ defmodule ClaudeAgentSDK.Hooks.HooksTest do
       assert Hooks.validate_config(config) == :ok
     end
 
-    test "validates session_start/session_end/notification events" do
+    test "rejects unsupported hook events" do
       matcher = %ClaudeAgentSDK.Hooks.Matcher{
         matcher: nil,
         hooks: [fn _, _, _ -> %{} end]
@@ -154,7 +130,8 @@ defmodule ClaudeAgentSDK.Hooks.HooksTest do
         notification: [matcher]
       }
 
-      assert Hooks.validate_config(config) == :ok
+      assert {:error, msg} = Hooks.validate_config(config)
+      assert msg =~ "Unsupported hook event"
     end
   end
 
@@ -163,15 +140,12 @@ defmodule ClaudeAgentSDK.Hooks.HooksTest do
       events = Hooks.all_valid_events()
 
       assert :pre_tool_use in events
-      assert :session_start in events
-      assert :session_end in events
-      assert :notification in events
       assert :post_tool_use in events
       assert :user_prompt_submit in events
       assert :stop in events
       assert :subagent_stop in events
       assert :pre_compact in events
-      assert length(events) == 9
+      assert length(events) == 6
     end
   end
 end

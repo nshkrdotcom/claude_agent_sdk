@@ -46,58 +46,42 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
 
   A Stream of `ClaudeAgentSDK.Message` structs.
   """
-  @spec stream(String.t(), Options.t()) :: Enumerable.t(Message.t())
-  def stream(prompt, %Options{} = options) do
+  @spec stream(String.t() | Enumerable.t(), Options.t(), term() | nil) ::
+          Enumerable.t(Message.t())
+  def stream(prompt, %Options{} = options, transport \\ nil) do
     Stream.resource(
-      fn -> start_client_and_send(prompt, options) end,
+      fn -> start_client_and_send(prompt, options, transport) end,
       &stream_next/1,
       &cleanup_client/1
     )
   end
 
-  defp start_client_and_send(prompt, options) do
-    Logger.debug("Starting control client for query", prompt_length: String.length(prompt))
+  defp start_client_and_send(prompt, options, transport) do
+    Logger.debug("Starting control client for query", prompt_type: prompt_type(prompt))
 
-    case Client.start_link(options) do
+    start_opts = client_start_opts(transport)
+
+    case Client.start_link(options, start_opts) do
       {:ok, client_pid} ->
-        {client_pid, ref} = Client.subscribe(client_pid)
-        deadline_ms = System.monotonic_time(:millisecond) + query_timeout_ms(options)
-
-        case await_initialized(client_pid, options) do
-          :ok ->
-            :ok = Client.send_message(client_pid, prompt)
-            {:ok, %{client: client_pid, ref: ref, done?: false, deadline_ms: deadline_ms}}
-
-          {:error, reason} ->
-            safe_stop(client_pid)
-
-            error_msg = %Message{
-              type: :result,
-              subtype: :error_during_execution,
-              data: %{
-                error: "Failed to initialize Client: #{inspect(reason)}",
-                session_id: "error",
-                is_error: true
-              }
-            }
-
-            {:error, [error_msg]}
-        end
+        initialize_and_send(client_pid, prompt, options)
 
       {:error, reason} ->
         Logger.error("Failed to start control client for query", error: inspect(reason))
+        make_error_result("Failed to start Client: #{inspect(reason)}")
+    end
+  end
 
-        error_msg = %Message{
-          type: :result,
-          subtype: :error_during_execution,
-          data: %{
-            error: "Failed to start Client: #{inspect(reason)}",
-            session_id: "error",
-            is_error: true
-          }
-        }
+  defp initialize_and_send(client_pid, prompt, options) do
+    {client_pid, ref} = Client.subscribe(client_pid)
+    deadline_ms = System.monotonic_time(:millisecond) + query_timeout_ms(options)
 
-        {:error, [error_msg]}
+    with :ok <- await_initialized(client_pid, options),
+         :ok <- send_prompt(client_pid, prompt) do
+      {:ok, %{client: client_pid, ref: ref, done?: false, deadline_ms: deadline_ms}}
+    else
+      {:error, reason} ->
+        safe_stop(client_pid)
+        make_error_result("Failed to initialize or send prompt: #{inspect(reason)}")
     end
   end
 
@@ -219,4 +203,43 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
   end
 
   defp cleanup_client(_), do: :ok
+
+  defp client_start_opts(nil), do: []
+
+  defp client_start_opts({module, opts}) when is_atom(module) and is_list(opts) do
+    [transport: module, transport_opts: opts]
+  end
+
+  defp client_start_opts(module) when is_atom(module) do
+    [transport: module]
+  end
+
+  defp client_start_opts(other) do
+    raise ArgumentError, "Unsupported transport spec: #{inspect(other)}"
+  end
+
+  defp send_prompt(client_pid, prompt) when is_binary(prompt) do
+    Client.send_message(client_pid, prompt)
+  end
+
+  defp send_prompt(client_pid, prompt) do
+    Client.query(client_pid, prompt)
+  end
+
+  defp prompt_type(prompt) when is_binary(prompt), do: :string
+  defp prompt_type(_prompt), do: :stream
+
+  defp make_error_result(error_message) do
+    error_msg = %Message{
+      type: :result,
+      subtype: :error_during_execution,
+      data: %{
+        error: error_message,
+        session_id: "error",
+        is_error: true
+      }
+    }
+
+    {:error, [error_msg]}
+  end
 end

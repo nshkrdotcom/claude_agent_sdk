@@ -67,9 +67,10 @@ defmodule ClaudeAgentSDK.Message do
 
   defstruct [:type, :subtype, :data, :raw]
 
-  @type message_type :: :assistant | :user | :result | :system | :stream_event
-  @type result_subtype :: :success | :error_max_turns | :error_during_execution
-  @type system_subtype :: :init
+  @type message_type ::
+          :assistant | :user | :result | :system | :stream_event | :unknown | String.t()
+  @type result_subtype :: :success | :error_max_turns | :error_during_execution | String.t()
+  @type system_subtype :: :init | String.t()
   @type assistant_error :: AssistantError.t()
   @type assistant_data :: %{
           required(:message) => map(),
@@ -84,6 +85,12 @@ defmodule ClaudeAgentSDK.Message do
           data: assistant_data() | map(),
           raw: map()
         }
+
+  @doc false
+  def __safe_type__(type), do: safe_type(type)
+
+  @doc false
+  def __safe_subtype__(type, subtype), do: safe_subtype(type, subtype)
 
   @doc """
   Parses a JSON message from Claude Code into a Message struct.
@@ -258,7 +265,7 @@ defmodule ClaudeAgentSDK.Message do
   end
 
   defp parse_message(raw) do
-    type = String.to_atom(raw["type"])
+    type = safe_type(raw["type"])
 
     message = %__MODULE__{
       type: type,
@@ -285,14 +292,22 @@ defmodule ClaudeAgentSDK.Message do
   end
 
   defp parse_by_type(message, :result, raw) do
-    subtype = String.to_atom(raw["subtype"])
-    data = build_result_data(subtype, raw)
+    subtype = safe_subtype(:result, raw["subtype"])
+
+    data =
+      case subtype do
+        :success -> build_result_data(:success, raw)
+        :error_max_turns -> build_result_data(:error_max_turns, raw)
+        :error_during_execution -> build_result_data(:error_during_execution, raw)
+        _ -> raw
+      end
+
     %{message | subtype: subtype, data: data}
   end
 
   defp parse_by_type(message, :system, raw) do
-    subtype = String.to_atom(raw["subtype"])
-    data = build_system_data(subtype, raw)
+    subtype = safe_subtype(:system, raw["subtype"])
+    data = if subtype == :init, do: build_system_data(:init, raw), else: raw
     %{message | subtype: subtype, data: data}
   end
 
@@ -310,6 +325,38 @@ defmodule ClaudeAgentSDK.Message do
   defp parse_by_type(message, _unknown_type, raw) do
     %{message | data: raw}
   end
+
+  defp safe_type(type) when is_binary(type) do
+    case type do
+      "assistant" -> :assistant
+      "user" -> :user
+      "result" -> :result
+      "system" -> :system
+      "stream_event" -> :stream_event
+      other -> other
+    end
+  end
+
+  defp safe_type(_), do: :unknown
+
+  defp safe_subtype(:result, subtype) when is_binary(subtype) do
+    case subtype do
+      "success" -> :success
+      "error_max_turns" -> :error_max_turns
+      "error_during_execution" -> :error_during_execution
+      other -> other
+    end
+  end
+
+  defp safe_subtype(:system, subtype) when is_binary(subtype) do
+    case subtype do
+      "init" -> :init
+      other -> other
+    end
+  end
+
+  defp safe_subtype(_type, subtype) when is_binary(subtype), do: subtype
+  defp safe_subtype(_type, _subtype), do: nil
 
   defp parse_content_block(%{"type" => "text", "text" => text}) when is_binary(text),
     do: %{type: :text, text: text}

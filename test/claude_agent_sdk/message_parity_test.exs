@@ -74,4 +74,28 @@ defmodule ClaudeAgentSDK.MessageParityTest do
              %{type: :tool_use, id: "toolu_1", name: "Bash", input: %{"command" => "ls"}}
            ] = Message.content_blocks(msg)
   end
+
+  test "unknown message types are preserved as strings" do
+    json = Jason.encode!(%{"type" => "new_message_type", "foo" => "bar"})
+
+    assert {:ok, %Message{type: type, data: data}} = Message.from_json(json)
+    assert type == "new_message_type"
+    assert data["foo"] == "bar"
+  end
+
+  test "unknown result subtypes remain strings" do
+    json =
+      Jason.encode!(%{
+        "type" => "result",
+        "subtype" => "error_future",
+        "session_id" => "s",
+        "duration_ms" => 1,
+        "duration_api_ms" => 1,
+        "num_turns" => 1,
+        "is_error" => true
+      })
+
+    assert {:ok, %Message{type: :result, subtype: subtype}} = Message.from_json(json)
+    assert subtype == "error_future"
+  end
 end

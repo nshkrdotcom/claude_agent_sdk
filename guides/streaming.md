@@ -19,7 +19,7 @@ This guide covers streaming in the Claude Agent SDK for Elixir, from simple quer
 
 The Claude Agent SDK provides two streaming approaches:
 
-1. **Simple Streaming via `query/2`** - Returns a lazy Elixir stream of parsed messages. Best for simple queries where you want aggregated responses.
+1. **Simple Streaming via `query/2`** - Returns a lazy Elixir stream of parsed messages as they arrive from the CLI.
 
 2. **Bidirectional Streaming API** - Provides persistent sessions with real-time character-by-character updates. Best for chat interfaces and interactive applications.
 
@@ -27,7 +27,7 @@ The Claude Agent SDK provides two streaming approaches:
 
 | Feature | `query/2` | Streaming API |
 |---------|-----------|---------------|
-| Real-time text | No (aggregated) | Yes (character-level) |
+| Real-time text | Message-level | Yes (character-level) |
 | Multi-turn | Via `resume/3` | Native session support |
 | Event granularity | Message-level | Token-level |
 | Resource usage | Lower | Session process |
@@ -37,7 +37,7 @@ The Claude Agent SDK provides two streaming approaches:
 
 ## Simple Query Streaming with query/2
 
-The `ClaudeAgentSDK.query/2` function returns a lazy stream of `Message` structs. This is the simplest way to interact with Claude.
+The `ClaudeAgentSDK.query/2` function returns a lazy stream of `Message` structs. This is the simplest way to interact with Claude, and it yields messages as the CLI emits them.
 
 ### Basic Usage
 
@@ -118,6 +118,29 @@ session_id = init_message.data.session_id
 
 # Check for successful completion
 success? = match?(%{type: :result, subtype: :success}, result)
+```
+
+### Streaming Input (Enumerable Prompts)
+
+You can stream a sequence of user messages into a single query by passing an `Enumerable` prompt:
+
+```elixir
+prompts = [
+  %{"type" => "user", "message" => %{"role" => "user", "content" => "Hello"}},
+  %{"type" => "user", "message" => %{"role" => "user", "content" => "How are you?"}}
+]
+
+ClaudeAgentSDK.query(prompts, %Options{})
+|> Enum.to_list()
+```
+
+### Custom Transport Injection
+
+You can inject a transport for query flows (module or `{module, opts}` tuple):
+
+```elixir
+ClaudeAgentSDK.query("Hello", %Options{}, {ClaudeAgentSDK.Transport.Port, []})
+|> Enum.to_list()
 ```
 
 ---
@@ -251,6 +274,8 @@ When Claude uses tools, you receive lifecycle events:
 %{type: :error, error: :connection_closed}
 %{type: :error, error: {:api_error, "Rate limit exceeded"}}
 ```
+
+If the CLI emits a JSON frame larger than `max_buffer_size` (default 1MB), the stream terminates with a `CLIJSONDecodeError`.
 
 ### Complete Event Handling Pattern
 

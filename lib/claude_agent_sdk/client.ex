@@ -274,6 +274,56 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @doc """
+  Streams messages until a result frame is received.
+
+  This provides a streaming equivalent of `receive_response/1`.
+  """
+  @spec receive_response_stream(pid()) :: Enumerable.t(Message.t())
+  def receive_response_stream(client) when is_pid(client) do
+    Stream.resource(
+      fn ->
+        {client_pid, ref} = subscribe(client)
+        {client_pid, ref, :active}
+      end,
+      fn
+        {client_pid, ref, :halt} ->
+          {:halt, {client_pid, ref}}
+
+        {client_pid, ref, :active} ->
+          receive do
+            {:claude_message, message} ->
+              next_state =
+                if Message.final?(message) do
+                  {client_pid, ref, :halt}
+                else
+                  {client_pid, ref, :active}
+                end
+
+              {[message], next_state}
+
+            {:stream_event, ^ref, event} ->
+              msg = %Message{type: :stream_event, subtype: nil, data: %{event: event}, raw: %{}}
+              {[msg], {client_pid, ref, :active}}
+          after
+            30_000 ->
+              if Process.alive?(client_pid) do
+                {[], {client_pid, ref, :active}}
+              else
+                {:halt, {client_pid, ref}}
+              end
+          end
+      end,
+      fn
+        {client_pid, ref} when is_pid(client_pid) and is_reference(ref) ->
+          GenServer.cast(client_pid, {:unsubscribe, ref})
+
+        _ ->
+          :ok
+      end
+    )
+  end
+
+  @doc """
   Stops the client.
 
   Terminates the CLI process and cleans up resources.
@@ -460,7 +510,9 @@ defmodule ClaudeAgentSDK.Client do
     # Validate hooks and permission callback configuration before starting
     with :ok <- validate_hooks(options.hooks),
          :ok <- validate_permission_callback(options.can_use_tool),
-         {:ok, updated_options} <- apply_agent_settings(options) do
+         {:ok, updated_options} <- apply_agent_settings(options),
+         {:ok, updated_options} <- apply_permission_prompt_tool(updated_options) do
+      updated_options = apply_client_entrypoint_env(updated_options)
       # Extract SDK MCP server registry PIDs
       sdk_mcp_servers = extract_sdk_mcp_servers(updated_options)
 
@@ -806,6 +858,16 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @impl true
+  def handle_info({:transport_error, error}, state) do
+    message = transport_error_message(error)
+
+    Enum.each(state.subscribers, fn {_ref, pid} ->
+      send(pid, {:claude_message, message})
+    end)
+
+    {:noreply, state}
+  end
+
   def handle_info({:transport_message, payload}, state) do
     case decode_transport_payload(payload) do
       {:ok, {message_type, message_data}} ->
@@ -1142,6 +1204,34 @@ defmodule ClaudeAgentSDK.Client do
 
   defp apply_agent_settings(options), do: {:ok, options}
 
+  defp apply_permission_prompt_tool(%Options{can_use_tool: nil} = options), do: {:ok, options}
+
+  defp apply_permission_prompt_tool(%Options{permission_prompt_tool: nil} = options) do
+    {:ok, %{options | permission_prompt_tool: "stdio"}}
+  end
+
+  defp apply_permission_prompt_tool(%Options{permission_prompt_tool: "stdio"} = options) do
+    {:ok, options}
+  end
+
+  defp apply_permission_prompt_tool(%Options{permission_prompt_tool: _tool}) do
+    {:error, :permission_prompt_tool_conflict}
+  end
+
+  defp apply_client_entrypoint_env(%Options{} = options) do
+    env = options.env || %{}
+
+    env =
+      if Map.has_key?(env, "CLAUDE_CODE_ENTRYPOINT") or
+           Map.has_key?(env, :CLAUDE_CODE_ENTRYPOINT) do
+        env
+      else
+        Map.put(env, "CLAUDE_CODE_ENTRYPOINT", "sdk-elixir-client")
+      end
+
+    %{options | env: env}
+  end
+
   @doc false
   @spec init_timeout_seconds_from_env() :: number()
   def init_timeout_seconds_from_env do
@@ -1400,7 +1490,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp build_cli_command(options) do
-    case CLI.find_executable() do
+    case CLI.resolve_executable(options) do
       {:ok, executable} ->
         # Build arguments for streaming mode.
         #
@@ -1412,12 +1502,11 @@ defmodule ClaudeAgentSDK.Client do
           "stream-json",
           "--input-format",
           "stream-json",
-          "--replay-user-messages",
           "--verbose"
         ]
 
         # Add other options
-        args = args ++ Options.to_args(options)
+        args = args ++ Options.to_stream_json_args(options)
         {args, temp_files} = AgentsFile.externalize_agents_if_needed(args)
 
         # Redirect stderr to /dev/null to suppress benign EPIPE errors during cleanup
@@ -1913,7 +2002,7 @@ defmodule ClaudeAgentSDK.Client do
       "response" => %{
         "request_id" => request_id,
         "subtype" => "success",
-        "result" => result_map
+        "response" => result_map
       }
     }
 
@@ -1926,7 +2015,7 @@ defmodule ClaudeAgentSDK.Client do
       "response" => %{
         "request_id" => request_id,
         "subtype" => "success",
-        "result" => Result.to_json_map(result)
+        "response" => Result.to_json_map(result)
       }
     }
 
@@ -2054,6 +2143,7 @@ defmodule ClaudeAgentSDK.Client do
   defp handle_sdk_mcp_request(request_id, request, state) do
     server_name = request["serverName"] || request["server_name"]
     message = request["message"]
+    sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers) || %{}
 
     Logger.debug("SDK MCP request",
       request_id: request_id,
@@ -2079,23 +2169,32 @@ defmodule ClaudeAgentSDK.Client do
 
       registry_pid ->
         # Route to JSONRPC handler
-        response = handle_sdk_mcp_jsonrpc(registry_pid, server_name, message)
+        response = handle_sdk_mcp_jsonrpc(registry_pid, server_name, message, sdk_mcp_info)
         send_sdk_mcp_response(state, request_id, response)
         state
     end
   end
 
   @doc false
-  @spec handle_sdk_mcp_jsonrpc(pid(), String.t(), map()) :: map()
-  defp handle_sdk_mcp_jsonrpc(registry_pid, server_name, message) do
+  @spec handle_sdk_mcp_jsonrpc(pid(), String.t(), map(), map()) :: map()
+  defp handle_sdk_mcp_jsonrpc(registry_pid, server_name, message, sdk_mcp_info) do
     method = message["method"]
     params = message["params"] || %{}
     message_id = message["id"]
 
-    dispatch_sdk_mcp_method(method, registry_pid, server_name, message_id, params)
+    dispatch_sdk_mcp_method(method, registry_pid, server_name, message_id, params, sdk_mcp_info)
   end
 
-  defp dispatch_sdk_mcp_method("initialize", _registry_pid, server_name, message_id, _params) do
+  defp dispatch_sdk_mcp_method(
+         "initialize",
+         _registry_pid,
+         server_name,
+         message_id,
+         _params,
+         sdk_mcp_info
+       ) do
+    server_info = Map.get(sdk_mcp_info, server_name, %{})
+
     %{
       "jsonrpc" => "2.0",
       "id" => message_id,
@@ -2105,14 +2204,21 @@ defmodule ClaudeAgentSDK.Client do
           "tools" => %{}
         },
         "serverInfo" => %{
-          "name" => server_name,
-          "version" => "1.0.0"
+          "name" => Map.get(server_info, "name", server_name),
+          "version" => Map.get(server_info, "version", "1.0.0")
         }
       }
     }
   end
 
-  defp dispatch_sdk_mcp_method("tools/list", registry_pid, _server_name, message_id, _params) do
+  defp dispatch_sdk_mcp_method(
+         "tools/list",
+         registry_pid,
+         _server_name,
+         message_id,
+         _params,
+         _sdk_mcp_info
+       ) do
     {:ok, tools} = ClaudeAgentSDK.Tool.Registry.list_tools(registry_pid)
 
     tools_data =
@@ -2133,8 +2239,15 @@ defmodule ClaudeAgentSDK.Client do
     }
   end
 
-  defp dispatch_sdk_mcp_method("tools/call", registry_pid, _server_name, message_id, params) do
-    tool_name = String.to_atom(params["name"])
+  defp dispatch_sdk_mcp_method(
+         "tools/call",
+         registry_pid,
+         _server_name,
+         message_id,
+         params,
+         _sdk_mcp_info
+       ) do
+    tool_name = to_string(params["name"])
     tool_input = params["arguments"] || %{}
 
     case ClaudeAgentSDK.Tool.Registry.execute_tool(registry_pid, tool_name, tool_input) do
@@ -2142,35 +2255,38 @@ defmodule ClaudeAgentSDK.Client do
         %{
           "jsonrpc" => "2.0",
           "id" => message_id,
-          "result" => result
+          "result" => normalize_tool_result(result)
         }
 
       {:error, reason} ->
         %{
           "jsonrpc" => "2.0",
           "id" => message_id,
-          "error" => %{
-            "code" => -32_603,
-            "message" => "Tool execution failed: #{inspect(reason)}"
-          }
+          "result" => normalize_tool_error(reason)
         }
     end
   end
 
-  defp dispatch_sdk_mcp_method("resources/list", _registry_pid, _server_name, message_id, _params) do
-    %{
-      "jsonrpc" => "2.0",
-      "id" => message_id,
-      "result" => %{"resources" => []}
-    }
+  defp dispatch_sdk_mcp_method(
+         "resources/list",
+         _registry_pid,
+         _server_name,
+         message_id,
+         _params,
+         _sdk_mcp_info
+       ) do
+    method_not_found_response(message_id, "resources/list")
   end
 
-  defp dispatch_sdk_mcp_method("prompts/list", _registry_pid, _server_name, message_id, _params) do
-    %{
-      "jsonrpc" => "2.0",
-      "id" => message_id,
-      "result" => %{"prompts" => []}
-    }
+  defp dispatch_sdk_mcp_method(
+         "prompts/list",
+         _registry_pid,
+         _server_name,
+         message_id,
+         _params,
+         _sdk_mcp_info
+       ) do
+    method_not_found_response(message_id, "prompts/list")
   end
 
   defp dispatch_sdk_mcp_method(
@@ -2178,7 +2294,8 @@ defmodule ClaudeAgentSDK.Client do
          _registry_pid,
          _server_name,
          message_id,
-         _params
+         _params,
+         _sdk_mcp_info
        ) do
     %{
       "jsonrpc" => "2.0",
@@ -2187,7 +2304,18 @@ defmodule ClaudeAgentSDK.Client do
     }
   end
 
-  defp dispatch_sdk_mcp_method(method, _registry_pid, _server_name, message_id, _params) do
+  defp dispatch_sdk_mcp_method(
+         method,
+         _registry_pid,
+         _server_name,
+         message_id,
+         _params,
+         _sdk_mcp_info
+       ) do
+    method_not_found_response(message_id, method)
+  end
+
+  defp method_not_found_response(message_id, method) do
     %{
       "jsonrpc" => "2.0",
       "id" => message_id,
@@ -2196,6 +2324,38 @@ defmodule ClaudeAgentSDK.Client do
         "message" => "Method not found: #{method}"
       }
     }
+  end
+
+  defp normalize_tool_result(result) when is_map(result) do
+    normalize_is_error(result)
+  end
+
+  defp normalize_tool_error(reason) do
+    base =
+      case reason do
+        %{} = map -> normalize_tool_result(map)
+        binary when is_binary(binary) -> %{"content" => [%{"type" => "text", "text" => binary}]}
+        other -> %{"content" => [%{"type" => "text", "text" => inspect(other)}]}
+      end
+
+    base
+    |> Map.put("is_error", true)
+    |> Map.delete("isError")
+  end
+
+  defp normalize_is_error(%{} = result) do
+    cond do
+      Map.has_key?(result, "is_error") ->
+        Map.delete(result, "isError")
+
+      Map.has_key?(result, "isError") ->
+        result
+        |> Map.put("is_error", Map.get(result, "isError"))
+        |> Map.delete("isError")
+
+      true ->
+        result
+    end
   end
 
   @doc false
@@ -2378,5 +2538,31 @@ defmodule ClaudeAgentSDK.Client do
     payload
     |> Jason.encode!()
     |> Protocol.decode_message()
+  end
+
+  defp transport_error_message(%ClaudeAgentSDK.Errors.CLIJSONDecodeError{} = error) do
+    %Message{
+      type: :result,
+      subtype: :error_during_execution,
+      data: %{
+        error: Exception.message(error),
+        error_struct: error,
+        session_id: "error",
+        is_error: true
+      }
+    }
+  end
+
+  defp transport_error_message(error) do
+    %Message{
+      type: :result,
+      subtype: :error_during_execution,
+      data: %{
+        error: "Transport error: #{inspect(error)}",
+        error_struct: error,
+        session_id: "error",
+        is_error: true
+      }
+    }
   end
 end

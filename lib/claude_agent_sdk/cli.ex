@@ -14,6 +14,8 @@ defmodule ClaudeAgentSDK.CLI do
   @executable_candidates ["claude-code", "claude"]
   @skip_version_check_env "CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK"
 
+  alias ClaudeAgentSDK.Options
+
   @doc """
   Attempts to find the Claude CLI executable.
 
@@ -28,6 +30,40 @@ defmodule ClaudeAgentSDK.CLI do
       {:error, :not_found}
     else
       path when is_binary(path) -> {:ok, path}
+    end
+  end
+
+  @doc """
+  Resolves the CLI executable, honoring option overrides.
+
+  When `path_to_claude_code_executable` or `executable` is set on the options,
+  that value is used directly. Otherwise falls back to normal discovery.
+  """
+  @spec resolve_executable(Options.t() | nil) :: {:ok, String.t()} | {:error, :not_found}
+  def resolve_executable(%Options{path_to_claude_code_executable: path})
+      when is_binary(path) do
+    {:ok, path}
+  end
+
+  def resolve_executable(%Options{executable: executable}) when is_binary(executable) do
+    {:ok, executable}
+  end
+
+  def resolve_executable(_), do: find_executable()
+
+  @doc """
+  Like `resolve_executable/1` but raises when the CLI is not available.
+  """
+  @spec resolve_executable!(Options.t() | nil) :: String.t()
+  def resolve_executable!(options) do
+    case resolve_executable(options) do
+      {:ok, path} ->
+        path
+
+      {:error, :not_found} ->
+        raise ClaudeAgentSDK.Errors.CLINotFoundError,
+          message:
+            "Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code"
     end
   end
 

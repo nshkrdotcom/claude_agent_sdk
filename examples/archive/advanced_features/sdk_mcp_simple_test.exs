@@ -65,7 +65,7 @@ end
 # Test direct tool execution
 IO.puts("\n🔧 Testing direct tool execution...")
 
-case ClaudeAgentSDK.Tool.Registry.execute_tool(server.registry_pid, :greet, %{
+case ClaudeAgentSDK.Tool.Registry.execute_tool(server.registry_pid, "greet", %{
        "name" => "World"
      }) do
   {:ok, result} ->

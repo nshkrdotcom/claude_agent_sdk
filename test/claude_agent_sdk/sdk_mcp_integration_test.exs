@@ -36,8 +36,8 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
 
       {:ok, tools} = Tool.Registry.list_tools(server.registry_pid)
       assert length(tools) == 2
-      assert Enum.any?(tools, &(&1.name == :add))
-      assert Enum.any?(tools, &(&1.name == :greet_user))
+      assert Enum.any?(tools, &(&1.name == "add"))
+      assert Enum.any?(tools, &(&1.name == "greet_user"))
     end
 
     test "Options accepts mcp_servers map" do

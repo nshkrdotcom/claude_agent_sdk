@@ -359,9 +359,9 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
       assert decoded["type"] == "control_response"
       assert decoded["response"]["subtype"] == "success"
       assert decoded["response"]["request_id"] == request_id
-      assert decoded["response"]["result"]["behavior"] == "allow"
-      assert decoded["response"]["result"]["updatedInput"] == %{"command" => "ls"}
-      refute Map.has_key?(decoded["response"]["result"], "updated_input")
+      assert decoded["response"]["response"]["behavior"] == "allow"
+      assert decoded["response"]["response"]["updatedInput"] == %{"command" => "ls"}
+      refute Map.has_key?(decoded["response"]["response"], "updated_input")
 
       Client.stop(client)
     end
@@ -416,11 +416,11 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
       assert_receive {:mock_transport_send, response_json}, 500
       decoded = Jason.decode!(String.trim(response_json))
 
-      assert decoded["response"]["result"]["updatedPermissions"] == [
+      assert decoded["response"]["response"]["updatedPermissions"] == [
                %{"type" => "setMode", "mode" => "plan"}
              ]
 
-      refute Map.has_key?(decoded["response"]["result"], "updated_permissions")
+      refute Map.has_key?(decoded["response"]["response"], "updated_permissions")
 
       Client.stop(client)
     end

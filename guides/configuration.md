@@ -33,7 +33,7 @@ options = %ClaudeAgentSDK.Options{
 # Using new/1 function
 options = ClaudeAgentSDK.Options.new(
   max_turns: 5,
-  output_format: :json,
+  output_format: :stream_json,
   verbose: true
 )
 
@@ -100,7 +100,7 @@ ClaudeAgentSDK.query("Refactor this code for better performance", options)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `mcp_servers` | `map()` | `nil` | MCP server configurations (SDK and external) |
+| `mcp_servers` | `map()` or `String.t()` | `nil` | MCP server configurations or JSON/path string (alias for `mcp_config`) |
 | `mcp_config` | `String.t()` | `nil` | Path to MCP configuration file |
 | `strict_mcp_config` | `boolean()` | `nil` | Only use MCP servers from config |
 
@@ -146,17 +146,21 @@ ClaudeAgentSDK.query("Refactor this code for better performance", options)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `executable` | `String.t()` | `nil` | Custom executable to run |
+| `executable` | `String.t()` | `nil` | Custom executable to run (CLI path override) |
 | `executable_args` | `[String.t()]` | `nil` | Arguments for custom executable |
-| `path_to_claude_code_executable` | `String.t()` | `nil` | Path to Claude Code CLI |
+| `path_to_claude_code_executable` | `String.t()` | `nil` | Path to Claude Code CLI (Python `cli_path` equivalent) |
 | `abort_ref` | `reference()` | `nil` | Reference for aborting requests |
-| `extra_args` | `map()` | `%{}` | Additional CLI arguments |
+| `extra_args` | `map()` | `%{}` | Additional CLI arguments (boolean `true`/`nil` => flag only; `false` => omit) |
 | `env` | `map()` | `%{}` | Environment variable overrides |
 | `stderr` | `function()` | `nil` | Stderr callback function |
 | `user` | `String.t()` | `nil` | User identifier |
-| `max_buffer_size` | `pos_integer()` | `nil` | Maximum buffer size |
+| `max_buffer_size` | `pos_integer()` | `nil` | Maximum JSON buffer size (default: 1MB, overflow yields `CLIJSONDecodeError`) |
 
 ---
+
+If you omit `max_buffer_size`, the SDK enforces a 1MB default across Port, erlexec, and sync process parsing to match Python SDK limits.
+
+The `stderr` callback is invoked for non-JSON stderr lines across query, client, and streaming session flows.
 
 ## Output Formats
 
@@ -169,6 +173,8 @@ The SDK supports multiple output formats for different use cases.
 | `:text` | Plain text output | Simple responses, human-readable output |
 | `:json` | JSON-formatted output | Structured data, parsing responses |
 | `:stream_json` | Streaming JSON | Real-time updates, long-running tasks |
+
+Note: SDK query/streaming/client flows always use `stream-json` for transport parsing. If you set `:text` or `:json`, the SDK normalizes the CLI output to `stream-json` and only forwards `--json-schema` when provided.
 
 ### Basic Usage
 
@@ -384,6 +390,12 @@ external_server = %{
 options = %Options{
   mcp_servers: %{"filesystem" => external_server}
 }
+```
+
+`mcp_servers` also accepts a JSON string or file path (alias for `mcp_config`):
+
+```elixir
+options = %Options{mcp_servers: "/path/to/mcp.json"}
 ```
 
 ---
@@ -997,7 +1009,7 @@ options = %ClaudeAgentSDK.Options{
   model: "haiku",
   max_turns: 3,
   verbose: false,
-  output_format: :json,
+  output_format: :stream_json,
   allowed_tools: ["Read"],
   disallowed_tools: ["Bash", "Write", "Edit"],
   permission_mode: :plan,

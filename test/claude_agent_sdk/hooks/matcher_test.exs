@@ -93,7 +93,7 @@ defmodule ClaudeAgentSDK.Hooks.MatcherTest do
       assert result == %{
                "matcher" => "Bash",
                "hookCallbackIds" => ["hook_0"],
-               "timeout" => 2_000
+               "timeout" => 2.0
              }
     end
 

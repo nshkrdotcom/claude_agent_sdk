@@ -16,12 +16,16 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   alias ClaudeAgentSDK.Process, as: SDKProcess
   alias ClaudeAgentSDK.Transport.AgentsFile
 
+  @default_max_buffer_size 1_048_576
+
   defstruct subprocess: nil,
             subscribers: MapSet.new(),
             stdout_buffer: "",
             status: :disconnected,
             stderr_callback: nil,
-            temp_files: []
+            temp_files: [],
+            max_buffer_size: @default_max_buffer_size,
+            overflowed?: false
 
   @impl ClaudeAgentSDK.Transport
   def start_link(opts) when is_list(opts) do
@@ -29,7 +33,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   @impl ClaudeAgentSDK.Transport
-  def send(transport, message) when is_pid(transport) and is_binary(message) do
+  def send(transport, message) when is_pid(transport) do
     GenServer.call(transport, {:send, message})
   end
 
@@ -43,6 +47,10 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     GenServer.stop(transport, :normal)
   end
 
+  def end_input(transport) when is_pid(transport) do
+    GenServer.call(transport, :end_input)
+  end
+
   @impl ClaudeAgentSDK.Transport
   def status(transport) when is_pid(transport) do
     GenServer.call(transport, :status)
@@ -51,6 +59,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   @impl GenServer
   def init(opts) do
     options = Keyword.get(opts, :options) || %Options{}
+
+    max_buffer_size = max_buffer_size_from_options(options)
 
     with {:ok, command, args, temp_files} <- resolve_command(opts, options),
          :ok <- validate_cwd(options.cwd),
@@ -64,7 +74,9 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
          subprocess: {pid, os_pid},
          status: :connected,
          stderr_callback: options.stderr,
-         temp_files: temp_files ++ agent_temp_files
+         temp_files: temp_files ++ agent_temp_files,
+         max_buffer_size: max_buffer_size,
+         overflowed?: false
        }}
     else
       {:error, reason} -> {:stop, reason}
@@ -112,7 +124,12 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   def handle_call({:send, message}, _from, %{subprocess: {pid, _os_pid}} = state) do
-    :exec.send(pid, message)
+    payload =
+      message
+      |> normalize_payload()
+      |> ensure_newline()
+
+    :exec.send(pid, payload)
     {:reply, :ok, state}
   catch
     _, _ -> {:reply, {:error, :send_failed}, state}
@@ -122,17 +139,17 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     {:reply, state.status, state}
   end
 
+  def handle_call(:end_input, _from, %{subprocess: {pid, _os_pid}} = state) do
+    :exec.send(pid, :eof)
+    {:reply, :ok, state}
+  catch
+    _, _ -> {:reply, {:error, :send_failed}, state}
+  end
+
   @impl GenServer
   def handle_info({:stdout, os_pid, data}, %{subprocess: {_pid, os_pid}} = state) do
     data = IO.iodata_to_binary(data)
-    full = state.stdout_buffer <> data
-    {complete_lines, remaining} = split_complete_lines(full)
-
-    Enum.each(complete_lines, fn line ->
-      broadcast(state.subscribers, {:transport_message, line})
-    end)
-
-    {:noreply, %{state | stdout_buffer: remaining}}
+    {:noreply, handle_stdout_data(state, data)}
   end
 
   def handle_info({:stderr, _os_pid, data}, state) do
@@ -175,6 +192,79 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     Enum.each(subscribers, fn pid -> Kernel.send(pid, message) end)
   end
 
+  defp handle_stdout_data(%{overflowed?: true} = state, data) do
+    case String.split(data, "\n", parts: 2) do
+      [_single] ->
+        state
+
+      [_dropped, rest] ->
+        state
+        |> Map.put(:overflowed?, false)
+        |> Map.put(:stdout_buffer, "")
+        |> handle_stdout_data(rest)
+    end
+  end
+
+  defp handle_stdout_data(state, data) do
+    full = state.stdout_buffer <> data
+    {complete_lines, remaining} = split_complete_lines(full)
+
+    updated_state =
+      Enum.reduce_while(complete_lines, %{state | stdout_buffer: ""}, fn line, acc ->
+        case enforce_buffer_limit(acc, line) do
+          {:ok, next_state} ->
+            broadcast(next_state.subscribers, {:transport_message, line})
+            {:cont, next_state}
+
+          {:overflow, next_state} ->
+            {:halt, next_state}
+        end
+      end)
+
+    cond do
+      updated_state.overflowed? ->
+        updated_state
+
+      remaining == "" ->
+        %{updated_state | stdout_buffer: ""}
+
+      true ->
+        case enforce_buffer_limit(updated_state, remaining) do
+          {:ok, next_state} -> %{next_state | stdout_buffer: remaining}
+          {:overflow, next_state} -> next_state
+        end
+    end
+  end
+
+  defp enforce_buffer_limit(%{max_buffer_size: max} = state, data) when is_binary(data) do
+    if byte_size(data) > max do
+      {:overflow, handle_buffer_overflow(state, data)}
+    else
+      {:ok, state}
+    end
+  end
+
+  defp handle_buffer_overflow(state, data) do
+    error =
+      %ClaudeAgentSDK.Errors.CLIJSONDecodeError{
+        message: "JSON message exceeded maximum buffer size of #{state.max_buffer_size} bytes",
+        line: truncate_line(data),
+        original_error: {:buffer_overflow, byte_size(data), state.max_buffer_size}
+      }
+
+    broadcast(state.subscribers, {:transport_error, error})
+
+    %{state | stdout_buffer: "", overflowed?: true}
+  end
+
+  defp truncate_line(data) when is_binary(data) do
+    if byte_size(data) > 100 do
+      binary_part(data, 0, 100) <> "..."
+    else
+      data
+    end
+  end
+
   defp split_complete_lines(""), do: {[], ""}
 
   defp split_complete_lines(data) do
@@ -215,11 +305,34 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   defp maybe_put_cd_option(opts, nil), do: opts
   defp maybe_put_cd_option(opts, cwd) when is_binary(cwd), do: [{:cd, cwd} | opts]
 
+  defp normalize_payload(message) when is_binary(message), do: message
+
+  defp normalize_payload(message) when is_map(message) or is_list(message) do
+    Jason.encode!(message)
+  end
+
+  defp normalize_payload(message), do: to_string(message)
+
+  defp ensure_newline(payload) do
+    if String.ends_with?(payload, "\n") do
+      payload
+    else
+      payload <> "\n"
+    end
+  end
+
   @doc false
   def __exec_opts__(%Options{} = options), do: build_exec_opts(options)
 
+  defp max_buffer_size_from_options(%Options{max_buffer_size: size}) do
+    normalize_max_buffer_size(size)
+  end
+
+  defp normalize_max_buffer_size(size) when is_integer(size) and size > 0, do: size
+  defp normalize_max_buffer_size(_), do: @default_max_buffer_size
+
   defp build_command_from_options(%Options{} = options) do
-    case CLI.find_executable() do
+    case CLI.resolve_executable(options) do
       {:ok, executable} ->
         args = [
           "--print",
@@ -227,11 +340,10 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
           "stream-json",
           "--input-format",
           "stream-json",
-          "--replay-user-messages",
           "--verbose"
         ]
 
-        args = args ++ ClaudeAgentSDK.Options.to_args(options)
+        args = args ++ ClaudeAgentSDK.Options.to_stream_json_args(options)
         {args, temp_files} = AgentsFile.externalize_agents_if_needed(args)
         {:ok, {executable, args, temp_files}}
 

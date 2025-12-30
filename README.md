@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.7.1"}
+    {:claude_agent_sdk, "~> 0.7.2"}
   ]
 end
 ```
@@ -185,6 +185,18 @@ opts = %ClaudeAgentSDK.Options{
 }
 messages = ClaudeAgentSDK.query("Explain OTP", opts) |> Enum.to_list()
 
+# Streamed input prompts (unidirectional)
+prompts = [
+  %{"type" => "user", "message" => %{"role" => "user", "content" => "Hello"}},
+  %{"type" => "user", "message" => %{"role" => "user", "content" => "How are you?"}}
+]
+
+ClaudeAgentSDK.query(prompts, opts) |> Enum.to_list()
+
+# Custom transport injection
+ClaudeAgentSDK.query("Hello", opts, {ClaudeAgentSDK.Transport.Port, []})
+|> Enum.to_list()
+
 # Continue a conversation
 ClaudeAgentSDK.continue("Can you give an example?") |> Enum.to_list()
 
@@ -250,8 +262,10 @@ opts = %Options{
 **Available Hook Events:**
 - `pre_tool_use` / `post_tool_use` - Before/after tool execution
 - `user_prompt_submit` - Before sending user messages
-- `session_start` / `session_end` - Session lifecycle
 - `stop` / `subagent_stop` - Completion events
+- `pre_compact` - Before context compaction
+
+Note: `SessionStart`, `SessionEnd`, and `Notification` hook events are not supported by the Python SDK and are rejected for parity.
 
 See the [Hooks Guide](guides/hooks.md) for comprehensive documentation.
 
@@ -281,6 +295,15 @@ opts = %Options{
   can_use_tool: permission_callback,
   permission_mode: :default  # :default | :accept_edits | :plan | :bypass_permissions
 }
+```
+
+Note: `can_use_tool` with `query/2` requires streaming prompts (Enumerable) and is mutually exclusive with `permission_prompt_tool` (auto-set to `"stdio"`).
+
+Stream a single client response until the final result:
+
+```elixir
+Client.receive_response_stream(client)
+|> Enum.to_list()
 ```
 
 ### MCP Tools (In-Process)
@@ -319,6 +342,9 @@ opts = %ClaudeAgentSDK.Options{
 }
 ```
 
+Note: MCP server routing only supports `initialize`, `tools/list`, `tools/call`, and `notifications/initialized`. Calls to `resources/list` or `prompts/list` return JSON-RPC method-not-found errors to match the Python SDK.
+If `version` is omitted, it defaults to `"1.0.0"`.
+
 ---
 
 ## Configuration Options
@@ -330,13 +356,16 @@ Key options for `ClaudeAgentSDK.Options`:
 | `model` | string | `"sonnet"`, `"opus"`, `"haiku"` |
 | `max_turns` | integer | Maximum conversation turns |
 | `system_prompt` | string | Custom system instructions |
-| `output_format` | atom/map | `:text`, `:json`, `:stream_json`, or JSON schema |
+| `output_format` | atom/map | `:text`, `:json`, `:stream_json`, or JSON schema (SDK enforces stream-json for transport; JSON schema still passed) |
 | `allowed_tools` | list | Tools Claude can use |
 | `permission_mode` | atom | `:default`, `:accept_edits`, `:plan`, `:bypass_permissions` |
 | `hooks` | map | Lifecycle hook callbacks |
-| `mcp_servers` | map | MCP server configurations |
+| `mcp_servers` | map or string | MCP server configurations (or JSON/path alias for `mcp_config`) |
 | `cwd` | string | Working directory for file operations |
 | `timeout_ms` | integer | Command timeout (default: 75 minutes) |
+| `max_buffer_size` | integer | Maximum JSON buffer size (default: 1MB, overflow yields `CLIJSONDecodeError`) |
+
+CLI path override: set `path_to_claude_code_executable` or `executable` in `Options` (Python `cli_path` equivalent).
 
 ### Option Presets
 

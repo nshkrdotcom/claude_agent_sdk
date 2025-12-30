@@ -387,9 +387,11 @@ defmodule ClaudeAgentSDK.SessionStore do
 
   defp deserialize_messages(serialized) do
     Enum.map(serialized, fn msg ->
+      type = ClaudeAgentSDK.Message.__safe_type__(msg["type"] || "unknown")
+
       %ClaudeAgentSDK.Message{
-        type: String.to_atom(msg["type"] || "unknown"),
-        subtype: msg["subtype"] && String.to_atom(msg["subtype"]),
+        type: type,
+        subtype: ClaudeAgentSDK.Message.__safe_subtype__(type, msg["subtype"]),
         data: msg["data"],
         raw: msg["raw"]
       }

@@ -85,6 +85,10 @@ options = %ClaudeAgentSDK.Options{
 
 The `can_use_tool` option accepts a callback function that receives a `Permission.Context` and returns a `Permission.Result`.
 
+Important constraints:
+- `can_use_tool` requires a streaming prompt (Enumerable) when used with `ClaudeAgentSDK.query/2`.
+- `can_use_tool` cannot be combined with `permission_prompt_tool`; the SDK auto-sets `permission_prompt_tool` to `"stdio"` for control protocol flows.
+
 ### Callback Signature
 
 ```elixir
@@ -181,6 +185,8 @@ The `Permission.Context` struct contains all information about the tool being in
   signal: AbortSignal.t()       # Optional abort signal reference
 }
 ```
+
+Note: MCP tool names are always strings of the form `mcp__<server>__<tool>`; avoid atom matching for MCP tool names.
 
 ### Accessing Context Fields
 

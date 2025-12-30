@@ -2,7 +2,7 @@
 
 Date: 2025-12-29
 Python reference: anthropics/claude-agent-sdk-python v0.1.18
-Elixir target: repo root (claude_agent_sdk v0.7.1)
+Elixir target: repo root (claude_agent_sdk v0.7.2)
 
 Scope
 - Canonical behavior derived from the Python SDK code in `anthropics/claude-agent-sdk-python`.
@@ -14,6 +14,11 @@ Summary
 - High gaps: 8
 - Medium gaps: 8
 - Low gaps: 4
+
+Status Update (v0.7.2)
+- Resolved: All gaps listed below are addressed in `claude_agent_sdk` v0.7.2, including G-011/G-014/G-015/G-016/G-020.
+- Intentional divergence: G-005 (CLI bundling) remains a documented difference; the Elixir SDK does not ship a bundled CLI binary.
+- Compatibility note: G-022 is satisfied via `Client.receive_response_stream/1` while retaining the list-returning `receive_response/1` for backward compatibility.
 
 Most impactful mismatches
 - Control protocol permission response shape (G-001)

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2025-12-29
+
+### Fixed
+
+- **Buffer Limits**: Enforced `max_buffer_size` hard limit across transports and sync parsing with `CLIJSONDecodeError` on overflow (G-011)
+- **MCP Methods**: `resources/list` and `prompts/list` now return JSON-RPC method-not-found errors (G-014)
+- **MCP Tool Names**: Registry and routing keep tool names as strings, avoiding atom leaks (G-015)
+- **Message Parsing**: Unknown message types/subtypes no longer crash or create atoms (G-016)
+- **Hooks Validation**: Unsupported hook events are rejected to match Python SDK parity (G-020)
+
+### Changed
+
+- **SDK MCP Server Defaults**: `create_sdk_mcp_server/1` defaults `version` to `"1.0.0"` when omitted (G-019)
+- **Documentation**: Updated README, guides, parity matrix, and examples for 0.7.2 parity
+
 ## [0.7.1] - 2025-12-29
 
 ### Added
@@ -915,7 +930,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.10...v0.7.0
 [0.6.10]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.9...v0.6.10

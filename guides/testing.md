@@ -247,9 +247,11 @@ The hooks system provides lifecycle event interception for testing security poli
 | `pre_tool_use` | Before tool executes | Security validation, logging |
 | `post_tool_use` | After tool executes | Audit trails, monitoring |
 | `user_prompt_submit` | When user submits prompt | Context injection |
-| `session_start` | At session start | Initialization |
-| `session_end` | At session end | Cleanup |
 | `stop` | When agent finishes | Final logging |
+| `subagent_stop` | When subagent finishes | Subagent result handling |
+| `pre_compact` | Before context compaction | Preserve context |
+
+Note: `session_start`, `session_end`, and `notification` hooks are not supported by the Python SDK and are rejected.
 
 ### Creating Test Hooks
 
@@ -541,7 +543,12 @@ defmodule MyApp.PermissionsTest do
       permission_mode: :default
     }
 
-    _messages = ClaudeAgentSDK.query("write a file", options) |> Enum.to_list()
+    # can_use_tool with query requires streaming prompts
+    prompts = [
+      %{"type" => "user", "message" => %{"role" => "user", "content" => "write a file"}}
+    ]
+
+    _messages = ClaudeAgentSDK.query(prompts, options) |> Enum.to_list()
 
     assert_receive {:context_received, context}
     assert is_binary(context.tool_name)
@@ -736,7 +743,7 @@ defmodule MyApp.MCPToolsTest do
     # Execute tool directly
     {:ok, result} = Registry.execute_tool(
       server.registry_pid,
-      :add,
+      "add",
       %{"a" => 5, "b" => 3}
     )
 

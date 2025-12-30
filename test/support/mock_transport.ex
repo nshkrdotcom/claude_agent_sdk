@@ -45,6 +45,10 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
     GenServer.stop(transport, :normal)
   end
 
+  def end_input(transport) do
+    GenServer.call(transport, :end_input)
+  end
+
   @impl ClaudeAgentSDK.Transport
   def status(transport) do
     GenServer.call(transport, :status)
@@ -78,6 +82,11 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
 
   def handle_call(:recorded, _from, state) do
     {:reply, Enum.reverse(state.messages), state}
+  end
+
+  def handle_call(:end_input, _from, state) do
+    if state.test_pid, do: Kernel.send(state.test_pid, {:mock_transport_end_input, self()})
+    {:reply, :ok, state}
   end
 
   @impl GenServer

@@ -61,19 +61,18 @@ When hooks are configured, the SDK automatically uses the control protocol trans
 
 ## Hook Events
 
-The SDK supports nine hook event types, each triggered at specific moments:
+The SDK supports six hook event types, each triggered at specific moments:
 
 | Event | Description | Common Use Cases |
 |-------|-------------|------------------|
-| `:session_start` | Triggered when a session begins | Initialize logging, set up resources |
-| `:session_end` | Triggered when a session ends | Cleanup, final logging |
-| `:notification` | Triggered for CLI notifications | Display status updates |
 | `:pre_tool_use` | Before a tool executes | Security validation, permission checks |
 | `:post_tool_use` | After a tool executes | Audit logging, result processing |
 | `:user_prompt_submit` | When user submits a prompt | Context injection, preprocessing |
 | `:stop` | When the agent finishes | Finalization, reporting |
 | `:subagent_stop` | When a subagent finishes | Subagent result processing |
 | `:pre_compact` | Before context compaction | Preserve important context |
+
+Note: `SessionStart`, `SessionEnd`, and `Notification` are not supported by the Python SDK and are rejected during validation.
 
 ### Event Configuration Examples
 
@@ -95,14 +94,6 @@ hooks = %{
   # Context injection on prompt submit
   user_prompt_submit: [
     Matcher.new(nil, [&add_project_context/3])
-  ],
-
-  # Session lifecycle
-  session_start: [
-    Matcher.new(nil, [&initialize_session/3])
-  ],
-  session_end: [
-    Matcher.new(nil, [&cleanup_session/3])
   ]
 }
 ```
@@ -125,8 +116,7 @@ Hooks.string_to_event("PostToolUse")   # => :post_tool_use
 
 # Get all valid events
 Hooks.all_valid_events()
-# => [:session_start, :session_end, :notification, :pre_tool_use,
-#     :post_tool_use, :user_prompt_submit, :stop, :subagent_stop, :pre_compact]
+# => [:pre_tool_use, :post_tool_use, :user_prompt_submit, :stop, :subagent_stop, :pre_compact]
 ```
 
 ---
@@ -188,12 +178,14 @@ Matcher.new("Bash", [
 Set a per-matcher timeout for callback execution:
 
 ```elixir
-# Timeout after 5 seconds (minimum is 1000ms)
+# Timeout after 5 seconds (minimum is 1000ms; sent to CLI as seconds)
 Matcher.new("Bash", [&slow_check/3], timeout_ms: 5000)
 
 # Timeout after 30 seconds for expensive operations
 Matcher.new("*", [&expensive_analysis/3], timeout_ms: 30_000)
 ```
+
+The SDK converts `timeout_ms` to seconds in the control initialization payload to match the CLI's expected units.
 
 ### Complete Matcher Examples
 
@@ -700,16 +692,11 @@ hooks = %{
 }
 ```
 
-### Session Lifecycle Logging
+### Conversation Lifecycle Logging
 
 ```elixir
 defmodule SessionAuditHooks do
-  def log_session_start(_input, _tool_use_id, _context) do
-    IO.puts("[AUDIT] Session started at #{DateTime.utc_now()}")
-    %{}
-  end
-
-  def log_session_end(input, _tool_use_id, _context) do
+  def log_stop(input, _tool_use_id, _context) do
     session_id = input["session_id"]
     IO.puts("[AUDIT] Session #{session_id} ended at #{DateTime.utc_now()}")
     %{}
@@ -725,14 +712,11 @@ end
 
 # Usage
 hooks = %{
-  session_start: [
-    Matcher.new(nil, [&SessionAuditHooks.log_session_start/3])
-  ],
-  session_end: [
-    Matcher.new(nil, [&SessionAuditHooks.log_session_end/3])
-  ],
   user_prompt_submit: [
     Matcher.new(nil, [&SessionAuditHooks.log_prompt_submit/3])
+  ],
+  stop: [
+    Matcher.new(nil, [&SessionAuditHooks.log_stop/3])
   ]
 }
 ```
@@ -1287,7 +1271,7 @@ Hooks provide a powerful mechanism for controlling Claude Agent SDK behavior:
 |----------|------------|---------------|
 | Security validation | `:pre_tool_use` | `Output.allow/0`, `Output.deny/1` |
 | Audit logging | `:pre_tool_use`, `:post_tool_use` | Return `%{}` |
-| Context injection | `:user_prompt_submit`, `:session_start` | `Output.add_context/2` |
+| Context injection | `:user_prompt_submit`, `:pre_compact` | `Output.add_context/2` |
 | Rate limiting | `:pre_tool_use` | ETS counters + `Output.deny/1` |
 | Execution control | Any | `Output.stop/1`, `Output.continue/0` |
 

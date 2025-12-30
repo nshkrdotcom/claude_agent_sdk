@@ -64,7 +64,7 @@ defmodule ClaudeAgentSDK.Mock.Process do
 
   defp convert_to_message(raw_message) do
     # The message is already a map, parse it directly
-    type = String.to_atom(raw_message["type"])
+    type = Message.__safe_type__(raw_message["type"])
 
     message = %Message{
       type: type,
@@ -85,11 +85,11 @@ defmodule ClaudeAgentSDK.Mock.Process do
         }
 
       :result ->
-        subtype = if raw_message["subtype"], do: String.to_atom(raw_message["subtype"])
+        subtype = Message.__safe_subtype__(:result, raw_message["subtype"])
         %{message | subtype: subtype, data: Map.drop(raw_message, ["type", "subtype"])}
 
       :system ->
-        subtype = if raw_message["subtype"], do: String.to_atom(raw_message["subtype"])
+        subtype = Message.__safe_subtype__(:system, raw_message["subtype"])
         %{message | subtype: subtype, data: Map.drop(raw_message, ["type", "subtype"])}
 
       _ ->

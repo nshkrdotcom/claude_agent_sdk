@@ -220,16 +220,7 @@ defmodule ClaudeAgentSDK.ClientTest do
 
           matchers_config =
             Enum.map(matchers, fn matcher ->
-              callback_ids =
-                Enum.map(matcher.hooks, fn cb ->
-                  Hooks.Registry.get_id(registry, cb)
-                end)
-
-              %{
-                "matcher" => matcher.matcher,
-                "hookCallbackIds" => callback_ids,
-                "timeout" => matcher.timeout_ms
-              }
+              Matcher.to_cli_format(matcher, fn cb -> Hooks.Registry.get_id(registry, cb) end)
             end)
 
           {event_str, matchers_config}
@@ -241,7 +232,7 @@ defmodule ClaudeAgentSDK.ClientTest do
                  %{
                    "matcher" => "Bash",
                    "hookCallbackIds" => ["hook_0"],
-                   "timeout" => 1_500
+                   "timeout" => 1.5
                  }
                ]
              }

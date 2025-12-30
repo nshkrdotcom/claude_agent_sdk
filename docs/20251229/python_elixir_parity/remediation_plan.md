@@ -2,6 +2,10 @@
 
 Goal: Align Elixir behavior with the canonical Python SDK (v0.1.18) while keeping Elixir-only conveniences opt-in and non-breaking.
 
+Status Update (v0.7.2)
+- All Phase 0-2 remediation items are complete.
+- CLI bundling (G-005) remains an intentional divergence; the Elixir SDK does not ship a bundled CLI binary.
+
 Principles
 - Protocol correctness first (control protocol and stream-json parsing).
 - Preserve backward compatibility where possible; add warnings when behavior changes.

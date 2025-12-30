@@ -1,6 +1,6 @@
 # MCP Tools Guide
 
-**Version:** 0.6.x | **Last Updated:** 2025-12-29
+**Version:** 0.7.2 | **Last Updated:** 2025-12-29
 
 ---
 
@@ -32,6 +32,12 @@ MCP (Model Context Protocol) is an open protocol that enables integration betwee
 | **Resource** | Data or context that Claude can access |
 | **Host** | The LLM application (Claude Agent SDK) |
 | **Client** | The MCP client that connects host to server |
+
+### Protocol Notes (Python Parity)
+
+- SDK MCP routing implements `initialize`, `tools/list`, `tools/call`, and `notifications/initialized`.
+- `resources/list` and `prompts/list` return JSON-RPC method-not-found errors (matching the Python SDK).
+- Tool names are kept as strings end-to-end; the registry normalizes tool names to strings to avoid atom leakage.
 
 ### Why Use MCP?
 
@@ -376,7 +382,7 @@ For errors that should be visible to Claude:
   "content" => [
     %{"type" => "text", "text" => "Error: Invalid input"}
   ],
-  "isError" => true
+  "is_error" => true
 }}
 ```
 
@@ -434,7 +440,7 @@ def execute(%{"file_path" => path}) do
     {:error, :eacces} ->
       {:ok, %{
         "content" => [%{"type" => "text", "text" => "Permission denied: #{path}"}],
-        "isError" => true
+        "is_error" => true
       }}
 
     {:error, reason} ->
@@ -464,7 +470,7 @@ server = ClaudeAgentSDK.create_sdk_mcp_server(
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `name` | String | Yes | Unique server identifier |
-| `version` | String | Yes | Server version (semver recommended) |
+| `version` | String | No | Server version (defaults to `1.0.0`) |
 | `tools` | List | Yes | List of tool modules |
 
 ### Server Structure
@@ -478,6 +484,13 @@ The returned server map contains:
   version: "1.0.0",              # Server version
   registry_pid: #PID<0.123.0>    # Tool registry process
 }
+```
+
+Direct registry calls use string tool names:
+
+```elixir
+{:ok, result} =
+  ClaudeAgentSDK.Tool.Registry.execute_tool(server.registry_pid, "add", %{"a" => 1, "b" => 2})
 ```
 
 ### Using with Options
@@ -504,6 +517,12 @@ options = %ClaudeAgentSDK.Options{
 
 ClaudeAgentSDK.query("What is 15 + 27, then multiply by 3?", options)
 |> Enum.to_list()
+```
+
+You can also pass a JSON string or file path via `mcp_servers` (alias for `mcp_config`):
+
+```elixir
+options = %Options{mcp_servers: "/path/to/mcp.json"}
 ```
 
 ### Complete Example
@@ -969,7 +988,7 @@ deftool :do_stuff, "Does things with data", %{...}
 ### Error Handling
 
 1. **Pattern Match Inputs**: Handle unexpected input gracefully
-2. **Use isError Flag**: For errors Claude should know about
+2. **Use is_error Flag**: For errors Claude should know about
 3. **Provide Context**: Help Claude understand what went wrong
 
 ```elixir
@@ -981,13 +1000,13 @@ def execute(%{"file_path" => path}) do
     {:error, :enoent} ->
       {:ok, %{
         "content" => [%{"type" => "text", "text" => "File not found: #{path}. Please check the path and try again."}],
-        "isError" => true
+        "is_error" => true
       }}
 
     {:error, :eacces} ->
       {:ok, %{
         "content" => [%{"type" => "text", "text" => "Permission denied reading: #{path}"}],
-        "isError" => true
+        "is_error" => true
       }}
 
     {:error, reason} ->

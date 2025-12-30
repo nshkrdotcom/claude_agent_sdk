@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.CLITest do
 
   import ExUnit.CaptureLog
 
-  alias ClaudeAgentSDK.CLI
+  alias ClaudeAgentSDK.{CLI, Options}
 
   # Tests spawn fake CLI scripts via System.cmd - requires process spawning
   @moduletag :live_cli
@@ -177,6 +177,44 @@ defmodule ClaudeAgentSDK.CLITest do
 
       File.rm_rf!(bundled_dir)
     end)
+  end
+
+  test "resolve_executable/1 prefers path_to_claude_code_executable" do
+    dir =
+      Path.join(System.tmp_dir!(), "claude_cli_override_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(dir)
+
+    primary = Path.join(dir, "primary")
+    fallback = Path.join(dir, "fallback")
+
+    File.write!(primary, "")
+    File.write!(fallback, "")
+
+    options = %Options{
+      path_to_claude_code_executable: primary,
+      executable: fallback
+    }
+
+    assert {:ok, ^primary} = CLI.resolve_executable(options)
+
+    File.rm_rf!(dir)
+  end
+
+  test "resolve_executable/1 uses executable override when set" do
+    dir =
+      Path.join(System.tmp_dir!(), "claude_cli_override_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(dir)
+
+    executable = Path.join(dir, "custom")
+    File.write!(executable, "")
+
+    options = %Options{executable: executable}
+
+    assert {:ok, ^executable} = CLI.resolve_executable(options)
+
+    File.rm_rf!(dir)
   end
 
   defp with_fake_cli(original_path, cli_defs, fun) do

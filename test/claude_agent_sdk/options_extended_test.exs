@@ -313,6 +313,44 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
       assert "--debug-to-stderr" in args
       assert flag_with_value?(args, "--foo", "bar")
     end
+
+    test "extra_args booleans follow Python semantics" do
+      options =
+        %Options{
+          extra_args: %{
+            "debug-to-stderr" => true,
+            "skip-this" => false
+          }
+        }
+
+      args = Options.to_args(options)
+
+      assert "--debug-to-stderr" in args
+      refute flag_with_value?(args, "--debug-to-stderr", "true")
+      refute "--skip-this" in args
+    end
+  end
+
+  describe "mcp config aliases" do
+    test "mcp_servers accepts JSON config string" do
+      json = ~s({"mcpServers":{"calc":{"type":"stdio","command":"calc","args":[]}}})
+      options = %Options{mcp_servers: json}
+      args = Options.to_args(options)
+
+      assert value_for_flag(args, "--mcp-config") == json
+    end
+
+    test "mcp_servers accepts config file path" do
+      path = Path.join(System.tmp_dir!(), "mcp_config_#{System.unique_integer([:positive])}.json")
+      File.write!(path, "{}")
+
+      options = %Options{mcp_servers: path}
+      args = Options.to_args(options)
+
+      assert value_for_flag(args, "--mcp-config") == path
+
+      File.rm(path)
+    end
   end
 
   describe "thinking tokens" do

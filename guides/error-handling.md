@@ -210,6 +210,9 @@ Raised when the SDK fails to parse JSON output from the CLI.
 - Corrupted CLI output
 - Partial message received due to process termination
 - Non-JSON output mixed with JSON (debug output, warnings)
+- JSON frames exceeding `max_buffer_size` (default: 1MB)
+
+When a frame exceeds the buffer limit, the error message is `JSON message exceeded maximum buffer size of <N> bytes` and the stream terminates.
 
 **Example handling:**
 

@@ -17,6 +17,8 @@ defmodule ClaudeAgentSDK.Process do
   alias ClaudeAgentSDK.{CLI, Message, Options}
   alias ClaudeAgentSDK.Transport.AgentsFile
 
+  @default_max_buffer_size 1_048_576
+
   @doc """
   Streams messages from Claude Code CLI using erlexec.
 
@@ -38,7 +40,7 @@ defmodule ClaudeAgentSDK.Process do
           Enumerable.t(ClaudeAgentSDK.Message.t())
   def stream(args, %Options{} = options, stdin_input \\ nil) do
     # Check if we should use mock
-    if use_mock?() do
+    if use_mock?() and not force_real?(options) do
       ClaudeAgentSDK.Mock.Process.stream(args, options, stdin_input)
     else
       stream_real(args, options, stdin_input)
@@ -53,6 +55,10 @@ defmodule ClaudeAgentSDK.Process do
       {_, "true"} -> false
       _ -> Application.get_env(:claude_agent_sdk, :use_mock, false)
     end
+  end
+
+  defp force_real?(%Options{executable: executable, path_to_claude_code_executable: path}) do
+    is_binary(executable) or is_binary(path)
   end
 
   defp stream_real(args, options, stdin_input) do
@@ -125,10 +131,12 @@ defmodule ClaudeAgentSDK.Process do
   defp start_exec(cmd, exec_options, options, nil, temp_files) do
     case :exec.run(cmd, exec_options) do
       {:ok, result} ->
+        _ = dispatch_stderr_from_result(result, options)
+
         %{
           mode: :sync,
           result: result,
-          messages: parse_sync_result(result),
+          messages: parse_sync_result(result, options),
           current_index: 0,
           done: false,
           temp_files: temp_files
@@ -181,7 +189,7 @@ defmodule ClaudeAgentSDK.Process do
         Logger.debug("Using timeout for CLI run", timeout_ms: timeout_ms)
 
         # Collect output until process exits
-        receive_exec_output(pid, os_pid, [], [], timeout_ms, temp_files)
+        receive_exec_output(pid, os_pid, [], [], timeout_ms, temp_files, options)
 
       {:error, reason} ->
         Logger.error("Failed to start Claude CLI (stdin run)",
@@ -203,7 +211,7 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp receive_exec_output(pid, os_pid, stdout_acc, stderr_acc, timeout_ms, temp_files) do
+  defp receive_exec_output(pid, os_pid, stdout_acc, stderr_acc, timeout_ms, temp_files, options) do
     receive do
       {:stdout, ^os_pid, data} ->
         # Check for challenge URL in the output
@@ -244,11 +252,14 @@ defmodule ClaudeAgentSDK.Process do
             [data | stdout_acc],
             stderr_acc,
             timeout_ms,
-            temp_files
+            temp_files,
+            options
           )
         end
 
       {:stderr, ^os_pid, data} ->
+        _ = dispatch_stderr_chunk(data, options)
+
         # Also check stderr for challenge URL
         combined_output = [data | stderr_acc] |> Enum.reverse() |> Enum.join()
 
@@ -287,7 +298,8 @@ defmodule ClaudeAgentSDK.Process do
             stdout_acc,
             [data | stderr_acc],
             timeout_ms,
-            temp_files
+            temp_files,
+            options
           )
         end
 
@@ -304,7 +316,7 @@ defmodule ClaudeAgentSDK.Process do
         %{
           mode: :sync,
           result: result,
-          messages: parse_sync_result(result),
+          messages: parse_sync_result(result, options),
           current_index: 0,
           done: false,
           temp_files: temp_files
@@ -344,8 +356,33 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp build_claude_command(args, _options, _stdin_input) do
-    executable = CLI.find_executable!()
+  defp dispatch_stderr_from_result(result, %Options{stderr: callback})
+       when is_function(callback, 1) do
+    stderr_data = get_in(result, [:stderr]) || []
+
+    stderr_data
+    |> Enum.join("")
+    |> String.split("\n")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.each(fn line -> callback.(line) end)
+  end
+
+  defp dispatch_stderr_from_result(_result, _options), do: :ok
+
+  defp dispatch_stderr_chunk(data, %Options{stderr: callback}) when is_function(callback, 1) do
+    data
+    |> IO.iodata_to_binary()
+    |> String.split("\n")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.each(fn line -> callback.(line) end)
+  end
+
+  defp dispatch_stderr_chunk(_data, _options), do: :ok
+
+  defp build_claude_command(args, %Options{} = options, _stdin_input) do
+    executable = CLI.resolve_executable!(options)
     _ = CLI.warn_if_outdated()
 
     # Ensure proper flags for JSON output
@@ -358,10 +395,7 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp build_exec_options(options) do
-    # Get timeout from options (default: 75 minutes)
-    timeout_ms = options.timeout_ms || 4_500_000
-
-    base_options = [:sync, :stdout, :stderr, {:timeout, timeout_ms}]
+    base_options = [:sync, :stdout, :stderr]
 
     # Add environment variables (critical for authentication!)
     env_options = build_env_vars(options)
@@ -456,9 +490,9 @@ defmodule ClaudeAgentSDK.Process do
   def __shell_escape__(arg) when is_binary(arg), do: shell_escape(arg)
 
   @doc false
-  @spec __parse_output__(String.t()) :: [Message.t()]
-  def __parse_output__(output) when is_binary(output) do
-    parse_sync_result(%{stdout: [output], stderr: []})
+  @spec __parse_output__(String.t(), Options.t()) :: [Message.t()]
+  def __parse_output__(output, %Options{} = options \\ %Options{}) when is_binary(output) do
+    parse_sync_result(%{stdout: [output], stderr: []}, options)
   end
 
   defp maybe_put_env_option(opts, []), do: opts
@@ -492,16 +526,9 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp ensure_json_flags(args) do
-    cond do
-      "--output-format" not in args ->
-        args ++ ["--output-format", "stream-json", "--verbose"]
-
-      has_stream_json?(args) and "--verbose" not in args ->
-        args ++ ["--verbose"]
-
-      true ->
-        args
-    end
+    args
+    |> ensure_stream_json_output_format()
+    |> ensure_verbose_for_stream_json()
   end
 
   defp has_stream_json?(args) do
@@ -511,18 +538,45 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp parse_sync_result(result) do
+  defp ensure_stream_json_output_format(args) do
+    case Enum.find_index(args, &(&1 == "--output-format")) do
+      nil ->
+        args ++ ["--output-format", "stream-json"]
+
+      idx when idx == length(args) - 1 ->
+        args ++ ["stream-json"]
+
+      idx ->
+        if Enum.at(args, idx + 1) == "stream-json" do
+          args
+        else
+          List.replace_at(args, idx + 1, "stream-json")
+        end
+    end
+  end
+
+  defp ensure_verbose_for_stream_json(args) do
+    if has_stream_json?(args) and "--verbose" not in args do
+      args ++ ["--verbose"]
+    else
+      args
+    end
+  end
+
+  defp parse_sync_result(result, %Options{} = options) do
     stdout_data = get_in(result, [:stdout]) || []
     stderr_data = get_in(result, [:stderr]) || []
 
     # Combine all output
-    all_output = stdout_data ++ stderr_data
-    combined_text = Enum.join(all_output)
+    stdout_output = Enum.join(stdout_data)
+    stderr_output = Enum.join(stderr_data)
+    combined_text = stdout_output <> stderr_output
 
     # First check for challenge URL
     case detect_challenge_url(combined_text) do
       nil ->
-        parse_sync_lines(combined_text)
+        output_to_parse = if stdout_output == "", do: stderr_output, else: stdout_output
+        parse_sync_lines(output_to_parse, max_buffer_size(options))
 
       challenge_url ->
         IO.puts("\n🔐 Challenge URL detected:")
@@ -544,10 +598,16 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp parse_sync_lines(combined_text) do
+  defp parse_sync_lines(combined_text, max_buffer_size) do
     combined_text
     |> String.split("\n", trim: true)
-    |> Enum.reduce_while([], &parse_sync_line/2)
+    |> Enum.reduce_while([], fn line, acc ->
+      if byte_size(line) > max_buffer_size do
+        {:halt, {:error, buffer_overflow_error_message(line, max_buffer_size)}}
+      else
+        parse_sync_line(line, acc)
+      end
+    end)
     |> case do
       {:error, error_message} -> [error_message]
       messages when is_list(messages) -> Enum.reverse(messages)
@@ -620,6 +680,39 @@ defmodule ClaudeAgentSDK.Process do
       }
     }
   end
+
+  defp buffer_overflow_error_message(line, max_buffer_size) do
+    error =
+      %ClaudeAgentSDK.Errors.CLIJSONDecodeError{
+        message: "JSON message exceeded maximum buffer size of #{max_buffer_size} bytes",
+        line: truncate_line(line),
+        original_error: {:buffer_overflow, byte_size(line), max_buffer_size}
+      }
+
+    %Message{
+      type: :result,
+      subtype: :error_during_execution,
+      data: %{
+        error: Exception.message(error),
+        error_struct: error,
+        session_id: "error",
+        is_error: true
+      }
+    }
+  end
+
+  defp truncate_line(line) when is_binary(line) do
+    if byte_size(line) > 100 do
+      binary_part(line, 0, 100) <> "..."
+    else
+      line
+    end
+  end
+
+  defp max_buffer_size(%Options{max_buffer_size: size}) when is_integer(size) and size > 0,
+    do: size
+
+  defp max_buffer_size(_), do: @default_max_buffer_size
 
   defp process_error_message(formatted_error, reason) do
     {exit_code, stderr} = extract_process_error_details(reason)

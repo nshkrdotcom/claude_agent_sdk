@@ -52,7 +52,7 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
     callback_id = Registry.get_id(state.registry, callback)
     [matcher_config] = init_request["request"]["hooks"]["PreToolUse"]
 
-    assert matcher_config["timeout"] == 1_000
+    assert matcher_config["timeout"] == 1.0
     assert matcher_config["matcher"] == "Bash"
     assert matcher_config["hookCallbackIds"] == [callback_id]
 
@@ -65,7 +65,7 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
     assert Enum.any?(recorded, fn msg ->
              msg["request"]["hooks"]["PreToolUse"]
              |> List.first()
-             |> Map.get("timeout") == 1_000
+             |> Map.get("timeout") == 1.0
            end)
   end
 

@@ -99,6 +99,8 @@ code_reviewer = Agent.new(
 - `:allowed_tools` - A list of tool name strings the agent can use
 - `:model` - A string specifying which model to use (e.g., "haiku", "sonnet", "opus", "claude-sonnet-4")
 
+Tip: MCP tool names are always strings (`mcp__<server>__<tool>`). Avoid atom tool names in agent configs to prevent atom leaks.
+
 ---
 
 ## Agent Configuration
@@ -583,6 +585,8 @@ options = %Options{
 # Query - filesystem agents are now available
 :ok = Client.query(client, "Run a security audit on the auth module")
 {:ok, messages} = Client.receive_response(client)
+# Or stream until result:
+# Client.receive_response_stream(client) |> Enum.to_list()
 
 # Check which agents were loaded (in init message)
 init = Enum.find(messages, &(&1.type == :system and &1.subtype == :init))

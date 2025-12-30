@@ -12,6 +12,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
   @behaviour ClaudeAgentSDK.Transport
 
+  @default_max_buffer_size 1_048_576
   @line_length 65_536
   alias ClaudeAgentSDK.{CLI, Options}
   alias ClaudeAgentSDK.Transport.AgentsFile
@@ -22,7 +23,9 @@ defmodule ClaudeAgentSDK.Transport.Port do
             status: :disconnected,
             options: [],
             temp_files: [],
-            stderr_callback: nil
+            stderr_callback: nil,
+            max_buffer_size: @default_max_buffer_size,
+            overflowed?: false
 
   @impl ClaudeAgentSDK.Transport
   def start_link(opts) when is_list(opts) do
@@ -89,6 +92,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
     command = Keyword.fetch!(opts, :command)
     temp_files = Keyword.get(opts, :temp_files, [])
     stderr_callback = Keyword.get(opts, :stderr_callback)
+    max_buffer_size = max_buffer_size_from_opts(opts)
 
     case open_port(command, opts) do
       {:ok, port} ->
@@ -99,7 +103,9 @@ defmodule ClaudeAgentSDK.Transport.Port do
           status: :connected,
           options: opts,
           temp_files: temp_files,
-          stderr_callback: stderr_callback
+          stderr_callback: stderr_callback,
+          max_buffer_size: max_buffer_size,
+          overflowed?: false
         }
 
         {:ok, state}
@@ -166,20 +172,20 @@ defmodule ClaudeAgentSDK.Transport.Port do
   @impl GenServer
   def handle_info({port, {:data, {:eol, line}}}, %{port: port} = state) when is_binary(line) do
     state
-    |> handle_line(line)
+    |> handle_port_data(line <> "\n")
+    |> noreply()
+  end
+
+  def handle_info({port, {:data, {:noeol, line}}}, %{port: port} = state) when is_binary(line) do
+    state
+    |> handle_port_data(line)
     |> noreply()
   end
 
   def handle_info({port, {:data, data}}, %{port: port} = state) when is_binary(data) do
-    full = state.buffer <> data
-    {complete_lines, remaining} = split_complete_lines(full)
-
-    new_state =
-      Enum.reduce(complete_lines, state, fn line, acc ->
-        handle_line(acc, line)
-      end)
-
-    {:noreply, %{new_state | buffer: remaining}}
+    state
+    |> handle_port_data(data)
+    |> noreply()
   end
 
   def handle_info({port, {:exit_status, status}}, %{port: port} = state) do
@@ -255,7 +261,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
   defp build_command_from_options(opts) do
     case Keyword.get(opts, :options) do
       %Options{} = options ->
-        case CLI.find_executable() do
+        case CLI.resolve_executable(options) do
           {:ok, executable} ->
             _ = CLI.warn_if_outdated()
 
@@ -265,11 +271,10 @@ defmodule ClaudeAgentSDK.Transport.Port do
               "stream-json",
               "--input-format",
               "stream-json",
-              "--replay-user-messages",
               "--verbose"
             ]
 
-            args = args ++ Options.to_args(options)
+            args = args ++ Options.to_stream_json_args(options)
             {:ok, {executable, args}}
 
           {:error, :not_found} ->
@@ -437,6 +442,80 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
   defp handle_line(state, line), do: broadcast(state, line)
 
+  defp handle_port_data(%{overflowed?: true} = state, data) do
+    case String.split(data, "\n", parts: 2) do
+      [_single] ->
+        state
+
+      [_dropped, rest] ->
+        state
+        |> Map.put(:overflowed?, false)
+        |> Map.put(:buffer, "")
+        |> handle_port_data(rest)
+    end
+  end
+
+  defp handle_port_data(state, data) do
+    full = state.buffer <> data
+    {complete_lines, remaining} = split_complete_lines(full)
+
+    updated_state =
+      Enum.reduce_while(complete_lines, %{state | buffer: ""}, fn line, acc ->
+        case enforce_buffer_limit(acc, line) do
+          {:ok, next_state} ->
+            {:cont, handle_line(next_state, line)}
+
+          {:overflow, next_state} ->
+            {:halt, next_state}
+        end
+      end)
+
+    cond do
+      updated_state.overflowed? ->
+        updated_state
+
+      remaining == "" ->
+        %{updated_state | buffer: ""}
+
+      true ->
+        case enforce_buffer_limit(updated_state, remaining) do
+          {:ok, next_state} -> %{next_state | buffer: remaining}
+          {:overflow, next_state} -> next_state
+        end
+    end
+  end
+
+  defp enforce_buffer_limit(%{max_buffer_size: max} = state, data) when is_binary(data) do
+    if byte_size(data) > max do
+      {:overflow, handle_buffer_overflow(state, data)}
+    else
+      {:ok, state}
+    end
+  end
+
+  defp handle_buffer_overflow(state, data) do
+    error =
+      %ClaudeAgentSDK.Errors.CLIJSONDecodeError{
+        message: "JSON message exceeded maximum buffer size of #{state.max_buffer_size} bytes",
+        line: truncate_line(data),
+        original_error: {:buffer_overflow, byte_size(data), state.max_buffer_size}
+      }
+
+    Enum.each(state.subscribers, fn {pid, _ref} ->
+      Kernel.send(pid, {:transport_error, error})
+    end)
+
+    %{state | buffer: "", overflowed?: true}
+  end
+
+  defp truncate_line(data) when is_binary(data) do
+    if byte_size(data) > 100 do
+      binary_part(data, 0, 100) <> "..."
+    else
+      data
+    end
+  end
+
   defp maybe_put_env(opts, nil), do: opts
 
   defp maybe_put_env(opts, env) when is_list(env) do
@@ -500,4 +579,14 @@ defmodule ClaudeAgentSDK.Transport.Port do
   end
 
   defp noreply(state), do: {:noreply, state}
+
+  defp max_buffer_size_from_opts(opts) do
+    case Keyword.get(opts, :options) do
+      %Options{max_buffer_size: size} -> normalize_max_buffer_size(size)
+      _ -> @default_max_buffer_size
+    end
+  end
+
+  defp normalize_max_buffer_size(size) when is_integer(size) and size > 0, do: size
+  defp normalize_max_buffer_size(_), do: @default_max_buffer_size
 end

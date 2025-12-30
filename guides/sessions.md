@@ -398,6 +398,8 @@ case SessionStore.load_session(session_id) do
 end
 ```
 
+SessionStore preserves unknown message types/subtypes as strings to stay forward-compatible with new CLI message variants.
+
 ### Complete Save/Load Workflow
 
 ```elixir

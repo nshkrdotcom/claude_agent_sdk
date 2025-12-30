@@ -25,6 +25,16 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
       assert is_pid(server.registry_pid)
     end
 
+    test "defaults version to 1.0.0 when omitted" do
+      server =
+        ClaudeAgentSDK.create_sdk_mcp_server(
+          name: "default-version",
+          tools: [CalculatorTools.Add]
+        )
+
+      assert server.version == "1.0.0"
+    end
+
     test "server has correct tool count" do
       server =
         ClaudeAgentSDK.create_sdk_mcp_server(
@@ -37,8 +47,8 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
       assert length(tools) == 2
 
       names = Enum.map(tools, & &1.name)
-      assert :add in names
-      assert :greet_user in names
+      assert "add" in names
+      assert "greet_user" in names
     end
 
     test "creates empty server with no tools" do
@@ -123,21 +133,22 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
     end
 
     test "executes tool successfully", %{server: server} do
-      {:ok, result} = Tool.Registry.execute_tool(server.registry_pid, :add, %{"a" => 5, "b" => 3})
+      {:ok, result} =
+        Tool.Registry.execute_tool(server.registry_pid, "add", %{"a" => 5, "b" => 3})
 
       assert result["content"] == [%{"type" => "text", "text" => "5 + 3 = 8"}]
     end
 
     test "executes different tools", %{server: server} do
       {:ok, result} =
-        Tool.Registry.execute_tool(server.registry_pid, :greet_user, %{"name" => "Alice"})
+        Tool.Registry.execute_tool(server.registry_pid, "greet_user", %{"name" => "Alice"})
 
       assert result["content"] == [%{"type" => "text", "text" => "Hello, Alice!"}]
     end
 
     test "handles tool not found", %{server: server} do
       assert {:error, :not_found} =
-               Tool.Registry.execute_tool(server.registry_pid, :nonexistent, %{})
+               Tool.Registry.execute_tool(server.registry_pid, "nonexistent", %{})
     end
   end
 
@@ -151,7 +162,7 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
         )
 
       assert {:error, "Expected error"} =
-               Tool.Registry.execute_tool(server.registry_pid, :fail_tool, %{})
+               Tool.Registry.execute_tool(server.registry_pid, "fail_tool", %{})
     end
 
     test "handles exceptions in tools" do
@@ -162,7 +173,7 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
           tools: [ErrorTools.RaiseTool]
         )
 
-      result = Tool.Registry.execute_tool(server.registry_pid, :raise_tool, %{})
+      result = Tool.Registry.execute_tool(server.registry_pid, "raise_tool", %{})
 
       # Should catch exception and return error tuple
       assert match?({:error, _}, result)
@@ -179,7 +190,7 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
         )
 
       {:ok, result} =
-        Tool.Registry.execute_tool(server.registry_pid, :generate_chart, %{"title" => "Sales"})
+        Tool.Registry.execute_tool(server.registry_pid, "generate_chart", %{"title" => "Sales"})
 
       assert length(result["content"]) == 2
       [text, image] = result["content"]
@@ -232,8 +243,8 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
 
       assert length(tools1) == 1
       assert length(tools2) == 1
-      assert hd(tools1).name == :add
-      assert hd(tools2).name == :greet_user
+      assert hd(tools1).name == "add"
+      assert hd(tools2).name == "greet_user"
     end
   end
 end
