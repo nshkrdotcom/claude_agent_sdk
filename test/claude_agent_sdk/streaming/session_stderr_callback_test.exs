@@ -23,8 +23,12 @@ defmodule ClaudeAgentSDK.Streaming.SessionStderrCallbackTest do
 
     assert_receive {:stderr_line, "ERR_LINE"}, 1_000
 
-    if Process.alive?(session) do
-      Streaming.close_session(session)
+    # The session may have already terminated after emitting the message.
+    # Wrap in try/catch to handle race between alive? check and close call.
+    try do
+      if Process.alive?(session), do: Streaming.close_session(session)
+    catch
+      :exit, _ -> :ok
     end
   end
 
