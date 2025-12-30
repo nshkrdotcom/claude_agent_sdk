@@ -67,7 +67,8 @@ response =
 
 IO.inspect(response, label: "control_response")
 
-result = get_in(response, ["response", "result"]) || %{}
+# The result is nested under response.response.response (not response.response.result)
+result = get_in(response, ["response", "response"]) || %{}
 
 unless Map.has_key?(result, "updatedInput") do
   raise "Expected updatedInput camelCase key in response result"
