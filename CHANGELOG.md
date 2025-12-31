@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2025-12-31
+
+### Added
+
+- **ClaudeSDKError Base Exception**: Added `ClaudeAgentSDK.Errors.ClaudeSDKError` base exception for catch-all error handling (Python SDK parity)
+- **Output.async/1 Helper**: Added `Output.async/1` and `Output.with_async_timeout/2` helpers for asynchronous hook processing
+- **Tool.simple_schema/1 Helper**: Added `Tool.simple_schema/1` helper to reduce boilerplate when defining MCP tool schemas
+  - Supports list of atoms (all string, all required)
+  - Keyword list with types (`:string`, `:number`, `:integer`, `:boolean`, `:array`, `:object`)
+  - Optional descriptions and optional field markers
+- **Transport.end_input/1 Callback**: Added `end_input/1` as optional callback in Transport behaviour for signaling stdin EOF
+
+### Changed
+
+- **Stream Diagnostics**: CLIStream now tracks `received_first_message?` and `received_result?` for better error context
+- **Documentation**: Updated guides for hooks, MCP tools, and error handling with new features
+
 ## [0.7.2] - 2025-12-29
 
 ### Fixed
@@ -930,7 +947,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.6.10...v0.7.0

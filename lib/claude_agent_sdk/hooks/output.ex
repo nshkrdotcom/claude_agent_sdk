@@ -332,6 +332,59 @@ defmodule ClaudeAgentSDK.Hooks.Output do
   end
 
   @doc """
+  Marks hook output for asynchronous processing.
+
+  When `async: true` is set, the hook callback can continue processing
+  in the background while Claude continues execution. This is useful for
+  hooks that perform slow operations (e.g., external API calls, logging).
+
+  ## Parameters
+
+  - `output` - Existing hook output
+
+  ## Examples
+
+      # Basic async output
+      Output.async(%{continue: true})
+
+      # Combined with allow
+      Output.allow("Approved")
+      |> Output.async()
+
+      # With timeout
+      Output.allow("Starting background check")
+      |> Output.async()
+      |> Output.with_async_timeout(30_000)
+  """
+  @spec async(t()) :: t()
+  def async(output) when is_map(output) do
+    Map.put(output, :async, true)
+  end
+
+  @doc """
+  Sets the timeout for async hook processing.
+
+  Must be used with `async/1`. The timeout is specified in milliseconds
+  and defines how long the CLI will wait for the async operation to complete.
+
+  ## Parameters
+
+  - `output` - Existing hook output (should have `async: true`)
+  - `timeout_ms` - Timeout in milliseconds
+
+  ## Examples
+
+      Output.allow("Processing")
+      |> Output.async()
+      |> Output.with_async_timeout(60_000)  # 60 second timeout
+  """
+  @spec with_async_timeout(t(), non_neg_integer()) :: t()
+  def with_async_timeout(output, timeout_ms)
+      when is_map(output) and is_integer(timeout_ms) and timeout_ms >= 0 do
+    Map.put(output, :asyncTimeout, timeout_ms)
+  end
+
+  @doc """
   Validates hook output structure.
 
   Returns `:ok` if valid, `{:error, reason}` otherwise.

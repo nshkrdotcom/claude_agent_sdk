@@ -245,6 +245,57 @@ defmodule ClaudeAgentSDK.Hooks.OutputTest do
     end
   end
 
+  describe "async/1" do
+    test "marks output for async processing" do
+      output = Output.async(%{continue: true})
+
+      assert output.async == true
+      assert output.continue == true
+    end
+
+    test "can be combined with allow" do
+      output =
+        Output.allow("Approved")
+        |> Output.async()
+
+      assert output.async == true
+      assert output.hookSpecificOutput.permissionDecision == "allow"
+    end
+
+    test "can be combined with deny" do
+      output =
+        Output.deny("Blocked")
+        |> Output.async()
+
+      assert output.async == true
+      assert output.hookSpecificOutput.permissionDecision == "deny"
+    end
+  end
+
+  describe "with_async_timeout/2" do
+    test "sets async timeout in milliseconds" do
+      output =
+        %{continue: true}
+        |> Output.async()
+        |> Output.with_async_timeout(30_000)
+
+      assert output.async == true
+      assert output.asyncTimeout == 30_000
+    end
+
+    test "can be chained with other helpers" do
+      output =
+        Output.allow("Security check pending")
+        |> Output.async()
+        |> Output.with_async_timeout(60_000)
+        |> Output.with_system_message("Processing in background")
+
+      assert output.async == true
+      assert output.asyncTimeout == 60_000
+      assert output.systemMessage == "Processing in background"
+    end
+  end
+
   describe "helper combinations" do
     test "can combine allow with system message" do
       output =

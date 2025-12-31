@@ -40,5 +40,15 @@ defmodule ClaudeAgentSDK.TransportTest do
       callbacks = Transport.behaviour_info(:callbacks)
       assert {:status, 1} in callbacks
     end
+
+    test "should_define_end_input_as_optional_callback" do
+      optional = Transport.behaviour_info(:optional_callbacks)
+      assert {:end_input, 1} in optional
+    end
+
+    test "should_include_end_input_in_callbacks_list" do
+      callbacks = Transport.behaviour_info(:callbacks)
+      assert {:end_input, 1} in callbacks
+    end
   end
 end

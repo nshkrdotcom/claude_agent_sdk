@@ -1,6 +1,6 @@
 # MCP Tools Guide
 
-**Version:** 0.7.2 | **Last Updated:** 2025-12-29
+**Version:** 0.7.3 | **Last Updated:** 2025-12-31
 
 ---
 
@@ -203,6 +203,55 @@ end
 ## Tool Schema (JSON Schema Format)
 
 Tool schemas follow JSON Schema draft-07 format with some MCP-specific conventions.
+
+### Simple Schema Helper
+
+For common tool patterns, use the `simple_schema/1` helper to reduce boilerplate:
+
+```elixir
+alias ClaudeAgentSDK.Tool
+
+# List of atoms - all string properties, all required
+Tool.simple_schema([:name, :path])
+# => %{type: "object", properties: %{name: %{type: "string"}, path: %{type: "string"}}, required: ["name", "path"]}
+
+# Keyword list with types
+Tool.simple_schema(name: :string, count: :number, enabled: :boolean)
+
+# With descriptions
+Tool.simple_schema(
+  name: {:string, "User's full name"},
+  age: {:number, "Age in years"}
+)
+
+# Optional fields
+Tool.simple_schema(
+  name: :string,
+  email: {:string, optional: true}
+)
+```
+
+**Supported types:** `:string`, `:number`, `:integer`, `:boolean`, `:array`, `:object`
+
+**Example in deftool:**
+
+```elixir
+defmodule Calculator do
+  use ClaudeAgentSDK.Tool
+  alias ClaudeAgentSDK.Tool
+
+  deftool :add,
+          "Add two numbers",
+          Tool.simple_schema(
+            a: {:number, "First number"},
+            b: {:number, "Second number"}
+          ) do
+    def execute(%{"a" => a, "b" => b}) do
+      {:ok, %{"content" => [%{"type" => "text", "text" => "#{a} + #{b} = #{a + b}"}]}}
+    end
+  end
+end
+```
 
 ### Schema Structure
 

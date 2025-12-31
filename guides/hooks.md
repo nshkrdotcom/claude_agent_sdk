@@ -458,6 +458,38 @@ Output.allow()
 |> Output.suppress_output()
 ```
 
+#### `Output.async/1`
+
+Mark the hook output as asynchronous (Python SDK parity):
+
+```elixir
+Output.allow()
+|> Output.async()
+
+# Returns:
+# %{
+#   hookSpecificOutput: %{...},
+#   async: true
+# }
+```
+
+#### `Output.with_async_timeout/2`
+
+Set a timeout for asynchronous hook processing:
+
+```elixir
+Output.allow()
+|> Output.async()
+|> Output.with_async_timeout(5000)
+
+# Returns:
+# %{
+#   hookSpecificOutput: %{...},
+#   async: true,
+#   asyncTimeout: 5000
+# }
+```
+
 ### Complete Output Examples
 
 ```elixir

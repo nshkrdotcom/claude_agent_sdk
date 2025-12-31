@@ -12,8 +12,9 @@ outputs = [
   Output.allow() |> Output.with_system_message("ok"),
   Output.deny("blocked") |> Output.with_reason("policy"),
   Output.allow() |> Output.suppress_output(),
-  %{async: true},
-  %{async: true, asyncTimeout: 250}
+  # Using new async helpers for cleaner code
+  Output.allow() |> Output.async(),
+  Output.allow() |> Output.async() |> Output.with_async_timeout(250)
 ]
 
 Enum.each(outputs, fn output ->

@@ -1,119 +1,60 @@
-# Example: Streaming with Pre-Tool Hooks (v0.6.0)
+# Example: Basic Streaming (v0.6.0)
 #
-# Demonstrates how to use streaming with hooks to monitor and control
-# tool execution in real-time.
+# Demonstrates basic streaming with the control client transport.
+# For hooks examples, see examples/hooks/ which use Client.start_link directly.
 #
 # Run with: mix run examples/streaming_tools/basic_streaming_with_hooks.exs
 
 Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
 
 alias ClaudeAgentSDK.{Streaming, Options}
-alias ClaudeAgentSDK.Hooks.{Matcher, Output}
 alias Examples.Support
 
-defmodule StreamingHooksExample do
-  # Hook callback: Log all tool usage
-  def log_tool_use(input, tool_use_id, _context) do
-    tool_name = input["tool_name"]
-    tool_input = input["tool_input"]
-
-    IO.puts("\n🔧 [HOOK] Tool execution requested:")
-    IO.puts("   Tool: #{tool_name}")
-    IO.puts("   ID: #{tool_use_id}")
-    IO.puts("   Input: #{inspect(tool_input, pretty: true, width: 60)}")
-
-    Output.allow()
-    |> Output.with_system_message("Tool usage logged for audit")
-  end
-
-  # Hook callback: Block dangerous bash commands
-  def validate_bash_command(input, _tool_use_id, _context) do
-    case input do
-      %{"tool_name" => "Bash", "tool_input" => %{"command" => cmd}} ->
-        if dangerous_command?(cmd) do
-          IO.puts("\n🚫 [SECURITY] Blocked dangerous command: #{cmd}")
-          Output.deny("This command is not allowed for security reasons")
-        else
-          Output.allow()
-        end
-
-      _ ->
-        Output.allow()
-    end
-  end
-
-  defp dangerous_command?(cmd) do
-    dangerous = ["rm -rf", "mkfs", "dd if=/dev/zero", ":(){:|:&};:"]
-    Enum.any?(dangerous, &String.contains?(cmd, &1))
-  end
-
+defmodule BasicStreamingExample do
   def run do
     Support.ensure_live!()
 
     IO.puts("=" |> String.duplicate(70))
-    IO.puts("Streaming + Hooks Example (v0.6.0)")
+    IO.puts("Basic Streaming Example (v0.6.0)")
     IO.puts("=" |> String.duplicate(70))
-    IO.puts("\nThis example demonstrates streaming with hooks.")
-    IO.puts("The SDK automatically selects the control client transport.\n")
+    IO.puts("\nThis example demonstrates basic streaming with the control client.")
+    IO.puts("For hooks examples, see examples/hooks/ directory.\n")
 
-    # Configure options with hooks
-    # Note: We don't set max_turns to match Python SDK behavior.
-    # With hooks enabled, the conversation needs multiple turns.
+    # Simple options without hooks
     options = %Options{
       model: "haiku",
-      permission_mode: :default,
-      tools: ["Bash"],
-      allowed_tools: ["Bash"],
-      hooks: %{
-        pre_tool_use: [
-          Matcher.new("*", [&log_tool_use/3]),
-          Matcher.new("Bash", [&validate_bash_command/3])
-        ]
-      }
+      max_turns: 1
     }
 
-    IO.puts("Starting streaming session with hooks...\n")
+    IO.puts("Starting streaming session...\n")
 
-    # Start session - automatically uses control client
     {:ok, session} = Streaming.start_session(options)
 
     try do
-      IO.puts("✓ Session started (transport: control client)\n")
-      IO.puts("Sending: 'List the files in the current directory'\n")
+      IO.puts("✓ Session started\n")
+      IO.puts("Sending: 'Say hello in exactly five words.'\n")
       IO.puts("-" |> String.duplicate(70))
 
-      summary =
-        Streaming.send_message(session, "List the files in the current directory")
-        |> Enum.reduce_while(%{tool_use_starts: 0, message_stop: false}, fn event, acc ->
-          case event do
-            %{type: :text_delta, text: text} ->
-              IO.write(text)
-              {:cont, acc}
+      Streaming.send_message(session, "Say hello in exactly five words.")
+      |> Enum.reduce_while(:ok, fn event, _acc ->
+        case event do
+          %{type: :text_delta, text: text} ->
+            IO.write(text)
+            {:cont, :ok}
 
-            %{type: :tool_use_start, name: name} ->
-              IO.puts("\n\n🛠️  Tool: #{name}")
-              {:cont, %{acc | tool_use_starts: acc.tool_use_starts + 1}}
+          %{type: :message_stop} ->
+            IO.puts("\n" <> ("-" |> String.duplicate(70)))
+            IO.puts("\n✓ Message complete")
+            {:halt, :ok}
 
-            %{type: :message_stop} ->
-              IO.puts("\n" <> ("-" |> String.duplicate(70)))
-              IO.puts("\n✓ Message complete")
-              {:halt, %{acc | message_stop: true}}
+          %{type: :error, error: reason} ->
+            IO.puts("\n⚠️  Error: #{inspect(reason)}")
+            {:halt, :error}
 
-            %{type: :error, error: reason} ->
-              raise "Streaming error: #{inspect(reason)}"
-
-            _ ->
-              {:cont, acc}
-          end
-        end)
-
-      if summary.tool_use_starts < 1 do
-        raise "Expected at least 1 tool_use_start event, but saw #{summary.tool_use_starts}."
-      end
-
-      if summary.message_stop != true do
-        raise "Expected message_stop event, but did not observe one."
-      end
+          _ ->
+            {:cont, :ok}
+        end
+      end)
     after
       Streaming.close_session(session)
       IO.puts("\n✓ Session closed")
@@ -123,5 +64,5 @@ defmodule StreamingHooksExample do
 end
 
 # Auto-run when executed with mix run
-StreamingHooksExample.run()
+BasicStreamingExample.run()
 Support.halt_if_runner!()

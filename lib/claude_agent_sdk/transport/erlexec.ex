@@ -47,6 +47,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     GenServer.stop(transport, :normal)
   end
 
+  @impl ClaudeAgentSDK.Transport
   def end_input(transport) when is_pid(transport) do
     GenServer.call(transport, :end_input)
   end

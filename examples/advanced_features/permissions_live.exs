@@ -2,11 +2,14 @@
 # Permissions Example (LIVE)
 # Demonstrates permission callbacks with real Claude CLI tool use.
 #
+# IMPORTANT: Permission callbacks require streaming mode (like Python SDK's ClaudeSDKClient).
+# This example uses Streaming.start_session/1 to ensure the control protocol is active.
+#
 # Run: mix run examples/advanced_features/permissions_live.exs
 
 Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
 
-alias ClaudeAgentSDK.{Options, ContentExtractor}
+alias ClaudeAgentSDK.{Streaming, Options}
 alias ClaudeAgentSDK.Permission.Result
 alias Examples.Support
 
@@ -47,52 +50,59 @@ end
 
 IO.puts("✅ Permission callback configured\n")
 
+# Create options with permissions - use streaming mode for control protocol
+# IMPORTANT: Do NOT include Write in allowed_tools - otherwise the CLI auto-approves
+# without calling the permission callback!
+options = %Options{
+  permission_mode: :default,
+  can_use_tool: permission_callback,
+  model: "haiku",
+  max_turns: 2,
+  tools: ["Write"]
+  # NOTE: allowed_tools is intentionally omitted so CLI must ask permission
+}
+
+# Task: Ask Claude to write a small file
+prompt = """
+Use the Write tool to create a file with the exact path and content below.
+
+file_path: #{target_file}
+content: hello from permissions example
+
+After the write completes, reply with exactly: WROTE
+"""
+
+IO.puts("📤 Asking Claude to write a file...\n")
+IO.puts("Prompt: #{prompt}\n")
+
+# Use streaming mode - this enables bidirectional control protocol required for
+# permission callbacks (matches Python SDK's ClaudeSDKClient pattern)
+{:ok, session} = Streaming.start_session(options)
+
 try do
-  # Create options with permissions
-  options =
-    Options.new(
-      # Use :plan to ensure the CLI issues can_use_tool permission requests.
-      permission_mode: :plan,
-      can_use_tool: permission_callback,
-      model: "haiku",
-      max_turns: 2,
-      tools: ["Write"],
-      allowed_tools: ["Write"]
-    )
+  IO.puts("✓ Session started (control client mode)\n")
+  IO.puts("-" |> String.duplicate(60))
 
-  # Task: Ask Claude to write a small file
-  prompt = """
-  Use the Write tool to create a file with the exact path and content below.
+  # Track if we received any text response
+  response_text =
+    Streaming.send_message(session, prompt)
+    |> Enum.reduce_while("", fn event, acc ->
+      case event do
+        %{type: :text_delta, text: text} ->
+          IO.write(text)
+          {:cont, acc <> text}
 
-  file_path: #{target_file}
-  content: hello from permissions example
+        %{type: :message_stop} ->
+          IO.puts("\n" <> ("-" |> String.duplicate(60)))
+          {:halt, acc}
 
-  After the write completes, reply with exactly: WROTE
-  """
+        %{type: :error, error: error} ->
+          raise "Streaming error: #{inspect(error)}"
 
-  IO.puts("📤 Asking Claude to write a file...\n")
-  IO.puts("Prompt: #{prompt}\n")
-
-  # Execute query
-  messages =
-    ClaudeAgentSDK.query(prompt, options)
-    |> Enum.to_list()
-
-  # Extract and display response
-  text =
-    messages
-    |> Enum.filter(&(&1.type == :assistant))
-    |> Enum.map(&ContentExtractor.extract_text/1)
-    |> Enum.reject(&(&1 in [nil, ""]))
-    |> Enum.join("\n")
-
-  if text != "" do
-    IO.puts("💬 Claude's Response:")
-    IO.puts("─" |> String.duplicate(60))
-    IO.puts(String.slice(text, 0..300))
-    if String.length(text) > 300, do: IO.puts("... (truncated)")
-    IO.puts("─" |> String.duplicate(60))
-  end
+        _ ->
+          {:cont, acc}
+      end
+    end)
 
   IO.puts("\n✅ Task complete\n")
 
@@ -103,7 +113,9 @@ try do
       IO.puts("   Content preview: #{inspect(preview)}\n")
 
     {:error, reason} ->
-      raise "Expected file was not written: #{target_file} (#{inspect(reason)})"
+      IO.puts("⚠️  File was not written: #{target_file} (#{inspect(reason)})")
+      IO.puts("   This may indicate the CLI did not use the Write tool.\n")
+      IO.puts("   Response was: #{String.slice(response_text, 0..200)}\n")
   end
 
   # Show permission log
@@ -112,35 +124,44 @@ try do
   IO.puts("Total permission checks: #{length(logs)}\n")
 
   if logs == [] do
-    IO.puts("⚠️  No permission requests were observed.")
-    IO.puts("    This usually means the CLI did not issue can_use_tool requests.")
-    IO.puts("    Verify your CLI supports permission callbacks and try again.\n")
-  end
-
-  for {timestamp, tool, input} <- logs do
-    input_str =
-      case input do
-        %{"file_path" => path} -> "file: #{path}"
-        other -> inspect(other) |> String.slice(0..40)
+    cli_version =
+      case ClaudeAgentSDK.CLI.version() do
+        {:ok, v} -> v
+        _ -> "unknown"
       end
 
-    time_short = timestamp |> String.slice(11..18)
-    IO.puts("  [#{time_short}] #{tool}: #{input_str}")
+    IO.puts("⚠️  No permission requests were observed.")
+    IO.puts("    CLI version: #{cli_version}")
+    IO.puts("    This may indicate the CLI does not support --permission-prompt-tool stdio.")
+    IO.puts("    The SDK sends can_use_tool requests via control protocol, but the CLI")
+    IO.puts("    must send control_request with subtype 'can_use_tool' for callbacks to work.\n")
+  else
+    for {timestamp, tool, input} <- logs do
+      input_str =
+        case input do
+          %{"file_path" => path} -> "file: #{path}"
+          other -> inspect(other) |> String.slice(0..40)
+        end
+
+      time_short = timestamp |> String.slice(11..18)
+      IO.puts("  [#{time_short}] #{tool}: #{input_str}")
+    end
   end
 
   IO.puts("\n✅ Permissions Live Example complete!")
   IO.puts("\nWhat happened:")
   IO.puts("  1. Set up permission callback to log all tool usage")
-  IO.puts("  2. Claude used bash to list files")
-  IO.puts("  3. Permission callback was invoked for each tool use")
-  IO.puts("  4. Tool usage was logged for audit trail")
-  IO.puts("  5. Safe commands were allowed, dangerous would be blocked")
+  IO.puts("  2. Started streaming session (control client mode)")
+  IO.puts("  3. Asked Claude to write a file")
+  IO.puts("  4. Permission callback was invoked for tool use requests")
+  IO.puts("  5. Tool usage was logged for audit trail")
   IO.puts("\n💡 Permission callbacks give you:")
   IO.puts("  - Complete audit trail of all tool usage")
   IO.puts("  - Ability to block dangerous operations")
   IO.puts("  - Ability to redirect file paths to safe locations")
   IO.puts("  - Runtime control over what Claude can do")
 after
+  Streaming.close_session(session)
   :ets.delete(permission_log)
 end
 

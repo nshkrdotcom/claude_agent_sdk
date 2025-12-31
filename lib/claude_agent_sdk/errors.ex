@@ -4,7 +4,69 @@ defmodule ClaudeAgentSDK.Errors do
 
   These mirror the Python SDK's exception taxonomy while keeping Elixir-friendly
   return shapes (`{:error, reason}` where `reason` is a struct).
+
+  ## Base Exception
+
+  `ClaudeSDKError` serves as the conceptual base for all SDK errors. While Elixir
+  doesn't have exception inheritance, this provides a common pattern for wrapping
+  lower-level errors with SDK-specific context.
+
+  ## Error Types
+
+  - `ClaudeSDKError` - Base exception for generic SDK errors
+  - `CLIConnectionError` - Connection/startup failures
+  - `CLINotFoundError` - CLI executable not found
+  - `ProcessError` - CLI process exited with error
+  - `CLIJSONDecodeError` - JSON parsing failures
+  - `MessageParseError` - Message structure parsing failures
+
+  ## Examples
+
+      # Raising base SDK error
+      raise ClaudeAgentSDK.Errors.ClaudeSDKError, message: "Operation failed"
+
+      # With cause
+      try do
+        risky_operation()
+      rescue
+        e ->
+          reraise ClaudeAgentSDK.Errors.ClaudeSDKError,
+                  [message: "SDK operation failed", cause: e],
+                  __STACKTRACE__
+      end
   """
+end
+
+defmodule ClaudeAgentSDK.Errors.ClaudeSDKError do
+  @moduledoc """
+  Base exception for all Claude Agent SDK errors.
+
+  This provides a common error type for catch-all handling and for wrapping
+  lower-level errors with SDK-specific context.
+
+  ## Fields
+
+  - `:message` - Human-readable error description
+  - `:cause` - Underlying error that caused this exception (optional)
+
+  ## Examples
+
+      # Simple error
+      raise ClaudeAgentSDK.Errors.ClaudeSDKError, message: "Something went wrong"
+
+      # Wrapping another error
+      %ClaudeAgentSDK.Errors.ClaudeSDKError{
+        message: "Failed to process response",
+        cause: original_error
+      }
+  """
+  @enforce_keys [:message]
+  defexception [:message, :cause]
+
+  @type t :: %__MODULE__{
+          message: String.t(),
+          cause: Exception.t() | term() | nil
+        }
 end
 
 defmodule ClaudeAgentSDK.Errors.CLIConnectionError do

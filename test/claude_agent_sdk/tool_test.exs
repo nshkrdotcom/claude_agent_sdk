@@ -120,4 +120,77 @@ defmodule ClaudeAgentSDK.ToolTest do
       assert Tool.valid_schema?(schema)
     end
   end
+
+  describe "simple_schema/1" do
+    test "creates schema with string properties" do
+      schema = Tool.simple_schema([:name, :path])
+
+      assert schema.type == "object"
+      assert schema.properties.name.type == "string"
+      assert schema.properties.path.type == "string"
+      assert schema.required == ["name", "path"]
+    end
+
+    test "creates schema with typed properties" do
+      schema =
+        Tool.simple_schema(
+          name: :string,
+          count: :number,
+          enabled: :boolean
+        )
+
+      assert schema.properties.name.type == "string"
+      assert schema.properties.count.type == "number"
+      assert schema.properties.enabled.type == "boolean"
+      assert "name" in schema.required
+      assert "count" in schema.required
+      assert "enabled" in schema.required
+    end
+
+    test "creates schema with descriptions" do
+      schema =
+        Tool.simple_schema(
+          name: {:string, "User's full name"},
+          age: {:number, "Age in years"}
+        )
+
+      assert schema.properties.name.type == "string"
+      assert schema.properties.name.description == "User's full name"
+      assert schema.properties.age.type == "number"
+      assert schema.properties.age.description == "Age in years"
+    end
+
+    test "supports optional fields" do
+      schema =
+        Tool.simple_schema(
+          name: :string,
+          email: {:string, optional: true}
+        )
+
+      assert schema.properties.name.type == "string"
+      assert schema.properties.email.type == "string"
+      assert "name" in schema.required
+      refute "email" in schema.required
+    end
+
+    test "supports array type" do
+      schema = Tool.simple_schema(tags: :array)
+
+      assert schema.properties.tags.type == "array"
+    end
+
+    test "supports integer type" do
+      schema = Tool.simple_schema(count: :integer)
+
+      assert schema.properties.count.type == "integer"
+    end
+
+    test "empty list creates empty object schema" do
+      schema = Tool.simple_schema([])
+
+      assert schema.type == "object"
+      assert schema.properties == %{}
+      assert schema.required == []
+    end
+  end
 end

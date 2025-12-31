@@ -22,21 +22,20 @@ alias Examples.Support
 
 Support.ensure_live!()
 
-# Define calculator tools using the deftool macro
+# Define calculator tools using the deftool macro with simple_schema helper
 defmodule Examples.CalculatorTools do
   @moduledoc false
   use ClaudeAgentSDK.Tool
+  alias ClaudeAgentSDK.Tool
 
+  # Using simple_schema/1 for concise schema definitions
+  # This helper reduces boilerplate compared to writing full JSON Schema
   deftool :add,
           "Add two numbers together",
-          %{
-            type: "object",
-            properties: %{
-              a: %{type: "number", description: "First number"},
-              b: %{type: "number", description: "Second number"}
-            },
-            required: ["a", "b"]
-          } do
+          Tool.simple_schema(
+            a: {:number, "First number"},
+            b: {:number, "Second number"}
+          ) do
     def execute(%{"a" => a, "b" => b}) do
       result = a + b
       {:ok, %{"content" => [%{"type" => "text", "text" => "#{a} + #{b} = #{result}"}]}}
@@ -45,14 +44,10 @@ defmodule Examples.CalculatorTools do
 
   deftool :multiply,
           "Multiply two numbers",
-          %{
-            type: "object",
-            properties: %{
-              a: %{type: "number", description: "First number"},
-              b: %{type: "number", description: "Second number"}
-            },
-            required: ["a", "b"]
-          } do
+          Tool.simple_schema(
+            a: {:number, "First number"},
+            b: {:number, "Second number"}
+          ) do
     def execute(%{"a" => a, "b" => b}) do
       result = a * b
       {:ok, %{"content" => [%{"type" => "text", "text" => "#{a} * #{b} = #{result}"}]}}

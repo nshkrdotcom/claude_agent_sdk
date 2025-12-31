@@ -202,4 +202,129 @@ defmodule ClaudeAgentSDK.Tool do
   end
 
   def valid_schema?(_), do: false
+
+  @doc """
+  Creates a simple JSON Schema for common tool patterns.
+
+  This helper reduces boilerplate when defining tools with straightforward
+  input requirements. It supports several input formats for flexibility.
+
+  ## Input Formats
+
+  ### List of atoms (all string, all required)
+
+      simple_schema([:name, :path])
+      # => %{type: "object", properties: %{name: %{type: "string"}, path: %{type: "string"}}, required: ["name", "path"]}
+
+  ### Keyword list with types
+
+      simple_schema(name: :string, count: :number, enabled: :boolean)
+      # => %{type: "object", properties: %{...}, required: ["name", "count", "enabled"]}
+
+  ### Keyword list with descriptions
+
+      simple_schema(name: {:string, "User's full name"}, age: {:number, "Age in years"})
+      # => Adds description field to each property
+
+  ### Optional fields
+
+      simple_schema(name: :string, email: {:string, optional: true})
+      # => "name" is required, "email" is not
+
+  ## Supported Types
+
+  - `:string` - String type
+  - `:number` - Number type (float or int)
+  - `:integer` - Integer type
+  - `:boolean` - Boolean type
+  - `:array` - Array type
+  - `:object` - Object type
+
+  ## Examples
+
+      # Simple tool with two required string fields
+      deftool :create_file, "Create a file", Tool.simple_schema([:path, :content]) do
+        def execute(%{"path" => path, "content" => content}) do
+          File.write!(path, content)
+          {:ok, %{"content" => [%{"type" => "text", "text" => "Created \#{path}"}]}}
+        end
+      end
+
+      # Tool with mixed types
+      deftool :search, "Search files",
+        Tool.simple_schema(query: :string, max_results: {:integer, optional: true}) do
+        def execute(%{"query" => query} = args) do
+          max = Map.get(args, "max_results", 10)
+          # ... search logic
+        end
+      end
+  """
+  @spec simple_schema(keyword() | [atom()]) :: map()
+  def simple_schema(fields) when is_list(fields) do
+    {properties, required} = build_schema_fields(fields)
+
+    %{
+      type: "object",
+      properties: properties,
+      required: required
+    }
+  end
+
+  defp build_schema_fields([]), do: {%{}, []}
+
+  # List of atoms - all string, all required
+  defp build_schema_fields([first | _] = fields) when is_atom(first) do
+    properties =
+      fields
+      |> Enum.map(fn name -> {name, %{type: "string"}} end)
+      |> Map.new()
+
+    required = Enum.map(fields, &to_string/1)
+
+    {properties, required}
+  end
+
+  # Keyword list
+  defp build_schema_fields(fields) do
+    Enum.reduce(fields, {%{}, []}, fn {name, spec}, {props, req} ->
+      {prop, is_required} = parse_field_spec(spec)
+      new_props = Map.put(props, name, prop)
+      new_req = if is_required, do: [to_string(name) | req], else: req
+      {new_props, new_req}
+    end)
+    |> then(fn {props, req} -> {props, Enum.reverse(req)} end)
+  end
+
+  # Type atom only
+  defp parse_field_spec(type) when is_atom(type) do
+    {%{type: type_to_string(type)}, true}
+  end
+
+  # Type with description
+  defp parse_field_spec({type, description}) when is_atom(type) and is_binary(description) do
+    {%{type: type_to_string(type), description: description}, true}
+  end
+
+  # Type with options keyword list
+  defp parse_field_spec({type, opts}) when is_atom(type) and is_list(opts) do
+    is_optional = Keyword.get(opts, :optional, false)
+    description = Keyword.get(opts, :description)
+
+    prop =
+      %{type: type_to_string(type)}
+      |> maybe_add_description(description)
+
+    {prop, not is_optional}
+  end
+
+  defp maybe_add_description(prop, nil), do: prop
+  defp maybe_add_description(prop, desc), do: Map.put(prop, :description, desc)
+
+  defp type_to_string(:string), do: "string"
+  defp type_to_string(:number), do: "number"
+  defp type_to_string(:integer), do: "integer"
+  defp type_to_string(:boolean), do: "boolean"
+  defp type_to_string(:array), do: "array"
+  defp type_to_string(:object), do: "object"
+  defp type_to_string(other), do: to_string(other)
 end

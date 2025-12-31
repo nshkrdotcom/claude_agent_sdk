@@ -25,11 +25,41 @@ The Claude Agent SDK defines several structured error types in the `ClaudeAgentS
 
 | Error Type | Module | Description |
 |------------|--------|-------------|
+| Base SDK Error | `ClaudeSDKError` | Base exception for all SDK errors (Python parity) |
 | CLI Connection Error | `CLIConnectionError` | Failed to connect to Claude CLI subprocess |
 | CLI Not Found Error | `CLINotFoundError` | Claude CLI executable not found |
 | Process Error | `ProcessError` | CLI process exited with error |
 | JSON Decode Error | `CLIJSONDecodeError` | Failed to parse JSON from CLI output |
 | Message Parse Error | `MessageParseError` | Failed to parse message structure |
+
+### ClaudeSDKError (Base Exception)
+
+The `ClaudeSDKError` provides a base exception type for catch-all error handling, matching the Python SDK pattern:
+
+```elixir
+%ClaudeAgentSDK.Errors.ClaudeSDKError{
+  message: String.t(),       # Human-readable error message
+  cause: term() | nil        # Optional underlying cause
+}
+```
+
+**Usage for wrapping errors:**
+
+```elixir
+alias ClaudeAgentSDK.Errors.ClaudeSDKError
+
+# Wrap an underlying error
+error = %ClaudeSDKError{
+  message: "Operation failed",
+  cause: %RuntimeError{message: "Connection timeout"}
+}
+
+# Raise with just a message
+raise ClaudeSDKError, message: "Something went wrong"
+
+# Get message
+Exception.message(error)  # => "Operation failed"
+```
 
 ### Assistant-Level Errors
 

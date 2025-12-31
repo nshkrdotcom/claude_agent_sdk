@@ -45,6 +45,7 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
     GenServer.stop(transport, :normal)
   end
 
+  @impl ClaudeAgentSDK.Transport
   def end_input(transport) do
     GenServer.call(transport, :end_input)
   end

@@ -43,4 +43,21 @@ defmodule ClaudeAgentSDK.Transport do
   Returns the current connection status for observability/health checks.
   """
   @callback status(t()) :: :connected | :disconnected | :error
+
+  @doc """
+  Signals end of input stream to the CLI process.
+
+  This closes stdin to indicate no more input will be sent. Required for
+  non-streaming queries where the CLI waits for stdin to close before
+  processing.
+
+  ## Implementation Notes
+
+  - For Port-based transports: Close the stdin pipe
+  - For erlexec-based transports: Send `:eof` signal
+  - This callback is optional - transports may not support it
+  """
+  @callback end_input(t()) :: :ok | {:error, term()}
+
+  @optional_callbacks [end_input: 1]
 end

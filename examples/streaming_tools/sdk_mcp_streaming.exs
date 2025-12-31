@@ -151,46 +151,51 @@ defmodule SDKMCPStreamingExample do
       Use tools for each calculation and show the results.
       """
 
-      {tool_use_starts, tool_completes} =
+      # Track tool usage - SDK MCP tools emit tool_use_start but results come via
+      # control protocol, not as streaming tool_complete events
+      {tool_use_starts, sdk_mcp_tools_used} =
         Streaming.send_message(session, prompt)
-        |> Enum.reduce_while({0, 0}, fn event, {starts, completes} ->
+        |> Enum.reduce_while({0, false}, fn event, {starts, sdk_mcp_used} ->
           case event do
             %{type: :text_delta, text: text} ->
               IO.write(text)
-              {:cont, {starts, completes}}
+              {:cont, {starts, sdk_mcp_used}}
 
             %{type: :tool_use_start, name: name} ->
+              # Check if this is an SDK MCP tool (prefixed with mcp__)
+              is_sdk_mcp = String.starts_with?(name, "mcp__")
               IO.puts("\n\n🛠️  Executing SDK MCP tool: #{name}")
-              {:cont, {starts + 1, completes}}
+              {:cont, {starts + 1, sdk_mcp_used or is_sdk_mcp}}
 
             %{type: :tool_input_delta, json: json} ->
               if String.trim(json) != "" do
                 IO.write("   Input: #{json}")
               end
 
-              {:cont, {starts, completes}}
+              {:cont, {starts, sdk_mcp_used}}
 
             %{type: :tool_complete, tool_name: name} ->
               IO.puts("\n✅ Tool #{name} completed\n")
-              {:cont, {starts, completes + 1}}
+              {:cont, {starts, sdk_mcp_used}}
 
             %{type: :message_stop} ->
               IO.puts("\n" <> ("-" |> String.duplicate(70)))
-              IO.puts("✓ Message complete (tool_use_start=#{starts}, tool_complete=#{completes})")
-              {:halt, {starts, completes}}
+
+              IO.puts(
+                "✓ Message complete (tool_use_start=#{starts}, sdk_mcp_used=#{sdk_mcp_used})"
+              )
+
+              {:halt, {starts, sdk_mcp_used}}
 
             %{type: :error, error: error} ->
               raise "Streaming error: #{inspect(error)}"
 
             _ ->
-              {:cont, {starts, completes}}
+              {:cont, {starts, sdk_mcp_used}}
           end
         end)
 
-      # Check if SDK MCP tools were actually used (not Task/other built-in tools)
-      # If Claude uses Task instead of SDK MCP tools, that's a CLI limitation
-      sdk_mcp_used = tool_use_starts > 0 and tool_completes > 0
-
+      # SDK MCP tools are considered used if we saw mcp__* prefixed tool names
       cond do
         tool_use_starts < 1 ->
           cli_version =
@@ -199,7 +204,7 @@ defmodule SDKMCPStreamingExample do
               _ -> "unknown"
             end
 
-          IO.puts("\n⚠️  Warning: Claude did not use the SDK MCP tools.")
+          IO.puts("\n⚠️  Warning: Claude did not use any tools.")
 
           IO.puts(
             "   This may indicate the CLI (v#{cli_version}) does not fully support SDK MCP servers."
@@ -209,9 +214,8 @@ defmodule SDKMCPStreamingExample do
           IO.puts("   did not query the SDK for tools/list.")
           IO.puts("\n   This is a known limitation - SDK MCP support requires CLI updates.")
 
-        tool_completes < 1 and tool_use_starts > 0 ->
-          # Claude used tools but they didn't complete - likely used Task which requires
-          # longer execution. This indicates SDK MCP tools weren't recognized.
+        not sdk_mcp_tools_used ->
+          # Claude used tools but none were SDK MCP tools (mcp__* prefix)
           cli_version =
             case ClaudeAgentSDK.CLI.version() do
               {:ok, v} -> v
@@ -237,7 +241,7 @@ defmodule SDKMCPStreamingExample do
       IO.puts("\n" <> ("=" |> String.duplicate(70)))
       IO.puts("✓ Session closed\n")
 
-      if sdk_mcp_used do
+      if sdk_mcp_tools_used do
         IO.puts("=" |> String.duplicate(70))
         IO.puts("\nKey Features Demonstrated:")
         IO.puts("  - Streaming with SDK MCP servers")

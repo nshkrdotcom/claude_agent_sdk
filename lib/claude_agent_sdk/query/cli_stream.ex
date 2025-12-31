@@ -87,7 +87,11 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         module: module,
         transport: transport_pid,
         input_task: input_task,
-        done?: false
+        done?: false,
+        # Track if we've received at least one message for better error diagnostics
+        received_first_message?: false,
+        # Track if we've received the result for stream completion detection
+        received_result?: false
       }
     else
       {:error, reason} ->
@@ -208,8 +212,14 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp handle_line(line, state) do
     case parse_message(line) do
       {:ok, message} ->
-        done_state = if Message.final?(message), do: %{state | done?: true}, else: state
-        {[message], done_state}
+        state = %{state | received_first_message?: true}
+
+        state =
+          if Message.final?(message),
+            do: %{state | received_result?: true, done?: true},
+            else: state
+
+        {[message], state}
 
       {:error, message} ->
         {[message], %{state | done?: true}}
