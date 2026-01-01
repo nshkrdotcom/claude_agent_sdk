@@ -191,13 +191,38 @@ defmodule ClaudeAgentSDK.Options do
         }
 
   @typedoc """
-  External MCP server configuration (subprocess)
+  External MCP server configuration (subprocess via stdio)
   """
-  @type external_mcp_server :: %{
-          type: :stdio | :sse | :http,
+  @type stdio_mcp_server :: %{
+          type: :stdio,
           command: String.t(),
           args: [String.t()]
         }
+
+  @typedoc """
+  SSE MCP server configuration (Server-Sent Events).
+  Headers is optional (defaults to empty map if not provided).
+  """
+  @type sse_mcp_server :: %{
+          :type => :sse,
+          :url => String.t(),
+          optional(:headers) => %{String.t() => String.t()}
+        }
+
+  @typedoc """
+  HTTP MCP server configuration (HTTP transport).
+  Headers is optional (defaults to empty map if not provided).
+  """
+  @type http_mcp_server :: %{
+          :type => :http,
+          :url => String.t(),
+          optional(:headers) => %{String.t() => String.t()}
+        }
+
+  @typedoc """
+  External MCP server (stdio, sse, or http)
+  """
+  @type external_mcp_server :: stdio_mcp_server() | sse_mcp_server() | http_mcp_server()
 
   @typedoc """
   MCP server (either SDK or external)
@@ -713,21 +738,38 @@ defmodule ClaudeAgentSDK.Options do
   @spec prepare_servers_for_cli(%{String.t() => mcp_server()}) :: %{String.t() => map()}
   def prepare_servers_for_cli(servers) do
     for {name, config} <- servers, into: %{} do
-      case config do
-        %{type: :sdk} = sdk_server ->
-          # Strip registry_pid - CLI doesn't need internal PID
-          {name,
-           %{
-             "type" => "sdk",
-             "name" => sdk_server.name,
-             "version" => sdk_server.version || "1.0.0"
-           }}
-
-        external_server ->
-          # Convert external server to string keys for JSON
-          {name, stringify_keys(external_server)}
-      end
+      {name, prepare_server_for_cli(config)}
     end
+  end
+
+  defp prepare_server_for_cli(%{type: :sdk} = sdk_server) do
+    # Strip registry_pid - CLI doesn't need internal PID
+    %{
+      "type" => "sdk",
+      "name" => sdk_server.name,
+      "version" => sdk_server.version || "1.0.0"
+    }
+  end
+
+  defp prepare_server_for_cli(%{type: :sse, url: url} = server) do
+    %{
+      "type" => "sse",
+      "url" => url,
+      "headers" => server[:headers] || %{}
+    }
+  end
+
+  defp prepare_server_for_cli(%{type: :http, url: url} = server) do
+    %{
+      "type" => "http",
+      "url" => url,
+      "headers" => server[:headers] || %{}
+    }
+  end
+
+  defp prepare_server_for_cli(external_server) do
+    # stdio and other external servers - convert to string keys for JSON
+    stringify_keys(external_server)
   end
 
   # Helper to convert atom keys and values to strings for JSON serialization

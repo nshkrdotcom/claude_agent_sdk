@@ -83,6 +83,24 @@ defmodule ClaudeAgentSDK.Transport.Port do
     GenServer.call(transport, :status)
   end
 
+  @doc """
+  Signals end of input (EOF) to the CLI subprocess.
+
+  This is used to indicate that no more input will be sent, which is required
+  for the first result event pattern when SDK MCP servers or hooks are present.
+
+  Note: For Erlang ports, there's no direct way to close stdin while keeping
+  the port open. This implementation closes the port entirely, which signals
+  EOF to the CLI and allows it to finish processing.
+  """
+  @impl ClaudeAgentSDK.Transport
+  def end_input(transport) do
+    GenServer.call(transport, :end_input)
+  catch
+    :exit, {:noproc, _} -> {:error, :port_closed}
+    :exit, {:normal, _} -> :ok
+  end
+
   ## GenServer callbacks
 
   @impl GenServer
@@ -167,6 +185,20 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
   def handle_call(:status, _from, state) do
     {:reply, state.status, state}
+  end
+
+  def handle_call(:end_input, _from, %{port: nil} = state) do
+    {:reply, {:error, :port_closed}, state}
+  end
+
+  def handle_call(:end_input, _from, %{port: port} = state) when is_port(port) do
+    # Close stdin by closing the port - this signals EOF to the subprocess
+    # The subprocess will continue running until it finishes processing
+    Port.close(port)
+    {:reply, :ok, %{state | port: nil, status: :disconnected}}
+  rescue
+    ArgumentError ->
+      {:reply, {:error, :port_closed}, %{state | port: nil, status: :disconnected}}
   end
 
   @impl GenServer

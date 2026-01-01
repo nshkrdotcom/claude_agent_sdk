@@ -296,6 +296,54 @@ defmodule ClaudeAgentSDK.Hooks.OutputTest do
     end
   end
 
+  describe "with_updated_input/2" do
+    test "adds updated input to hook specific output" do
+      output =
+        Output.allow("Approved")
+        |> Output.with_updated_input(%{"path" => "/safe/path"})
+
+      assert output.hookSpecificOutput.updatedInput == %{"path" => "/safe/path"}
+      assert output.hookSpecificOutput.permissionDecision == "allow"
+    end
+
+    test "creates hookSpecificOutput if not present" do
+      output = Output.with_updated_input(%{}, %{"key" => "value"})
+
+      assert output.hookSpecificOutput.updatedInput == %{"key" => "value"}
+    end
+
+    test "preserves existing hookSpecificOutput fields" do
+      output =
+        Output.allow("Approved")
+        |> Output.with_updated_input(%{"sanitized" => true})
+
+      assert output.hookSpecificOutput.permissionDecision == "allow"
+      assert output.hookSpecificOutput.permissionDecisionReason == "Approved"
+      assert output.hookSpecificOutput.updatedInput == %{"sanitized" => true}
+    end
+
+    test "can chain with other helpers" do
+      output =
+        Output.allow("Security check passed")
+        |> Output.with_updated_input(%{"validated" => true})
+        |> Output.with_system_message("Input sanitized")
+
+      assert output.hookSpecificOutput.permissionDecision == "allow"
+      assert output.hookSpecificOutput.updatedInput == %{"validated" => true}
+      assert output.systemMessage == "Input sanitized"
+    end
+
+    test "converts to JSON correctly" do
+      output =
+        Output.allow("Approved")
+        |> Output.with_updated_input(%{"modified" => true})
+
+      json = Output.to_json_map(output)
+
+      assert json["hookSpecificOutput"]["updatedInput"] == %{"modified" => true}
+    end
+  end
+
   describe "helper combinations" do
     test "can combine allow with system message" do
       output =

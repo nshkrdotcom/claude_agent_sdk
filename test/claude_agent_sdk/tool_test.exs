@@ -193,4 +193,81 @@ defmodule ClaudeAgentSDK.ToolTest do
       assert schema.required == []
     end
   end
+
+  describe "simple_schema/1 with map syntax (Python parity)" do
+    test "creates schema with atom keys and atom types" do
+      schema = Tool.simple_schema(%{a: :float, b: :float})
+
+      assert schema["type"] == "object"
+      assert schema["properties"]["a"]["type"] == "number"
+      assert schema["properties"]["b"]["type"] == "number"
+      assert "a" in schema["required"]
+      assert "b" in schema["required"]
+    end
+
+    test "creates schema with string keys" do
+      schema = Tool.simple_schema(%{"name" => :string, "age" => :integer})
+
+      assert schema["properties"]["name"]["type"] == "string"
+      assert schema["properties"]["age"]["type"] == "integer"
+      assert "name" in schema["required"]
+      assert "age" in schema["required"]
+    end
+
+    test "supports module types for Python parity" do
+      schema = Tool.simple_schema(%{"name" => String, "count" => Integer, "rate" => Float})
+
+      assert schema["properties"]["name"]["type"] == "string"
+      assert schema["properties"]["count"]["type"] == "integer"
+      assert schema["properties"]["rate"]["type"] == "number"
+    end
+
+    test "supports :number type" do
+      schema = Tool.simple_schema(%{value: :number})
+
+      assert schema["properties"]["value"]["type"] == "number"
+    end
+
+    test "supports :boolean type" do
+      schema = Tool.simple_schema(%{enabled: :boolean})
+
+      assert schema["properties"]["enabled"]["type"] == "boolean"
+    end
+
+    test "supports :array type" do
+      schema = Tool.simple_schema(%{items: :array})
+
+      assert schema["properties"]["items"]["type"] == "array"
+    end
+
+    test "supports :object type" do
+      schema = Tool.simple_schema(%{config: :object})
+
+      assert schema["properties"]["config"]["type"] == "object"
+    end
+
+    test "all fields are required by default" do
+      schema = Tool.simple_schema(%{a: :string, b: :integer, c: :boolean})
+
+      assert length(schema["required"]) == 3
+      assert "a" in schema["required"]
+      assert "b" in schema["required"]
+      assert "c" in schema["required"]
+    end
+
+    test "empty map creates empty object schema" do
+      schema = Tool.simple_schema(%{})
+
+      assert schema["type"] == "object"
+      assert schema["properties"] == %{}
+      assert schema["required"] == []
+    end
+
+    test "mixed atom and string keys" do
+      schema = Tool.simple_schema(%{:a => :float, "b" => :integer})
+
+      assert schema["properties"]["a"]["type"] == "number"
+      assert schema["properties"]["b"]["type"] == "integer"
+    end
+  end
 end

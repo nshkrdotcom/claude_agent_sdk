@@ -353,6 +353,99 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
     end
   end
 
+  describe "SSE and HTTP MCP server types (Python parity)" do
+    test "SSE server serializes correctly" do
+      options = %Options{
+        mcp_servers: %{
+          "weather" => %{
+            type: :sse,
+            url: "https://example.com/sse",
+            headers: %{"Authorization" => "Bearer token"}
+          }
+        }
+      }
+
+      args = Options.to_args(options)
+      config = args |> value_for_flag("--mcp-config") |> Jason.decode!()
+
+      assert config["mcpServers"]["weather"]["type"] == "sse"
+      assert config["mcpServers"]["weather"]["url"] == "https://example.com/sse"
+      assert config["mcpServers"]["weather"]["headers"]["Authorization"] == "Bearer token"
+    end
+
+    test "HTTP server serializes correctly" do
+      options = %Options{
+        mcp_servers: %{
+          "api" => %{
+            type: :http,
+            url: "https://api.example.com/mcp",
+            headers: %{"X-API-Key" => "secret"}
+          }
+        }
+      }
+
+      args = Options.to_args(options)
+      config = args |> value_for_flag("--mcp-config") |> Jason.decode!()
+
+      assert config["mcpServers"]["api"]["type"] == "http"
+      assert config["mcpServers"]["api"]["url"] == "https://api.example.com/mcp"
+      assert config["mcpServers"]["api"]["headers"]["X-API-Key"] == "secret"
+    end
+
+    test "SSE server with no headers uses empty map" do
+      options = %Options{
+        mcp_servers: %{
+          "simple" => %{
+            type: :sse,
+            url: "https://example.com/sse"
+          }
+        }
+      }
+
+      args = Options.to_args(options)
+      config = args |> value_for_flag("--mcp-config") |> Jason.decode!()
+
+      assert config["mcpServers"]["simple"]["type"] == "sse"
+      assert config["mcpServers"]["simple"]["url"] == "https://example.com/sse"
+      assert config["mcpServers"]["simple"]["headers"] == %{}
+    end
+
+    test "HTTP server with no headers uses empty map" do
+      options = %Options{
+        mcp_servers: %{
+          "simple" => %{
+            type: :http,
+            url: "https://example.com/mcp"
+          }
+        }
+      }
+
+      args = Options.to_args(options)
+      config = args |> value_for_flag("--mcp-config") |> Jason.decode!()
+
+      assert config["mcpServers"]["simple"]["type"] == "http"
+      assert config["mcpServers"]["simple"]["url"] == "https://example.com/mcp"
+      assert config["mcpServers"]["simple"]["headers"] == %{}
+    end
+
+    test "mixed server types can coexist" do
+      options = %Options{
+        mcp_servers: %{
+          "sse_server" => %{type: :sse, url: "https://sse.example.com"},
+          "http_server" => %{type: :http, url: "https://http.example.com"},
+          "stdio_server" => %{type: :stdio, command: "npx", args: ["-y", "mcp-server"]}
+        }
+      }
+
+      args = Options.to_args(options)
+      config = args |> value_for_flag("--mcp-config") |> Jason.decode!()
+
+      assert config["mcpServers"]["sse_server"]["type"] == "sse"
+      assert config["mcpServers"]["http_server"]["type"] == "http"
+      assert config["mcpServers"]["stdio_server"]["type"] == "stdio"
+    end
+  end
+
   describe "thinking tokens" do
     test "max_thinking_tokens emits --max-thinking-tokens" do
       options = %Options{max_thinking_tokens: 1024}

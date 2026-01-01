@@ -231,11 +231,19 @@ defmodule ClaudeAgentSDK.Tool do
       simple_schema(name: :string, email: {:string, optional: true})
       # => "name" is required, "email" is not
 
+  ### Map syntax (Python parity)
+
+      simple_schema(%{a: :float, b: :float})
+      # => %{"type" => "object", "properties" => %{"a" => %{"type" => "number"}, ...}, "required" => ["a", "b"]}
+
+      simple_schema(%{"name" => String, "age" => Integer})
+      # => Supports module types (String, Integer, Float) for Python parity
+
   ## Supported Types
 
-  - `:string` - String type
-  - `:number` - Number type (float or int)
-  - `:integer` - Integer type
+  - `:string` or `String` - String type
+  - `:number` or `:float` or `Float` - Number type (float or int)
+  - `:integer` or `Integer` - Integer type
   - `:boolean` - Boolean type
   - `:array` - Array type
   - `:object` - Object type
@@ -258,8 +266,15 @@ defmodule ClaudeAgentSDK.Tool do
           # ... search logic
         end
       end
+
+      # Python-style map syntax
+      deftool :add, "Add two numbers", Tool.simple_schema(%{a: :float, b: :float}) do
+        def execute(%{"a" => a, "b" => b}) do
+          {:ok, %{"content" => [%{"type" => "text", "text" => "Result: \#{a + b}"}]}}
+        end
+      end
   """
-  @spec simple_schema(keyword() | [atom()]) :: map()
+  @spec simple_schema(keyword() | [atom()] | map()) :: map()
   def simple_schema(fields) when is_list(fields) do
     {properties, required} = build_schema_fields(fields)
 
@@ -269,6 +284,36 @@ defmodule ClaudeAgentSDK.Tool do
       required: required
     }
   end
+
+  # Map syntax for Python parity
+  def simple_schema(fields) when is_map(fields) do
+    {properties, required} =
+      Enum.reduce(fields, {%{}, []}, fn {key, type}, {props, req} ->
+        key_str = to_string(key)
+        schema = map_type_to_json_schema(type)
+        {Map.put(props, key_str, schema), [key_str | req]}
+      end)
+
+    %{
+      "type" => "object",
+      "properties" => properties,
+      "required" => Enum.sort(required)
+    }
+  end
+
+  # Type conversion for map syntax (matches Python SDK)
+  defp map_type_to_json_schema(:string), do: %{"type" => "string"}
+  defp map_type_to_json_schema(:float), do: %{"type" => "number"}
+  defp map_type_to_json_schema(:number), do: %{"type" => "number"}
+  defp map_type_to_json_schema(:integer), do: %{"type" => "integer"}
+  defp map_type_to_json_schema(:boolean), do: %{"type" => "boolean"}
+  defp map_type_to_json_schema(:array), do: %{"type" => "array"}
+  defp map_type_to_json_schema(:object), do: %{"type" => "object"}
+  # Elixir module types for Python parity
+  defp map_type_to_json_schema(String), do: %{"type" => "string"}
+  defp map_type_to_json_schema(Float), do: %{"type" => "number"}
+  defp map_type_to_json_schema(Integer), do: %{"type" => "integer"}
+  defp map_type_to_json_schema(type) when is_atom(type), do: %{"type" => to_string(type)}
 
   defp build_schema_fields([]), do: {%{}, []}
 

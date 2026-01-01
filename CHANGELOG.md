@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2025-12-31
+
+### Added
+
+- **Base Error Hierarchy Utilities**: Added `Errors.sdk_error?/1` and `Errors.category/1` functions for programmatic error handling (Python SDK parity)
+  - `sdk_error?/1` returns true for any SDK error type
+  - `category/1` returns error category (`:connection`, `:process`, `:parse`, `:generic`)
+- **Guard Macro for SDK Errors**: New `ClaudeAgentSDK.Errors.Guards` module with `is_sdk_error/1` guard macro for pattern matching SDK errors in function heads and case clauses
+- **Simple Schema Map Syntax**: Extended `Tool.simple_schema/1` to support map syntax for Python parity
+  - Supports atom keys: `simple_schema(%{a: :float, b: :float})`
+  - Supports string keys: `simple_schema(%{"name" => :string})`
+  - Supports Elixir module types: `String`, `Integer`, `Float`
+- **`Output.with_updated_input/2` Helper**: New helper for PreToolUse hooks to modify tool input before execution
+- **SSE and HTTP MCP Server Types**: Added new MCP server transport types for remote servers
+  - `:sse` - Server-Sent Events transport with `url` and optional `headers`
+  - `:http` - HTTP transport with `url` and optional `headers`
+- **`Transport.Port.end_input/1` Implementation**: Transport.Port now implements the `end_input/1` callback for stdin EOF signaling
+
+### Changed
+
+- Transport behaviour `end_input/1` is now implemented by Transport.Port (previously only Erlexec)
+
 ## [0.7.3] - 2025-12-31
 
 ### Added
@@ -947,7 +969,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.0...v0.7.1

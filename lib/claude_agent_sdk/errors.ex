@@ -20,21 +20,119 @@ defmodule ClaudeAgentSDK.Errors do
   - `CLIJSONDecodeError` - JSON parsing failures
   - `MessageParseError` - Message structure parsing failures
 
+  ## Utility Functions
+
+  - `sdk_error?/1` - Check if an exception is an SDK error
+  - `category/1` - Get the category of an SDK error
+
+  ## Guard Macro
+
+  Import `ClaudeAgentSDK.Errors.Guards` to use `is_sdk_error/1` in guards:
+
+      import ClaudeAgentSDK.Errors.Guards
+
+      try do
+        ClaudeAgentSDK.query("prompt", opts)
+      rescue
+        e when is_sdk_error(e) ->
+          Logger.error("SDK Error: \#{Exception.message(e)}")
+      end
+
   ## Examples
 
       # Raising base SDK error
       raise ClaudeAgentSDK.Errors.ClaudeSDKError, message: "Operation failed"
 
-      # With cause
-      try do
-        risky_operation()
-      rescue
-        e ->
-          reraise ClaudeAgentSDK.Errors.ClaudeSDKError,
-                  [message: "SDK operation failed", cause: e],
-                  __STACKTRACE__
-      end
+      # Checking error type
+      Errors.sdk_error?(%Errors.CLIConnectionError{message: "failed"})
+      # => true
+
+      # Getting error category
+      Errors.category(%Errors.CLIConnectionError{message: "failed"})
+      # => :connection
   """
+
+  @typedoc """
+  Union type of all SDK error types.
+  """
+  @type sdk_error ::
+          __MODULE__.ClaudeSDKError.t()
+          | __MODULE__.CLIConnectionError.t()
+          | __MODULE__.CLINotFoundError.t()
+          | __MODULE__.ProcessError.t()
+          | __MODULE__.CLIJSONDecodeError.t()
+          | __MODULE__.MessageParseError.t()
+
+  @typedoc """
+  Error category for grouping related errors.
+  """
+  @type category :: :connection | :process | :parse | :generic
+
+  @doc """
+  Check if an exception is an SDK error.
+
+  Returns `true` if the given value is one of the SDK error types,
+  `false` otherwise.
+
+  ## Examples
+
+      iex> Errors.sdk_error?(%Errors.ClaudeSDKError{message: "test"})
+      true
+
+      iex> Errors.sdk_error?(%Errors.CLIConnectionError{message: "failed"})
+      true
+
+      iex> Errors.sdk_error?(%RuntimeError{message: "not sdk"})
+      false
+
+      iex> Errors.sdk_error?("string")
+      false
+  """
+  @spec sdk_error?(term()) :: boolean()
+  def sdk_error?(error) do
+    case error do
+      %{__struct__: __MODULE__.ClaudeSDKError} -> true
+      %{__struct__: __MODULE__.CLIConnectionError} -> true
+      %{__struct__: __MODULE__.CLINotFoundError} -> true
+      %{__struct__: __MODULE__.ProcessError} -> true
+      %{__struct__: __MODULE__.CLIJSONDecodeError} -> true
+      %{__struct__: __MODULE__.MessageParseError} -> true
+      _ -> false
+    end
+  end
+
+  @doc """
+  Get the category of an SDK error.
+
+  Categories help group related errors for handling:
+
+  - `:connection` - Connection and CLI discovery errors
+  - `:process` - CLI process execution errors
+  - `:parse` - JSON and message parsing errors
+  - `:generic` - Base SDK errors without specific category
+
+  ## Examples
+
+      iex> Errors.category(%Errors.CLIConnectionError{message: "failed"})
+      :connection
+
+      iex> Errors.category(%Errors.ProcessError{message: "crashed"})
+      :process
+
+      iex> Errors.category(%Errors.CLIJSONDecodeError{message: "bad", line: "{"})
+      :parse
+  """
+  @spec category(sdk_error()) :: category()
+  def category(error) do
+    case error do
+      %{__struct__: __MODULE__.CLIConnectionError} -> :connection
+      %{__struct__: __MODULE__.CLINotFoundError} -> :connection
+      %{__struct__: __MODULE__.ProcessError} -> :process
+      %{__struct__: __MODULE__.CLIJSONDecodeError} -> :parse
+      %{__struct__: __MODULE__.MessageParseError} -> :parse
+      %{__struct__: __MODULE__.ClaudeSDKError} -> :generic
+    end
+  end
 end
 
 defmodule ClaudeAgentSDK.Errors.ClaudeSDKError do

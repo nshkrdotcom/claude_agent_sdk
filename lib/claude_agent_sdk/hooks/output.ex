@@ -62,11 +62,13 @@ defmodule ClaudeAgentSDK.Hooks.Output do
   - `hookEventName` - Must be "PreToolUse"
   - `permissionDecision` - "allow", "deny", or "ask"
   - `permissionDecisionReason` - Explanation for the decision
+  - `updatedInput` - Optional modified tool input (via `with_updated_input/2`)
   """
   @type pre_tool_use_output :: %{
-          hookEventName: String.t(),
-          permissionDecision: String.t(),
-          permissionDecisionReason: String.t()
+          :hookEventName => String.t(),
+          :permissionDecision => String.t(),
+          :permissionDecisionReason => String.t(),
+          optional(:updatedInput) => map()
         }
 
   @typedoc """
@@ -382,6 +384,43 @@ defmodule ClaudeAgentSDK.Hooks.Output do
   def with_async_timeout(output, timeout_ms)
       when is_map(output) and is_integer(timeout_ms) and timeout_ms >= 0 do
     Map.put(output, :asyncTimeout, timeout_ms)
+  end
+
+  @doc """
+  Modifies tool input before execution (PreToolUse hooks only).
+
+  This helper allows hooks to sanitize, validate, or transform tool inputs
+  before Claude executes the tool. The updated input replaces the original
+  input for that tool execution.
+
+  ## Parameters
+
+  - `output` - Existing hook output
+  - `updated_input` - Map of updated input values
+
+  ## Examples
+
+      # Sanitize file paths
+      Output.allow("Path sanitized")
+      |> Output.with_updated_input(%{"path" => sanitize_path(input["path"])})
+
+      # Add default values
+      Output.allow("Defaults applied")
+      |> Output.with_updated_input(Map.put(input, "timeout", 30))
+
+      # Validate and transform
+      Output.allow("Input validated")
+      |> Output.with_updated_input(%{
+        "path" => expand_path(input["path"]),
+        "validated" => true
+      })
+  """
+  @spec with_updated_input(t(), map()) :: t()
+  def with_updated_input(output, updated_input)
+      when is_map(output) and is_map(updated_input) do
+    hook_output = Map.get(output, :hookSpecificOutput, %{})
+    updated_hook_output = Map.put(hook_output, :updatedInput, updated_input)
+    Map.put(output, :hookSpecificOutput, updated_hook_output)
   end
 
   @doc """

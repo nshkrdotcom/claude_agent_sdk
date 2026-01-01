@@ -5,6 +5,9 @@ defmodule ClaudeAgentSDK.ErrorsTest do
 
   use ClaudeAgentSDK.SupertesterCase
 
+  alias ClaudeAgentSDK.Errors
+  import ClaudeAgentSDK.Errors.Guards
+
   alias ClaudeAgentSDK.Errors.{
     ClaudeSDKError,
     CLIConnectionError,
@@ -140,6 +143,138 @@ defmodule ClaudeAgentSDK.ErrorsTest do
       }
 
       assert error.data == %{"type" => "unknown"}
+    end
+  end
+
+  describe "sdk_error?/1" do
+    test "returns true for ClaudeSDKError" do
+      assert Errors.sdk_error?(%ClaudeSDKError{message: "test"})
+    end
+
+    test "returns true for CLIConnectionError" do
+      assert Errors.sdk_error?(%CLIConnectionError{message: "test"})
+    end
+
+    test "returns true for CLINotFoundError" do
+      assert Errors.sdk_error?(%CLINotFoundError{message: "test"})
+    end
+
+    test "returns true for ProcessError" do
+      assert Errors.sdk_error?(%ProcessError{message: "test"})
+    end
+
+    test "returns true for CLIJSONDecodeError" do
+      assert Errors.sdk_error?(%CLIJSONDecodeError{message: "test", line: "bad"})
+    end
+
+    test "returns true for MessageParseError" do
+      assert Errors.sdk_error?(%MessageParseError{message: "test"})
+    end
+
+    test "returns false for RuntimeError" do
+      refute Errors.sdk_error?(%RuntimeError{message: "test"})
+    end
+
+    test "returns false for ArgumentError" do
+      refute Errors.sdk_error?(%ArgumentError{message: "test"})
+    end
+
+    test "returns false for non-exception values" do
+      refute Errors.sdk_error?("string")
+      refute Errors.sdk_error?(123)
+      refute Errors.sdk_error?(%{message: "test"})
+      refute Errors.sdk_error?(nil)
+    end
+  end
+
+  describe "category/1" do
+    test "returns :connection for CLIConnectionError" do
+      assert Errors.category(%CLIConnectionError{message: "test"}) == :connection
+    end
+
+    test "returns :connection for CLINotFoundError" do
+      assert Errors.category(%CLINotFoundError{message: "test"}) == :connection
+    end
+
+    test "returns :process for ProcessError" do
+      assert Errors.category(%ProcessError{message: "test"}) == :process
+    end
+
+    test "returns :parse for CLIJSONDecodeError" do
+      assert Errors.category(%CLIJSONDecodeError{message: "test", line: "bad"}) == :parse
+    end
+
+    test "returns :parse for MessageParseError" do
+      assert Errors.category(%MessageParseError{message: "test"}) == :parse
+    end
+
+    test "returns :generic for ClaudeSDKError" do
+      assert Errors.category(%ClaudeSDKError{message: "test"}) == :generic
+    end
+  end
+
+  describe "is_sdk_error/1 guard macro" do
+    # Helper function that uses the guard
+    defp matches_sdk_error?(error) when is_sdk_error(error), do: true
+    defp matches_sdk_error?(_), do: false
+
+    test "matches ClaudeSDKError in guard" do
+      assert matches_sdk_error?(%ClaudeSDKError{message: "test"})
+    end
+
+    test "matches CLIConnectionError in guard" do
+      assert matches_sdk_error?(%CLIConnectionError{message: "test"})
+    end
+
+    test "matches CLINotFoundError in guard" do
+      assert matches_sdk_error?(%CLINotFoundError{message: "test"})
+    end
+
+    test "matches ProcessError in guard" do
+      assert matches_sdk_error?(%ProcessError{message: "test"})
+    end
+
+    test "matches CLIJSONDecodeError in guard" do
+      assert matches_sdk_error?(%CLIJSONDecodeError{message: "test", line: "bad"})
+    end
+
+    test "matches MessageParseError in guard" do
+      assert matches_sdk_error?(%MessageParseError{message: "test"})
+    end
+
+    test "does not match RuntimeError in guard" do
+      refute matches_sdk_error?(%RuntimeError{message: "test"})
+    end
+
+    test "does not match non-structs in guard" do
+      refute matches_sdk_error?("string")
+      refute matches_sdk_error?(123)
+      refute matches_sdk_error?(%{message: "test"})
+    end
+
+    test "can be used in case guards" do
+      error = %CLIConnectionError{message: "Connection failed"}
+
+      result =
+        case error do
+          e when is_sdk_error(e) -> {:matched, :sdk_error}
+          _ -> {:matched, :other}
+        end
+
+      assert result == {:matched, :sdk_error}
+    end
+
+    test "can be used with if expression" do
+      error = %ProcessError{message: "Process failed"}
+
+      result =
+        if is_sdk_error(error) do
+          :sdk_error
+        else
+          :other
+        end
+
+      assert result == :sdk_error
     end
   end
 end
