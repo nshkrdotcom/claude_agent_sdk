@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-01-07
+
+### Added
+
+- **Comprehensive Application Examples**: Added five production-ready example applications to `examples/` demonstrating advanced patterns:
+  - **Phoenix Chat** (`examples/phoenix_chat`): Full Phoenix LiveView application with real-time WebSocket streaming, GenServer session management, and tool usage visualization.
+  - **Document Generation** (`examples/document_generation`): AI-powered Excel creation utility using `elixlsx`, featuring natural language parsing, complex formula generation, and professional styling.
+  - **Research Agent** (`examples/research_agent`): Sophisticated multi-agent coordination system with specialized subagents, hook-based lifecycle tracking, and parallel task execution.
+  - **Email Agent** (`examples/email_agent`): Intelligent email assistant integrating IMAP access, SQLite persistence, automation rules, and natural language query processing.
+  - **Skill Invocation** (`examples/skill_invocation`): Focused demonstration of the Skill tool, utilizing custom hook callbacks for invocation tracking and execution statistics.
+
+### Changed
+
+- **Documentation**: Updated `README.md` with a new "Full Application Examples" section detailing the new example projects.
+- **ExDoc Configuration**: Updated `mix.exs` to include the README files from all new example applications in the generated documentation.
+
 ## [0.7.5] - 2026-01-07
 
 ### Added
@@ -997,7 +1013,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.5...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.6...HEAD
+[0.7.7]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.2...v0.7.3

@@ -1,0 +1,25 @@
+# Dependencies
+/deps/
+/_build/
+
+# Generated on deploy
+/priv/static/assets/
+
+# Dialyzer PLT files
+/priv/plts/
+
+# Mix artifacts
+/.fetch
+erl_crash.dump
+
+# Phoenix artifacts
+/tmp/
+
+# Environment configuration
+.env
+.env.local
+
+# IDE
+.elixir_ls/
+.vscode/
+*.beam

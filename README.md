@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.7.5"}
+    {:claude_agent_sdk, "~> 0.7.6"}
   ]
 end
 ```
@@ -422,6 +422,36 @@ mix run examples/hooks/basic_bash_blocking.exs
 - `advanced_features/agents_live.exs` - Multi-agent workflows
 - `advanced_features/subagent_spawning_live.exs` - Parallel subagent coordination
 - `advanced_features/web_tools_live.exs` - WebSearch and WebFetch
+
+### Full Application Examples
+
+Complete Mix applications demonstrating production-ready SDK integration patterns:
+
+| Example | Description | Key Features |
+|---------|-------------|--------------|
+| [`phoenix_chat/`](examples/phoenix_chat/README.md) | Real-time chat with Phoenix LiveView | LiveView, Channels, streaming responses, session management |
+| [`document_generation/`](examples/document_generation/README.md) | AI-powered Excel document generation | elixlsx, natural language parsing, Mix tasks |
+| [`research_agent/`](examples/research_agent/README.md) | Multi-agent research coordination | Task tool, subagent tracking via hooks, parallel execution |
+| [`skill_invocation/`](examples/skill_invocation/README.md) | Skill tool usage and tracking | Skill definitions, hook-based tracking, GenServer state |
+| [`email_agent/`](examples/email_agent/README.md) | AI-powered email assistant | SQLite storage, rule-based processing, natural language queries |
+
+```bash
+# Run Phoenix Chat
+cd examples/phoenix_chat && mix deps.get && mix phx.server
+# Visit http://localhost:4000
+
+# Run Document Generation
+cd examples/document_generation && mix deps.get && mix generate.demo
+
+# Run Research Agent
+cd examples/research_agent && mix deps.get && mix research "quantum computing"
+
+# Run Skill Invocation demo
+cd examples/skill_invocation && mix deps.get && mix run -e "SkillInvocation.demo()"
+
+# Run Email Agent
+cd examples/email_agent && mix deps.get && mix email.assistant "find emails from last week"
+```
 
 ---
 

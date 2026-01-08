@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
-  @version "0.7.5"
+  @version "0.7.6"
 
   def project do
     [
@@ -60,7 +60,8 @@ defmodule ClaudeAgentSdk.MixProject do
         "Examples" => "https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples"
       },
       maintainers: [{"NSHkr", "ZeroTrust@NSHkr.com"}],
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs assets guides)
+      files:
+        ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs assets guides examples/README.md examples/mix_task_chat/README.md examples/phoenix_chat/README.md examples/document_generation/README.md examples/research_agent/README.md examples/skill_invocation/README.md examples/email_agent/README.md)
     ]
   end
 
@@ -87,6 +88,11 @@ defmodule ClaudeAgentSdk.MixProject do
         "guides/error-handling.md",
         {"examples/README.md", filename: "examples"},
         {"examples/mix_task_chat/README.md", filename: "mix-task-chat-example"},
+        {"examples/phoenix_chat/README.md", filename: "phoenix-chat-example"},
+        {"examples/document_generation/README.md", filename: "document-generation-example"},
+        {"examples/research_agent/README.md", filename: "research-agent-example"},
+        {"examples/skill_invocation/README.md", filename: "skill-invocation-example"},
+        {"examples/email_agent/README.md", filename: "email-agent-example"},
         "CHANGELOG.md",
         "LICENSE"
       ],
@@ -112,7 +118,12 @@ defmodule ClaudeAgentSdk.MixProject do
         ],
         Examples: [
           "examples/README.md",
-          "examples/mix_task_chat/README.md"
+          "examples/mix_task_chat/README.md",
+          "examples/phoenix_chat/README.md",
+          "examples/document_generation/README.md",
+          "examples/research_agent/README.md",
+          "examples/skill_invocation/README.md",
+          "examples/email_agent/README.md"
         ],
         "Release Notes": ["CHANGELOG.md", "LICENSE"]
       ],

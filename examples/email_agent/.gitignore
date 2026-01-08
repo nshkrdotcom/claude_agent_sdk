@@ -1,0 +1,34 @@
+# Dependencies and build artifacts
+/_build/
+/deps/
+*.ez
+
+# Generated on crash by the VM
+erl_crash.dump
+
+# Database files
+/priv/*.db
+/priv/*.db-*
+
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+/cover/
+*.coverdata
+
+# Dialyzer PLT files
+/priv/plts/

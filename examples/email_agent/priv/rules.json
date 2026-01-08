@@ -1,0 +1,37 @@
+{
+  "rules": [
+    {
+      "name": "Label newsletters",
+      "condition": {
+        "from_contains": "newsletter"
+      },
+      "action": {
+        "type": "label",
+        "label": "newsletters"
+      },
+      "enabled": true
+    },
+    {
+      "name": "Star urgent emails",
+      "condition": {
+        "subject_contains": "urgent"
+      },
+      "action": {
+        "type": "star"
+      },
+      "enabled": true
+    },
+    {
+      "name": "Archive old promotions",
+      "condition": {
+        "from_contains": "promo",
+        "older_than_days": 14
+      },
+      "action": {
+        "type": "move",
+        "destination": "Archive"
+      },
+      "enabled": false
+    }
+  ]
+}

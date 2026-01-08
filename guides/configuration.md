@@ -741,7 +741,7 @@ diagnosis = ClaudeAgentSDK.AuthChecker.diagnose()
 IO.inspect(diagnosis)
 # %{
 #   cli_installed: true,
-#   cli_version: "2.0.75",
+#   cli_version: "2.1.1",
 #   authenticated: true,
 #   auth_method: "Anthropic API",
 #   api_key_source: "env",
