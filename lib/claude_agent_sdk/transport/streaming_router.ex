@@ -117,7 +117,7 @@ defmodule ClaudeAgentSDK.Transport.StreamingRouter do
        when is_map(hooks) and map_size(hooks) > 0 do
     # Empty map doesn't count
     Enum.any?(hooks, fn {_event, matchers} ->
-      is_list(matchers) and length(matchers) > 0
+      is_list(matchers) and matchers != []
     end)
   end
 

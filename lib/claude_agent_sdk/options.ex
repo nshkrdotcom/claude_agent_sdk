@@ -70,6 +70,9 @@ defmodule ClaudeAgentSDK.Options do
 
   """
 
+  # This struct intentionally has many fields as it mirrors the Claude Code CLI options.
+  # The struct is created once per request and is short-lived, so memory overhead is minimal.
+  # credo:disable-for-next-line Credo.Check.Warning.StructFieldAmount
   defstruct [
     :max_turns,
     :system_prompt,

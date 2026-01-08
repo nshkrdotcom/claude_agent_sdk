@@ -228,12 +228,10 @@ Testing permission callback with various scenarios:
 ## Next Steps
 
 After running these examples, check out:
-- [Comprehensive Manual](../../COMPREHENSIVE_MANUAL.md) - Full API documentation
-- [Hooks Guide](../../HOOKS_GUIDE.md) - Advanced hook system
-- [Gap Analysis](../../docs/20251017/gap_analysis/README.md) - Feature parity details
-- [Architecture](../../ARCHITECTURE.md) - System design
+- [Hooks Guide](../../../guides/hooks.md) - Advanced hook system
+- [Streaming Guide](../../../guides/streaming.md) - Streaming patterns
+- [Permissions Guide](../../../guides/permissions.md) - Permission control
 
 For more examples:
-- `examples/` - Basic examples
-- `examples/hooks/` - Hook system examples
-- `test/` - Test suite for reference implementations
+- [Examples Index](../../README.md) - All examples
+- [Mix Task Chat](../../mix_task_chat/README.md) - Complete working example

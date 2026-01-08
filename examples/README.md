@@ -1,47 +1,106 @@
 # Examples
 
-These examples are **live** (they talk to the real Claude Code CLI).
+> **Note:** Examples are available in the [source repository](https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples) and are not included in the Hex package to minimize download size. Clone the repo to run them locally.
 
-## Prereqs
+These examples demonstrate real integration with the Claude Code CLI.
 
-- Install CLI: `npm install -g @anthropic-ai/claude-code`
-- Authenticate: `claude login` (or set `ANTHROPIC_API_KEY` / `CLAUDE_AGENT_OAUTH_TOKEN`)
+## Prerequisites
 
-## Run Everything
+- **Claude Code CLI:** `npm install -g @anthropic-ai/claude-code`
+- **Authentication:** `claude login` (or set `ANTHROPIC_API_KEY` / `CLAUDE_AGENT_OAUTH_TOKEN`)
 
-- `bash examples/run_all.sh`
-  - Sets `CLAUDE_EXAMPLES_FORCE_HALT=true` to ensure each `mix run` exits cleanly
+## Mix Task Example (Recommended Starting Point)
 
-## Run One
+A complete working example app showing how to integrate Claude into your own Mix project:
 
-- `mix run examples/basic_example.exs`
+**[`mix_task_chat/`](mix_task_chat/README.md)**
 
-## Curated Live Examples
+- Mix tasks using the SDK
+- Real-time streaming responses (typewriter effect)
+- Interactive multi-turn conversations
+- Simple query-response patterns for scripting
 
-- `examples/basic_example.exs` — minimal `ClaudeAgentSDK.query/2` + message extraction
-- `examples/session_features_example.exs` — SessionStore save/search + resume + session-related CLI flags
-- `examples/structured_output_live.exs` — structured JSON via `--json-schema`
-- `examples/sandbox_settings_live.exs` — sandbox merged into `--settings` + live query
-- `examples/tools_and_betas_live.exs` — `--tools` variations (optional: `CLAUDE_CODE_BETAS`)
-- `examples/advanced_features/agents_live.exs` — multi-agent workflow via `resume/3`
-- `examples/advanced_features/permissions_live.exs` — tool permission callback (`can_use_tool`)
-- `examples/advanced_features/sdk_mcp_live_demo.exs` — SDK MCP tools invoked in-process
-- `examples/advanced_features/subagent_spawning_live.exs` — Task tool for parallel subagent spawning (research-agent pattern)
-- `examples/advanced_features/web_tools_live.exs` — WebSearch and WebFetch for web access
-- `examples/streaming_tools/quick_demo.exs` — minimal streaming session (no tools/hooks)
-- `examples/streaming_tools/sdk_mcp_streaming.exs` — Streaming + SDK MCP tools (stream events + tool lifecycle)
-- `examples/hooks/context_injection.exs` — `user_prompt_submit` context injection hook
-- `examples/hooks/basic_bash_blocking.exs` — `pre_tool_use` allow/deny hook for Bash
-- `examples/hooks/file_policy_enforcement.exs` — `pre_tool_use` file policy hook for Write/Edit (sandbox + sensitive files)
-- `examples/hooks/logging_and_audit.exs` — pre/post tool hooks for audit logging
-- `examples/hooks/complete_workflow.exs` — combined hooks workflow (context + audit + security + monitoring)
-- `examples/streaming_tools/basic_streaming_with_hooks.exs` — Streaming API + hooks
-- `examples/runtime_control/control_parity_live.exs` — Query/control parity + runtime permission mode switching
-- `examples/assistant_error_live.exs` — assistant error metadata (streaming vs aggregated)
-- `examples/file_checkpointing_live.exs` — `rewind_files/2` (best-effort; depends on CLI support)
-- `examples/filesystem_agents_live.exs` — filesystem agents loaded via `setting_sources: ["project"]`
+```bash
+git clone https://github.com/nshkrdotcom/claude_agent_sdk.git
+cd claude_agent_sdk/examples/mix_task_chat
+mix deps.get
+mix chat "Hello, Claude!"           # Streaming response
+mix chat --interactive              # Multi-turn conversation
+mix ask -q "What is 2+2?"           # Script-friendly output
+```
 
-## Archived / Mock
+## Running Examples
 
-- `examples/archive/mock_demos/` contains deterministic mock/transport examples.
-- `examples/archive/` contains older or experimental scripts.
+### Run All Examples
+
+```bash
+bash examples/run_all.sh
+```
+
+Sets `CLAUDE_EXAMPLES_FORCE_HALT=true` to ensure each script exits cleanly.
+
+### Run Individual Examples
+
+```bash
+mix run examples/basic_example.exs
+```
+
+## Example Index
+
+### Core Examples
+
+| Example | Description |
+|---------|-------------|
+| `basic_example.exs` | Minimal `ClaudeAgentSDK.query/2` with message extraction |
+| `session_features_example.exs` | SessionStore save/search, resume, session CLI flags |
+| `structured_output_live.exs` | Structured JSON via `--json-schema` |
+| `sandbox_settings_live.exs` | Sandbox merged into `--settings` |
+| `tools_and_betas_live.exs` | `--tools` variations |
+
+### Advanced Features
+
+| Example | Description |
+|---------|-------------|
+| `advanced_features/agents_live.exs` | Multi-agent workflow via `resume/3` |
+| `advanced_features/permissions_live.exs` | Tool permission callback (`can_use_tool`) |
+| `advanced_features/sdk_mcp_live_demo.exs` | SDK MCP tools invoked in-process |
+| `advanced_features/subagent_spawning_live.exs` | Parallel subagent spawning (research-agent pattern) |
+| `advanced_features/web_tools_live.exs` | WebSearch and WebFetch for web access |
+
+### Streaming
+
+| Example | Description |
+|---------|-------------|
+| `streaming_tools/quick_demo.exs` | Minimal streaming session |
+| `streaming_tools/sdk_mcp_streaming.exs` | Streaming with SDK MCP tools |
+| `streaming_tools/basic_streaming_with_hooks.exs` | Streaming API with hooks |
+
+### Hooks
+
+| Example | Description |
+|---------|-------------|
+| `hooks/context_injection.exs` | `user_prompt_submit` context injection |
+| `hooks/basic_bash_blocking.exs` | `pre_tool_use` allow/deny for Bash |
+| `hooks/file_policy_enforcement.exs` | `pre_tool_use` file policy for Write/Edit |
+| `hooks/logging_and_audit.exs` | Pre/post tool hooks for audit logging |
+| `hooks/complete_workflow.exs` | Combined hooks workflow |
+
+### Runtime Control
+
+| Example | Description |
+|---------|-------------|
+| `runtime_control/control_parity_live.exs` | Query/control parity, permission mode switching |
+| `assistant_error_live.exs` | Assistant error metadata handling |
+| `file_checkpointing_live.exs` | `rewind_files/2` (depends on CLI support) |
+| `filesystem_agents_live.exs` | Filesystem agents via `setting_sources: ["project"]` |
+
+## Archived Examples
+
+The `archive/` directory contains older or experimental scripts, including mock/transport examples for deterministic testing.
+
+## Related Documentation
+
+- [Getting Started](../guides/getting-started.md)
+- [Streaming Guide](../guides/streaming.md)
+- [Hooks Guide](../guides/hooks.md)
+- [Permissions Guide](../guides/permissions.md)

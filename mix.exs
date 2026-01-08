@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
-  @version "0.7.4"
+  @version "0.7.5"
 
   def project do
     [
@@ -15,10 +15,6 @@ defmodule ClaudeAgentSdk.MixProject do
       package: package(),
       docs: docs(),
       dialyzer: dialyzer(),
-      preferred_cli_env: [
-        "test.live": :test,
-        "run.live": :dev
-      ],
       source_url: "https://github.com/nshkrdotcom/claude_agent_sdk"
     ]
   end
@@ -26,6 +22,15 @@ defmodule ClaudeAgentSdk.MixProject do
   def application do
     [
       extra_applications: [:logger]
+    ]
+  end
+
+  def cli do
+    [
+      preferred_envs: [
+        "test.live": :test,
+        "run.live": :dev
+      ]
     ]
   end
 
@@ -39,7 +44,7 @@ defmodule ClaudeAgentSdk.MixProject do
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
-      {:supertester, "~> 0.4.0", only: :test},
+      {:supertester, "~> 0.5.0", only: :test},
       {:stream_data, "~> 1.0", only: :test}
     ]
   end
@@ -51,7 +56,8 @@ defmodule ClaudeAgentSdk.MixProject do
       links: %{
         "GitHub" => "https://github.com/nshkrdotcom/claude_agent_sdk",
         "Documentation" => "https://hexdocs.pm/claude_agent_sdk",
-        "Claude Code" => "https://claude.ai/code"
+        "Claude Code" => "https://claude.ai/code",
+        "Examples" => "https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples"
       },
       maintainers: [{"NSHkr", "ZeroTrust@NSHkr.com"}],
       files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs assets guides)
@@ -64,7 +70,7 @@ defmodule ClaudeAgentSdk.MixProject do
       name: "ClaudeAgentSDK",
       source_ref: "v#{@version}",
       source_url: "https://github.com/nshkrdotcom/claude_agent_sdk",
-      homepage_url: "https://claude.ai/code",
+      homepage_url: "https://hex.pm/packages/claude_agent_sdk",
       assets: %{"assets" => "assets"},
       logo: "assets/claude_agent_sdk.svg",
       extras: [
@@ -79,6 +85,8 @@ defmodule ClaudeAgentSdk.MixProject do
         "guides/sessions.md",
         "guides/testing.md",
         "guides/error-handling.md",
+        {"examples/README.md", filename: "examples"},
+        {"examples/mix_task_chat/README.md", filename: "mix-task-chat-example"},
         "CHANGELOG.md",
         "LICENSE"
       ],
@@ -101,6 +109,10 @@ defmodule ClaudeAgentSdk.MixProject do
         "Testing & Errors": [
           "guides/testing.md",
           "guides/error-handling.md"
+        ],
+        Examples: [
+          "examples/README.md",
+          "examples/mix_task_chat/README.md"
         ],
         "Release Notes": ["CHANGELOG.md", "LICENSE"]
       ],

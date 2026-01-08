@@ -50,7 +50,7 @@ Verify the installation:
 claude --version
 ```
 
-You should see a version number like `2.0.75` or higher.
+You should see a version number like `2.1.1` or higher.
 
 ### 3. Authentication
 
@@ -103,7 +103,7 @@ Add `claude_agent_sdk` to your Mix dependencies in `mix.exs`:
 ```elixir
 defp deps do
   [
-    {:claude_agent_sdk, "~> 0.7.2"}
+    {:claude_agent_sdk, "~> 0.7.5"}
   ]
 end
 ```
@@ -557,7 +557,6 @@ Once comfortable with the basics, explore:
 
 ### Getting Help
 
-- **HexDocs**: [hexdocs.pm/claude_agent_sdk](https://hexdocs.pm/claude_agent_sdk)
 - **GitHub Issues**: [github.com/nshkrdotcom/claude_agent_sdk/issues](https://github.com/nshkrdotcom/claude_agent_sdk/issues)
 - **Claude Code Documentation**: [docs.anthropic.com/claude-code/sdk](https://docs.anthropic.com/en/docs/claude-code/sdk)
 

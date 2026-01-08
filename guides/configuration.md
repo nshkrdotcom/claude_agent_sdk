@@ -1082,4 +1082,3 @@ options = %ClaudeAgentSDK.Options{
 
 - [Hooks Guide](hooks.md) - Comprehensive guide to lifecycle hooks
 - [MCP Tools Guide](mcp-tools.md) - MCP server design and tool creation
-- [API Documentation](https://hexdocs.pm/claude_agent_sdk) - Full API reference

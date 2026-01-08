@@ -62,7 +62,7 @@ defmodule ClaudeAgentSDKTest do
       opts = %Options{max_turns: 3, output_format: :json}
       messages = ClaudeAgentSDK.query("test prompt", opts) |> Enum.to_list()
 
-      assert length(messages) > 0
+      assert messages != []
       assert Enum.any?(messages, &(&1.type == :assistant))
     end
   end

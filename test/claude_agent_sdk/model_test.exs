@@ -45,7 +45,7 @@ defmodule ClaudeAgentSDK.ModelTest do
     test "should_return_list_of_all_known_models" do
       models = Model.list_models()
       assert is_list(models)
-      assert length(models) > 0
+      assert models != []
     end
 
     test "should_include_both_short_and_full_forms" do

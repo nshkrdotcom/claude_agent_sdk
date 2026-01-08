@@ -338,15 +338,14 @@ Output.deny("Blocked")
 
 After reviewing these examples:
 
-1. **Read the full guide:** [docs/HOOKS_GUIDE.md](../../docs/HOOKS_GUIDE.md)
-2. **Review the design:** [docs/design/hooks_implementation.md](../../docs/design/hooks_implementation.md)
-3. **Explore tests:** [test/claude_agent_sdk/hooks/](../../test/claude_agent_sdk/hooks/)
-4. **Build your own:** Create custom hooks for your use case!
+1. **Read the full guide:** [Hooks Guide](../../../guides/hooks.md)
+2. **Explore tests:** `test/claude_agent_sdk/hooks/`
+3. **Build your own:** Create custom hooks for your use case!
 
 ---
 
 ## Questions?
 
 - **API Reference:** See module docs with `h ClaudeAgentSDK.Hooks.Output`
-- **Full Guide:** [docs/HOOKS_GUIDE.md](../../docs/HOOKS_GUIDE.md)
-- **Issues:** https://github.com/nshkrdotcom/claude_agent_sdk/issues
+- **Full Guide:** [Hooks Guide](../../../guides/hooks.md)
+- **Issues:** [GitHub Issues](https://github.com/nshkrdotcom/claude_agent_sdk/issues)

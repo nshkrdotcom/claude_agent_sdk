@@ -477,8 +477,8 @@ defmodule ClaudeAgentSDK.DebugMode do
 
   defp format_tools_summary(%Options{allowed_tools: allowed, disallowed_tools: disallowed}) do
     cond do
-      allowed && length(allowed) > 0 -> "allowed[#{length(allowed)}]"
-      disallowed && length(disallowed) > 0 -> "disallowed[#{length(disallowed)}]"
+      allowed != nil and allowed != [] -> "allowed[#{length(allowed)}]"
+      disallowed != nil and disallowed != [] -> "disallowed[#{length(disallowed)}]"
       true -> "default"
     end
   end
@@ -665,7 +665,6 @@ defmodule ClaudeAgentSDK.DebugMode do
     # Simple echo test
     case System.cmd("claude", ["--print", "test", "--output-format", "json"],
            stderr_to_stdout: true,
-           timeout: 5000,
            env: []
          ) do
       {output, 0} ->

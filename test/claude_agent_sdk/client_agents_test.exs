@@ -308,7 +308,7 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
         end)
 
       messages = Task.await(task, :infinity)
-      assert length(messages) > 0
+      assert messages != []
 
       # Switch to doc agent
       :ok = Client.set_agent(client, :writer)
@@ -325,7 +325,7 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
         end)
 
       more_messages = Task.await(task2, :infinity)
-      assert length(more_messages) > 0
+      assert more_messages != []
 
       Client.stop(client)
     end

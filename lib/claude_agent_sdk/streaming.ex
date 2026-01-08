@@ -222,8 +222,8 @@ defmodule ClaudeAgentSDK.Streaming do
   - `ClaudeAgentSDK` - Non-streaming API (simpler but blocks)
   """
 
-  alias ClaudeAgentSDK.Streaming.Session
   alias ClaudeAgentSDK.{Client, Options}
+  alias ClaudeAgentSDK.Streaming.Session
   alias ClaudeAgentSDK.Transport.StreamingRouter
 
   @doc """

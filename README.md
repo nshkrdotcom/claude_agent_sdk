@@ -11,7 +11,7 @@
 [![CI](https://github.com/nshkrdotcom/claude_agent_sdk/actions/workflows/elixir.yaml/badge.svg)](https://github.com/nshkrdotcom/claude_agent_sdk/actions/workflows/elixir.yaml)
 [![Last Commit](https://img.shields.io/github/last-commit/nshkrdotcom/claude_agent_sdk.svg)](https://github.com/nshkrdotcom/claude_agent_sdk/commits/main)
 
-An Elixir SDK aiming for feature-complete parity with the official [claude-agent-sdk-python](https://github.com/anthropics/claude-agent-sdk-python). Build AI-powered applications with Claude using a production-ready interface for the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/sdk), featuring streaming responses, lifecycle hooks, permission controls, and in-process tool execution via MCP.
+An Elixir SDK aiming for feature-complete parity with the official [claude-agent-sdk-python](https://github.com/anthropics/claude-agent-sdk-python). Build AI-powered applications with Claude using a production-ready interface for the [Claude Code CLI](https://code.claude.com/docs/en/cli-reference), featuring streaming responses, lifecycle hooks, permission controls, and in-process tool execution via MCP.
 
 > **Note:** This SDK does not bundle the Claude Code CLI. You must install it separately (see [Prerequisites](#prerequisites)).
 
@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.7.4"}
+    {:claude_agent_sdk, "~> 0.7.5"}
   ]
 end
 ```
@@ -387,7 +387,21 @@ OptionBuilder.quick()                      # Fast one-off queries
 
 ## Examples
 
-The `examples/` directory contains runnable demonstrations:
+The `examples/` directory contains runnable demonstrations.
+
+### Mix Task Example (Start Here)
+
+If you want to integrate Claude into your own Mix project, see the **[mix_task_chat](examples/mix_task_chat/README.md)** example — a complete working app with Mix tasks:
+
+```bash
+cd examples/mix_task_chat
+mix deps.get
+mix chat "Hello, Claude!"           # Streaming response
+mix chat --interactive              # Multi-turn conversation
+mix ask -q "What is 2+2?"           # Script-friendly output
+```
+
+### Script Examples
 
 ```bash
 # Run all examples
@@ -400,6 +414,7 @@ mix run examples/hooks/basic_bash_blocking.exs
 ```
 
 **Key Examples:**
+- [`mix_task_chat/`](examples/mix_task_chat/README.md) - **Full Mix task integration** (streaming + interactive chat)
 - `basic_example.exs` - Minimal SDK usage
 - `streaming_tools/quick_demo.exs` - Real-time streaming
 - `hooks/complete_workflow.exs` - Full hooks integration

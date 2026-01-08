@@ -2,8 +2,8 @@ defmodule ClaudeAgentSDK.ClientCancelTest do
   use ClaudeAgentSDK.SupertesterCase, isolation: :full_isolation
   @moduletag capture_log: true
 
-  alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.{AbortSignal, Permission}
+  alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
   alias ClaudeAgentSDK.TestSupport.MockTransport
 

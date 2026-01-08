@@ -9,8 +9,8 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
   import ClaudeAgentSDK.SupertesterCase, only: [eventually: 2]
 
-  alias ClaudeAgentSDK.Hooks.Matcher
   alias ClaudeAgentSDK.{Client, Message, Options}
+  alias ClaudeAgentSDK.Hooks.Matcher
   alias ClaudeAgentSDK.TestSupport.MockTransport
 
   describe "Client with include_partial_messages option" do

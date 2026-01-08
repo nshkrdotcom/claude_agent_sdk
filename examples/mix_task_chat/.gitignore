@@ -20,32 +20,58 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-claude_code_sdk-*.tar
+*.tar
+
+# Temporary files
+*.tmp
+*.temp
 
 # Dialyzer PLT files
 /priv/plts/
+*.plt
+*.plt.hash
 
-# Bundled CLI binaries (not committed)
-priv/_bundled/
-
-# Ignore any .beam files
+# Ignore any .beam files that end up in the wrong place
 *.beam
 
-# Live examples write runtime artifacts here
-examples/_output/
+# Mix lock file (users should generate their own based on their environment)
+/mix.lock
 
-# Ignore IDE files
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.*.sw?
+\#*\#
+.#*
 
-# OS files
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-anthropics/
-claude-agent-sdk-python/
-/claude_agent_sdk/
- claude_agent_sdk-*.tar
+# Runtime artifacts
+*.log
+/logs/
+
+# IEx/REPL history
+.iex.exs.history
+.erlang.cookie
+
+# Environment and secrets (if any)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Test artifacts
+/test/tmp/
+/tmp/

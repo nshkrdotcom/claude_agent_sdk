@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-01-07
+
+### Added
+
+- **Mix Task Example App**: New `examples/mix_task_chat/` - a complete working example demonstrating SDK integration in Mix tasks
+  - `mix chat` - Streaming chat task with real-time typewriter output, interactive multi-turn conversations, and tool support
+  - `mix ask` - Simple query task for scripting with quiet mode and JSON output options
+  - Comprehensive README tutorial with architecture diagrams, code walkthroughs, and troubleshooting guide
+  - Proper project structure with mix.exs, .formatter.exs, and comprehensive .gitignore
+
+### Changed
+
+- **Documentation**: Updated main README.md with prominent "Mix Task Example (Start Here)" section
+- **Documentation**: Updated examples/README.md with "Mix Task Example (Recommended Starting Point)" section at top
+- **ExDoc Configuration**: Added examples/README.md and examples/mix_task_chat/README.md to documentation extras
+- **ExDoc Menu**: New "Examples" group in documentation sidebar with index and tutorial links
+- **Hex Package**: Added `examples/mix_task_chat` to package files for inclusion in hex package
+- **Dependencies**: Updated credo 1.7.12→1.7.15, dialyxir 1.4.5→1.4.7, erlexec 2.2.0→2.2.2, ex_doc 0.38.2→0.39.3, supertester 0.4.0→0.5.0
+- **Mix Config**: Fixed deprecated `preferred_cli_env` warning by migrating to `def cli` block
+
+### Fixed
+
+- **Dialyzer**: Fixed invalid `timeout` option in `System.cmd/3` call in DebugMode
+- **Dialyzer**: Fixed boolean guard expressions using `and` instead of `&&` for nil safety
+- **Credo**: Replaced `length(list) > 0` with `list != []` for efficiency across codebase
+- **Credo**: Fixed alias ordering to be alphabetical in Streaming and test modules
+- **Credo**: Suppressed intentional struct field count warning in Options module
+
 ## [0.7.4] - 2025-12-31
 
 ### Added
@@ -969,7 +997,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.4...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.5...HEAD
+[0.7.5]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.1...v0.7.2
