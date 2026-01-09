@@ -1,7 +1,25 @@
-# Simple example of using the Factorial module
+# Simple example demonstrating factorial calculation
 
-# Load the factorial module
-Code.require_file("../lib/factorial.ex", __DIR__)
+defmodule Factorial do
+  @moduledoc """
+  A simple module for calculating factorials.
+  """
+
+  def calculate(n) when is_integer(n) and n >= 0 do
+    do_calculate(n, 1)
+  end
+
+  def calculate(n) when is_integer(n) and n < 0 do
+    raise ArgumentError, "Cannot calculate factorial of negative number"
+  end
+
+  def calculate(_) do
+    raise ArgumentError, "Input must be an integer"
+  end
+
+  defp do_calculate(0, acc), do: acc
+  defp do_calculate(n, acc), do: do_calculate(n - 1, n * acc)
+end
 
 # Examples of calculating factorials
 IO.puts("Factorial examples:")

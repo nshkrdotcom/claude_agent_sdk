@@ -205,7 +205,6 @@ end
 ```
 lib/
 ├── claude_agent_sdk.ex              # Main API module
-├── factorial.ex                     # Example/utility module
 └── claude_agent_sdk/
     ├── abort_signal.ex
     ├── agent.ex
