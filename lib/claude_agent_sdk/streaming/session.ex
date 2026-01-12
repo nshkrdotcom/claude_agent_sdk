@@ -134,39 +134,57 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
     # Return stream that receives events
     Stream.resource(
-      fn -> {session, ref, :active} end,
+      fn -> {session, ref, :active, nil} end,
       fn state ->
-        {session, ref, status} = state
+        {session, ref, status, stop_reason} = state
 
         if status == :complete do
           {:halt, state}
         else
           receive do
             {:stream_event, ^ref, event} ->
-              # Check if this is a completion event
-              new_status =
-                case event.type do
-                  :message_stop -> :complete
-                  _ -> :active
+              # Track stop_reason from message_delta events to support multi-turn
+              # tool conversations. When stop_reason is "tool_use", we continue
+              # streaming to receive the tool result and Claude's follow-up response.
+              new_stop_reason =
+                case event do
+                  %{type: :message_delta, stop_reason: reason} when not is_nil(reason) ->
+                    reason
+
+                  _ ->
+                    stop_reason
                 end
 
-              {[event], {session, ref, new_status}}
+              # Only complete on message_stop if stop_reason is NOT "tool_use"
+              new_status =
+                case {event.type, new_stop_reason} do
+                  {:message_stop, "tool_use"} ->
+                    :active
+
+                  {:message_stop, _reason} ->
+                    :complete
+
+                  _ ->
+                    :active
+                end
+
+              {[event], {session, ref, new_status, new_stop_reason}}
 
             {:stream_error, ^ref, reason} ->
               error_event = %{type: :error, error: reason}
-              {[error_event], {session, ref, :complete}}
+              {[error_event], {session, ref, :complete, stop_reason}}
 
             {:stream_complete, ^ref} ->
-              {:halt, {session, ref, :complete}}
+              {:halt, {session, ref, :complete, stop_reason}}
           after
             @default_timeout ->
               Logger.warning("Streaming timeout after #{@default_timeout}ms")
               timeout_event = %{type: :error, error: :timeout}
-              {[timeout_event], {session, ref, :complete}}
+              {[timeout_event], {session, ref, :complete, stop_reason}}
           end
         end
       end,
-      fn {session, ref, _status} ->
+      fn {session, ref, _status, _stop_reason} ->
         # Unsubscribe on stream completion
         GenServer.cast(session, {:unsubscribe, ref})
       end
