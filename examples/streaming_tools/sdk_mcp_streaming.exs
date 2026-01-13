@@ -129,7 +129,12 @@ defmodule SDKMCPStreamingExample do
       mcp_servers: %{"math-tools" => server},
       model: "haiku",
       max_turns: 2,
-      allowed_tools: []
+      allowed_tools: [
+        "mcp__math-tools__add",
+        "mcp__math-tools__multiply",
+        "mcp__math-tools__factorial"
+      ],
+      permission_mode: :bypass_permissions
     }
 
     IO.puts("Starting streaming session with SDK MCP...\n")
@@ -138,6 +143,10 @@ defmodule SDKMCPStreamingExample do
     {:ok, session} = Streaming.start_session(options)
 
     try do
+      if not match?({:control_client, _pid}, session) do
+        raise "Expected control client session, got: #{inspect(session)}"
+      end
+
       IO.puts("✓ Session started (transport: control client with SDK MCP)\n")
       IO.puts("-" |> String.duplicate(70))
 
@@ -153,95 +162,108 @@ defmodule SDKMCPStreamingExample do
 
       # Track tool usage - SDK MCP tools emit tool_use_start but results come via
       # control protocol, not as streaming tool_complete events
-      {tool_use_starts, sdk_mcp_tools_used} =
+      summary =
         Streaming.send_message(session, prompt)
-        |> Enum.reduce_while({0, false}, fn event, {starts, sdk_mcp_used} ->
-          case event do
-            %{type: :text_delta, text: text} ->
-              IO.write(text)
-              {:cont, {starts, sdk_mcp_used}}
+        |> Enum.reduce_while(
+          %{
+            tool_use_starts: 0,
+            sdk_mcp_tools_used: false,
+            current_tool: nil,
+            tool_input: "",
+            current_block: nil,
+            message_complete: false
+          },
+          fn event, state ->
+            state = maybe_flush_tool_input(state, event)
 
-            %{type: :tool_use_start, name: name} ->
-              # Check if this is an SDK MCP tool (prefixed with mcp__)
-              is_sdk_mcp = String.starts_with?(name, "mcp__")
-              IO.puts("\n\n🛠️  Executing SDK MCP tool: #{name}")
-              {:cont, {starts + 1, sdk_mcp_used or is_sdk_mcp}}
+            case event do
+              %{type: :text_delta, text: text} ->
+                IO.write(text)
+                {:cont, state}
 
-            %{type: :tool_input_delta, json: json} ->
-              if String.trim(json) != "" do
-                IO.write("   Input: #{json}")
-              end
+              %{type: :tool_use_start, name: name} ->
+                # Check if this is an SDK MCP tool (prefixed with mcp__)
+                is_sdk_mcp = String.starts_with?(name, "mcp__")
+                IO.puts("\n\n🛠️  Executing SDK MCP tool: #{name}")
 
-              {:cont, {starts, sdk_mcp_used}}
+                {:cont,
+                 %{
+                   state
+                   | tool_use_starts: state.tool_use_starts + 1,
+                     sdk_mcp_tools_used: state.sdk_mcp_tools_used or is_sdk_mcp,
+                     current_tool: name,
+                     tool_input: "",
+                     current_block: :tool
+                 }}
 
-            %{type: :tool_complete, tool_name: name} ->
-              IO.puts("\n✅ Tool #{name} completed\n")
-              {:cont, {starts, sdk_mcp_used}}
+              %{type: :tool_input_delta, json: json} ->
+                {:cont, %{state | tool_input: state.tool_input <> json}}
 
-            %{type: :message_stop} ->
-              IO.puts("\n" <> ("-" |> String.duplicate(70)))
+              %{type: :text_block_start} ->
+                {:cont, %{state | current_block: :text}}
 
-              IO.puts(
-                "✓ Message complete (tool_use_start=#{starts}, sdk_mcp_used=#{sdk_mcp_used})"
-              )
+              %{type: :thinking_start} ->
+                {:cont, %{state | current_block: :thinking}}
 
-              {:halt, {starts, sdk_mcp_used}}
+              %{type: :content_block_stop} ->
+                next_state =
+                  if state.current_block == :tool do
+                    %{flush_tool_input(state) | current_block: nil, current_tool: nil}
+                  else
+                    %{state | current_block: nil}
+                  end
 
-            %{type: :error, error: error} ->
-              raise "Streaming error: #{inspect(error)}"
+                {:cont, next_state}
 
-            _ ->
-              {:cont, {starts, sdk_mcp_used}}
+              %{type: :tool_complete, tool_name: name} ->
+                IO.puts("\n✅ Tool #{name} completed\n")
+                {:cont, state}
+
+              %{type: :message_stop} ->
+                final_state = %{
+                  flush_tool_input(state)
+                  | message_complete: true,
+                    current_tool: nil
+                }
+
+                IO.puts("\n" <> ("-" |> String.duplicate(70)))
+
+                IO.puts(
+                  "✓ Message complete (tool_use_start=#{final_state.tool_use_starts}, sdk_mcp_used=#{final_state.sdk_mcp_tools_used})"
+                )
+
+                {:halt, final_state}
+
+              %{type: :error, error: error} ->
+                raise "Streaming error: #{inspect(error)}"
+
+              _ ->
+                {:cont, state}
+            end
           end
-        end)
+        )
 
-      # SDK MCP tools are considered used if we saw mcp__* prefixed tool names
-      cond do
-        tool_use_starts < 1 ->
-          cli_version =
-            case ClaudeAgentSDK.CLI.version() do
-              {:ok, v} -> v
-              _ -> "unknown"
-            end
-
-          IO.puts("\n⚠️  Warning: Claude did not use any tools.")
-
-          IO.puts(
-            "   This may indicate the CLI (v#{cli_version}) does not fully support SDK MCP servers."
-          )
-
-          IO.puts("   The SDK sent sdkMcpServers in the initialize request, but the CLI")
-          IO.puts("   did not query the SDK for tools/list.")
-          IO.puts("\n   This is a known limitation - SDK MCP support requires CLI updates.")
-
-        not sdk_mcp_tools_used ->
-          # Claude used tools but none were SDK MCP tools (mcp__* prefix)
-          cli_version =
-            case ClaudeAgentSDK.CLI.version() do
-              {:ok, v} -> v
-              _ -> "unknown"
-            end
-
-          IO.puts(
-            "\n⚠️  Warning: Claude used built-in tools (like Task) instead of SDK MCP tools."
-          )
-
-          IO.puts(
-            "   This may indicate the CLI (v#{cli_version}) does not fully support SDK MCP servers."
-          )
-
-          IO.puts("   The SDK sent sdkMcpServers in the initialize request, but the CLI")
-          IO.puts("   did not recognize them as available tools.")
-          IO.puts("\n   This is a known limitation - SDK MCP support requires CLI updates.")
-
-        true ->
-          :ok
+      if not summary.message_complete do
+        raise "Stream ended without message_stop."
       end
 
+      if summary.tool_use_starts < 1 do
+        raise "Expected at least one tool_use_start event, but observed none."
+      end
+
+      if not summary.sdk_mcp_tools_used do
+        raise "Expected SDK MCP tools to be used, but observed none."
+      end
+
+      if String.trim(summary.tool_input) != "" do
+        raise "Incomplete tool input JSON observed: #{inspect(summary.tool_input)}"
+      end
+
+      # SDK MCP tools are considered used if we saw mcp__* prefixed tool names
       IO.puts("\n" <> ("=" |> String.duplicate(70)))
       IO.puts("✓ Session closed\n")
 
-      if sdk_mcp_tools_used do
+      if summary.sdk_mcp_tools_used do
         IO.puts("=" |> String.duplicate(70))
         IO.puts("\nKey Features Demonstrated:")
         IO.puts("  - Streaming with SDK MCP servers")
@@ -261,6 +283,43 @@ defmodule SDKMCPStreamingExample do
       end
     after
       Streaming.close_session(session)
+    end
+  end
+
+  defp maybe_flush_tool_input(state, %{type: :tool_use_start}) do
+    state = flush_tool_input(state)
+
+    if String.trim(state.tool_input) != "" do
+      raise "Incomplete tool input JSON before next tool: #{inspect(state.tool_input)}"
+    end
+
+    state
+  end
+
+  defp maybe_flush_tool_input(state, _event), do: state
+
+  defp flush_tool_input(%{tool_input: input} = state) do
+    trimmed = String.trim(input)
+
+    if trimmed == "" do
+      state
+    else
+      case Jason.decode(trimmed) do
+        {:ok, value} ->
+          formatted = Jason.encode!(value)
+
+          label =
+            case state.current_tool do
+              nil -> "   Input: "
+              tool_name -> "   Input (#{tool_name}): "
+            end
+
+          IO.puts("\n#{label}#{formatted}")
+          %{state | tool_input: ""}
+
+        {:error, _} ->
+          state
+      end
     end
   end
 end

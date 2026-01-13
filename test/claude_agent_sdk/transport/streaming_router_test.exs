@@ -183,6 +183,16 @@ defmodule ClaudeAgentSDK.Transport.StreamingRouterTest do
       assert :control_client = StreamingRouter.select_transport(opts)
     end
 
+    test "delegate mode → control client" do
+      opts = %Options{permission_mode: :delegate}
+      assert :control_client = StreamingRouter.select_transport(opts)
+    end
+
+    test "dont_ask mode → control client" do
+      opts = %Options{permission_mode: :dont_ask}
+      assert :control_client = StreamingRouter.select_transport(opts)
+    end
+
     test "default mode → CLI-only" do
       opts = %Options{permission_mode: :default}
       assert :streaming_session = StreamingRouter.select_transport(opts)

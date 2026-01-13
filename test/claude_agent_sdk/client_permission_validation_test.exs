@@ -38,5 +38,7 @@ defmodule ClaudeAgentSDK.ClientPermissionValidationTest do
 
     state = :sys.get_state(client)
     assert state.options.permission_prompt_tool == "stdio"
+    assert state.options.permission_mode == nil
+    assert state.options.include_partial_messages == true
   end
 end

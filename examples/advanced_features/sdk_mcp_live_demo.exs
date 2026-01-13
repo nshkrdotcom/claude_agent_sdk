@@ -168,21 +168,7 @@ try do
       raise "Query did not complete successfully (result subtype: #{inspect(summary.result_subtype)})"
 
     summary.tool_uses == 0 ->
-      cli_version =
-        case ClaudeAgentSDK.CLI.version() do
-          {:ok, v} -> v
-          _ -> "unknown"
-        end
-
-      IO.puts("\n⚠️  Warning: Claude did not use the SDK MCP tools.")
-
-      IO.puts(
-        "   This may indicate the CLI (v#{cli_version}) does not fully support SDK MCP servers."
-      )
-
-      IO.puts("   The SDK sent sdkMcpServers in the initialize request, but the CLI")
-      IO.puts("   did not query the SDK for tools/list.")
-      IO.puts("\n   This is a known limitation - SDK MCP support requires CLI updates.")
+      raise "Expected Claude to use SDK MCP tools, but observed none."
 
     summary.tool_results == 0 and summary.tool_uses > 0 ->
       raise "No MCP tool_result blocks observed; expected at least one SDK MCP tool result."

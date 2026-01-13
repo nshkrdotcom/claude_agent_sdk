@@ -75,6 +75,8 @@ examples=(
   "examples/advanced_features/web_tools_live.exs"
   "examples/streaming_tools/quick_demo.exs"
   "examples/streaming_tools/sdk_mcp_streaming.exs"
+  "examples/streaming_tools/stop_reason_probe.exs"
+  "examples/streaming_tools/multi_turn_tool_streaming_session.exs"
   "examples/hooks/context_injection.exs"
   "examples/hooks/basic_bash_blocking.exs"
   "examples/hooks/file_policy_enforcement.exs"
@@ -87,25 +89,26 @@ examples=(
   "examples/filesystem_agents_live.exs"
 )
 
+failures=()
+
 for ex in "${examples[@]}"; do
   echo ""
   echo "==> mix run $ex"
   if command -v stty >/dev/null 2>&1; then
     stty sane >/dev/null 2>&1 || true
   fi
+  rc=0
   if command -v timeout >/dev/null 2>&1; then
     # Use --foreground to avoid process group issues with :erlang.halt
-    if ! timeout --foreground "${EXAMPLE_TIMEOUT_SECONDS}s" mix run "$ex"; then
-      rc=$?
-      echo "ERROR: example failed (exit=$rc): $ex" >&2
-      exit "$rc"
-    fi
+    timeout --foreground "${EXAMPLE_TIMEOUT_SECONDS}s" mix run "$ex" || rc=$?
   else
-    if ! mix run "$ex"; then
-      rc=$?
-      echo "ERROR: example failed (exit=$rc): $ex" >&2
-      exit "$rc"
-    fi
+    mix run "$ex" || rc=$?
+  fi
+
+  if [[ "$rc" -ne 0 ]]; then
+    echo "ERROR: example failed (exit=$rc): $ex" >&2
+    failures+=("$ex (exit=$rc)")
+    continue
   fi
   if command -v stty >/dev/null 2>&1; then
     stty sane >/dev/null 2>&1 || true
@@ -115,4 +118,12 @@ for ex in "${examples[@]}"; do
 done
 
 echo ""
+if (( ${#failures[@]} > 0 )); then
+  echo "Examples failed:"
+  for ex in "${failures[@]}"; do
+    echo "  - $ex"
+  done
+  exit 1
+fi
+
 echo "All examples completed."

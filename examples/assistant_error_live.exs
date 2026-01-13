@@ -43,7 +43,7 @@ defmodule AssistantErrorLiveExample do
         IO.puts("Partial/streamed text:\n#{final_text}\n")
 
       {:error, reason} ->
-        IO.puts("Streaming error: #{inspect(reason)}\n")
+        raise "Streaming error: #{inspect(reason)}"
     end
 
     inspect_messages()
@@ -86,6 +86,12 @@ defmodule AssistantErrorLiveExample do
     messages =
       ClaudeAgentSDK.query(prompt(), %{@options | include_partial_messages: nil})
       |> Enum.to_list()
+
+    case Enum.find(messages, &(&1.type == :result)) do
+      %{subtype: :success} -> :ok
+      %{subtype: other} -> raise "Query did not succeed (result subtype: #{inspect(other)})"
+      nil -> raise "No result message returned."
+    end
 
     assistant_error =
       Enum.find_value(messages, fn

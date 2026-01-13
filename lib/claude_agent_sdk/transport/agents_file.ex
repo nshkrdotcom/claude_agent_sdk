@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSDK.Transport.AgentsFile do
   @moduledoc false
 
-  require Logger
+  alias ClaudeAgentSDK.Log, as: Logger
 
   @windows_cmd_length_limit 8_000
   @default_cmd_length_limit 100_000

@@ -49,7 +49,7 @@ defmodule ClaudeAgentSDK.SessionStore do
   """
 
   use GenServer
-  require Logger
+  alias ClaudeAgentSDK.Log, as: Logger
 
   @default_storage_dir Path.expand("~/.claude_sdk/sessions")
   @max_age_days 30

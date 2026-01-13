@@ -3,7 +3,8 @@ import Config
 # Default configuration
 config :claude_agent_sdk,
   use_mock: false,
-  build_env: config_env()
+  build_env: config_env(),
+  log_level: :warning
 
 # Logger metadata used throughout the SDK (Credo strict compliance).
 config :logger, :console,

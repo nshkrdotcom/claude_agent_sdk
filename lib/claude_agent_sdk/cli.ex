@@ -7,7 +7,7 @@ defmodule ClaudeAgentSDK.CLI do
   warning when the detected version is below the supported minimum.
   """
 
-  require Logger
+  alias ClaudeAgentSDK.Log, as: Logger
 
   @minimum_version "2.0.0"
   @recommended_version "2.0.75"

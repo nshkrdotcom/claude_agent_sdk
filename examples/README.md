@@ -38,6 +38,8 @@ bash examples/run_all.sh
 ```
 
 Sets `CLAUDE_EXAMPLES_FORCE_HALT=true` to ensure each script exits cleanly.
+The runner continues after failures and prints a summary at the end (non-zero exit
+if any example failed).
 
 ### Run Individual Examples
 
@@ -62,7 +64,7 @@ mix run examples/basic_example.exs
 | Example | Description |
 |---------|-------------|
 | `advanced_features/agents_live.exs` | Multi-agent workflow via `resume/3` |
-| `advanced_features/permissions_live.exs` | Tool permission callback (`can_use_tool`) |
+| `advanced_features/permissions_live.exs` | Tool permission callback (`can_use_tool`), fails if CLI doesn't emit control callbacks |
 | `advanced_features/sdk_mcp_live_demo.exs` | SDK MCP tools invoked in-process |
 | `advanced_features/subagent_spawning_live.exs` | Parallel subagent spawning (research-agent pattern) |
 | `advanced_features/web_tools_live.exs` | WebSearch and WebFetch for web access |
@@ -74,6 +76,8 @@ mix run examples/basic_example.exs
 | `streaming_tools/quick_demo.exs` | Minimal streaming session |
 | `streaming_tools/sdk_mcp_streaming.exs` | Streaming with SDK MCP tools |
 | `streaming_tools/basic_streaming_with_hooks.exs` | Streaming API with hooks |
+| `streaming_tools/stop_reason_probe.exs` | Control client probe for stop_reason emission across tool_use and end_turn |
+| `streaming_tools/multi_turn_tool_streaming_session.exs` | Session path multi-turn tool streaming example (raises if stream ends after tool_use) |
 
 ### Hooks
 

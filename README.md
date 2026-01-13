@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.7.6"}
+    {:claude_agent_sdk, "~> 0.8.0"}
   ]
 end
 ```
@@ -293,11 +293,11 @@ end
 
 opts = %Options{
   can_use_tool: permission_callback,
-  permission_mode: :default  # :default | :accept_edits | :plan | :bypass_permissions
+  permission_mode: :default  # :default | :accept_edits | :plan | :bypass_permissions | :delegate | :dont_ask
 }
 ```
 
-Note: `can_use_tool` with `query/2` requires streaming prompts (Enumerable) and is mutually exclusive with `permission_prompt_tool` (auto-set to `"stdio"`).
+Note: `can_use_tool` is mutually exclusive with `permission_prompt_tool`. The SDK routes `can_use_tool` through the control client (including string prompts), auto-enables `include_partial_messages`, and sets `permission_prompt_tool` to `\"stdio\"` internally so the CLI can emit permission callbacks. Use `:default` or `:plan` for built-in tool permissions; `:delegate` is intended for external tool execution. Hook-based fallback only applies in non-`:delegate` modes and ignores `updated_permissions`. If you do not see callbacks, your CLI build may not emit control callbacks (see `examples/advanced_features/permissions_live.exs`).
 
 Stream a single client response until the final result:
 
@@ -358,7 +358,7 @@ Key options for `ClaudeAgentSDK.Options`:
 | `system_prompt` | string | Custom system instructions |
 | `output_format` | atom/map | `:text`, `:json`, `:stream_json`, or JSON schema (SDK enforces stream-json for transport; JSON schema still passed) |
 | `allowed_tools` | list | Tools Claude can use |
-| `permission_mode` | atom | `:default`, `:accept_edits`, `:plan`, `:bypass_permissions` |
+| `permission_mode` | atom | `:default`, `:accept_edits`, `:plan`, `:bypass_permissions`, `:delegate`, `:dont_ask` |
 | `hooks` | map | Lifecycle hook callbacks |
 | `mcp_servers` | map or string | MCP server configurations (or JSON/path alias for `mcp_config`) |
 | `cwd` | string | Working directory for file operations |
@@ -366,6 +366,14 @@ Key options for `ClaudeAgentSDK.Options`:
 | `max_buffer_size` | integer | Maximum JSON buffer size (default: 1MB, overflow yields `CLIJSONDecodeError`) |
 
 CLI path override: set `path_to_claude_code_executable` or `executable` in `Options` (Python `cli_path` equivalent).
+
+### SDK Logging
+
+The SDK uses its own log level filter (default: `:warning`) to keep output quiet in dev. Configure via application env:
+
+```elixir
+config :claude_agent_sdk, log_level: :warning  # :debug | :info | :warning | :error | :off
+```
 
 ### Option Presets
 

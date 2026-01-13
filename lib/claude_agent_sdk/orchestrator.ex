@@ -38,7 +38,7 @@ defmodule ClaudeAgentSDK.Orchestrator do
       )
   """
 
-  require Logger
+  alias ClaudeAgentSDK.Log, as: Logger
 
   alias ClaudeAgentSDK.{ContentExtractor, Message}
 

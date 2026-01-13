@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-01-12
+
+### Added
+
+- **Streaming Termination Logic**: Added `ClaudeAgentSDK.Streaming.Termination` for shared stop_reason tracking with message_start resets.
+- **Session Test Injection**: Added `mock_stream` support and `Session.push_events/2` for deterministic session streaming tests.
+- **Streaming Tests**: Added unit tests for termination logic and multi-turn tool streaming coverage across session and control client paths.
+- **Streaming Examples**: Added live examples for stop_reason probing and session-path multi-turn tool streaming.
+- **SDK Log Level**: Added `ClaudeAgentSDK.Log` with configurable `log_level` (default: `:warning`) for SDK-scoped log filtering.
+- **Permission Modes**: Added `:delegate` and `:dont_ask` permission modes for parity with the current Claude CLI.
+
+### Changed
+
+- **Logging Defaults**: SDK logging now respects `:log_level` configuration for quieter default output.
+- **Examples Index**: Updated `examples/run_all.sh` and `examples/README.md` to include the new streaming examples.
+- **Live Examples**: Streaming/tool demos now fail fast when required tool calls or outputs are missing.
+- **Streaming Partials**: `can_use_tool` now enables `include_partial_messages` to surface tool events during streaming.
+- **Permission Prompt Tool**: `can_use_tool` now auto-configures `permission_prompt_tool` to `\"stdio\"` for control-protocol callbacks (parity with Python SDK).
+
+### Fixed
+
+- **Multi-Turn Tool Streaming**: Streams now continue after `message_stop` with `stop_reason: "tool_use"` in both control client and session paths.
+- **Control Client Init**: Streaming now waits for control client initialization before sending messages to avoid dropped callbacks.
+- **Stop Reason Staleness**: Stop reasons reset on `message_start` to avoid stale `tool_use` carryover across messages.
+- **SDK MCP Streaming Output**: Tool input deltas are now rendered coherently instead of repeated partial lines.
+- **Permission Callback Bridge**: Permission callbacks now run via PreToolUse hooks when the CLI does not emit `can_use_tool` requests (with `updated_permissions` ignored in that path and disabled in `:delegate`).
+
 ## [0.7.6] - 2026-01-07
 
 ### Added
@@ -1013,7 +1040,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.6...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.6...v0.8.0
 [0.7.7]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.3...v0.7.4

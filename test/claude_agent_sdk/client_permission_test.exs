@@ -143,7 +143,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
 
       MockTransport.push_message(transport_pid, Jason.encode!(init_response))
 
-      for mode <- [:plan, :accept_edits, :bypass_permissions, :default] do
+      for mode <- [:plan, :accept_edits, :bypass_permissions, :default, :delegate, :dont_ask] do
         task = Task.async(fn -> Client.set_permission_mode(client, mode) end)
 
         assert_receive {:mock_transport_send, set_mode_json}, 200

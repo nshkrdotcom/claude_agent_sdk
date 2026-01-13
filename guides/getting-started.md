@@ -103,7 +103,7 @@ Add `claude_agent_sdk` to your Mix dependencies in `mix.exs`:
 ```elixir
 defp deps do
   [
-    {:claude_agent_sdk, "~> 0.7.6"}
+    {:claude_agent_sdk, "~> 0.8.0"}
   ]
 end
 ```
@@ -553,7 +553,7 @@ Once comfortable with the basics, explore:
    }
    ```
 
-   `can_use_tool` with `query/2` requires streaming prompts (Enumerable) and is mutually exclusive with `permission_prompt_tool`.
+   `can_use_tool` routes `query/2` through the control client (string or streaming prompts), enables `include_partial_messages`, and is mutually exclusive with `permission_prompt_tool` (the SDK sets it to `"stdio"` internally). Use `:default` for built-in tool permissions.
 
 ### Getting Help
 

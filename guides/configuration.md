@@ -96,6 +96,8 @@ ClaudeAgentSDK.query("Refactor this code for better performance", options)
 | `permission_prompt_tool` | `String.t()` | `nil` | Tool for permission prompts |
 | `can_use_tool` | `function()` | `nil` | Permission callback function |
 
+Note: when `can_use_tool` is set, the SDK enables `include_partial_messages` and sets `permission_prompt_tool` to `"stdio"` internally.
+
 ### MCP Options
 
 | Field | Type | Default | Description |
@@ -135,7 +137,7 @@ ClaudeAgentSDK.query("Refactor this code for better performance", options)
 | `max_budget_usd` | `number()` | `nil` | Maximum budget in USD |
 | `enable_file_checkpointing` | `boolean()` | `nil` | Enable file checkpointing and rewind |
 
-### Streaming Options (v0.6.0+)
+### Streaming Options (v0.8.0+)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -791,7 +793,8 @@ config :claude_agent_sdk,
   auth_storage: :file,                    # :file | :application_env | :custom
   auth_file_path: "~/.claude_sdk/token.json",
   auto_refresh: true,
-  refresh_before_expiry: 86_400_000       # 1 day in ms
+  refresh_before_expiry: 86_400_000,      # 1 day in ms
+  log_level: :warning                     # :debug | :info | :warning | :error
 ```
 
 ### Authentication by Provider
@@ -894,14 +897,19 @@ Control how tool permissions are handled.
 
 | Mode | Description |
 |------|-------------|
-| `:default` | All tools go through permission callback |
+| `:default` | CLI default permission flow |
+| `:delegate` | Delegate tool execution to SDK |
 | `:accept_edits` | Edit operations auto-allowed |
 | `:plan` | Creates plan, shows to user, executes after approval |
 | `:bypass_permissions` | All tools allowed without callback |
+| `:dont_ask` | No permission prompts; tools proceed |
 
 ```elixir
-# Default - manual approval for each tool
+# Default - CLI handles permissions
 %Options{permission_mode: :default}
+
+# Delegate - SDK callback controls permissions
+%Options{permission_mode: :delegate}
 
 # Accept edits - auto-approve file modifications
 %Options{permission_mode: :accept_edits}
@@ -911,6 +919,9 @@ Control how tool permissions are handled.
 
 # Bypass - no permissions (use with caution)
 %Options{permission_mode: :bypass_permissions}
+
+# Dont ask - no permission prompts
+%Options{permission_mode: :dont_ask}
 ```
 
 ### Custom Permission Callback
@@ -945,9 +956,11 @@ options = %Options{
 }
 ```
 
+Note: `can_use_tool` enables `include_partial_messages` and sets `permission_prompt_tool` to `"stdio"` internally. Hook fallback only applies in non-`:delegate` modes and ignores `updated_permissions`.
+
 ---
 
-## Transport Configuration (v0.6.0+)
+## Transport Configuration (v0.8.0+)
 
 The SDK automatically selects the appropriate transport based on configured features.
 

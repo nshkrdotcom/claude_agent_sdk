@@ -53,8 +53,23 @@ defmodule FilesystemAgentsLive do
       IO.inspect(Enum.map(messages, & &1.type), label: "Message types")
 
       init = Enum.find(messages, &(&1.type == :system and &1.subtype == :init))
+      result = Enum.find(messages, &(&1.type == :result))
+
+      case result do
+        %{subtype: :success} -> :ok
+        %{subtype: other} -> raise "Query did not succeed (result subtype: #{inspect(other)})"
+        nil -> raise "No result message returned."
+      end
+
+      if is_nil(init) do
+        raise "No init message observed."
+      end
 
       IO.inspect(init.raw["agents"], label: ~s(init.raw["agents"]))
+
+      if not Enum.member?(init.raw["agents"] || [], "fs-test-agent") do
+        raise "Filesystem agent not found in init agents list."
+      end
 
       assistant_text =
         messages
@@ -62,9 +77,11 @@ defmodule FilesystemAgentsLive do
         |> Enum.map(&ContentExtractor.extract_text/1)
         |> Enum.reject(&(&1 in [nil, ""]))
 
-      if assistant_text != [] do
-        IO.puts("Assistant: #{Enum.join(assistant_text, "\n")}")
+      if assistant_text == [] do
+        raise "No assistant text returned."
       end
+
+      IO.puts("Assistant: #{Enum.join(assistant_text, "\n")}")
     after
       Process.sleep(100)
       File.rm_rf!(demo_dir)
