@@ -25,7 +25,7 @@ defmodule ClaudeAgentSDK.Tool.Registry do
   """
 
   use GenServer
-  require Logger
+  alias ClaudeAgentSDK.Log, as: Logger
 
   @type tool_name :: String.t() | atom()
 

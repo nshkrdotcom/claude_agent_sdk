@@ -29,10 +29,10 @@ defmodule ClaudeAgentSDK.Options do
   - `timeout_ms` - Command execution timeout in milliseconds (integer, default: 4_500_000)
   - `sandbox` - Sandbox settings merged into `--settings` JSON when present (Python v0.1.12+)
   - `enable_file_checkpointing` - Enables file checkpointing + `rewind_files` (Python v0.1.15+)
-  - `include_partial_messages` - Enable character-level streaming (boolean) (v0.6.0+)
-  - `preferred_transport` - Override automatic transport selection (`:auto | :cli | :control`) (v0.6.0+)
+  - `include_partial_messages` - Enable character-level streaming (boolean) (v0.8.0+)
+  - `preferred_transport` - Override automatic transport selection (`:auto | :cli | :control`) (v0.8.0+)
 
-  ## Streaming + Tools (v0.6.0)
+  ## Streaming + Tools (v0.8.0)
 
   The SDK automatically selects the appropriate transport:
   - **CLI-only**: Fast streaming without control features (no hooks, MCP, or permissions)
@@ -60,7 +60,7 @@ defmodule ClaudeAgentSDK.Options do
         cwd: "/path/to/project"
       }
 
-      # Streaming with tools (v0.6.0)
+      # Streaming with tools (v0.8.0)
       %ClaudeAgentSDK.Options{
         include_partial_messages: true,
         hooks: %{pre_tool_use: [...]},
@@ -129,7 +129,7 @@ defmodule ClaudeAgentSDK.Options do
     :timeout_ms,
     # File checkpointing (Python v0.1.15+)
     :enable_file_checkpointing,
-    # Streaming + Tools (v0.6.0)
+    # Streaming + Tools (v0.8.0)
     # Enable character-level streaming with --include-partial-messages
     :include_partial_messages,
     # Override automatic transport selection
@@ -154,7 +154,8 @@ defmodule ClaudeAgentSDK.Options do
             }
 
   @type output_format :: :text | :json | :stream_json | structured_output_format()
-  @type permission_mode :: :default | :accept_edits | :bypass_permissions | :plan
+  @type permission_mode ::
+          :default | :accept_edits | :bypass_permissions | :plan | :delegate | :dont_ask
   @type model_name :: String.t()
   @type agent_name :: atom()
   @type agent_definition :: ClaudeAgentSDK.Agent.t()
@@ -798,6 +799,7 @@ defmodule ClaudeAgentSDK.Options do
       case mode do
         :accept_edits -> "acceptEdits"
         :bypass_permissions -> "bypassPermissions"
+        :dont_ask -> "dontAsk"
         other -> to_string(other)
       end
 

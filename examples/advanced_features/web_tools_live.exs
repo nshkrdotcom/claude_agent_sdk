@@ -6,7 +6,7 @@
 # Run: mix run examples/advanced_features/web_tools_live.exs
 #
 # NOTE: Web search requires an API key with web search enabled.
-# If web search is not available, Claude will indicate this in the response.
+# This example fails if the WebSearch tool is not available.
 
 Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
 
@@ -120,10 +120,10 @@ case Enum.find(messages, &(&1.type == :result)) do
     IO.puts("\n[ok] Query completed successfully")
 
   %{subtype: subtype} ->
-    IO.puts("\n[warn] Query completed with status: #{inspect(subtype)}")
+    raise "Query completed with status: #{inspect(subtype)}"
 
   nil ->
-    IO.puts("\n[warn] No result message found")
+    raise "No result message found"
 end
 
 # Display web tool tracking summary
@@ -134,34 +134,33 @@ web_calls =
 IO.puts("\nWeb Tools Usage Summary:")
 IO.puts(String.duplicate("-", 60))
 
-if length(web_calls) > 0 do
-  search_count = Enum.count(web_calls, &(&1.tool == "WebSearch"))
-  fetch_count = Enum.count(web_calls, &(&1.tool == "WebFetch"))
-
-  IO.puts("Total web tool calls: #{length(web_calls)}")
-  IO.puts("  - WebSearch calls: #{search_count}")
-  IO.puts("  - WebFetch calls: #{fetch_count}")
-  IO.puts("")
-
-  Enum.each(web_calls, fn call ->
-    detail =
-      case call.details.type do
-        :search -> call.details.query
-        :fetch -> call.details.url
-      end
-
-    IO.puts("  #{call.tool}: #{String.slice(detail, 0..60)}")
-  end)
-
-  IO.puts("\n[ok] Successfully demonstrated web tools!")
-else
-  IO.puts("No web tool calls were made.")
-  IO.puts("Possible reasons:")
-  IO.puts("  - Web search may not be enabled for your API key")
-  IO.puts("  - Claude may have answered from training data")
-  IO.puts("  - The tools may require specific API permissions")
-  IO.puts("\nTo enable web search, ensure your API key has web search access.")
+if length(web_calls) == 0 do
+  raise "No web tool calls were made."
 end
+
+search_count = Enum.count(web_calls, &(&1.tool == "WebSearch"))
+fetch_count = Enum.count(web_calls, &(&1.tool == "WebFetch"))
+
+if search_count < 1 do
+  raise "Expected at least one WebSearch call, observed none."
+end
+
+IO.puts("Total web tool calls: #{length(web_calls)}")
+IO.puts("  - WebSearch calls: #{search_count}")
+IO.puts("  - WebFetch calls: #{fetch_count}")
+IO.puts("")
+
+Enum.each(web_calls, fn call ->
+  detail =
+    case call.details.type do
+      :search -> call.details.query
+      :fetch -> call.details.url
+    end
+
+  IO.puts("  #{call.tool}: #{String.slice(detail, 0..60)}")
+end)
+
+IO.puts("\n[ok] Successfully demonstrated web tools!")
 
 IO.puts(String.duplicate("-", 60))
 

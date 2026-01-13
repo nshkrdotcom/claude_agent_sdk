@@ -22,8 +22,6 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   See: https://docs.anthropic.com/en/docs/claude-code/sdk
   """
 
-  require Logger
-
   @typedoc """
   Request ID for tracking control protocol requests.
   """

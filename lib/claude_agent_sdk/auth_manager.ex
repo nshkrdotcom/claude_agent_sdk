@@ -35,7 +35,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   """
 
   use GenServer
-  require Logger
+  alias ClaudeAgentSDK.Log, as: Logger
 
   alias ClaudeAgentSDK.Auth.{Provider, TokenStore}
 

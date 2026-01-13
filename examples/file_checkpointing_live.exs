@@ -42,14 +42,16 @@ defmodule FileCheckpointingLive do
       run_step(
         client,
         "Create the file at #{file_path} with the single line: one. Use that exact path. Then say done.",
-        file_path
+        file_path,
+        "one"
       )
 
     _ =
       run_step(
         client,
         "Replace the file at #{file_path} so it contains the single line: two. Use that exact path. Then say done.",
-        file_path
+        file_path,
+        "two"
       )
 
     attempt_rewind(client, checkpoint_id, file_path)
@@ -57,7 +59,7 @@ defmodule FileCheckpointingLive do
     if Process.alive?(client), do: Client.stop(client)
   end
 
-  defp run_step(client, prompt, file_path) do
+  defp run_step(client, prompt, file_path, expected_contents) do
     task =
       Task.async(fn ->
         Client.stream_messages(client)
@@ -96,6 +98,12 @@ defmodule FileCheckpointingLive do
     user_message_id = Task.await(task, 180_000)
 
     print_file(file_path, "demo.txt after step")
+    assert_file_contents!(file_path, expected_contents)
+
+    if is_nil(user_message_id) do
+      raise "No user_message_id captured for checkpointing."
+    end
+
     user_message_id
   end
 
@@ -114,6 +122,30 @@ defmodule FileCheckpointingLive do
     |> Enum.uniq()
   end
 
+  defp attempt_rewind(_client, nil, file_path) do
+    raise """
+    No user_message_id found in incoming frames.
+
+    The CLI should emit a per-user-message UUID (when `--replay-user-messages` is enabled),
+    which the SDK parses into `%ClaudeAgentSDK.Message{type: :user}.data.uuid`.
+
+    Inspect `%ClaudeAgentSDK.Message{type: :user}.raw` while running this example to find the correct ID field
+    to pass to Client.rewind_files/2.
+    """
+  end
+
+  defp attempt_rewind(client, user_message_id, file_path) when is_binary(user_message_id) do
+    IO.puts("Rewinding files to user_message_id: #{user_message_id}")
+    result = Client.rewind_files(client, user_message_id)
+    IO.inspect(result, label: "rewind_files result")
+
+    if result != :ok do
+      raise "rewind_files failed: #{inspect(result)}"
+    end
+
+    assert_file_missing!(file_path)
+  end
+
   defp print_file(path, label) do
     case File.read(path) do
       {:ok, contents} ->
@@ -124,24 +156,26 @@ defmodule FileCheckpointingLive do
     end
   end
 
-  defp attempt_rewind(_client, nil, file_path) do
-    IO.puts("""
-    No user_message_id found in incoming frames.
+  defp assert_file_contents!(path, expected) do
+    case File.read(path) do
+      {:ok, contents} ->
+        if String.trim(contents) != expected do
+          raise "Unexpected file contents at #{path}: #{inspect(contents)}"
+        end
 
-    The CLI should emit a per-user-message UUID (when `--replay-user-messages` is enabled),
-    which the SDK parses into `%ClaudeAgentSDK.Message{type: :user}.data.uuid`.
-
-    Inspect `%ClaudeAgentSDK.Message{type: :user}.raw` while running this example to find the correct ID field
-    to pass to Client.rewind_files/2.
-    """)
-
-    print_file(file_path, "demo.txt after rewind (skipped)")
+      {:error, reason} ->
+        raise "Expected file at #{path}, but read failed: #{inspect(reason)}"
+    end
   end
 
-  defp attempt_rewind(client, user_message_id, file_path) when is_binary(user_message_id) do
-    IO.puts("Rewinding files to user_message_id: #{user_message_id}")
-    IO.inspect(Client.rewind_files(client, user_message_id), label: "rewind_files result")
-    print_file(file_path, "demo.txt after rewind")
+  defp assert_file_missing!(path) do
+    case File.read(path) do
+      {:ok, contents} ->
+        raise "Expected file to be missing after rewind, but found: #{inspect(contents)}"
+
+      {:error, _reason} ->
+        IO.puts("demo.txt after rewind: :enoent")
+    end
   end
 
   defp normalize_display_newlines(text) when is_binary(text) do

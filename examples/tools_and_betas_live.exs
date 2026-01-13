@@ -30,25 +30,36 @@ defmodule ToolsAndBetasLive do
       "What tools do you have available? Just list them briefly.",
       options
     )
-    |> Enum.each(fn
-      %{type: :system, subtype: :init, data: %{tools: tools}} ->
+    |> Enum.reduce(nil, fn
+      %{type: :system, subtype: :init, data: %{tools: tools}}, acc ->
         sample = Enum.take(tools, 10)
         IO.puts("System tools (#{length(tools)}): #{inspect(sample)}")
+        acc
 
-      %{type: :assistant} = message ->
+      %{type: :assistant} = message, acc ->
         text = ContentExtractor.extract_text(message)
         if text != "", do: IO.puts("Assistant:\n#{display_text(text)}")
+        acc
 
-      %{type: :result} = message ->
+      %{type: :result} = message, _acc ->
         IO.puts("Result: #{message.subtype}")
 
         if Map.has_key?(message.data, :total_cost_usd) do
           IO.puts("Cost: $#{message.data.total_cost_usd}")
         end
 
-      _ ->
-        :ok
+        message.subtype
+
+      _message, acc ->
+        acc
     end)
+    |> case do
+      :success ->
+        :ok
+
+      other ->
+        raise "Tools example (#{label}) did not succeed (result subtype: #{inspect(other)})"
+    end
 
     IO.puts("")
   end

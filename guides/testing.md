@@ -543,7 +543,7 @@ defmodule MyApp.PermissionsTest do
       permission_mode: :default
     }
 
-    # can_use_tool with query requires streaming prompts
+    # can_use_tool with query uses the control client (string or streaming prompts)
     prompts = [
       %{"type" => "user", "message" => %{"role" => "user", "content" => "write a file"}}
     ]
@@ -561,7 +561,11 @@ end
 
 ```elixir
 %Options{
-  permission_mode: :default          # All tools go through callback
+  permission_mode: :default          # CLI default permission flow
+}
+
+%Options{
+  permission_mode: :delegate         # Delegate decisions to SDK callback
 }
 
 %Options{
@@ -574,6 +578,10 @@ end
 
 %Options{
   permission_mode: :bypass_permissions  # All tools allowed (use with caution)
+}
+
+%Options{
+  permission_mode: :dont_ask         # No permission prompts
 }
 ```
 

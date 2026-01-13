@@ -403,8 +403,13 @@ defmodule ClaudeAgentSDK.Streaming do
   defp stream_via_control_client(client, message) do
     {client_pid, ref} = Client.subscribe(client)
 
-    # Send message
-    :ok = Client.send_message(client_pid, message)
+    with :ok <- Client.await_initialized(client_pid),
+         :ok <- Client.send_message(client_pid, message) do
+      :ok
+    else
+      {:error, reason} ->
+        return_error_stream(client_pid, ref, reason)
+    end
 
     # Return stream that adapts client messages to events
     # State: {client_pid, ref, status, accumulated_text, stop_reason}
@@ -420,27 +425,14 @@ defmodule ClaudeAgentSDK.Streaming do
             receive do
               # Stream events from control client
               {:stream_event, ^ref, event} ->
-                # Track stop_reason from message_delta events
-                new_stop_reason =
-                  case event do
-                    %{type: :message_delta, stop_reason: reason} when not is_nil(reason) ->
-                      reason
+                {new_stop_reason, message_complete?} =
+                  ClaudeAgentSDK.Streaming.Termination.step(event, stop_reason)
 
-                    _ ->
-                      stop_reason
-                  end
-
-                # Only complete on message_stop if stop_reason is NOT "tool_use"
                 new_status =
-                  case {event.type, new_stop_reason} do
-                    {:message_stop, "tool_use"} ->
-                      :active
-
-                    {:message_stop, _reason} ->
-                      :complete
-
-                    _ ->
-                      :active
+                  if message_complete? do
+                    :complete
+                  else
+                    :active
                   end
 
                 new_accumulated = Map.get(event, :accumulated, accumulated)
@@ -460,6 +452,24 @@ defmodule ClaudeAgentSDK.Streaming do
         end
       end,
       fn {client, ref, _, _, _} ->
+        GenServer.cast(client, {:unsubscribe, ref})
+      end
+    )
+  end
+
+  defp return_error_stream(client, ref, reason) do
+    Stream.resource(
+      fn -> {client, ref, reason} end,
+      fn state ->
+        case state do
+          {:done, client, ref, _reason} ->
+            {:halt, {client, ref, :done}}
+
+          {client, ref, reason} ->
+            {[%{type: :error, error: reason}], {:done, client, ref, reason}}
+        end
+      end,
+      fn {client, ref, _} ->
         GenServer.cast(client, {:unsubscribe, ref})
       end
     )

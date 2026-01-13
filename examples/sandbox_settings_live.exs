@@ -64,26 +64,33 @@ defmodule SandboxSettingsLive do
 
     IO.puts("=== Live query with sandbox settings ===")
 
-    ClaudeAgentSDK.query(
-      "Say hello in one sentence.",
-      %Options{
-        model: "haiku",
-        max_turns: 1,
-        output_format: :stream_json,
-        sandbox: sandbox
-      }
-    )
-    |> Enum.each(fn
-      %{type: :assistant} = message ->
-        text = ContentExtractor.extract_text(message)
-        if text != "", do: IO.puts("Assistant: #{text}")
+    result_subtype =
+      ClaudeAgentSDK.query(
+        "Say hello in one sentence.",
+        %Options{
+          model: "haiku",
+          max_turns: 1,
+          output_format: :stream_json,
+          sandbox: sandbox
+        }
+      )
+      |> Enum.reduce(nil, fn
+        %{type: :assistant} = message, acc ->
+          text = ContentExtractor.extract_text(message)
+          if text != "", do: IO.puts("Assistant: #{text}")
+          acc
 
-      %{type: :result} = message ->
-        IO.puts("Result: #{message.subtype}")
+        %{type: :result} = message, _acc ->
+          IO.puts("Result: #{message.subtype}")
+          message.subtype
 
-      _ ->
-        :ok
-    end)
+        _message, acc ->
+          acc
+      end)
+
+    if result_subtype != :success do
+      raise "Sandbox query did not succeed (result subtype: #{inspect(result_subtype)})"
+    end
   end
 end
 

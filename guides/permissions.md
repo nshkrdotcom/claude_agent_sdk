@@ -19,21 +19,32 @@ The Claude Agent SDK for Elixir provides a comprehensive permission system for c
 
 ## Understanding Permission Modes
 
-The SDK supports four permission modes that control how tool permissions are handled. Set the mode using the `permission_mode` option:
+The SDK supports six permission modes that control how tool permissions are handled. Set the mode using the `permission_mode` option:
 
 ```elixir
 options = %ClaudeAgentSDK.Options{
-  permission_mode: :default  # or :accept_edits, :plan, :bypass_permissions
+  permission_mode: :default  # or :accept_edits, :plan, :bypass_permissions, :delegate, :dont_ask
 }
 ```
 
 ### `:default` Mode
 
-All tools go through the permission callback. This is the standard mode for production environments where you want full control over tool execution.
+The CLI uses its standard permission flow. For built-in tools, this is the recommended mode when using `can_use_tool`.
 
 ```elixir
 options = %ClaudeAgentSDK.Options{
   permission_mode: :default,
+  can_use_tool: &my_permission_callback/1
+}
+```
+
+### `:delegate` Mode
+
+Delegates tool execution to the SDK. Use this when you plan to execute tools yourself instead of the Claude CLI.
+
+```elixir
+options = %ClaudeAgentSDK.Options{
+  permission_mode: :delegate,
   can_use_tool: &my_permission_callback/1
 }
 ```
@@ -51,7 +62,7 @@ options = %ClaudeAgentSDK.Options{
 
 ### `:plan` Mode
 
-Claude creates a plan before execution, shows it to the user (or your callback), then executes after approval. This mode ensures the CLI issues `can_use_tool` permission requests for each tool use.
+Claude creates a plan before execution, shows it to the user, then executes after approval. For built-in tool decisions, prefer `:default`.
 
 ```elixir
 options = %ClaudeAgentSDK.Options{
@@ -70,14 +81,26 @@ options = %ClaudeAgentSDK.Options{
 }
 ```
 
+### `:dont_ask` Mode
+
+Disables permission prompts so tools proceed without callback involvement. Use with caution in trusted environments.
+
+```elixir
+options = %ClaudeAgentSDK.Options{
+  permission_mode: :dont_ask
+}
+```
+
 ### Comparison Table
 
 | Mode | Edit Tools | Other Tools | Use Case |
 |------|------------|-------------|----------|
-| `:default` | Callback | Callback | Production with full control |
+| `:default` | CLI flow | CLI flow | Built-in tool permissions |
+| `:delegate` | Callback | Callback | External tool execution |
 | `:accept_edits` | Auto-allow | Callback | Trusted file operations |
-| `:plan` | Callback | Callback | Review-before-execute workflows |
+| `:plan` | Plan + approval | Plan + approval | Review-before-execute workflows |
 | `:bypass_permissions` | Auto-allow | Auto-allow | Development/sandboxed |
+| `:dont_ask` | Auto-allow | Auto-allow | No prompt / headless flows |
 
 ---
 
@@ -86,8 +109,15 @@ options = %ClaudeAgentSDK.Options{
 The `can_use_tool` option accepts a callback function that receives a `Permission.Context` and returns a `Permission.Result`.
 
 Important constraints:
-- `can_use_tool` requires a streaming prompt (Enumerable) when used with `ClaudeAgentSDK.query/2`.
-- `can_use_tool` cannot be combined with `permission_prompt_tool`; the SDK auto-sets `permission_prompt_tool` to `"stdio"` for control protocol flows.
+- `can_use_tool` routes `query/2` through the control client (string or streaming prompts).
+- `can_use_tool` cannot be combined with `permission_prompt_tool`; the SDK sets `permission_prompt_tool` to `"stdio"` internally.
+- For built-in tool permissions, use `permission_mode: :default` or `:plan`.
+- `can_use_tool` enables `include_partial_messages` automatically so tool events stream to the SDK.
+- Hook-based fallback only applies in non-`:delegate` modes and ignores `updated_permissions`.
+
+### Troubleshooting Missing Callbacks
+
+If your callback never fires, the CLI may not be emitting `can_use_tool` or hook callbacks for tool use. This is a known behavior on some Claude CLI builds. Run `examples/advanced_features/permissions_live.exs` to verify your CLI and confirm the control protocol is emitting callbacks.
 
 ### Callback Signature
 
@@ -797,6 +827,9 @@ Tool Execution
 Response to User
 ```
 
+Note: Hook fallback only applies in non-`:delegate` modes. In `:delegate`, the
+permission callback only runs when the CLI emits `can_use_tool`.
+
 ### Combined Example
 
 ```elixir
@@ -1112,7 +1145,7 @@ end
 
 The Claude Agent SDK permission system provides:
 
-1. **Permission Modes** - Four modes for different security postures
+1. **Permission Modes** - Six modes for different security postures
 2. **Permission Callbacks** - Full control over tool execution
 3. **Context Information** - Complete visibility into tool requests
 4. **Result Types** - Allow, deny, or modify tool inputs

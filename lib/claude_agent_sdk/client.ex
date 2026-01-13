@@ -62,7 +62,7 @@ defmodule ClaudeAgentSDK.Client do
   """
 
   use GenServer
-  require Logger
+  alias ClaudeAgentSDK.Log, as: Logger
 
   alias ClaudeAgentSDK.{AbortSignal, CLI, Hooks, Message, Model, Options}
   alias ClaudeAgentSDK.ControlProtocol.Protocol
@@ -74,6 +74,7 @@ defmodule ClaudeAgentSDK.Client do
   @default_init_timeout_ms 60_000
   @default_control_request_timeout_ms 60_000
   @init_timeout_env_var "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT"
+  @edit_tools ["Write", "Edit", "MultiEdit"]
 
   @typedoc """
   Client state.
@@ -117,6 +118,7 @@ defmodule ClaudeAgentSDK.Client do
           pending_model_change: {GenServer.from(), reference()} | nil,
           current_permission_mode: ClaudeAgentSDK.Permission.permission_mode() | nil,
           pending_permission_change: {GenServer.from(), reference()} | nil,
+          permission_bridge: :ets.tid() | nil,
           accumulated_text: String.t(),
           active_subscriber: reference() | nil,
           subscriber_queue: [{reference(), String.t()}],
@@ -385,6 +387,24 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @doc """
+  Waits for the client to finish initialization.
+
+  Returns `:ok` once the initialize handshake completes, or `{:error, reason}`
+  if the client is not alive or times out.
+  """
+  @spec await_initialized(pid(), pos_integer() | nil) :: :ok | {:error, term()}
+  def await_initialized(client, timeout_ms \\ nil) when is_pid(client) do
+    timeout_ms =
+      cond do
+        is_integer(timeout_ms) and timeout_ms > 0 -> timeout_ms
+        true -> (init_timeout_seconds_from_env() * 1_000) |> trunc()
+      end
+
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_await_initialized(client, deadline)
+  end
+
+  @doc """
   Sets the permission mode at runtime.
 
   Changes how tool permissions are handled for subsequent tool uses.
@@ -392,7 +412,7 @@ defmodule ClaudeAgentSDK.Client do
   ## Parameters
 
   - `client` - Client PID
-  - `mode` - Permission mode atom (`:default`, `:accept_edits`, `:plan`, `:bypass_permissions`)
+  - `mode` - Permission mode atom (`:default`, `:accept_edits`, `:plan`, `:bypass_permissions`, `:delegate`, `:dont_ask`)
 
   ## Returns
 
@@ -404,11 +424,31 @@ defmodule ClaudeAgentSDK.Client do
       Client.set_permission_mode(pid, :plan)
       Client.set_permission_mode(pid, :accept_edits)
       Client.set_permission_mode(pid, :bypass_permissions)
+      Client.set_permission_mode(pid, :delegate)
   """
   @spec set_permission_mode(pid(), ClaudeAgentSDK.Permission.permission_mode()) ::
           :ok | {:error, :invalid_permission_mode}
   def set_permission_mode(client, mode) when is_pid(client) do
     GenServer.call(client, {:set_permission_mode, mode}, :infinity)
+  end
+
+  defp do_await_initialized(client, deadline_ms) do
+    if System.monotonic_time(:millisecond) > deadline_ms do
+      {:error, :timeout}
+    else
+      state = :sys.get_state(client)
+
+      if Map.get(state, :initialized) == true do
+        :ok
+      else
+        Process.sleep(50)
+        do_await_initialized(client, deadline_ms)
+      end
+    end
+  rescue
+    _ -> {:error, :client_not_alive}
+  catch
+    :exit, _ -> {:error, :client_not_alive}
   end
 
   @doc """
@@ -511,7 +551,11 @@ defmodule ClaudeAgentSDK.Client do
     with :ok <- validate_hooks(options.hooks),
          :ok <- validate_permission_callback(options.can_use_tool),
          {:ok, updated_options} <- apply_agent_settings(options),
-         {:ok, updated_options} <- apply_permission_prompt_tool(updated_options) do
+         {:ok, updated_options} <- apply_permission_mode(updated_options),
+         {:ok, updated_options} <- apply_permission_streaming(updated_options),
+         {:ok, updated_options} <- apply_permission_prompt_tool(updated_options),
+         {:ok, updated_options, permission_bridge} <-
+           maybe_attach_permission_hook(updated_options) do
       updated_options = apply_client_entrypoint_env(updated_options)
       # Extract SDK MCP server registry PIDs
       sdk_mcp_servers = extract_sdk_mcp_servers(updated_options)
@@ -537,8 +581,10 @@ defmodule ClaudeAgentSDK.Client do
         pending_model_change: nil,
         current_permission_mode: updated_options.permission_mode,
         pending_permission_change: nil,
+        permission_bridge: permission_bridge,
         # Streaming support fields (v0.6.0)
         accumulated_text: "",
+        stream_stop_reason: nil,
         active_subscriber: nil,
         subscriber_queue: [],
         server_info: nil,
@@ -1204,18 +1250,173 @@ defmodule ClaudeAgentSDK.Client do
 
   defp apply_agent_settings(options), do: {:ok, options}
 
+  defp apply_permission_mode(options), do: {:ok, options}
+
+  defp apply_permission_streaming(%Options{can_use_tool: nil} = options), do: {:ok, options}
+
+  defp apply_permission_streaming(%Options{include_partial_messages: nil} = options) do
+    {:ok, %{options | include_partial_messages: true}}
+  end
+
+  defp apply_permission_streaming(options), do: {:ok, options}
+
   defp apply_permission_prompt_tool(%Options{can_use_tool: nil} = options), do: {:ok, options}
 
-  defp apply_permission_prompt_tool(%Options{permission_prompt_tool: nil} = options) do
+  defp apply_permission_prompt_tool(
+         %Options{can_use_tool: _callback, permission_prompt_tool: nil} = options
+       ) do
     {:ok, %{options | permission_prompt_tool: "stdio"}}
   end
 
-  defp apply_permission_prompt_tool(%Options{permission_prompt_tool: "stdio"} = options) do
-    {:ok, options}
+  defp apply_permission_prompt_tool(%Options{can_use_tool: _callback}),
+    do: {:error, :permission_prompt_tool_conflict}
+
+  defp apply_permission_prompt_tool(options), do: {:ok, options}
+
+  defp maybe_attach_permission_hook(%Options{can_use_tool: nil} = options) do
+    {:ok, options, nil}
   end
 
-  defp apply_permission_prompt_tool(%Options{permission_prompt_tool: _tool}) do
-    {:error, :permission_prompt_tool_conflict}
+  defp maybe_attach_permission_hook(
+         %Options{can_use_tool: _callback, permission_mode: :delegate} = options
+       ) do
+    {:ok, options, nil}
+  end
+
+  defp maybe_attach_permission_hook(%Options{can_use_tool: callback} = options) do
+    bridge = init_permission_bridge(options.permission_mode)
+    hook = permission_hook(callback, bridge)
+    hooks = attach_permission_hook(options.hooks, hook)
+    {:ok, %{options | hooks: hooks}, bridge}
+  end
+
+  defp init_permission_bridge(permission_mode) do
+    bridge = :ets.new(:permission_hook_state, [:set, :protected])
+    :ets.insert(bridge, {:can_use_tool_seen, false})
+    :ets.insert(bridge, {:permission_mode, permission_mode})
+    bridge
+  end
+
+  defp attach_permission_hook(nil, hook) do
+    matcher = Matcher.new("*", [hook])
+    %{pre_tool_use: [matcher]}
+  end
+
+  defp attach_permission_hook(%{} = hooks, hook) do
+    matcher = Matcher.new("*", [hook])
+
+    updated_matchers =
+      case Map.get(hooks, :pre_tool_use) do
+        nil -> [matcher]
+        matchers when is_list(matchers) -> [matcher | matchers]
+      end
+
+    Map.put(hooks, :pre_tool_use, updated_matchers)
+  end
+
+  defp permission_hook(callback, bridge) when is_function(callback, 1) do
+    fn input, _tool_use_id, context ->
+      tool_name = Map.get(input, "tool_name") || Map.get(input, :tool_name) || "unknown"
+      tool_input = Map.get(input, "tool_input") || Map.get(input, :tool_input) || %{}
+      session_id = Map.get(input, "session_id") || "unknown"
+      mode = permission_bridge_get(bridge, :permission_mode, nil)
+
+      cond do
+        permission_bridge_get(bridge, :can_use_tool_seen, false) ->
+          Output.allow("Permission handled by can_use_tool")
+
+        permission_hook_skip_callback?(mode, tool_name) ->
+          Output.allow("Auto-approved by permission mode")
+
+        true ->
+          signal = Map.get(context, :signal)
+
+          result =
+            execute_permission_callback(
+              callback,
+              tool_name,
+              tool_input,
+              [],
+              nil,
+              session_id,
+              signal
+            )
+
+          permission_result_to_hook_output(result, tool_name)
+      end
+    end
+  end
+
+  defp permission_hook_skip_callback?(:bypass_permissions, _tool_name), do: true
+
+  defp permission_hook_skip_callback?(:dont_ask, _tool_name), do: true
+
+  defp permission_hook_skip_callback?(:accept_edits, tool_name)
+       when tool_name in @edit_tools,
+       do: true
+
+  defp permission_hook_skip_callback?(_mode, _tool_name), do: false
+
+  defp permission_result_to_hook_output({:ok, %Result{} = result}, tool_name) do
+    if is_list(result.updated_permissions) and result.updated_permissions != [] do
+      Logger.warning("Permission updates ignored when using hook-based callbacks",
+        tool: tool_name
+      )
+    end
+
+    case result.behavior do
+      :allow ->
+        output = Output.allow("Approved")
+
+        if is_map(result.updated_input) do
+          Output.with_updated_input(output, result.updated_input)
+        else
+          output
+        end
+
+      :deny ->
+        reason = result.message || "Denied"
+        output = Output.deny(reason)
+
+        if result.interrupt do
+          Map.merge(output, Output.stop(reason))
+        else
+          output
+        end
+    end
+  end
+
+  defp permission_result_to_hook_output({:error, reason}, tool_name) do
+    Logger.error("Permission callback failed during hook handling",
+      tool: tool_name,
+      reason: inspect(reason)
+    )
+
+    Output.deny("Permission callback failed")
+  end
+
+  defp permission_bridge_get(nil, _key, default), do: default
+
+  defp permission_bridge_get(bridge, key, default) do
+    try do
+      case :ets.lookup(bridge, key) do
+        [{^key, value}] -> value
+        _ -> default
+      end
+    rescue
+      ArgumentError -> default
+    end
+  end
+
+  defp permission_bridge_put(nil, _key, _value), do: :ok
+
+  defp permission_bridge_put(bridge, key, value) do
+    try do
+      :ets.insert(bridge, {key, value})
+      :ok
+    rescue
+      ArgumentError -> :ok
+    end
   end
 
   defp apply_client_entrypoint_env(%Options{} = options) do
@@ -1726,6 +1927,8 @@ defmodule ClaudeAgentSDK.Client do
         updated_options = %{state.options | permission_mode: requested_mode}
         GenServer.reply(from, :ok)
 
+        permission_bridge_put(state.permission_bridge, :permission_mode, requested_mode)
+
         %{
           state
           | options: updated_options,
@@ -1871,6 +2074,8 @@ defmodule ClaudeAgentSDK.Client do
       request_id: request_id,
       tool: tool_name
     )
+
+    permission_bridge_put(state.permission_bridge, :can_use_tool_seen, true)
 
     # Check if we have a permission callback
     case state.options.can_use_tool do
@@ -2443,6 +2648,9 @@ defmodule ClaudeAgentSDK.Client do
     {:ok, events, new_accumulated} =
       EventParser.parse_event(event_data, state.accumulated_text)
 
+    {stop_reason, message_complete?} =
+      ClaudeAgentSDK.Streaming.Termination.reduce(events, state.stream_stop_reason)
+
     # Broadcast to active subscriber only (queue model)
     case state.active_subscriber do
       nil ->
@@ -2456,13 +2664,12 @@ defmodule ClaudeAgentSDK.Client do
         )
     end
 
-    # Check for message completion
-    message_complete? = Enum.any?(events, &(&1.type == :message_stop))
-
     if message_complete? do
-      handle_stream_completion(state, new_accumulated)
+      state
+      |> handle_stream_completion(new_accumulated)
+      |> Map.put(:stream_stop_reason, nil)
     else
-      %{state | accumulated_text: new_accumulated}
+      %{state | accumulated_text: new_accumulated, stream_stop_reason: stop_reason}
     end
   end
 
@@ -2509,11 +2716,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp to_cli_permission_mode(mode) do
-    case mode do
-      :accept_edits -> "acceptEdits"
-      :bypass_permissions -> "bypassPermissions"
-      other -> to_string(other)
-    end
+    ClaudeAgentSDK.Permission.mode_to_string(mode)
   end
 
   defp ensure_newline(payload) when is_binary(payload) do

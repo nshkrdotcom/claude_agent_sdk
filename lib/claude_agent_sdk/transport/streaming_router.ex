@@ -152,7 +152,7 @@ defmodule ClaudeAgentSDK.Transport.StreamingRouter do
   defp has_active_agents?(_), do: false
 
   defp has_special_permission_mode?(%Options{permission_mode: mode})
-       when mode in [:accept_edits, :bypass_permissions, :plan],
+       when mode in [:accept_edits, :bypass_permissions, :plan, :delegate, :dont_ask],
        do: true
 
   defp has_special_permission_mode?(_), do: false

@@ -165,9 +165,16 @@ defmodule ClaudeAgentSDK.Query do
       end
 
       # can_use_tool triggers control_client which handles both string and streaming prompts
-      %Options{options | permission_prompt_tool: "stdio"}
+      options
+      |> maybe_enable_partial_messages()
     else
       options
     end
   end
+
+  defp maybe_enable_partial_messages(%Options{include_partial_messages: nil} = options) do
+    %Options{options | include_partial_messages: true}
+  end
+
+  defp maybe_enable_partial_messages(options), do: options
 end

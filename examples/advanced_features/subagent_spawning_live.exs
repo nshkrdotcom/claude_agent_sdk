@@ -147,10 +147,10 @@ case Enum.find(messages, &(&1.type == :result)) do
     IO.puts("\n[ok] Query completed successfully")
 
   %{subtype: subtype} ->
-    IO.puts("\n[warn] Query completed with status: #{inspect(subtype)}")
+    raise "Query completed with status: #{inspect(subtype)}"
 
   nil ->
-    IO.puts("\n[warn] No result message found")
+    raise "No result message found"
 end
 
 # Display subagent tracking summary
@@ -164,22 +164,22 @@ task_completions = :ets.lookup(:subagent_tracker, :task_complete) |> length()
 IO.puts("\nSubagent Spawning Summary:")
 IO.puts(String.duplicate("-", 60))
 
-if length(task_calls) > 0 do
-  IO.puts("Total Task tool calls: #{length(task_calls)}")
-  IO.puts("Task completions: #{task_completions}")
-
-  Enum.each(task_calls, fn call ->
-    IO.puts("  - #{call.description} (#{call.subagent_type})")
-  end)
-
-  IO.puts("\n[ok] Successfully demonstrated subagent spawning!")
-else
-  IO.puts("No Task tool calls were made.")
-  IO.puts("This could mean:")
-  IO.puts("  - Claude found another way to answer")
-  IO.puts("  - The Task tool wasn't available")
-  IO.puts("  - Claude's model decided not to spawn subagents")
+if length(task_calls) < 2 do
+  raise "Expected at least 2 Task tool calls, observed #{length(task_calls)}."
 end
+
+if task_completions < 2 do
+  raise "Expected at least 2 Task completions, observed #{task_completions}."
+end
+
+IO.puts("Total Task tool calls: #{length(task_calls)}")
+IO.puts("Task completions: #{task_completions}")
+
+Enum.each(task_calls, fn call ->
+  IO.puts("  - #{call.description} (#{call.subagent_type})")
+end)
+
+IO.puts("\n[ok] Successfully demonstrated subagent spawning!")
 
 IO.puts(String.duplicate("-", 60))
 

@@ -123,11 +123,10 @@ defmodule SDKMCPExample do
     IO.puts("\n4. Claude's Response:")
     IO.puts(String.duplicate("-", 60))
 
-    tool_calls = []
-
-    tool_calls =
+    summary =
       Client.stream_messages(client)
-      |> Enum.reduce_while(tool_calls, fn msg, acc ->
+      |> Enum.reduce_while(%{tool_calls: [], result_subtype: nil, saw_result: false}, fn msg,
+                                                                                         acc ->
         case msg.type do
           :system ->
             mcp_servers = msg.data[:mcp_servers] || []
@@ -158,7 +157,7 @@ defmodule SDKMCPExample do
 
             # Track tool uses
             tool_uses = Enum.filter(content, &(is_map(&1) and &1["type"] == "tool_use"))
-            {:cont, acc ++ tool_uses}
+            {:cont, %{acc | tool_calls: acc.tool_calls ++ tool_uses}}
 
           :user ->
             content = get_in(msg.data, [:message, "content"]) || []
@@ -181,7 +180,7 @@ defmodule SDKMCPExample do
           :result ->
             IO.puts("[result] #{msg.subtype}")
             # Stop consuming the stream after we get the result
-            {:halt, acc}
+            {:halt, %{acc | result_subtype: msg.subtype, saw_result: true}}
 
           _ ->
             {:cont, acc}
@@ -193,19 +192,29 @@ defmodule SDKMCPExample do
     # Step 5: Verify tools were called
     IO.puts("\n5. Verification:")
 
-    if length(tool_calls) > 0 do
-      IO.puts("   SDK MCP tools called: #{length(tool_calls)}")
-
-      Enum.each(tool_calls, fn call ->
-        IO.puts("   - #{call["name"]}: #{inspect(call["input"])}")
-      end)
-
-      IO.puts("\n   Example completed successfully!")
-    else
-      IO.puts("   Warning: No SDK MCP tools were called by Claude")
-      IO.puts("   This could mean Claude found another way to answer,")
-      IO.puts("   or there was an issue with tool registration.")
+    if not summary.saw_result do
+      raise "No result message observed."
     end
+
+    if summary.result_subtype != :success do
+      raise "Result did not succeed (subtype: #{inspect(summary.result_subtype)})"
+    end
+
+    if summary.tool_calls == [] do
+      raise "No SDK MCP tool calls were observed."
+    end
+
+    if not Enum.any?(summary.tool_calls, &String.starts_with?(&1["name"], "mcp__")) do
+      raise "No MCP-prefixed tool calls were observed."
+    end
+
+    IO.puts("   SDK MCP tools called: #{length(summary.tool_calls)}")
+
+    Enum.each(summary.tool_calls, fn call ->
+      IO.puts("   - #{call["name"]}: #{inspect(call["input"])}")
+    end)
+
+    IO.puts("\n   Example completed successfully!")
 
     Client.stop(client)
 

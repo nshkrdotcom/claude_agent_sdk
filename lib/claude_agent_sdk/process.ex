@@ -12,7 +12,7 @@ defmodule ClaudeAgentSDK.Process do
   at once, then converts it to a lazy stream for consumption.
   """
 
-  require Logger
+  alias ClaudeAgentSDK.Log, as: Logger
 
   alias ClaudeAgentSDK.{CLI, Message, Options}
   alias ClaudeAgentSDK.Transport.AgentsFile

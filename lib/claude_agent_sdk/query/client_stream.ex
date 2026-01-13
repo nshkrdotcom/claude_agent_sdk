@@ -24,7 +24,7 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
   """
 
   alias ClaudeAgentSDK.{Client, Message, Options}
-  require Logger
+  alias ClaudeAgentSDK.Log, as: Logger
 
   @default_receive_timeout_ms 30_000
   @default_query_timeout_ms 4_500_000

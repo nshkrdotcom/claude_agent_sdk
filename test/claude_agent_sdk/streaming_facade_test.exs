@@ -194,9 +194,49 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
       transport_opts: [test_pid: self()]
     )
     |> case do
-      {:ok, client} -> {:ok, {:control_client, client}}
-      error -> error
+      {:ok, client} ->
+        initialize_control_client(client)
+        {:ok, {:control_client, client}}
+
+      error ->
+        error
     end
+  end
+
+  defp initialize_control_client(client) do
+    transport =
+      receive do
+        {:mock_transport_started, pid} -> pid
+      after
+        1_000 -> flunk("Did not receive mock transport start")
+      end
+
+    assert_receive {:mock_transport_subscribed, _pid}, 1_000
+
+    init_request =
+      receive do
+        {:mock_transport_send, json} -> Jason.decode!(String.trim(json))
+      after
+        1_000 -> flunk("Did not receive initialize request")
+      end
+
+    init_response = %{
+      "type" => "control_response",
+      "response" => %{
+        "subtype" => "success",
+        "request_id" => init_request["request_id"],
+        "response" => %{}
+      }
+    }
+
+    MockTransport.push_message(transport, init_response)
+
+    ClaudeAgentSDK.SupertesterCase.eventually(
+      fn -> :sys.get_state(client).initialized end,
+      timeout: 1_000
+    )
+
+    :ok
   end
 
   defp close_session_safe({:control_client, client}) do

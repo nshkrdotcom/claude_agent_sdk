@@ -74,7 +74,9 @@ defmodule ClaudeAgentSDK.QueryControlTest do
 
       # Verify can_use_tool triggers control client routing
       assert_received {:client_stream_invoked, "hello", received_options, nil}
-      assert received_options.permission_prompt_tool == "stdio"
+      assert received_options.permission_prompt_tool == nil
+      assert received_options.permission_mode == nil
+      assert received_options.include_partial_messages == true
     end
 
     test "raises when can_use_tool and permission_prompt_tool are both set" do
@@ -85,7 +87,7 @@ defmodule ClaudeAgentSDK.QueryControlTest do
       end
     end
 
-    test "auto-sets permission_prompt_tool for streaming prompts" do
+    test "keeps permission_prompt_tool unset for streaming prompts" do
       callback = fn _ -> :ok end
       options = %Options{can_use_tool: callback}
       prompt = [%{"type" => "user", "message" => %{"role" => "user", "content" => "hi"}}]
@@ -93,7 +95,9 @@ defmodule ClaudeAgentSDK.QueryControlTest do
       assert [:client_stream] = Query.run(prompt, options) |> Enum.to_list()
 
       assert_received {:client_stream_invoked, ^prompt, updated, nil}
-      assert updated.permission_prompt_tool == "stdio"
+      assert updated.permission_prompt_tool == nil
+      assert updated.permission_mode == nil
+      assert updated.include_partial_messages == true
     end
   end
 end

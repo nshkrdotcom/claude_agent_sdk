@@ -36,8 +36,17 @@ base_options = %Options{
   allowed_tools: []
 }
 
+assert_success = fn messages, label ->
+  case Enum.find(messages, &(&1.type == :result)) do
+    %{subtype: :success} -> :ok
+    %{subtype: other} -> raise "#{label} did not succeed (result subtype: #{inspect(other)})"
+    nil -> raise "#{label} returned no result message."
+  end
+end
+
 prompt = "In one sentence, suggest a feature name for a tiny Elixir SDK demo."
 messages = ClaudeAgentSDK.query(prompt, base_options) |> Enum.to_list()
+assert_success.(messages, "initial query")
 
 assistant_text =
   messages
@@ -87,6 +96,8 @@ case session_id do
       )
       |> Enum.to_list()
 
+    assert_success.(resumed, "resume query")
+
     resumed_text =
       resumed
       |> Enum.filter(&(&1.type == :assistant))
@@ -102,7 +113,7 @@ case session_id do
     IO.inspect(Enum.filter(Options.to_args(fork_opts), &(&1 == "--fork-session")))
 
   _ ->
-    IO.puts("No session_id detected; SessionStore demo skipped.")
+    raise "No session_id detected; SessionStore demo cannot proceed."
 end
 
 IO.puts("\nOther session-related CLI flags:")

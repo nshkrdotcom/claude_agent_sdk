@@ -7,7 +7,7 @@ defmodule ClaudeAgentSDK.PermissionTest do
   - Permission result types (allow/deny)
   - Permission context building
   - Input modification via permissions
-  - Permission mode behavior (default, accept_edits, plan, bypass_permissions)
+  - Permission mode behavior (default, accept_edits, plan, bypass_permissions, delegate, dont_ask)
   - Runtime mode switching
   - Error handling in permission callbacks
   """
@@ -290,23 +290,44 @@ defmodule ClaudeAgentSDK.PermissionTest do
     test "accept_edits mode allows edits without callback (integrated test)" do
       # This mode bypasses callback for edit operations
       # Validated at integration level with Client
-      assert :accept_edits in [:default, :accept_edits, :plan, :bypass_permissions]
+      assert :accept_edits in [
+               :default,
+               :accept_edits,
+               :plan,
+               :bypass_permissions,
+               :delegate,
+               :dont_ask
+             ]
     end
 
     test "plan mode requires explicit approval (integrated test)" do
       # This mode shows plan before execution
       # Validated at integration level with Client
-      assert :plan in [:default, :accept_edits, :plan, :bypass_permissions]
+      assert :plan in [
+               :default,
+               :accept_edits,
+               :plan,
+               :bypass_permissions,
+               :delegate,
+               :dont_ask
+             ]
     end
 
     test "bypass_permissions mode skips all callbacks (integrated test)" do
       # This mode bypasses all permission checks
       # Validated at integration level with Client
-      assert :bypass_permissions in [:default, :accept_edits, :plan, :bypass_permissions]
+      assert :bypass_permissions in [
+               :default,
+               :accept_edits,
+               :plan,
+               :bypass_permissions,
+               :delegate,
+               :dont_ask
+             ]
     end
 
     test "mode values are valid atoms" do
-      valid_modes = [:default, :accept_edits, :plan, :bypass_permissions]
+      valid_modes = [:default, :accept_edits, :plan, :bypass_permissions, :delegate, :dont_ask]
 
       # Test mode validation function (to be implemented)
       assert Enum.all?(valid_modes, &is_atom/1)
@@ -562,7 +583,7 @@ defmodule ClaudeAgentSDK.PermissionTest do
     end
 
     test "Options validates permission mode values" do
-      valid_modes = [:default, :accept_edits, :plan, :bypass_permissions]
+      valid_modes = [:default, :accept_edits, :plan, :bypass_permissions, :delegate, :dont_ask]
 
       Enum.each(valid_modes, fn mode ->
         options = %ClaudeAgentSDK.Options{permission_mode: mode}

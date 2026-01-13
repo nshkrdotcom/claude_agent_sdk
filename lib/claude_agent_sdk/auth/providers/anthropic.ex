@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.Auth.Providers.Anthropic do
   Anthropic-specific authentication via `claude setup-token`.
   """
 
-  require Logger
+  alias ClaudeAgentSDK.Log, as: Logger
 
   # OAuth tokens valid for 1 year
   @token_ttl_days 365

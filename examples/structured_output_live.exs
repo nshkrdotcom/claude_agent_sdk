@@ -51,9 +51,15 @@ defmodule StructuredOutputLiveExample do
 
     messages = ClaudeAgentSDK.query(prompt, options) |> Enum.to_list()
 
+    case Enum.find(messages, &(&1.type == :result)) do
+      %{subtype: :success} -> :ok
+      %{subtype: other} -> raise "Query did not succeed (result subtype: #{inspect(other)})"
+      nil -> raise "No result message returned."
+    end
+
     case find_structured_output(messages) do
       nil ->
-        IO.puts("⚠️  No structured_output returned. Check CLI version/support.")
+        raise "No structured_output returned. Check CLI version/support."
 
       structured ->
         IO.puts("✨ Structured output:")

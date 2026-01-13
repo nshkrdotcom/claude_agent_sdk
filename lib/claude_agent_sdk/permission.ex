@@ -7,12 +7,14 @@ defmodule ClaudeAgentSDK.Permission do
 
   ## Permission Modes
 
-  The SDK supports four permission modes that control how tool permissions are handled:
+  The SDK supports six permission modes that control how tool permissions are handled:
 
   - `:default` - All tools go through the permission callback
   - `:accept_edits` - Edit operations (Write, Edit, MultiEdit) are auto-allowed
   - `:plan` - Claude creates a plan, shows it to user, then executes after approval
   - `:bypass_permissions` - All tools are allowed without callback invocation
+  - `:delegate` - Delegate tool execution to the SDK (CLI does not run built-in tools)
+  - `:dont_ask` - Do not prompt for permissions; tools proceed without callback
 
   ## Permission Callbacks
 
@@ -70,7 +72,11 @@ defmodule ClaudeAgentSDK.Permission do
 
   The permission system integrates with the existing hooks system. Permission
   callbacks are invoked via the control protocol when the CLI requests permission
-  to use a tool.
+  to use a tool. If the CLI does not emit `can_use_tool` requests, the SDK
+  automatically invokes the callback via a PreToolUse hook when possible.
+  In that hook-based path, `updated_permissions` updates are ignored.
+  When `can_use_tool` is set, the SDK enables partial messages and configures
+  the CLI permission prompt tool to `\"stdio\"` internally.
 
   See:
   - `ClaudeAgentSDK.Permission.Context` - Permission context structure
@@ -82,7 +88,8 @@ defmodule ClaudeAgentSDK.Permission do
   @typedoc """
   Permission mode controlling how tool permissions are handled.
   """
-  @type permission_mode :: :default | :accept_edits | :plan | :bypass_permissions
+  @type permission_mode ::
+          :default | :accept_edits | :plan | :bypass_permissions | :delegate | :dont_ask
 
   @typedoc """
   Permission callback function type.
@@ -97,11 +104,11 @@ defmodule ClaudeAgentSDK.Permission do
   ## Examples
 
       iex> ClaudeAgentSDK.Permission.valid_modes()
-      [:default, :accept_edits, :plan, :bypass_permissions]
+      [:default, :accept_edits, :plan, :bypass_permissions, :delegate, :dont_ask]
   """
   @spec valid_modes() :: [permission_mode()]
   def valid_modes do
-    [:default, :accept_edits, :plan, :bypass_permissions]
+    [:default, :accept_edits, :plan, :bypass_permissions, :delegate, :dont_ask]
   end
 
   @doc """
@@ -138,6 +145,8 @@ defmodule ClaudeAgentSDK.Permission do
   @spec mode_to_string(permission_mode()) :: String.t()
   def mode_to_string(:accept_edits), do: "acceptEdits"
   def mode_to_string(:bypass_permissions), do: "bypassPermissions"
+  def mode_to_string(:dont_ask), do: "dontAsk"
+  def mode_to_string(:delegate), do: "delegate"
   def mode_to_string(mode) when is_atom(mode), do: Atom.to_string(mode)
 
   @doc """
@@ -158,6 +167,8 @@ defmodule ClaudeAgentSDK.Permission do
   def string_to_mode("acceptEdits"), do: :accept_edits
   def string_to_mode("plan"), do: :plan
   def string_to_mode("bypassPermissions"), do: :bypass_permissions
+  def string_to_mode("delegate"), do: :delegate
+  def string_to_mode("dontAsk"), do: :dont_ask
   def string_to_mode(_), do: nil
 
   @doc """
