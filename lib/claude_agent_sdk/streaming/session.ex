@@ -189,10 +189,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   @doc false
   @spec push_events(pid(), [map()]) :: :ok
   def push_events(session, events) when is_pid(session) and is_list(events) do
-    payload =
-      events
-      |> Enum.map(&Jason.encode!/1)
-      |> Enum.join("\n")
+    payload = Enum.map_join(events, "\n", &Jason.encode!/1)
 
     send(session, {:mock_stdout, payload <> "\n"})
     :ok

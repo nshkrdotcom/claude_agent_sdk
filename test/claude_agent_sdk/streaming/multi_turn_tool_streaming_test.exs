@@ -106,8 +106,7 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
       text =
         events
         |> Enum.filter(&(&1.type == :text_delta))
-        |> Enum.map(& &1.text)
-        |> Enum.join()
+        |> Enum.map_join(& &1.text)
 
       assert text =~ "Running..."
       assert text =~ "Here are the files."
@@ -169,8 +168,7 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
       text =
         events
         |> Enum.filter(&(&1.type == :text_delta))
-        |> Enum.map(& &1.text)
-        |> Enum.join()
+        |> Enum.map_join(& &1.text)
 
       assert text =~ "Running..."
       assert text =~ "Done."
