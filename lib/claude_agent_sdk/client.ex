@@ -68,7 +68,7 @@ defmodule ClaudeAgentSDK.Client do
   alias ClaudeAgentSDK.ControlProtocol.Protocol
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
   alias ClaudeAgentSDK.Permission.{Context, Result}
-  alias ClaudeAgentSDK.Streaming.EventParser
+  alias ClaudeAgentSDK.Streaming.{EventParser, Termination}
   alias ClaudeAgentSDK.Transport.AgentsFile
   @default_hook_timeout_ms 60_000
   @default_init_timeout_ms 60_000
@@ -395,9 +395,10 @@ defmodule ClaudeAgentSDK.Client do
   @spec await_initialized(pid(), pos_integer() | nil) :: :ok | {:error, term()}
   def await_initialized(client, timeout_ms \\ nil) when is_pid(client) do
     timeout_ms =
-      cond do
-        is_integer(timeout_ms) and timeout_ms > 0 -> timeout_ms
-        true -> (init_timeout_seconds_from_env() * 1_000) |> trunc()
+      if is_integer(timeout_ms) and timeout_ms > 0 do
+        timeout_ms
+      else
+        (init_timeout_seconds_from_env() * 1_000) |> trunc()
       end
 
     deadline = System.monotonic_time(:millisecond) + timeout_ms
@@ -1398,25 +1399,21 @@ defmodule ClaudeAgentSDK.Client do
   defp permission_bridge_get(nil, _key, default), do: default
 
   defp permission_bridge_get(bridge, key, default) do
-    try do
-      case :ets.lookup(bridge, key) do
-        [{^key, value}] -> value
-        _ -> default
-      end
-    rescue
-      ArgumentError -> default
+    case :ets.lookup(bridge, key) do
+      [{^key, value}] -> value
+      _ -> default
     end
+  rescue
+    ArgumentError -> default
   end
 
   defp permission_bridge_put(nil, _key, _value), do: :ok
 
   defp permission_bridge_put(bridge, key, value) do
-    try do
-      :ets.insert(bridge, {key, value})
-      :ok
-    rescue
-      ArgumentError -> :ok
-    end
+    :ets.insert(bridge, {key, value})
+    :ok
+  rescue
+    ArgumentError -> :ok
   end
 
   defp apply_client_entrypoint_env(%Options{} = options) do
@@ -2649,7 +2646,7 @@ defmodule ClaudeAgentSDK.Client do
       EventParser.parse_event(event_data, state.accumulated_text)
 
     {stop_reason, message_complete?} =
-      ClaudeAgentSDK.Streaming.Termination.reduce(events, state.stream_stop_reason)
+      Termination.reduce(events, state.stream_stop_reason)
 
     # Broadcast to active subscriber only (queue model)
     case state.active_subscriber do

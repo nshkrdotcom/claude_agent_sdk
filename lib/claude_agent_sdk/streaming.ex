@@ -223,7 +223,7 @@ defmodule ClaudeAgentSDK.Streaming do
   """
 
   alias ClaudeAgentSDK.{Client, Options}
-  alias ClaudeAgentSDK.Streaming.Session
+  alias ClaudeAgentSDK.Streaming.{Session, Termination}
   alias ClaudeAgentSDK.Transport.StreamingRouter
 
   @doc """
@@ -426,7 +426,7 @@ defmodule ClaudeAgentSDK.Streaming do
               # Stream events from control client
               {:stream_event, ^ref, event} ->
                 {new_stop_reason, message_complete?} =
-                  ClaudeAgentSDK.Streaming.Termination.step(event, stop_reason)
+                  Termination.step(event, stop_reason)
 
                 new_status =
                   if message_complete? do
