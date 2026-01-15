@@ -50,7 +50,7 @@ Verify the installation:
 claude --version
 ```
 
-You should see a version number like `2.1.1` or higher.
+You should see a version number like `2.1.7` or higher.
 
 ### 3. Authentication
 
@@ -103,7 +103,7 @@ Add `claude_agent_sdk` to your Mix dependencies in `mix.exs`:
 ```elixir
 defp deps do
   [
-    {:claude_agent_sdk, "~> 0.8.0"}
+    {:claude_agent_sdk, "~> 0.8.1"}
   ]
 end
 ```

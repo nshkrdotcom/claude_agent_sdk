@@ -30,6 +30,7 @@ defmodule ClaudeAgentSDK.Options do
   - `sandbox` - Sandbox settings merged into `--settings` JSON when present (Python v0.1.12+)
   - `enable_file_checkpointing` - Enables file checkpointing + `rewind_files` (Python v0.1.15+)
   - `include_partial_messages` - Enable character-level streaming (boolean) (v0.8.0+)
+  - `stream_buffer_limit` - Max inbound entries buffered before first subscriber (integer, default: 1000)
   - `preferred_transport` - Override automatic transport selection (`:auto | :cli | :control`) (v0.8.0+)
 
   ## Streaming + Tools (v0.8.0)
@@ -132,6 +133,8 @@ defmodule ClaudeAgentSDK.Options do
     # Streaming + Tools (v0.8.0)
     # Enable character-level streaming with --include-partial-messages
     :include_partial_messages,
+    # Buffer inbound events/messages before a subscriber attaches
+    :stream_buffer_limit,
     # Override automatic transport selection
     :preferred_transport,
     :user,
@@ -281,6 +284,7 @@ defmodule ClaudeAgentSDK.Options do
           timeout_ms: integer() | nil,
           enable_file_checkpointing: boolean() | nil,
           include_partial_messages: boolean() | nil,
+          stream_buffer_limit: non_neg_integer() | nil,
           preferred_transport: transport_preference() | nil,
           max_buffer_size: pos_integer() | nil,
           extra_args: %{optional(String.t()) => String.t() | boolean() | nil},

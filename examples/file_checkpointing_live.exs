@@ -11,52 +11,51 @@ defmodule FileCheckpointingLive do
     Support.ensure_live!()
     Support.header!("File Checkpointing Example (live)")
 
-    demo_dir =
-      Path.join(
-        System.tmp_dir!(),
-        "claude_agent_sdk_checkpointing_demo_#{System.unique_integer([:positive])}"
-      )
+    demo_dir = Support.tmp_dir!("claude_agent_sdk_checkpointing_demo")
+    client = nil
 
-    File.mkdir_p!(demo_dir)
-    IO.puts("Demo working directory: #{demo_dir}")
-    IO.inspect(CLI.find_executable(), label: "Claude CLI (resolved)")
-    IO.inspect(CLI.version(), label: "Claude CLI (version)")
+    try do
+      IO.puts("Demo working directory: #{demo_dir}")
+      IO.inspect(CLI.find_executable(), label: "Claude CLI (resolved)")
+      IO.inspect(CLI.version(), label: "Claude CLI (version)")
 
-    file_path = Path.join(demo_dir, "demo.txt")
-    init_git_repo(demo_dir)
+      file_path = Path.join(demo_dir, "demo.txt")
+      init_git_repo(demo_dir)
 
-    options = %Options{
-      cwd: demo_dir,
-      enable_file_checkpointing: true,
-      extra_args: %{"replay-user-messages" => nil},
-      permission_mode: :accept_edits,
-      tools: ["Read", "Write", "Edit"],
-      allowed_tools: ["Read", "Write", "Edit"],
-      model: "haiku",
-      max_turns: 3
-    }
+      options = %Options{
+        cwd: demo_dir,
+        enable_file_checkpointing: true,
+        extra_args: %{"replay-user-messages" => nil},
+        permission_mode: :accept_edits,
+        tools: ["Read", "Write", "Edit"],
+        allowed_tools: ["Read", "Write", "Edit"],
+        model: "haiku",
+        max_turns: 3
+      }
 
-    {:ok, client} = Client.start_link(options, transport: ClaudeAgentSDK.Transport.Port)
+      {:ok, client} = Client.start_link(options, transport: ClaudeAgentSDK.Transport.Port)
 
-    checkpoint_id =
-      run_step(
-        client,
-        "Create the file at #{file_path} with the single line: one. Use that exact path. Then say done.",
-        file_path,
-        "one"
-      )
+      checkpoint_id =
+        run_step(
+          client,
+          "Create the file at #{file_path} with the single line: one. Use that exact path. Then say done.",
+          file_path,
+          "one"
+        )
 
-    _ =
-      run_step(
-        client,
-        "Replace the file at #{file_path} so it contains the single line: two. Use that exact path. Then say done.",
-        file_path,
-        "two"
-      )
+      _ =
+        run_step(
+          client,
+          "Replace the file at #{file_path} so it contains the single line: two. Use that exact path. Then say done.",
+          file_path,
+          "two"
+        )
 
-    attempt_rewind(client, checkpoint_id, file_path)
-
-    if Process.alive?(client), do: Client.stop(client)
+      attempt_rewind(client, checkpoint_id, file_path)
+    after
+      if is_pid(client) and Process.alive?(client), do: Client.stop(client)
+      Support.cleanup_tmp_dir(demo_dir)
+    end
   end
 
   defp run_step(client, prompt, file_path, expected_contents) do
@@ -122,7 +121,7 @@ defmodule FileCheckpointingLive do
     |> Enum.uniq()
   end
 
-  defp attempt_rewind(_client, nil, file_path) do
+  defp attempt_rewind(_client, nil, _file_path) do
     raise """
     No user_message_id found in incoming frames.
 

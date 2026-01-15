@@ -47,6 +47,70 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
     end
   end
 
+  describe "pre-subscribe buffering" do
+    test "buffers stream events and sdk messages until the first subscriber" do
+      options = %Options{include_partial_messages: true}
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
+
+      assert_receive {:mock_transport_started, transport_pid}, 1_000
+      assert {:ok, request_id} = Client.await_init_sent(client, 1_000)
+
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => request_id,
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+
+      event = %{
+        "type" => "content_block_delta",
+        "delta" => %{"type" => "text_delta", "text" => "Hello"},
+        "index" => 0
+      }
+
+      assistant = %{
+        "type" => "assistant",
+        "message" => %{
+          "role" => "assistant",
+          "content" => [%{"type" => "text", "text" => "Hello world"}]
+        },
+        "session_id" => "buffered"
+      }
+
+      result = %{
+        "type" => "result",
+        "subtype" => "success",
+        "session_id" => "buffered",
+        "total_cost_usd" => 0.0
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(event))
+      MockTransport.push_message(transport_pid, Jason.encode!(assistant))
+      MockTransport.push_message(transport_pid, Jason.encode!(result))
+
+      task =
+        Task.async(fn ->
+          Client.stream_messages(client)
+          |> Enum.take(3)
+        end)
+
+      assert [
+               %Message{type: :stream_event, data: %{event: %{type: :text_delta}}},
+               %Message{type: :assistant},
+               %Message{type: :result, subtype: :success}
+             ] = Task.await(task, 1_000)
+    end
+  end
+
   describe "stream event handling" do
     setup do
       options = %Options{include_partial_messages: true}

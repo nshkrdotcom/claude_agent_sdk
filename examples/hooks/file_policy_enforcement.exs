@@ -82,165 +82,163 @@ defmodule FilePolicyHooks do
 end
 
 table = FilePolicyHooks.table_name()
+sandbox_dir = Support.tmp_dir!("claude_agent_sdk_file_policy")
+outside_dir = Support.tmp_dir!("claude_agent_sdk_file_policy_outside")
+client = nil
 
-case :ets.whereis(table) do
-  :undefined -> :ok
-  tid -> :ets.delete(tid)
-end
+try do
+  case :ets.whereis(table) do
+    :undefined -> :ok
+    tid -> :ets.delete(tid)
+  end
 
-:ets.new(table, [:named_table, :public, :set])
+  :ets.new(table, [:named_table, :public, :set])
 
-sandbox_dir =
-  Path.join(
-    System.tmp_dir!(),
-    "claude_agent_sdk_file_policy_#{System.unique_integer([:positive])}"
-  )
+  FilePolicyHooks.put_allowed_dir!(sandbox_dir)
 
-File.mkdir_p!(sandbox_dir)
-FilePolicyHooks.put_allowed_dir!(sandbox_dir)
+  ok_file = Path.join(sandbox_dir, "ok.txt")
+  env_file = Path.join(sandbox_dir, ".env")
+  outside_file = Path.join(outside_dir, "outside.txt")
 
-outside_dir =
-  Path.join(
-    System.tmp_dir!(),
-    "claude_agent_sdk_file_policy_outside_#{System.unique_integer([:positive])}"
-  )
+  hooks = %{
+    pre_tool_use: [
+      Matcher.new("*", [&FilePolicyHooks.enforce_file_policy/3])
+    ]
+  }
 
-File.mkdir_p!(outside_dir)
+  # Note: We don't set max_turns here to match Python SDK behavior.
+  # With hooks enabled, the conversation needs multiple turns for tool use + response.
+  options = %Options{
+    tools: ["Write", "Edit"],
+    allowed_tools: ["Write", "Edit"],
+    hooks: hooks,
+    model: "haiku",
+    permission_mode: :default
+  }
 
-ok_file = Path.join(sandbox_dir, "ok.txt")
-env_file = Path.join(sandbox_dir, ".env")
-outside_file = Path.join(outside_dir, "outside.txt")
+  {:ok, client} = Client.start_link(options)
 
-hooks = %{
-  pre_tool_use: [
-    Matcher.new("*", [&FilePolicyHooks.enforce_file_policy/3])
-  ]
-}
+  run_prompt = fn prompt ->
+    task =
+      Task.async(fn ->
+        Client.stream_messages(client)
+        |> Enum.reduce_while([], fn message, acc ->
+          acc = [message | acc]
 
-# Note: We don't set max_turns here to match Python SDK behavior.
-# With hooks enabled, the conversation needs multiple turns for tool use + response.
-options = %Options{
-  tools: ["Write", "Edit"],
-  allowed_tools: ["Write", "Edit"],
-  hooks: hooks,
-  model: "haiku",
-  permission_mode: :default
-}
+          case message do
+            %Message{type: :assistant} = msg ->
+              text = ContentExtractor.extract_text(msg)
+              if is_binary(text) and text != "", do: IO.puts("\nAssistant:\n#{text}\n")
+              {:cont, acc}
 
-{:ok, client} = Client.start_link(options)
+            %Message{type: :result} ->
+              {:halt, Enum.reverse(acc)}
 
-run_prompt = fn prompt ->
-  task =
-    Task.async(fn ->
-      Client.stream_messages(client)
-      |> Enum.reduce_while([], fn message, acc ->
-        acc = [message | acc]
-
-        case message do
-          %Message{type: :assistant} = msg ->
-            text = ContentExtractor.extract_text(msg)
-            if is_binary(text) and text != "", do: IO.puts("\nAssistant:\n#{text}\n")
-            {:cont, acc}
-
-          %Message{type: :result} ->
-            {:halt, Enum.reverse(acc)}
-
-          _ ->
-            {:cont, acc}
-        end
+            _ ->
+              {:cont, acc}
+          end
+        end)
       end)
-    end)
 
-  Process.sleep(50)
-  :ok = Client.send_message(client, prompt)
-  Task.await(task, 120_000)
-end
-
-IO.puts("Sandbox directory: #{sandbox_dir}\n")
-
-IO.puts("Test 1: Allowed write within sandbox\n")
-
-messages1 =
-  run_prompt.("""
-  Use the Write tool to create a file at #{ok_file}.
-  Put exactly this content (including the newline): ok
-  """)
-
-IO.puts("\nTest 2: Denied write to sensitive filename (.env)\n")
-
-messages2 =
-  run_prompt.("""
-  Use the Write tool to create a file at #{env_file}.
-  Put exactly: SECRET=1
-  """)
-
-IO.puts("\nTest 3: Denied write outside sandbox\n")
-
-messages3 =
-  run_prompt.("""
-  Use the Write tool to create a file at #{outside_file}.
-  Put exactly: outside
-  """)
-
-for {label, msgs} <- [
-      {"allowed write", messages1},
-      {"sensitive file", messages2},
-      {"outside write", messages3}
-    ] do
-  case Enum.find(msgs, &(&1.type == :result)) do
-    %Message{subtype: :success} ->
-      :ok
-
-    %Message{subtype: other} ->
-      raise "Run #{label} did not succeed (result subtype: #{inspect(other)})"
-
-    nil ->
-      raise "Run #{label} returned no result message."
-  end
-end
-
-allowed =
-  case :ets.lookup(table, :allowed) do
-    [{:allowed, n}] when is_integer(n) -> n
-    _ -> 0
+    Process.sleep(50)
+    :ok = Client.send_message(client, prompt)
+    Task.await(task, 120_000)
   end
 
-denied =
-  case :ets.lookup(table, :denied) do
-    [{:denied, n}] when is_integer(n) -> n
-    _ -> 0
+  IO.puts("Sandbox directory: #{sandbox_dir}\n")
+
+  IO.puts("Test 1: Allowed write within sandbox\n")
+
+  messages1 =
+    run_prompt.("""
+    Use the Write tool to create a file at #{ok_file}.
+    Put exactly this content (including the newline): ok
+    """)
+
+  IO.puts("\nTest 2: Denied write to sensitive filename (.env)\n")
+
+  messages2 =
+    run_prompt.("""
+    Use the Write tool to create a file at #{env_file}.
+    Put exactly: SECRET=1
+    """)
+
+  IO.puts("\nTest 3: Denied write outside sandbox\n")
+
+  messages3 =
+    run_prompt.("""
+    Use the Write tool to create a file at #{outside_file}.
+    Put exactly: outside
+    """)
+
+  for {label, msgs} <- [
+        {"allowed write", messages1},
+        {"sensitive file", messages2},
+        {"outside write", messages3}
+      ] do
+    case Enum.find(msgs, &(&1.type == :result)) do
+      %Message{subtype: :success} ->
+        :ok
+
+      %Message{subtype: other} ->
+        raise "Run #{label} did not succeed (result subtype: #{inspect(other)})"
+
+      nil ->
+        raise "Run #{label} returned no result message."
+    end
   end
 
-if allowed < 1 do
-  raise "Expected at least 1 allowed file operation, but allowed=#{allowed}."
-end
-
-if denied < 2 do
-  raise "Expected at least 2 denied file operations, but denied=#{denied}."
-end
-
-case File.read(ok_file) do
-  {:ok, contents} ->
-    if String.trim_trailing(contents) != "ok" do
-      raise "Expected #{ok_file} to contain \"ok\", got: #{inspect(contents)}"
+  allowed =
+    case :ets.lookup(table, :allowed) do
+      [{:allowed, n}] when is_integer(n) -> n
+      _ -> 0
     end
 
-  {:error, reason} ->
-    raise "Expected #{ok_file} to exist, but read failed: #{inspect(reason)}"
+  denied =
+    case :ets.lookup(table, :denied) do
+      [{:denied, n}] when is_integer(n) -> n
+      _ -> 0
+    end
+
+  if allowed < 1 do
+    raise "Expected at least 1 allowed file operation, but allowed=#{allowed}."
+  end
+
+  if denied < 2 do
+    raise "Expected at least 2 denied file operations, but denied=#{denied}."
+  end
+
+  case File.read(ok_file) do
+    {:ok, contents} ->
+      if String.trim_trailing(contents) != "ok" do
+        raise "Expected #{ok_file} to contain \"ok\", got: #{inspect(contents)}"
+      end
+
+    {:error, reason} ->
+      raise "Expected #{ok_file} to exist, but read failed: #{inspect(reason)}"
+  end
+
+  if File.exists?(env_file) do
+    raise "Expected #{env_file} to be blocked and not written, but it exists."
+  end
+
+  if File.exists?(outside_file) do
+    raise "Expected #{outside_file} to be blocked and not written, but it exists."
+  end
+
+  IO.puts("\n✅ File policy enforcement checks passed (allowed=#{allowed}, denied=#{denied}).")
+
+  IO.puts("\nDone.")
+after
+  if is_pid(client) and Process.alive?(client), do: Client.stop(client)
+
+  case :ets.whereis(table) do
+    :undefined -> :ok
+    tid -> :ets.delete(tid)
+  end
+
+  Support.cleanup_tmp_dir(sandbox_dir)
+  Support.cleanup_tmp_dir(outside_dir)
 end
 
-if File.exists?(env_file) do
-  raise "Expected #{env_file} to be blocked and not written, but it exists."
-end
-
-if File.exists?(outside_file) do
-  raise "Expected #{outside_file} to be blocked and not written, but it exists."
-end
-
-IO.puts("\n✅ File policy enforcement checks passed (allowed=#{allowed}, denied=#{denied}).")
-
-Client.stop(client)
-:ets.delete(table)
-
-IO.puts("\nDone.")
 Support.halt_if_runner!()

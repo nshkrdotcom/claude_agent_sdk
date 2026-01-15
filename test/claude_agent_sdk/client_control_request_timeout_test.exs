@@ -28,9 +28,9 @@ defmodule ClaudeAgentSDK.ClientControlRequestTimeoutTest do
         transport_opts: [test_pid: self()]
       )
 
-    assert_receive {:mock_transport_started, transport_pid}, 200
-    assert_receive {:mock_transport_send, init_json}, 200
-    init_request_id = Jason.decode!(String.trim(init_json))["request_id"]
+    assert_receive {:mock_transport_started, transport_pid}, 1_000
+    assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
+    assert_receive {:mock_transport_send, _init_json}, 1_000
 
     init_response = %{
       "type" => "control_response",
@@ -65,9 +65,9 @@ defmodule ClaudeAgentSDK.ClientControlRequestTimeoutTest do
         transport_opts: [test_pid: self()]
       )
 
-    assert_receive {:mock_transport_started, transport_pid}, 200
-    assert_receive {:mock_transport_send, init_json}, 200
-    init_request_id = Jason.decode!(String.trim(init_json))["request_id"]
+    assert_receive {:mock_transport_started, transport_pid}, 1_000
+    assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
+    assert_receive {:mock_transport_send, _init_json}, 1_000
 
     init_response = %{
       "type" => "control_response",

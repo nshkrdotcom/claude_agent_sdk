@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-01-14
+
+### Added
+
+- **Init Readiness API**: Added `Client.await_init_sent/2` to block until the initialize request is sent, enabling deterministic test synchronization without flaky mailbox timing.
+- **Pre-Subscriber Buffering**: Inbound stream events and SDK messages are now buffered until the first subscriber attaches, preventing dropped events during async startup.
+- **Buffer Limit Option**: Added `stream_buffer_limit` option to `Options` (default: 1000) controlling max buffered entries before first subscriber; oldest entries are dropped when limit is exceeded.
+
+### Changed
+
+- **Test Timeouts**: Increased init message assertion timeouts from 200ms to 1000ms across client tests for reliability under load.
+- **Test Patterns**: Replaced flaky `assert_receive {:mock_transport_send, init_json}` patterns with `Client.await_init_sent/2` followed by explicit message consumption.
+
+### Fixed
+
+- **Intermittent Test Failures**: Resolved race conditions caused by async `handle_continue` initialization where init messages arrived after short `assert_receive` timeouts.
+- **Stream Event Drops**: Fixed stream events being silently dropped when `active_subscriber` was nil by auto-assigning first subscriber as active and flushing buffered events.
+- **Legacy Subscribe**: Legacy `{:subscribe}` call now sets `active_subscriber` when nil and flushes pending inbound buffer to prevent indefinite buffering.
+
 ## [0.8.0] - 2026-01-12
 
 ### Added
@@ -1040,7 +1059,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.6...v0.8.0
 [0.7.7]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.4...v0.7.5

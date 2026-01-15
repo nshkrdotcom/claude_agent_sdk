@@ -73,6 +73,7 @@ defmodule ClaudeAgentSDK.Client do
   @default_hook_timeout_ms 60_000
   @default_init_timeout_ms 60_000
   @default_control_request_timeout_ms 60_000
+  @default_stream_buffer_limit 1_000
   @init_timeout_env_var "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT"
   @edit_tools ["Write", "Edit", "MultiEdit"]
 
@@ -93,6 +94,11 @@ defmodule ClaudeAgentSDK.Client do
   - `accumulated_text` - Buffer for partial text (streaming, v0.6.0)
   - `active_subscriber` - Current streaming consumer reference (v0.6.0)
   - `subscriber_queue` - Pending message queue (v0.6.0)
+  - `init_waiters` - Callers waiting for initialize request send
+  - `pending_inbound` - Buffered inbound events/messages before first subscriber
+  - `pending_inbound_count` - Count of buffered inbound entries
+  - `pending_inbound_dropped` - Dropped inbound entries due to buffer limit
+  - `stream_buffer_limit` - Max buffered inbound entries before first subscriber
   """
   @type state :: %{
           port: port() | nil,
@@ -122,6 +128,11 @@ defmodule ClaudeAgentSDK.Client do
           accumulated_text: String.t(),
           active_subscriber: reference() | nil,
           subscriber_queue: [{reference(), String.t()}],
+          init_waiters: [GenServer.from()],
+          pending_inbound: :queue.queue(),
+          pending_inbound_count: non_neg_integer(),
+          pending_inbound_dropped: non_neg_integer(),
+          stream_buffer_limit: non_neg_integer(),
           server_info: map() | nil,
           init_request_id: String.t() | nil,
           init_timeout_ref: reference() | nil,
@@ -406,6 +417,29 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @doc """
+  Waits until the initialize request has been sent to the transport.
+
+  Returns `{:ok, request_id}` once the initialize request is sent, or
+  `{:error, reason}` if the client is not alive or times out.
+  """
+  @spec await_init_sent(pid(), pos_integer() | nil) :: {:ok, String.t()} | {:error, term()}
+  def await_init_sent(client, timeout_ms \\ nil) when is_pid(client) do
+    timeout_ms =
+      if is_integer(timeout_ms) and timeout_ms > 0 do
+        timeout_ms
+      else
+        @default_init_timeout_ms
+      end
+
+    try do
+      GenServer.call(client, :await_init_sent, timeout_ms)
+    catch
+      :exit, {:timeout, _} -> {:error, :timeout}
+      :exit, _ -> {:error, :client_not_alive}
+    end
+  end
+
+  @doc """
   Sets the permission mode at runtime.
 
   Changes how tool permissions are handled for subsequent tool uses.
@@ -588,6 +622,11 @@ defmodule ClaudeAgentSDK.Client do
         stream_stop_reason: nil,
         active_subscriber: nil,
         subscriber_queue: [],
+        init_waiters: [],
+        pending_inbound: :queue.new(),
+        pending_inbound_count: 0,
+        pending_inbound_dropped: 0,
+        stream_buffer_limit: stream_buffer_limit(updated_options),
         server_info: nil,
         init_request_id: nil,
         init_timeout_ref: nil,
@@ -617,7 +656,7 @@ defmodule ClaudeAgentSDK.Client do
   def handle_continue(:start_cli, state) do
     case start_cli_process(state) do
       {:ok, new_state} ->
-        {:noreply, new_state}
+        {:noreply, notify_init_sent_waiters(new_state)}
 
       {:error, reason} ->
         {:stop, {:cli_start_failed, reason}, state}
@@ -651,6 +690,7 @@ defmodule ClaudeAgentSDK.Client do
 
   def handle_call({:subscribe, ref}, from, state) do
     {pid, _from_ref} = from
+    was_empty = map_size(state.subscribers) == 0
 
     # Add to subscribers map
     subscribers = Map.put(state.subscribers, ref, pid)
@@ -663,12 +703,28 @@ defmodule ClaudeAgentSDK.Client do
         state.active_subscriber
       end
 
-    {:reply, {:ok, ref},
-     %{
-       state
-       | subscribers: subscribers,
-         active_subscriber: new_active
-     }}
+    state = %{
+      state
+      | subscribers: subscribers,
+        active_subscriber: new_active
+    }
+
+    state =
+      if was_empty do
+        flush_pending_inbound(state, ref, pid)
+      else
+        state
+      end
+
+    {:reply, {:ok, ref}, state}
+  end
+
+  def handle_call(:await_init_sent, from, state) do
+    if is_binary(state.init_request_id) do
+      {:reply, {:ok, state.init_request_id}, state}
+    else
+      {:noreply, %{state | init_waiters: [from | state.init_waiters]}}
+    end
   end
 
   # Legacy subscribe (backwards compatibility) - generate a ref for the pid
@@ -676,8 +732,24 @@ defmodule ClaudeAgentSDK.Client do
     {pid, _ref} = from
     # For backwards compat, create a ref for this pid subscription
     ref = make_ref()
+    was_empty = map_size(state.subscribers) == 0
     subscribers = Map.put(state.subscribers, ref, pid)
-    {:reply, :ok, %{state | subscribers: subscribers}}
+
+    state =
+      if state.active_subscriber == nil do
+        %{state | subscribers: subscribers, active_subscriber: ref}
+      else
+        %{state | subscribers: subscribers}
+      end
+
+    state =
+      if was_empty do
+        flush_pending_inbound(state, ref, pid)
+      else
+        state
+      end
+
+    {:reply, :ok, state}
   end
 
   def handle_call({:set_permission_mode, mode}, from, state) do
@@ -1274,6 +1346,13 @@ defmodule ClaudeAgentSDK.Client do
 
   defp apply_permission_prompt_tool(options), do: {:ok, options}
 
+  defp stream_buffer_limit(%Options{stream_buffer_limit: limit})
+       when is_integer(limit) and limit >= 0 do
+    limit
+  end
+
+  defp stream_buffer_limit(_options), do: @default_stream_buffer_limit
+
   defp maybe_attach_permission_hook(%Options{can_use_tool: nil} = options) do
     {:ok, options, nil}
   end
@@ -1532,6 +1611,16 @@ defmodule ClaudeAgentSDK.Client do
     }
   end
 
+  defp notify_init_sent_waiters(%{init_waiters: []} = state), do: state
+
+  defp notify_init_sent_waiters(%{init_request_id: request_id, init_waiters: waiters} = state)
+       when is_binary(request_id) do
+    Enum.each(waiters, fn from -> GenServer.reply(from, {:ok, request_id}) end)
+    %{state | init_waiters: []}
+  end
+
+  defp notify_init_sent_waiters(state), do: state
+
   defp cancel_init_timeout(%{init_timeout_ref: ref} = state) when is_reference(ref) do
     _ = Process.cancel_timer(ref)
     %{state | init_timeout_ref: nil, init_timeout_ms: nil}
@@ -1744,7 +1833,6 @@ defmodule ClaudeAgentSDK.Client do
   defp handle_decoded_message(:sdk_message, data, state) do
     # Regular SDK message, broadcast to subscribers
     broadcast_message(data, state)
-    state
   end
 
   defp handle_decoded_message(:stream_event, data, state) do
@@ -2281,13 +2369,97 @@ defmodule ClaudeAgentSDK.Client do
     # Parse into Message struct
     case Message.from_json(Jason.encode!(message_data)) do
       {:ok, message} ->
-        # Send to all subscribers (now a map of ref => pid)
-        Enum.each(state.subscribers, fn {_ref, pid} ->
-          send(pid, {:claude_message, message})
-        end)
+        deliver_or_buffer_message(message, state)
 
       {:error, reason} ->
         Logger.warning("Failed to parse SDK message", reason: reason)
+        state
+    end
+  end
+
+  defp deliver_or_buffer_message(message, state) do
+    if map_size(state.subscribers) == 0 do
+      buffer_inbound(state, [{:claude_message, message}])
+    else
+      Enum.each(state.subscribers, fn {_ref, pid} ->
+        send(pid, {:claude_message, message})
+      end)
+
+      state
+    end
+  end
+
+  defp buffer_inbound(%{stream_buffer_limit: 0} = state, _entries), do: state
+
+  defp buffer_inbound(state, entries) when is_list(entries) do
+    Enum.reduce(entries, state, fn entry, acc ->
+      queue = :queue.in(entry, acc.pending_inbound)
+      count = acc.pending_inbound_count + 1
+
+      {queue, count, dropped} =
+        trim_inbound_queue(queue, count, acc.stream_buffer_limit, acc.pending_inbound_dropped)
+
+      %{
+        acc
+        | pending_inbound: queue,
+          pending_inbound_count: count,
+          pending_inbound_dropped: dropped
+      }
+    end)
+  end
+
+  defp trim_inbound_queue(queue, count, limit, dropped)
+       when is_integer(limit) and limit > 0 and count > limit do
+    {{:value, _}, queue} = :queue.out(queue)
+    trim_inbound_queue(queue, count - 1, limit, dropped + 1)
+  end
+
+  defp trim_inbound_queue(queue, count, _limit, dropped), do: {queue, count, dropped}
+
+  defp flush_pending_inbound(%{pending_inbound_count: 0} = state, _ref, _pid), do: state
+
+  defp flush_pending_inbound(state, ref, pid) do
+    if state.pending_inbound_dropped > 0 do
+      Logger.warning("Dropped inbound messages before first subscriber",
+        dropped: state.pending_inbound_dropped,
+        buffer_limit: state.stream_buffer_limit
+      )
+    end
+
+    state.pending_inbound
+    |> :queue.to_list()
+    |> Enum.each(fn
+      {:claude_message, message} ->
+        send(pid, {:claude_message, message})
+
+      {:stream_event, event} ->
+        send(pid, {:stream_event, ref, event})
+    end)
+
+    %{
+      state
+      | pending_inbound: :queue.new(),
+        pending_inbound_count: 0,
+        pending_inbound_dropped: 0
+    }
+  end
+
+  defp buffer_stream_events(state, events) do
+    entries = Enum.map(events, &{:stream_event, &1})
+    buffer_inbound(state, entries)
+  end
+
+  defp ensure_active_subscriber(%{active_subscriber: ref} = state) when is_reference(ref) do
+    {ref, state}
+  end
+
+  defp ensure_active_subscriber(state) do
+    case Map.keys(state.subscribers) do
+      [] ->
+        {nil, state}
+
+      [ref | _] ->
+        {ref, %{state | active_subscriber: ref}}
     end
   end
 
@@ -2648,18 +2820,23 @@ defmodule ClaudeAgentSDK.Client do
     {stop_reason, message_complete?} =
       Termination.reduce(events, state.stream_stop_reason)
 
-    # Broadcast to active subscriber only (queue model)
-    case state.active_subscriber do
-      nil ->
-        :ok
+    # Broadcast to active subscriber only (queue model), or buffer until subscribed
+    {active_ref, state} = ensure_active_subscriber(state)
 
-      ref ->
-        broadcast_events_to_subscriber(
-          ref,
-          state.subscribers,
-          events
-        )
-    end
+    state =
+      case active_ref do
+        nil ->
+          buffer_stream_events(state, events)
+
+        ref ->
+          broadcast_events_to_subscriber(
+            ref,
+            state.subscribers,
+            events
+          )
+
+          state
+      end
 
     if message_complete? do
       state

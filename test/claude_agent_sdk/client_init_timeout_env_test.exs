@@ -53,8 +53,9 @@ defmodule ClaudeAgentSDK.ClientInitTimeoutEnvTest do
 
       on_exit(fn -> safe_stop(client) end)
 
-      assert_receive {:mock_transport_started, _transport}, 200
-      assert_receive {:mock_transport_send, _init_json}, 200
+      assert_receive {:mock_transport_started, _transport}, 1_000
+      assert {:ok, _request_id} = Client.await_init_sent(client, 1_000)
+      assert_receive {:mock_transport_send, _init_json}, 1_000
 
       state = :sys.get_state(client)
 

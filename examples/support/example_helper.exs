@@ -13,6 +13,20 @@ defmodule Examples.Support do
     dir
   end
 
+  def tmp_dir!(prefix) when is_binary(prefix) do
+    suffix = "#{System.system_time(:microsecond)}_#{System.unique_integer([:positive])}"
+    dir = Path.join(System.tmp_dir!(), "#{prefix}_#{suffix}")
+    File.mkdir_p!(dir)
+    dir
+  end
+
+  def cleanup_tmp_dir(nil), do: :ok
+
+  def cleanup_tmp_dir(path) when is_binary(path) do
+    _ = File.rm_rf(path)
+    :ok
+  end
+
   # When running under `examples/run_all.sh`, we force-halt to avoid any cases where
   # background OTP apps or ports keep the VM alive after the script finishes.
   def halt_if_runner!(exit_code \\ 0) when is_integer(exit_code) do

@@ -19,9 +19,9 @@ defmodule Integration.CustomTransportTest do
       end
     end)
 
-    assert_receive {:mock_transport_started, transport_pid}, 200
-    # consume initialize request
-    assert_receive {:mock_transport_send, _init_json}, 200
+    assert_receive {:mock_transport_started, transport_pid}, 1_000
+    assert {:ok, _request_id} = Client.await_init_sent(client, 1_000)
+    assert_receive {:mock_transport_send, _init_json}, 1_000
 
     task =
       Task.async(fn ->

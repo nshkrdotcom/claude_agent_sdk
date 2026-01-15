@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
-  @version "0.8.0"
+  @version "0.8.1"
 
   def project do
     [
@@ -60,8 +60,7 @@ defmodule ClaudeAgentSdk.MixProject do
         "Examples" => "https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples"
       },
       maintainers: [{"NSHkr", "ZeroTrust@NSHkr.com"}],
-      files:
-        ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs assets guides examples/README.md examples/mix_task_chat/README.md examples/phoenix_chat/README.md examples/document_generation/README.md examples/research_agent/README.md examples/skill_invocation/README.md examples/email_agent/README.md)
+      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs)
     ]
   end
 
