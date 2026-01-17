@@ -284,30 +284,47 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
   defp parse_json_line(line, events_acc, text_acc) do
     case Jason.decode(line) do
       {:ok, json} ->
-        {event_json, parent_tool_use_id} = unwrap_stream_event(json)
+        {event_json, metadata} = unwrap_stream_event(json)
         {:ok, parsed_events, new_text_acc} = parse_event(event_json, text_acc)
-        events_with_parent_id = inject_parent_tool_use_id(parsed_events, parent_tool_use_id)
-        {events_acc ++ events_with_parent_id, new_text_acc}
+        events_with_metadata = attach_stream_metadata(parsed_events, metadata, event_json)
+        {events_acc ++ events_with_metadata, new_text_acc}
 
       {:error, _reason} ->
         {events_acc, text_acc}
     end
   end
 
-  # Inject parent_tool_use_id into all parsed events for subagent routing
-  defp inject_parent_tool_use_id(events, parent_tool_use_id) do
-    Enum.map(events, &Map.put(&1, :parent_tool_use_id, parent_tool_use_id))
+  @doc false
+  @spec attach_stream_metadata([event()], map(), map()) :: [event()]
+  def attach_stream_metadata(events, metadata, raw_event) do
+    Enum.map(events, fn event ->
+      event
+      |> Map.put(:parent_tool_use_id, Map.get(metadata, :parent_tool_use_id))
+      |> Map.put(:uuid, Map.get(metadata, :uuid))
+      |> Map.put(:session_id, Map.get(metadata, :session_id))
+      |> Map.put(:raw_event, raw_event)
+    end)
   end
 
-  # Unwrap stream_event wrapper from Claude CLI output, preserving parent_tool_use_id
-  # The parent_tool_use_id field identifies which Task tool call produced the event,
-  # enabling UIs to route subagent output to the correct panel.
-  defp unwrap_stream_event(%{"type" => "stream_event", "event" => event} = wrapper) do
-    parent_id = Map.get(wrapper, "parent_tool_use_id")
-    {event, parent_id}
+  # Unwrap stream_event wrapper from Claude CLI output, preserving metadata.
+  defp unwrap_stream_event(%{"type" => "stream_event"} = wrapper) do
+    event = Map.fetch!(wrapper, "event")
+    uuid = Map.fetch!(wrapper, "uuid")
+    session_id = Map.fetch!(wrapper, "session_id")
+
+    metadata = %{
+      parent_tool_use_id: Map.get(wrapper, "parent_tool_use_id"),
+      uuid: uuid,
+      session_id: session_id
+    }
+
+    {event, metadata}
   end
 
-  defp unwrap_stream_event(event), do: {event, nil}
+  defp unwrap_stream_event(event) do
+    metadata = %{parent_tool_use_id: nil, uuid: nil, session_id: nil}
+    {event, metadata}
+  end
 
   defp maybe_put_structured_output(event, nil), do: event
 

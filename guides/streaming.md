@@ -214,6 +214,7 @@ IO.puts("Session ID: #{session_id}")
 ## Event Types
 
 The Streaming API emits various event types for fine-grained control.
+Each event map also includes streaming metadata: `uuid`, `session_id`, `parent_tool_use_id`, and `raw_event` (the raw CLI event map with string keys). Stream event wrappers require both `uuid` and `session_id` (missing keys raise) to match Python SDK behavior.
 
 ### Text Streaming Events
 

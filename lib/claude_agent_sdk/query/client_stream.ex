@@ -142,7 +142,13 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
         end
 
       {:stream_event, ^ref, event} ->
-        msg = %Message{type: :stream_event, subtype: nil, data: %{event: event}, raw: %{}}
+        msg = %Message{
+          type: :stream_event,
+          subtype: nil,
+          data: stream_event_data(event),
+          raw: %{}
+        }
+
         {[msg], {:ok, state}}
     after
       @default_receive_timeout_ms ->
@@ -169,6 +175,17 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
             {:halt, {:ok, state}}
         end
     end
+  end
+
+  defp stream_event_data(event) when is_map(event) do
+    raw_event = Map.get(event, :raw_event, event)
+
+    %{
+      event: raw_event,
+      uuid: Map.get(event, :uuid),
+      session_id: Map.get(event, :session_id),
+      parent_tool_use_id: Map.get(event, :parent_tool_use_id)
+    }
   end
 
   defp query_timeout_ms(%Options{timeout_ms: timeout_ms})

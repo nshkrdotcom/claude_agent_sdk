@@ -67,7 +67,8 @@ IO.puts("Received #{length(messages)} message(s):")
 
 Enum.each(messages, fn
   %Message{type: :stream_event, data: %{event: event}} ->
-    IO.puts("  • stream_event: #{event.type}")
+    event_type = Map.get(event, "type") || Map.get(event, :type)
+    IO.puts("  • stream_event: #{event_type}")
 
   %Message{type: :assistant} = msg ->
     blocks = Message.content_blocks(msg)

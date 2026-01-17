@@ -55,7 +55,6 @@ defmodule ClaudeAgentSdk.MixProject do
       licenses: ["MIT"],
       links: %{
         "GitHub" => "https://github.com/nshkrdotcom/claude_agent_sdk",
-        "Documentation" => "https://hexdocs.pm/claude_agent_sdk",
         "Claude Code" => "https://claude.ai/code",
         "Examples" => "https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples"
       },

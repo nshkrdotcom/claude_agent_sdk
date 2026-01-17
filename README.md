@@ -229,7 +229,7 @@ Streaming.send_message(session, "Now write one about Phoenix")
 Streaming.close_session(session)
 ```
 
-**Subagent Streaming:** When Claude spawns subagents via the Task tool, events include a `parent_tool_use_id` field to identify the source. Main agent events have `nil`, subagent events have the Task tool call ID. See the [Streaming Guide](guides/streaming.md#subagent-events-parent_tool_use_id) for details.
+**Subagent Streaming:** When Claude spawns subagents via the Task tool, events include a `parent_tool_use_id` field to identify the source. Main agent events have `nil`, subagent events have the Task tool call ID. Streaming events also include `uuid`, `session_id`, and `raw_event` metadata for parity with the Python SDK. Stream event wrappers require `uuid` and `session_id` (missing keys raise). See the [Streaming Guide](guides/streaming.md#subagent-events-parent_tool_use_id) for details.
 
 ### Hooks System
 
@@ -479,6 +479,14 @@ cd examples/email_agent && mix deps.get && mix email.assistant "find emails from
 | [Sessions](guides/sessions.md) | Session management and persistence |
 | [Testing](guides/testing.md) | Mock system and testing patterns |
 | [Error Handling](guides/error-handling.md) | Error types and recovery |
+
+## Upgrading
+
+For breaking changes and migration notes, see `CHANGELOG.md`.
+
+**0.9.0 breaking change (streaming):**
+- Stream event wrappers now require `uuid` and `session_id`. Missing keys raise and terminate the streaming client.
+- If you emit or mock `stream_event` wrappers, include both fields (custom transports, fixtures, tests).
 
 **Additional Resources:**
 - [CHANGELOG.md](CHANGELOG.md) - Version history and release notes

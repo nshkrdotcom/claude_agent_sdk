@@ -50,7 +50,7 @@ Verify the installation:
 claude --version
 ```
 
-You should see a version number like `2.1.7` or higher.
+You should see a version number like `2.1.12` or higher.
 
 ### 3. Authentication
 
@@ -243,7 +243,9 @@ Each message in the stream has a `type` field indicating what it represents:
 | `:user` | User input echo | `message`, `session_id` |
 | `:assistant` | Claude's response | `message` (with `content`), `session_id` |
 | `:result` | Final summary | `total_cost_usd`, `duration_ms`, `num_turns` |
-| `:stream_event` | Streaming event | `event`, `uuid` |
+| `:stream_event` | Streaming event | `event`, `uuid`, `session_id`, `parent_tool_use_id` |
+
+Note: `:stream_event` messages expose the raw CLI event in `data.event`. For parsed streaming events (with `:text_delta`, `:message_start`, etc.), use the Streaming API. Parsed events include `uuid`, `session_id`, `parent_tool_use_id`, and `raw_event`.
 
 Note: CLI JSON frames are capped by `max_buffer_size` (default 1MB). If a frame exceeds the limit, the stream terminates with a `CLIJSONDecodeError` result.
 

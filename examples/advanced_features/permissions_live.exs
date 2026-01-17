@@ -43,6 +43,19 @@ options = %Options{
   allowed_tools: ["Write"]
 }
 
+wait_for_file = fn path, attempts, delay_ms ->
+  Enum.reduce_while(1..attempts, {:error, :not_found}, fn _idx, _acc ->
+    case File.stat(path) do
+      {:ok, _} ->
+        {:halt, :ok}
+
+      {:error, _} ->
+        Process.sleep(delay_ms)
+        {:cont, {:error, :not_found}}
+    end
+  end)
+end
+
 # Task: Ask Claude to write a small file
 prompt = """
 Use the Write tool to create a file with the exact path and content below.
@@ -64,14 +77,14 @@ session_type =
     _pid when is_pid(session) -> :streaming_session
   end
 
+session_label =
+  case session_type do
+    :control_client -> "control client mode"
+    :streaming_session -> "CLI streaming mode"
+  end
+
 exit_code =
   try do
-    session_label =
-      case session_type do
-        :control_client -> "control client mode"
-        :streaming_session -> "CLI streaming mode"
-      end
-
     IO.puts("✓ Session started (#{session_label})\n")
     IO.puts("-" |> String.duplicate(60))
 
@@ -116,7 +129,15 @@ exit_code =
       end
     end
 
-    case File.read(target_file) do
+    case wait_for_file.(target_file, 15, 200) do
+      :ok -> :ok
+      {:error, :not_found} -> :error
+    end
+    |> case do
+      :ok -> File.read(target_file)
+      :error -> {:error, :not_found}
+    end
+    |> case do
       {:ok, contents} ->
         preview = contents |> String.trim() |> String.slice(0..120)
         IO.puts("✅ File written: #{target_file}")
@@ -132,7 +153,7 @@ exit_code =
 
     IO.puts("\nPermissions Live Example complete!")
     IO.puts("\nWhat happened:")
-    IO.puts("  1. Started streaming session (control client mode)")
+    IO.puts("  1. Started streaming session (#{session_label})")
     IO.puts("  2. Asked Claude to write a file")
     IO.puts("  3. Observed Write tool use in stream")
     IO.puts("  4. Verified file contents")

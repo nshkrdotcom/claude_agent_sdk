@@ -315,7 +315,13 @@ defmodule ClaudeAgentSDK.Client do
               {[message], next_state}
 
             {:stream_event, ^ref, event} ->
-              msg = %Message{type: :stream_event, subtype: nil, data: %{event: event}, raw: %{}}
+              msg = %Message{
+                type: :stream_event,
+                subtype: nil,
+                data: stream_event_data(event),
+                raw: %{}
+              }
+
               {[msg], {client_pid, ref, :active}}
           after
             30_000 ->
@@ -334,6 +340,17 @@ defmodule ClaudeAgentSDK.Client do
           :ok
       end
     )
+  end
+
+  defp stream_event_data(event) when is_map(event) do
+    raw_event = Map.get(event, :raw_event, event)
+
+    %{
+      event: raw_event,
+      uuid: Map.get(event, :uuid),
+      session_id: Map.get(event, :session_id),
+      parent_tool_use_id: Map.get(event, :parent_tool_use_id)
+    }
   end
 
   @doc """
@@ -1837,16 +1854,27 @@ defmodule ClaudeAgentSDK.Client do
 
   defp handle_decoded_message(:stream_event, data, state) do
     # Streaming event (v0.6.0) - handle both wrapped and unwrapped formats
-    # Real CLI: {"type": "stream_event", "event": {"type": "message_start", ...}, "parent_tool_use_id": "toolu_xxx"}
+    # Real CLI: {"type": "stream_event", "uuid": "...", "session_id": "...",
+    #            "event": {"type": "message_start", ...}, "parent_tool_use_id": "toolu_xxx"}
     # Tests: {"type": "message_start", ...}
-    {event_data, parent_tool_use_id} =
+    {event_data, metadata} =
       if data["type"] == "stream_event" do
-        {data["event"], data["parent_tool_use_id"]}
+        event = Map.fetch!(data, "event")
+        uuid = Map.fetch!(data, "uuid")
+        session_id = Map.fetch!(data, "session_id")
+
+        metadata = %{
+          parent_tool_use_id: data["parent_tool_use_id"],
+          uuid: uuid,
+          session_id: session_id
+        }
+
+        {event, metadata}
       else
-        {data, nil}
+        {data, %{parent_tool_use_id: nil, uuid: nil, session_id: nil}}
       end
 
-    handle_stream_event(event_data, parent_tool_use_id, state)
+    handle_stream_event(event_data, metadata, state)
   end
 
   defp handle_control_request(request_data, state) do
@@ -2475,7 +2503,7 @@ defmodule ClaudeAgentSDK.Client do
         {[message], {client, ref}}
 
       {:stream_event, ^ref, event} ->
-        {[%Message{type: :stream_event, subtype: nil, data: %{event: event}, raw: %{}}],
+        {[%Message{type: :stream_event, subtype: nil, data: stream_event_data(event), raw: %{}}],
          {client, ref}}
     after
       30_000 ->
@@ -2818,18 +2846,15 @@ defmodule ClaudeAgentSDK.Client do
 
   ## Stream Event Handling (v0.6.0)
 
-  defp handle_stream_event(event_data, parent_tool_use_id, state) do
+  defp handle_stream_event(event_data, metadata, state) do
     # Parse streaming event via EventParser (always returns {:ok, events, accumulated})
     {:ok, events, new_accumulated} =
       EventParser.parse_event(event_data, state.accumulated_text)
 
-    # Inject parent_tool_use_id into all parsed events for subagent routing
-    # This field identifies which Task tool call produced the event
-    events_with_parent_id =
-      Enum.map(events, &Map.put(&1, :parent_tool_use_id, parent_tool_use_id))
+    events_with_metadata = EventParser.attach_stream_metadata(events, metadata, event_data)
 
     {stop_reason, message_complete?} =
-      Termination.reduce(events_with_parent_id, state.stream_stop_reason)
+      Termination.reduce(events_with_metadata, state.stream_stop_reason)
 
     # Broadcast to active subscriber only (queue model), or buffer until subscribed
     {active_ref, state} = ensure_active_subscriber(state)
@@ -2837,13 +2862,13 @@ defmodule ClaudeAgentSDK.Client do
     state =
       case active_ref do
         nil ->
-          buffer_stream_events(state, events_with_parent_id)
+          buffer_stream_events(state, events_with_metadata)
 
         ref ->
           broadcast_events_to_subscriber(
             ref,
             state.subscribers,
-            events_with_parent_id
+            events_with_metadata
           )
 
           state

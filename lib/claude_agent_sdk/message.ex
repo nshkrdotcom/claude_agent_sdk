@@ -313,9 +313,9 @@ defmodule ClaudeAgentSDK.Message do
 
   defp parse_by_type(message, :stream_event, raw) do
     data = %{
-      uuid: raw["uuid"],
-      session_id: raw["session_id"],
-      event: raw["event"],
+      uuid: Map.fetch!(raw, "uuid"),
+      session_id: Map.fetch!(raw, "session_id"),
+      event: Map.fetch!(raw, "event"),
       parent_tool_use_id: raw["parent_tool_use_id"]
     }
 

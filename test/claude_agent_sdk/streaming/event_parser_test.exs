@@ -19,10 +19,12 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
   # Raw CLI output structure:
   #
   #   Main agent (no parent):
-  #     {"type": "stream_event", "event": {...}, "parent_tool_use_id": null}
+  #     {"type": "stream_event", "uuid": "...", "session_id": "...", "event": {...},
+  #      "parent_tool_use_id": null}
   #
   #   Subagent (has parent):
-  #     {"type": "stream_event", "event": {...}, "parent_tool_use_id": "toolu_01ABC"}
+  #     {"type": "stream_event", "uuid": "...", "session_id": "...", "event": {...},
+  #      "parent_tool_use_id": "toolu_01ABC"}
   #
   # ===========================================================================
 
@@ -30,7 +32,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
     test "preserves parent_tool_use_id from stream_event wrapper on text_delta" do
       # Subagent event with parent_tool_use_id
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}}\n)
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -43,7 +45,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
     test "sets parent_tool_use_id to nil for main agent events" do
       # Main agent event (no parent_tool_use_id or explicit null)
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","parent_tool_use_id":null,"event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}}\n)
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":null,"event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -54,7 +56,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
     test "preserves parent_tool_use_id on message_start events" do
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","parent_tool_use_id":"toolu_01XYZ","event":{"type":"message_start","message":{"model":"claude-haiku","role":"assistant"}}}\n)
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_01XYZ","event":{"type":"message_start","message":{"model":"claude-haiku","role":"assistant"}}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -65,7 +67,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
     test "preserves parent_tool_use_id on message_stop events" do
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"message_stop"}}\n)
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"message_stop"}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -76,7 +78,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
     test "preserves parent_tool_use_id on tool_use_start events" do
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","parent_tool_use_id":"toolu_parent","event":{"type":"content_block_start","content_block":{"type":"tool_use","name":"Glob","id":"toolu_child"}}}\n)
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_parent","event":{"type":"content_block_start","content_block":{"type":"tool_use","name":"Glob","id":"toolu_child"}}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -89,7 +91,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
     test "preserves parent_tool_use_id on tool_input_delta events" do
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"pattern\\""}}}\n)
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"pattern\\""}}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -101,7 +103,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
     test "preserves parent_tool_use_id on content_block_stop events" do
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"content_block_stop"}}\n)
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"content_block_stop"}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -112,7 +114,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
     test "preserves parent_tool_use_id on message_delta events" do
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"message_delta","delta":{"stop_reason":"end_turn"}}}\n)
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"message_delta","delta":{"stop_reason":"end_turn"}}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -123,7 +125,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
     test "preserves parent_tool_use_id on thinking_delta events" do
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Let me think..."}}}\n)
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Let me think..."}}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -136,8 +138,8 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
     test "handles multiple events with mixed parent_tool_use_id values" do
       # Main agent event followed by subagent event
       buffer = """
-      {"type":"stream_event","session_id":"sess_123","parent_tool_use_id":null,"event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Main"}}}
-      {"type":"stream_event","session_id":"sess_123","parent_tool_use_id":"toolu_sub","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Sub"}}}
+      {"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":null,"event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Main"}}}
+      {"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_sub","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Sub"}}}
       """
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
@@ -157,6 +159,49 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
       assert [event] = events
       assert event.type == :message_start
       assert event.parent_tool_use_id == nil
+    end
+  end
+
+  describe "parse_buffer/2 stream_event metadata preservation" do
+    test "preserves uuid and session_id from stream_event wrapper" do
+      buffer =
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_01ABC","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}}\n)
+
+      {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
+
+      assert [event] = events
+      assert event.uuid == "evt_123"
+      assert event.session_id == "sess_123"
+
+      assert event.raw_event == %{
+               "type" => "content_block_delta",
+               "delta" => %{"type" => "text_delta", "text" => "Hello"}
+             }
+    end
+
+    test "raises when stream_event wrapper is missing uuid" do
+      buffer =
+        ~s({"type":"stream_event","session_id":"sess_123","event":{"type":"message_start","message":{"model":"claude-haiku","role":"assistant"}}}\n)
+
+      assert_raise KeyError, fn ->
+        EventParser.parse_buffer(buffer, "")
+      end
+    end
+
+    test "sets raw_event with nil metadata for unwrapped events" do
+      buffer =
+        ~s({"type":"message_start","message":{"model":"claude-haiku","role":"assistant"}}\n)
+
+      {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
+
+      assert [event] = events
+      assert event.uuid == nil
+      assert event.session_id == nil
+
+      assert event.raw_event == %{
+               "type" => "message_start",
+               "message" => %{"model" => "claude-haiku", "role" => "assistant"}
+             }
     end
   end
 

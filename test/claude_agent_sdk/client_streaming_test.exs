@@ -103,11 +103,14 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
           |> Enum.take(3)
         end)
 
-      assert [
-               %Message{type: :stream_event, data: %{event: %{type: :text_delta}}},
-               %Message{type: :assistant},
-               %Message{type: :result, subtype: :success}
-             ] = Task.await(task, 1_000)
+      [stream_event_msg, %Message{type: :assistant}, %Message{type: :result, subtype: :success}] =
+        Task.await(task, 1_000)
+
+      assert %Message{type: :stream_event, data: data} = stream_event_msg
+      assert data.event["type"] == "content_block_delta"
+      assert data.event["delta"]["text"] == "Hello"
+      assert data.uuid == nil
+      assert data.session_id == nil
     end
   end
 
@@ -347,12 +350,12 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       MockTransport.push_message(transport, Jason.encode!(event))
 
-      assert [
-               %Message{
-                 type: :stream_event,
-                 data: %{event: %{type: :text_delta, accumulated: "Hello"}}
-               }
-             ] = Task.await(task, 1_000)
+      [message] = Task.await(task, 1_000)
+      assert %Message{type: :stream_event, data: data} = message
+      assert data.event["type"] == "content_block_delta"
+      assert data.event["delta"]["text"] == "Hello"
+      assert data.uuid == nil
+      assert data.session_id == nil
 
       eventually(
         fn ->
@@ -588,13 +591,9 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
     end
   end
 
-  # Tests that parent_tool_use_id is preserved when processing stream_event wrappers.
-  # This field identifies which Task tool call produced the streaming event,
-  # enabling UIs to route subagent output to the correct panel.
-  #
-  # BUG LOCATION: Client.handle_decoded_message(:stream_event, ...) at lines 1838-1843
-  # discards the parent_tool_use_id when extracting the inner event.
-  describe "parent_tool_use_id preservation in control client path" do
+  # Tests that stream_event metadata is preserved when processing wrappers.
+  # This includes uuid/session_id plus parent_tool_use_id for subagent routing.
+  describe "stream_event metadata preservation in control client path" do
     setup do
       options = %Options{include_partial_messages: true}
 
@@ -653,12 +652,12 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       [message] = Task.await(task, 2_000)
 
-      # The event inside data.event should have parent_tool_use_id preserved
-      assert %Message{type: :stream_event, data: %{event: event}} = message
-      assert event.type == :text_delta
-      assert event.text == "Subagent output"
-      # THIS WILL FAIL - parent_tool_use_id is discarded in handle_decoded_message
-      assert event.parent_tool_use_id == "toolu_01ABC123XYZ"
+      assert %Message{type: :stream_event, data: data} = message
+      assert data.event["type"] == "content_block_delta"
+      assert data.event["delta"]["text"] == "Subagent output"
+      assert data.parent_tool_use_id == "toolu_01ABC123XYZ"
+      assert data.uuid == "evt_123"
+      assert data.session_id == "sess_456"
     end
 
     test "preserves parent_tool_use_id from stream_event wrapper on message_start", %{
@@ -702,11 +701,12 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       [message] = Task.await(task, 2_000)
 
-      assert %Message{type: :stream_event, data: %{event: event}} = message
-      assert event.type == :message_start
-      assert event.model == "claude-haiku-4-5"
-      # THIS WILL FAIL - parent_tool_use_id is discarded
-      assert event.parent_tool_use_id == "toolu_02DEF456ABC"
+      assert %Message{type: :stream_event, data: data} = message
+      assert data.event["type"] == "message_start"
+      assert data.event["message"]["model"] == "claude-haiku-4-5"
+      assert data.parent_tool_use_id == "toolu_02DEF456ABC"
+      assert data.uuid == "evt_456"
+      assert data.session_id == "sess_789"
     end
 
     test "sets parent_tool_use_id to nil for main agent events (no wrapper parent_tool_use_id)",
@@ -747,13 +747,12 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       [message] = Task.await(task, 2_000)
 
-      assert %Message{type: :stream_event, data: %{event: event}} = message
-      assert event.type == :text_delta
-      assert event.text == "Main agent output"
-      # Main agent events should have nil parent_tool_use_id
-      # THIS WILL FAIL - field doesn't exist at all
-      assert Map.has_key?(event, :parent_tool_use_id)
-      assert event.parent_tool_use_id == nil
+      assert %Message{type: :stream_event, data: data} = message
+      assert data.event["type"] == "content_block_delta"
+      assert data.event["delta"]["text"] == "Main agent output"
+      assert data.parent_tool_use_id == nil
+      assert data.uuid == "evt_789"
+      assert data.session_id == "sess_012"
     end
 
     test "preserves parent_tool_use_id on tool_use_start from subagent", %{
@@ -798,11 +797,13 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       [message] = Task.await(task, 2_000)
 
-      assert %Message{type: :stream_event, data: %{event: event}} = message
-      assert event.type == :tool_use_start
-      assert event.name == "Glob"
-      # THIS WILL FAIL - parent_tool_use_id is discarded
-      assert event.parent_tool_use_id == "toolu_03GHI789DEF"
+      assert %Message{type: :stream_event, data: data} = message
+      assert data.event["type"] == "content_block_start"
+      assert data.event["content_block"]["type"] == "tool_use"
+      assert data.event["content_block"]["name"] == "Glob"
+      assert data.parent_tool_use_id == "toolu_03GHI789DEF"
+      assert data.uuid == "evt_tool"
+      assert data.session_id == "sess_tool"
     end
 
     test "preserves parent_tool_use_id on message_stop from subagent", %{
@@ -841,30 +842,49 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       [message] = Task.await(task, 2_000)
 
-      assert %Message{type: :stream_event, data: %{event: event}} = message
-      assert event.type == :message_stop
-      # THIS WILL FAIL - parent_tool_use_id is discarded
-      assert event.parent_tool_use_id == "toolu_04JKL012GHI"
+      assert %Message{type: :stream_event, data: data} = message
+      assert data.event["type"] == "message_stop"
+      assert data.parent_tool_use_id == "toolu_04JKL012GHI"
+      assert data.uuid == "evt_stop"
+      assert data.session_id == "sess_stop"
+    end
+
+    test "crashes when stream_event wrapper is missing uuid", %{
+      client: client,
+      transport: transport
+    } do
+      Process.flag(:trap_exit, true)
+
+      stream_event = %{
+        "type" => "stream_event",
+        "session_id" => "sess_missing_uuid",
+        "event" => %{"type" => "message_stop"}
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(stream_event))
+
+      assert_receive {:EXIT, ^client, {{:badkey, "uuid"}, _}}, 1_000
+    end
+
+    test "crashes when stream_event wrapper is missing session_id", %{
+      client: client,
+      transport: transport
+    } do
+      Process.flag(:trap_exit, true)
+
+      stream_event = %{
+        "type" => "stream_event",
+        "uuid" => "evt_missing_session",
+        "event" => %{"type" => "message_stop"}
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(stream_event))
+
+      assert_receive {:EXIT, ^client, {{:badkey, "session_id"}, _}}, 1_000
     end
   end
 
-  # ============================================================================
-  # BUG: Streaming.message_to_event/2 discards parent_tool_use_id from Messages
-  # ============================================================================
-  #
-  # The CLI sends parent_tool_use_id on complete message objects (user, assistant),
-  # not just on stream_event wrappers. The Python SDK correctly preserves this:
-  #
-  #   [EVENT 36] UserMessage
-  #     parent_tool_use_id: 'toolu_012eTRMqhzgmuzW6U6VQ6BRN'
-  #
-  # But Elixir's Streaming.message_to_event/2 hardcodes parent_tool_use_id: nil
-  # instead of reading it from message.data.parent_tool_use_id.
-  #
-  # These tests demonstrate the bug.
-  # ============================================================================
-
-  describe "Streaming.message_to_event preserves parent_tool_use_id (BUG DEMONSTRATION)" do
+  describe "message_to_event preserves parent_tool_use_id on complete messages" do
     setup do
       options = %Options{include_partial_messages: true}
 
@@ -885,7 +905,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       {:ok, client: client, transport: transport}
     end
 
-    test "FAILS: user message with parent_tool_use_id should preserve it", %{
+    test "user message with parent_tool_use_id preserves it", %{
       client: client,
       transport: transport
     } do
@@ -931,14 +951,9 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       # The Message struct should have parent_tool_use_id in data
       assert %Message{type: :user, data: data} = message
       assert data.parent_tool_use_id == "toolu_05MNO345JKL"
-
-      # NOTE: This test passes because Message parsing works.
-      # The REAL bug is in Streaming.message_to_event which converts
-      # this Message to an event and DISCARDS parent_tool_use_id.
-      # See the next test for that demonstration.
     end
 
-    test "FAILS: assistant message with parent_tool_use_id should preserve it", %{
+    test "assistant message with parent_tool_use_id preserves it", %{
       client: client,
       transport: transport
     } do
@@ -980,10 +995,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
     end
   end
 
-  describe "Streaming module message_to_event bug (via Streaming.send_message)" do
-    # This tests the actual bug path: Streaming.send_message converts
-    # Messages via message_to_event which DISCARDS parent_tool_use_id
-
+  describe "Streaming.send_message preserves parent_tool_use_id" do
     setup do
       hook = TestFixtures.allow_all_hook()
 
@@ -1026,7 +1038,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       {:ok, client: client, transport: transport}
     end
 
-    test "FAILS: Streaming.send_message should preserve parent_tool_use_id on user messages", %{
+    test "preserves parent_tool_use_id on user messages", %{
       client: client,
       transport: transport
     } do
@@ -1070,10 +1082,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       [event] = Task.await(task, 2_000)
 
-      # This is where the bug manifests!
-      # message_to_event hardcodes parent_tool_use_id: nil instead of reading from message
       assert event.type == :message
-      # THIS ASSERTION WILL FAIL - demonstrating the bug
       assert event.parent_tool_use_id == "toolu_07STU901PQR"
     end
   end

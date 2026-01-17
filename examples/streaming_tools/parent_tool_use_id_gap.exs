@@ -28,8 +28,10 @@
 # ## What This Script Verifies
 #
 # 1. The parent_tool_use_id field EXISTS on all events
-# 2. Main agent events correctly have nil
-# 3. Subagent messages have the Task tool ID (non-nil)
+# 2. The uuid/session_id metadata fields EXISTS on all events
+# 3. The raw_event payload is preserved on all events
+# 4. Main agent events correctly have nil parent_tool_use_id
+# 5. Subagent messages have the Task tool ID (non-nil)
 #
 # Run with: mix run examples/streaming_tools/parent_tool_use_id_gap.exs
 # ============================================================================
@@ -41,13 +43,14 @@ alias Examples.Support
 
 defmodule ParentToolUseIdVerification do
   @moduledoc """
-  Verifies that parent_tool_use_id is correctly preserved on all events.
+  Verifies that stream_event metadata is preserved on all events.
 
   This example:
   1. Sends a prompt that triggers Task tool usage (spawns subagent)
   2. Runs through ALL turns (not just the first message_stop)
   3. Checks that parent_tool_use_id field EXISTS on all events
-  4. Categorizes events as main agent (nil) vs subagent (non-nil)
+  4. Checks that uuid/session_id/raw_event fields exist on all events
+  5. Categorizes events as main agent (nil) vs subagent (non-nil)
 
   Note: parent_tool_use_id appears on complete messages (UserMessage,
   AssistantMessage) from subagents, not on streaming deltas.
@@ -102,6 +105,9 @@ defmodule ParentToolUseIdVerification do
         total: 0,
         field_exists: 0,
         field_missing: 0,
+        uuid_missing: 0,
+        session_id_missing: 0,
+        raw_event_missing: 0,
         # nil parent_tool_use_id
         main_agent_events: 0,
         # non-nil parent_tool_use_id
@@ -140,8 +146,11 @@ defmodule ParentToolUseIdVerification do
   defp log_event_details(event, acc) do
     acc = Map.update!(acc, :total, &(&1 + 1))
 
-    # Check if field EXISTS (this is what we fixed!)
+    # Check if metadata fields exist
     field_exists = Map.has_key?(event, :parent_tool_use_id)
+    uuid_exists = Map.has_key?(event, :uuid)
+    session_id_exists = Map.has_key?(event, :session_id)
+    raw_event_exists = Map.has_key?(event, :raw_event)
 
     acc =
       if field_exists do
@@ -150,10 +159,37 @@ defmodule ParentToolUseIdVerification do
         Map.update!(acc, :field_missing, &(&1 + 1))
       end
 
+    metadata_check? = should_check_metadata?(event)
+
+    acc =
+      if metadata_check? and not uuid_exists do
+        Map.update!(acc, :uuid_missing, &(&1 + 1))
+      else
+        acc
+      end
+
+    acc =
+      if metadata_check? and not session_id_exists do
+        Map.update!(acc, :session_id_missing, &(&1 + 1))
+      else
+        acc
+      end
+
+    acc =
+      if metadata_check? and not raw_event_exists do
+        Map.update!(acc, :raw_event_missing, &(&1 + 1))
+      else
+        acc
+      end
+
     # Categorize by value
+    metadata_missing =
+      metadata_check? and
+        (not field_exists or not uuid_exists or not session_id_exists or not raw_event_exists)
+
     {label, acc} =
       cond do
-        not field_exists ->
+        metadata_missing ->
           {"[BUG!]", acc}
 
         is_nil(event.parent_tool_use_id) ->
@@ -227,6 +263,10 @@ defmodule ParentToolUseIdVerification do
     acc
   end
 
+  defp should_check_metadata?(%{type: type}) when type in [:message, :tool_complete], do: false
+  defp should_check_metadata?(%{type: _type}), do: true
+  defp should_check_metadata?(_), do: false
+
   defp format_parent_id(event, field_exists) do
     cond do
       not field_exists ->
@@ -249,6 +289,9 @@ defmodule ParentToolUseIdVerification do
     IO.puts("Total events received:     #{result.total}")
     IO.puts("Field exists on events:    #{result.field_exists}")
     IO.puts("Field MISSING on events:   #{result.field_missing}")
+    IO.puts("UUID field missing:        #{result.uuid_missing}")
+    IO.puts("Session ID field missing:  #{result.session_id_missing}")
+    IO.puts("Raw event missing:         #{result.raw_event_missing}")
     IO.puts("")
     IO.puts("Main agent events (nil):   #{result.main_agent_events}")
     IO.puts("Subagent events (non-nil): #{result.subagent_events}")
@@ -285,6 +328,16 @@ defmodule ParentToolUseIdVerification do
         IO.puts("          This shouldn't happen - investigate further.")
     end
 
+    if result.uuid_missing > 0 or result.session_id_missing > 0 or result.raw_event_missing > 0 do
+      raise """
+      Missing stream_event metadata fields.
+
+      uuid missing: #{result.uuid_missing}
+      session_id missing: #{result.session_id_missing}
+      raw_event missing: #{result.raw_event_missing}
+      """
+    end
+
     if length(result.tool_use_starts) > 0 do
       IO.puts("")
       IO.puts("Tool calls observed:")
@@ -301,10 +354,12 @@ defmodule ParentToolUseIdVerification do
     IO.puts("PARENT_TOOL_USE_ID VERIFICATION")
     IO.puts("=" |> String.duplicate(72))
     IO.puts("")
-    IO.puts("Purpose: Verify parent_tool_use_id is preserved through all turns")
+    IO.puts("Purpose: Verify stream_event metadata is preserved through all turns")
     IO.puts("")
     IO.puts("Expected results:")
     IO.puts("  - All events should have the parent_tool_use_id field")
+    IO.puts("  - All events should have uuid and session_id fields")
+    IO.puts("  - All events should have raw_event payloads preserved")
     IO.puts("  - Main agent events: parent_tool_use_id = nil")
     IO.puts("  - Subagent messages: parent_tool_use_id = 'toolu_xxx'")
     IO.puts("")
