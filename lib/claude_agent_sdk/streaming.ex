@@ -476,20 +476,38 @@ defmodule ClaudeAgentSDK.Streaming do
   end
 
   # Convert Message struct to streaming event format
+  # Extract parent_tool_use_id from message data if present (for subagent messages)
   defp message_to_event(%{type: :tool_result} = msg, accumulated) do
     %{
       type: :tool_complete,
       tool_name: msg.tool_name,
       result: msg.content,
-      accumulated: accumulated
+      accumulated: accumulated,
+      parent_tool_use_id: get_parent_tool_use_id(msg)
     }
   end
 
   defp message_to_event(%{type: :error} = msg, accumulated) do
-    %{type: :error, error: msg.content, accumulated: accumulated}
+    %{
+      type: :error,
+      error: msg.content,
+      accumulated: accumulated,
+      parent_tool_use_id: get_parent_tool_use_id(msg)
+    }
   end
 
   defp message_to_event(msg, accumulated) do
-    %{type: :message, message: msg, accumulated: accumulated}
+    %{
+      type: :message,
+      message: msg,
+      accumulated: accumulated,
+      parent_tool_use_id: get_parent_tool_use_id(msg)
+    }
   end
+
+  # Extract parent_tool_use_id from Message struct or map
+  defp get_parent_tool_use_id(%ClaudeAgentSDK.Message{data: %{parent_tool_use_id: id}}), do: id
+  defp get_parent_tool_use_id(%{data: %{parent_tool_use_id: id}}), do: id
+  defp get_parent_tool_use_id(%{parent_tool_use_id: id}), do: id
+  defp get_parent_tool_use_id(_), do: nil
 end

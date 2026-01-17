@@ -8,6 +8,7 @@ This guide covers streaming in the Claude Agent SDK for Elixir, from simple quer
 2. [Simple Query Streaming with query/2](#simple-query-streaming-with-query2)
 3. [Streaming API](#streaming-api)
 4. [Event Types](#event-types)
+   - [Subagent Events (parent_tool_use_id)](#subagent-events-parent_tool_use_id)
 5. [Real-Time Typewriter Effect](#real-time-typewriter-effect)
 6. [Multi-Turn Conversations](#multi-turn-conversations)
 7. [Error Handling in Streams](#error-handling-in-streams)
@@ -276,6 +277,48 @@ When Claude uses tools, you receive lifecycle events:
 ```
 
 If the CLI emits a JSON frame larger than `max_buffer_size` (default 1MB), the stream terminates with a `CLIJSONDecodeError`.
+
+### Subagent Events (parent_tool_use_id)
+
+When Claude uses the Task tool to spawn subagents, streaming events include a `parent_tool_use_id` field that identifies which Task tool call produced the event. This is critical for building hierarchical UIs that route subagent output to the correct panel.
+
+```elixir
+# Main agent events have parent_tool_use_id: nil
+%{type: :text_delta, text: "Let me search...", parent_tool_use_id: nil}
+
+# Subagent events have parent_tool_use_id set to the Task tool call ID
+%{type: :text_delta, text: "Found 3 files", parent_tool_use_id: "toolu_01ABC123"}
+%{type: :message_stop, parent_tool_use_id: "toolu_01ABC123"}
+```
+
+**Use cases:**
+- Route main agent output to the primary chat panel
+- Display subagent output in nested/collapsible panels
+- Track which subagent produced which response
+- Build hierarchical streaming UIs for multi-agent workflows
+
+**Example: Routing by source**
+
+```elixir
+Streaming.send_message(session, "Use the Task tool to find .ex files")
+|> Enum.each(fn event ->
+  label = case event.parent_tool_use_id do
+    nil -> "[MAIN]"
+    id -> "[SUB:#{String.slice(id, 0, 8)}]"
+  end
+
+  case event do
+    %{type: :text_delta, text: text} ->
+      IO.puts("#{label} #{text}")
+    %{type: :message_stop} ->
+      IO.puts("#{label} Complete")
+    _ ->
+      :ok
+  end
+end)
+```
+
+See `examples/streaming_tools/subagent_streaming.exs` for a complete working example.
 
 ### Complete Event Handling Pattern
 

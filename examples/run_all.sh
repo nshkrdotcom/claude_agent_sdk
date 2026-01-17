@@ -77,6 +77,7 @@ examples=(
   "examples/streaming_tools/sdk_mcp_streaming.exs"
   "examples/streaming_tools/stop_reason_probe.exs"
   "examples/streaming_tools/multi_turn_tool_streaming_session.exs"
+  "examples/streaming_tools/subagent_streaming.exs"
   "examples/hooks/context_injection.exs"
   "examples/hooks/basic_bash_blocking.exs"
   "examples/hooks/file_policy_enforcement.exs"

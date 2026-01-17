@@ -1009,6 +1009,27 @@ options = Options.new(
 )
 ```
 
+### Streaming Subagent Output
+
+When using the Streaming API, events include a `parent_tool_use_id` field to identify which subagent produced each event:
+
+```elixir
+Streaming.send_message(session, "Use Task to research Elixir frameworks")
+|> Enum.each(fn event ->
+  case event.parent_tool_use_id do
+    nil ->
+      # Main agent output
+      IO.write("[MAIN] #{event[:text]}")
+
+    tool_id ->
+      # Subagent output - route to appropriate UI panel
+      IO.write("[SUB:#{String.slice(tool_id, 0, 8)}] #{event[:text]}")
+  end
+end)
+```
+
+See the [Streaming Guide](streaming.md#subagent-events-parent_tool_use_id) and `examples/streaming_tools/subagent_streaming.exs` for details.
+
 ### Subagent Types
 
 The Task tool supports different subagent types:

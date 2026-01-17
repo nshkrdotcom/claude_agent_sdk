@@ -78,6 +78,7 @@ mix run examples/basic_example.exs
 | `streaming_tools/basic_streaming_with_hooks.exs` | Streaming API with hooks |
 | `streaming_tools/stop_reason_probe.exs` | Control client probe for stop_reason emission across tool_use and end_turn |
 | `streaming_tools/multi_turn_tool_streaming_session.exs` | Session path multi-turn tool streaming example (raises if stream ends after tool_use) |
+| `streaming_tools/subagent_streaming.exs` | Subagent streaming with `parent_tool_use_id` for routing output by source |
 
 ### Hooks
 

@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
-  @version "0.8.1"
+  @version "0.9.0"
 
   def project do
     [
@@ -44,7 +44,7 @@ defmodule ClaudeAgentSdk.MixProject do
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
-      {:supertester, "~> 0.5.0", only: :test},
+      {:supertester, "~> 0.5.1", only: :test},
       {:stream_data, "~> 1.0", only: :test}
     ]
   end

@@ -1837,10 +1837,16 @@ defmodule ClaudeAgentSDK.Client do
 
   defp handle_decoded_message(:stream_event, data, state) do
     # Streaming event (v0.6.0) - handle both wrapped and unwrapped formats
-    # Real CLI: {"type": "stream_event", "event": {"type": "message_start", ...}}
+    # Real CLI: {"type": "stream_event", "event": {"type": "message_start", ...}, "parent_tool_use_id": "toolu_xxx"}
     # Tests: {"type": "message_start", ...}
-    event_data = if data["type"] == "stream_event", do: data["event"], else: data
-    handle_stream_event(event_data, state)
+    {event_data, parent_tool_use_id} =
+      if data["type"] == "stream_event" do
+        {data["event"], data["parent_tool_use_id"]}
+      else
+        {data, nil}
+      end
+
+    handle_stream_event(event_data, parent_tool_use_id, state)
   end
 
   defp handle_control_request(request_data, state) do
@@ -2812,13 +2818,18 @@ defmodule ClaudeAgentSDK.Client do
 
   ## Stream Event Handling (v0.6.0)
 
-  defp handle_stream_event(event_data, state) do
+  defp handle_stream_event(event_data, parent_tool_use_id, state) do
     # Parse streaming event via EventParser (always returns {:ok, events, accumulated})
     {:ok, events, new_accumulated} =
       EventParser.parse_event(event_data, state.accumulated_text)
 
+    # Inject parent_tool_use_id into all parsed events for subagent routing
+    # This field identifies which Task tool call produced the event
+    events_with_parent_id =
+      Enum.map(events, &Map.put(&1, :parent_tool_use_id, parent_tool_use_id))
+
     {stop_reason, message_complete?} =
-      Termination.reduce(events, state.stream_stop_reason)
+      Termination.reduce(events_with_parent_id, state.stream_stop_reason)
 
     # Broadcast to active subscriber only (queue model), or buffer until subscribed
     {active_ref, state} = ensure_active_subscriber(state)
@@ -2826,13 +2837,13 @@ defmodule ClaudeAgentSDK.Client do
     state =
       case active_ref do
         nil ->
-          buffer_stream_events(state, events)
+          buffer_stream_events(state, events_with_parent_id)
 
         ref ->
           broadcast_events_to_subscriber(
             ref,
             state.subscribers,
-            events
+            events_with_parent_id
           )
 
           state

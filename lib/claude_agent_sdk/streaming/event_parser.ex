@@ -272,27 +272,42 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
   end
 
   defp parse_line(line, events_acc, text_acc) do
-    if String.trim(line) == "" do
+    trimmed = String.trim(line)
+
+    if trimmed == "" do
       {events_acc, text_acc}
     else
-      case Jason.decode(line) do
-        {:ok, json} ->
-          event_json = unwrap_stream_event(json)
-          {:ok, parsed_events, new_text_acc} = parse_event(event_json, text_acc)
-          {events_acc ++ parsed_events, new_text_acc}
-
-        {:error, _reason} ->
-          {events_acc, text_acc}
-      end
+      parse_json_line(line, events_acc, text_acc)
     end
   end
 
-  # Unwrap stream_event wrapper from Claude CLI output
-  defp unwrap_stream_event(%{"type" => "stream_event", "event" => event}) do
-    event
+  defp parse_json_line(line, events_acc, text_acc) do
+    case Jason.decode(line) do
+      {:ok, json} ->
+        {event_json, parent_tool_use_id} = unwrap_stream_event(json)
+        {:ok, parsed_events, new_text_acc} = parse_event(event_json, text_acc)
+        events_with_parent_id = inject_parent_tool_use_id(parsed_events, parent_tool_use_id)
+        {events_acc ++ events_with_parent_id, new_text_acc}
+
+      {:error, _reason} ->
+        {events_acc, text_acc}
+    end
   end
 
-  defp unwrap_stream_event(event), do: event
+  # Inject parent_tool_use_id into all parsed events for subagent routing
+  defp inject_parent_tool_use_id(events, parent_tool_use_id) do
+    Enum.map(events, &Map.put(&1, :parent_tool_use_id, parent_tool_use_id))
+  end
+
+  # Unwrap stream_event wrapper from Claude CLI output, preserving parent_tool_use_id
+  # The parent_tool_use_id field identifies which Task tool call produced the event,
+  # enabling UIs to route subagent output to the correct panel.
+  defp unwrap_stream_event(%{"type" => "stream_event", "event" => event} = wrapper) do
+    parent_id = Map.get(wrapper, "parent_tool_use_id")
+    {event, parent_id}
+  end
+
+  defp unwrap_stream_event(event), do: {event, nil}
 
   defp maybe_put_structured_output(event, nil), do: event
 

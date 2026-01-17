@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.8.1"}
+    {:claude_agent_sdk, "~> 0.9.0"}
   ]
 end
 ```
@@ -228,6 +228,8 @@ Streaming.send_message(session, "Now write one about Phoenix")
 
 Streaming.close_session(session)
 ```
+
+**Subagent Streaming:** When Claude spawns subagents via the Task tool, events include a `parent_tool_use_id` field to identify the source. Main agent events have `nil`, subagent events have the Task tool call ID. See the [Streaming Guide](guides/streaming.md#subagent-events-parent_tool_use_id) for details.
 
 ### Hooks System
 

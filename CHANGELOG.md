@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-01-17
+
+### Added
+
+- **Subagent Streaming Support**: Streaming events now include `parent_tool_use_id` field to identify which Task tool call produced each event, enabling hierarchical UIs that route subagent output to separate panels.
+- **Subagent Streaming Example**: Added `examples/streaming_tools/subagent_streaming.exs` demonstrating how to distinguish main agent vs subagent streaming output.
+
+### Fixed
+
+- **EventParser parent_tool_use_id Preservation (Session Path)**: Fixed `EventParser.unwrap_stream_event/1` discarding the `parent_tool_use_id` field from the CLI's `stream_event` wrapper.
+- **Client parent_tool_use_id Preservation (Control Client Path)**: Fixed `Client.handle_decoded_message(:stream_event, ...)` discarding the `parent_tool_use_id` field when processing stream events via the control client transport.
+- **Streaming message_to_event parent_tool_use_id**: Fixed `Streaming.message_to_event/2` to extract `parent_tool_use_id` from the Message struct's data field instead of hardcoding `nil`, enabling subagent output to preserve its parent tool context.
+
 ## [0.8.1] - 2026-01-14
 
 ### Added
@@ -1059,7 +1072,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.6...v0.8.0
 [0.7.7]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.5...v0.7.6

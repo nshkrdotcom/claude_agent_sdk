@@ -9,9 +9,9 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
   import ClaudeAgentSDK.SupertesterCase, only: [eventually: 2]
 
-  alias ClaudeAgentSDK.{Client, Message, Options}
+  alias ClaudeAgentSDK.{Client, Message, Options, Streaming}
   alias ClaudeAgentSDK.Hooks.Matcher
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.{MockTransport, TestFixtures}
 
   describe "Client with include_partial_messages option" do
     test "includes --include-partial-messages in CLI command when option set" do
@@ -585,6 +585,496 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       # Should initialize successfully
       assert Process.alive?(client)
+    end
+  end
+
+  # Tests that parent_tool_use_id is preserved when processing stream_event wrappers.
+  # This field identifies which Task tool call produced the streaming event,
+  # enabling UIs to route subagent output to the correct panel.
+  #
+  # BUG LOCATION: Client.handle_decoded_message(:stream_event, ...) at lines 1838-1843
+  # discards the parent_tool_use_id when extracting the inner event.
+  describe "parent_tool_use_id preservation in control client path" do
+    setup do
+      options = %Options{include_partial_messages: true}
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
+
+      transport =
+        receive do
+          {:mock_transport_started, t} -> t
+        end
+
+      :sys.get_state(client)
+
+      %{client: client, transport: transport}
+    end
+
+    test "preserves parent_tool_use_id from stream_event wrapper on text_delta", %{
+      client: client,
+      transport: transport
+    } do
+      # Set up subscriber to receive events
+      stream =
+        client
+        |> Client.stream_messages()
+        |> Stream.take(1)
+
+      task = Task.async(fn -> Enum.to_list(stream) end)
+
+      assert_receive {:mock_transport_subscribed, _pid}, 500
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber != nil
+        end,
+        timeout: 500
+      )
+
+      # Send stream_event wrapper WITH parent_tool_use_id (simulating subagent output)
+      stream_event = %{
+        "type" => "stream_event",
+        "uuid" => "evt_123",
+        "session_id" => "sess_456",
+        "parent_tool_use_id" => "toolu_01ABC123XYZ",
+        "event" => %{
+          "type" => "content_block_delta",
+          "delta" => %{"type" => "text_delta", "text" => "Subagent output"},
+          "index" => 0
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(stream_event))
+
+      [message] = Task.await(task, 2_000)
+
+      # The event inside data.event should have parent_tool_use_id preserved
+      assert %Message{type: :stream_event, data: %{event: event}} = message
+      assert event.type == :text_delta
+      assert event.text == "Subagent output"
+      # THIS WILL FAIL - parent_tool_use_id is discarded in handle_decoded_message
+      assert event.parent_tool_use_id == "toolu_01ABC123XYZ"
+    end
+
+    test "preserves parent_tool_use_id from stream_event wrapper on message_start", %{
+      client: client,
+      transport: transport
+    } do
+      stream =
+        client
+        |> Client.stream_messages()
+        |> Stream.take(1)
+
+      task = Task.async(fn -> Enum.to_list(stream) end)
+
+      assert_receive {:mock_transport_subscribed, _pid}, 500
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber != nil
+        end,
+        timeout: 500
+      )
+
+      # Send stream_event wrapper WITH parent_tool_use_id
+      stream_event = %{
+        "type" => "stream_event",
+        "uuid" => "evt_456",
+        "session_id" => "sess_789",
+        "parent_tool_use_id" => "toolu_02DEF456ABC",
+        "event" => %{
+          "type" => "message_start",
+          "message" => %{
+            "model" => "claude-haiku-4-5",
+            "role" => "assistant",
+            "usage" => %{"input_tokens" => 10, "output_tokens" => 0}
+          }
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(stream_event))
+
+      [message] = Task.await(task, 2_000)
+
+      assert %Message{type: :stream_event, data: %{event: event}} = message
+      assert event.type == :message_start
+      assert event.model == "claude-haiku-4-5"
+      # THIS WILL FAIL - parent_tool_use_id is discarded
+      assert event.parent_tool_use_id == "toolu_02DEF456ABC"
+    end
+
+    test "sets parent_tool_use_id to nil for main agent events (no wrapper parent_tool_use_id)",
+         %{
+           client: client,
+           transport: transport
+         } do
+      stream =
+        client
+        |> Client.stream_messages()
+        |> Stream.take(1)
+
+      task = Task.async(fn -> Enum.to_list(stream) end)
+
+      assert_receive {:mock_transport_subscribed, _pid}, 500
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber != nil
+        end,
+        timeout: 500
+      )
+
+      # Send stream_event wrapper WITHOUT parent_tool_use_id (main agent output)
+      stream_event = %{
+        "type" => "stream_event",
+        "uuid" => "evt_789",
+        "session_id" => "sess_012",
+        "event" => %{
+          "type" => "content_block_delta",
+          "delta" => %{"type" => "text_delta", "text" => "Main agent output"},
+          "index" => 0
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(stream_event))
+
+      [message] = Task.await(task, 2_000)
+
+      assert %Message{type: :stream_event, data: %{event: event}} = message
+      assert event.type == :text_delta
+      assert event.text == "Main agent output"
+      # Main agent events should have nil parent_tool_use_id
+      # THIS WILL FAIL - field doesn't exist at all
+      assert Map.has_key?(event, :parent_tool_use_id)
+      assert event.parent_tool_use_id == nil
+    end
+
+    test "preserves parent_tool_use_id on tool_use_start from subagent", %{
+      client: client,
+      transport: transport
+    } do
+      stream =
+        client
+        |> Client.stream_messages()
+        |> Stream.take(1)
+
+      task = Task.async(fn -> Enum.to_list(stream) end)
+
+      assert_receive {:mock_transport_subscribed, _pid}, 500
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber != nil
+        end,
+        timeout: 500
+      )
+
+      # Subagent using a tool
+      stream_event = %{
+        "type" => "stream_event",
+        "uuid" => "evt_tool",
+        "session_id" => "sess_tool",
+        "parent_tool_use_id" => "toolu_03GHI789DEF",
+        "event" => %{
+          "type" => "content_block_start",
+          "content_block" => %{
+            "type" => "tool_use",
+            "name" => "Glob",
+            "id" => "toolu_subagent_tool"
+          },
+          "index" => 0
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(stream_event))
+
+      [message] = Task.await(task, 2_000)
+
+      assert %Message{type: :stream_event, data: %{event: event}} = message
+      assert event.type == :tool_use_start
+      assert event.name == "Glob"
+      # THIS WILL FAIL - parent_tool_use_id is discarded
+      assert event.parent_tool_use_id == "toolu_03GHI789DEF"
+    end
+
+    test "preserves parent_tool_use_id on message_stop from subagent", %{
+      client: client,
+      transport: transport
+    } do
+      stream =
+        client
+        |> Client.stream_messages()
+        |> Stream.take(1)
+
+      task = Task.async(fn -> Enum.to_list(stream) end)
+
+      assert_receive {:mock_transport_subscribed, _pid}, 500
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber != nil
+        end,
+        timeout: 500
+      )
+
+      # Subagent message complete
+      stream_event = %{
+        "type" => "stream_event",
+        "uuid" => "evt_stop",
+        "session_id" => "sess_stop",
+        "parent_tool_use_id" => "toolu_04JKL012GHI",
+        "event" => %{
+          "type" => "message_stop"
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(stream_event))
+
+      [message] = Task.await(task, 2_000)
+
+      assert %Message{type: :stream_event, data: %{event: event}} = message
+      assert event.type == :message_stop
+      # THIS WILL FAIL - parent_tool_use_id is discarded
+      assert event.parent_tool_use_id == "toolu_04JKL012GHI"
+    end
+  end
+
+  # ============================================================================
+  # BUG: Streaming.message_to_event/2 discards parent_tool_use_id from Messages
+  # ============================================================================
+  #
+  # The CLI sends parent_tool_use_id on complete message objects (user, assistant),
+  # not just on stream_event wrappers. The Python SDK correctly preserves this:
+  #
+  #   [EVENT 36] UserMessage
+  #     parent_tool_use_id: 'toolu_012eTRMqhzgmuzW6U6VQ6BRN'
+  #
+  # But Elixir's Streaming.message_to_event/2 hardcodes parent_tool_use_id: nil
+  # instead of reading it from message.data.parent_tool_use_id.
+  #
+  # These tests demonstrate the bug.
+  # ============================================================================
+
+  describe "Streaming.message_to_event preserves parent_tool_use_id (BUG DEMONSTRATION)" do
+    setup do
+      options = %Options{include_partial_messages: true}
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
+
+      transport =
+        receive do
+          {:mock_transport_started, t} -> t
+        end
+
+      # Synchronize - wait for client to be ready
+      :sys.get_state(client)
+
+      {:ok, client: client, transport: transport}
+    end
+
+    test "FAILS: user message with parent_tool_use_id should preserve it", %{
+      client: client,
+      transport: transport
+    } do
+      stream =
+        client
+        |> Client.stream_messages()
+        |> Stream.take(1)
+
+      task = Task.async(fn -> Enum.to_list(stream) end)
+
+      assert_receive {:mock_transport_subscribed, _pid}, 500
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber != nil
+        end,
+        timeout: 500
+      )
+
+      # Complete user message from subagent (like Python SDK receives)
+      # The CLI sends parent_tool_use_id on complete messages, not just stream_events
+      user_message = %{
+        "type" => "user",
+        "message" => %{
+          "role" => "user",
+          "content" => [
+            %{
+              "type" => "tool_result",
+              "tool_use_id" => "toolu_subagent",
+              "content" => "1\n2\n3\n4\n5"
+            }
+          ]
+        },
+        "session_id" => "sess_subagent",
+        "parent_tool_use_id" => "toolu_05MNO345JKL"
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(user_message))
+
+      [message] = Task.await(task, 2_000)
+
+      # The Message struct should have parent_tool_use_id in data
+      assert %Message{type: :user, data: data} = message
+      assert data.parent_tool_use_id == "toolu_05MNO345JKL"
+
+      # NOTE: This test passes because Message parsing works.
+      # The REAL bug is in Streaming.message_to_event which converts
+      # this Message to an event and DISCARDS parent_tool_use_id.
+      # See the next test for that demonstration.
+    end
+
+    test "FAILS: assistant message with parent_tool_use_id should preserve it", %{
+      client: client,
+      transport: transport
+    } do
+      stream =
+        client
+        |> Client.stream_messages()
+        |> Stream.take(1)
+
+      task = Task.async(fn -> Enum.to_list(stream) end)
+
+      assert_receive {:mock_transport_subscribed, _pid}, 500
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber != nil
+        end,
+        timeout: 500
+      )
+
+      # Complete assistant message from subagent
+      assistant_message = %{
+        "type" => "assistant",
+        "message" => %{
+          "role" => "assistant",
+          "content" => [%{"type" => "text", "text" => "Here are the numbers 1-5"}]
+        },
+        "session_id" => "sess_subagent",
+        "parent_tool_use_id" => "toolu_06PQR678MNO"
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(assistant_message))
+
+      [message] = Task.await(task, 2_000)
+
+      # The Message struct should have parent_tool_use_id in data
+      assert %Message{type: :assistant, data: data} = message
+      assert data.parent_tool_use_id == "toolu_06PQR678MNO"
+    end
+  end
+
+  describe "Streaming module message_to_event bug (via Streaming.send_message)" do
+    # This tests the actual bug path: Streaming.send_message converts
+    # Messages via message_to_event which DISCARDS parent_tool_use_id
+
+    setup do
+      hook = TestFixtures.allow_all_hook()
+
+      options = %Options{
+        include_partial_messages: true,
+        hooks: %{pre_tool_use: [hook]}
+      }
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
+
+      transport =
+        receive do
+          {:mock_transport_started, t} -> t
+        end
+
+      # Wait for init request and send response to mark client as initialized
+      {:ok, request_id} = Client.await_init_sent(client, 1_000)
+
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => request_id,
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(init_response))
+
+      # Wait for client to be initialized
+      eventually(
+        fn -> :sys.get_state(client).initialized end,
+        timeout: 1_000
+      )
+
+      {:ok, client: client, transport: transport}
+    end
+
+    test "FAILS: Streaming.send_message should preserve parent_tool_use_id on user messages", %{
+      client: client,
+      transport: transport
+    } do
+      # Use Streaming module to get events (which uses message_to_event internally)
+      session = {:control_client, client}
+
+      # Start streaming in a task
+      task =
+        Task.async(fn ->
+          session
+          |> Streaming.send_message("test")
+          |> Stream.take(1)
+          |> Enum.to_list()
+        end)
+
+      # Wait for subscription using deterministic synchronization (no Process.sleep!)
+      assert_receive {:mock_transport_subscribed, _pid}, 500
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+          state.active_subscriber != nil
+        end,
+        timeout: 500
+      )
+
+      # Send a user message with parent_tool_use_id (like CLI does for subagent results)
+      user_message = %{
+        "type" => "user",
+        "message" => %{
+          "role" => "user",
+          "content" => [
+            %{"type" => "tool_result", "tool_use_id" => "toolu_task", "content" => "done"}
+          ]
+        },
+        "session_id" => "sess_123",
+        "parent_tool_use_id" => "toolu_07STU901PQR"
+      }
+
+      MockTransport.push_message(transport, Jason.encode!(user_message))
+
+      [event] = Task.await(task, 2_000)
+
+      # This is where the bug manifests!
+      # message_to_event hardcodes parent_tool_use_id: nil instead of reading from message
+      assert event.type == :message
+      # THIS ASSERTION WILL FAIL - demonstrating the bug
+      assert event.parent_tool_use_id == "toolu_07STU901PQR"
     end
   end
 end
