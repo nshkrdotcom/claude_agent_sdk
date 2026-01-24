@@ -1139,7 +1139,29 @@ def robust_hook(input, _id, _ctx) do
 end
 ```
 
-### 4. Use ETS for Stateful Hooks
+### 4. Supervise Callback Tasks
+
+Hook callbacks run in async tasks. For production, add the SDK task supervisor
+so callback processes are supervised and crash handling works as expected:
+
+```elixir
+children = [
+  ClaudeAgentSDK.TaskSupervisor,
+  {ClaudeAgentSDK.Client, options}
+]
+```
+
+If you use a custom supervisor name, configure the SDK to match:
+
+```elixir
+children = [
+  {ClaudeAgentSDK.TaskSupervisor, name: MyApp.ClaudeTaskSupervisor}
+]
+
+config :claude_agent_sdk, task_supervisor: MyApp.ClaudeTaskSupervisor
+```
+
+### 5. Use ETS for Stateful Hooks
 
 When hooks need to maintain state (counters, caches, etc.), use ETS:
 
@@ -1164,7 +1186,7 @@ defmodule StatefulHooks do
 end
 ```
 
-### 5. Layer Security Hooks
+### 6. Layer Security Hooks
 
 Apply multiple layers of security validation:
 
@@ -1184,7 +1206,7 @@ hooks = %{
 }
 ```
 
-### 6. Test Hooks in Isolation
+### 7. Test Hooks in Isolation
 
 Test hook logic separately from the SDK:
 
@@ -1219,7 +1241,7 @@ defmodule SecurityHooksTest do
 end
 ```
 
-### 7. Clean Up Resources
+### 8. Clean Up Resources
 
 Always clean up ETS tables and other resources:
 
@@ -1236,7 +1258,7 @@ def stop_hooks do
 end
 ```
 
-### 8. Validate Hook Configuration
+### 9. Validate Hook Configuration
 
 Use the SDK's validation before using hooks:
 
@@ -1257,7 +1279,7 @@ case Hooks.validate_config(hooks) do
 end
 ```
 
-### 9. Document Your Hooks
+### 10. Document Your Hooks
 
 Keep hooks well-documented for maintainability:
 

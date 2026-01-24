@@ -28,6 +28,7 @@ config :logger, :console,
     :server,
     :subtype,
     :timeout_ms,
+    :type,
     :tool
   ]
 

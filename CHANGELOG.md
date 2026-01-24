@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-01-23
+
+### Added
+
+- **OTP Supervision Compliance**: Added proper supervision for all async callback execution
+  - Created `ClaudeAgentSDK.TaskSupervisor` module for supervised task execution
+  - Consumers can optionally add this to their supervision tree for full OTP compliance
+  - Automatic fallback to unlinked spawn when supervisor is not available
+- **Callback Crash Handling**: Client now properly handles callback task crashes
+  - Added `Process.monitor/1` for all callback tasks
+  - New `handle_info({:DOWN, ...})` clause detects crashes
+  - Error responses automatically sent when callbacks crash
+  - Pending callbacks map properly cleaned up on crash
+- **Callback Crash Tests**: New test file `client_callback_crash_test.exs` covering:
+  - Hook callback crashes with raise
+  - Hook callback crashes with exit
+  - Client continues operating after callback crash
+  - Permission callback crash handling
+  - Monitor ref cleanup after normal completion
+
+### Fixed
+
+- **Callback :DOWN Handling**: Ignore normal task exits to avoid false error responses when callback results are still pending.
+- **Task Supervisor Naming**: Custom `task_supervisor` configuration now starts tasks under the configured supervisor name reliably.
+- **Critical OTP Violations**: Fixed 3 `Task.start/1` unsupervised process spawns:
+  - `client.ex:2143` - Hook callback execution now uses `TaskSupervisor.start_child/2`
+  - `client.ex:2213` - Permission callback execution now uses `TaskSupervisor.start_child/2`
+  - `cli_stream.ex:178` - Input streaming now uses `TaskSupervisor.start_child/2`
+- **Documentation Anti-Pattern**: Fixed Phoenix LiveView example in `streaming.ex` to use `Task.Supervisor.start_child/3` instead of `spawn_link/1`
+
+### Changed
+
+- **Pending Callbacks State**: Now stores `monitor_ref` in addition to `pid`, `signal`, and `type`
+- **Callback Cleanup**: `pop_pending_callback/2` now demonitors the callback process
+- **Cancel Cleanup**: `cancel_pending_callbacks/1` now demonitors all callback processes before killing them
+
+### Documentation
+
+- **Supervision Guidance**: Added TaskSupervisor usage notes in README and Hooks guide.
+
+### Tests
+
+- **Callback :DOWN Race**: Added coverage to ensure normal exits do not emit error responses.
+- **Custom Task Supervisor**: Added coverage for custom supervisor configuration paths.
+
 ## [0.9.0] - 2026-01-17
 
 ### Added

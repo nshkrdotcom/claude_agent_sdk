@@ -114,9 +114,10 @@ defmodule ClaudeAgentSDK.Streaming do
       # Add user message
       messages = socket.assigns.messages ++ [%{role: :user, content: message}]
 
-      # Start streaming in background
+      # Start streaming in background using Task.Supervisor (OTP-safe pattern)
+      # Add {Task.Supervisor, name: MyApp.TaskSupervisor} to your supervision tree
       pid = self()
-      spawn_link(fn ->
+      Task.Supervisor.start_child(MyApp.TaskSupervisor, fn ->
         ClaudeAgentSDK.Streaming.send_message(socket.assigns.claude_session, message)
         |> Stream.each(fn event -> send(pid, {:claude_event, event}) end)
         |> Stream.run()

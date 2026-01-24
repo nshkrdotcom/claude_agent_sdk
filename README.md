@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.9.0"}
+    {:claude_agent_sdk, "~> 0.9.1"}
   ]
 end
 ```
@@ -270,6 +270,28 @@ opts = %Options{
 Note: `SessionStart`, `SessionEnd`, and `Notification` hook events are not supported by the Python SDK and are rejected for parity.
 
 See the [Hooks Guide](guides/hooks.md) for comprehensive documentation.
+
+### Supervision
+
+Hook and permission callbacks run in async tasks. For production, add the SDK
+task supervisor so callback processes are supervised:
+
+```elixir
+children = [
+  ClaudeAgentSDK.TaskSupervisor,
+  {ClaudeAgentSDK.Client, options}
+]
+```
+
+If you use a custom supervisor name, configure the SDK to match:
+
+```elixir
+children = [
+  {ClaudeAgentSDK.TaskSupervisor, name: MyApp.ClaudeTaskSupervisor}
+]
+
+config :claude_agent_sdk, task_supervisor: MyApp.ClaudeTaskSupervisor
+```
 
 ### Permission System
 

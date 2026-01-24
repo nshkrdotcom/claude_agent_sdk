@@ -64,7 +64,7 @@ defmodule ClaudeAgentSDK.Client do
   use GenServer
   alias ClaudeAgentSDK.Log, as: Logger
 
-  alias ClaudeAgentSDK.{AbortSignal, CLI, Hooks, Message, Model, Options}
+  alias ClaudeAgentSDK.{AbortSignal, CLI, Hooks, Message, Model, Options, TaskSupervisor}
   alias ClaudeAgentSDK.ControlProtocol.Protocol
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
   alias ClaudeAgentSDK.Permission.{Context, Result}
@@ -87,7 +87,7 @@ defmodule ClaudeAgentSDK.Client do
   - `hook_callback_timeouts` - Map of callback_id => timeout_ms
   - `subscribers` - Map of ref => pid for streaming subscriptions
   - `pending_requests` - Map of request_id => {from, ref}
-  - `pending_callbacks` - Map of request_id => %{pid, signal, type} for in-flight control callbacks
+  - `pending_callbacks` - Map of request_id => %{pid, monitor_ref, signal, type} for in-flight control callbacks
   - `initialized` - Whether initialization handshake completed
   - `buffer` - Incomplete JSON buffer
   - `sdk_mcp_servers` - Map of server_name => registry_pid for SDK MCP servers
@@ -113,6 +113,7 @@ defmodule ClaudeAgentSDK.Client do
           pending_callbacks: %{
             String.t() => %{
               pid: pid(),
+              monitor_ref: reference(),
               signal: ClaudeAgentSDK.AbortSignal.t(),
               type: :hook | :permission
             }
@@ -1188,6 +1189,50 @@ defmodule ClaudeAgentSDK.Client do
     {:stop, :normal, state}
   end
 
+  # Handle callback task crashes - OTP supervision compliance
+  # When a callback task exits abnormally, we need to:
+  # 1. Find the pending callback by monitor ref
+  # 2. Send an error response to the CLI
+  # 3. Clean up the pending_callbacks map
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, :normal}, state) do
+    # Normal exits can arrive before the callback_result message; let the result handler clean up.
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    case find_callback_by_monitor_ref(state.pending_callbacks, ref) do
+      nil ->
+        # Not a callback we're tracking, ignore
+        {:noreply, state}
+
+      {request_id, entry} ->
+        Logger.error("Callback task crashed",
+          request_id: request_id,
+          type: entry.type,
+          reason: inspect(reason)
+        )
+
+        # Send error response based on callback type
+        error_message = "Callback crashed: #{inspect(reason)}"
+
+        case entry.type do
+          :hook ->
+            json = Protocol.encode_hook_response(request_id, error_message, :error)
+            _ = send_payload(state, json)
+
+          :permission ->
+            json = encode_permission_error_response(request_id, error_message)
+            _ = send_payload(state, json)
+        end
+
+        # Remove the callback from pending_callbacks (no need to demonitor, it's already down)
+        pending = Map.delete(state.pending_callbacks, request_id)
+        {:noreply, %{state | pending_callbacks: pending}}
+    end
+  end
+
   defp split_complete_lines(full_data) do
     lines = String.split(full_data, "\n")
 
@@ -2140,14 +2185,16 @@ defmodule ClaudeAgentSDK.Client do
         server = self()
 
         {:ok, pid} =
-          Task.start(fn ->
+          TaskSupervisor.start_child(fn ->
             result =
               execute_hook_callback(callback_fn, input, tool_use_id, signal, timeout_ms)
 
             send(server, {:callback_result, request_id, :hook, signal, result})
           end)
 
-        put_pending_callback(state, request_id, pid, signal, :hook)
+        # Monitor the callback task to detect crashes
+        monitor_ref = Process.monitor(pid)
+        put_pending_callback(state, request_id, pid, monitor_ref, signal, :hook)
 
       :error ->
         error_msg = "Callback not found: #{callback_id}"
@@ -2210,7 +2257,7 @@ defmodule ClaudeAgentSDK.Client do
         server = self()
 
         {:ok, pid} =
-          Task.start(fn ->
+          TaskSupervisor.start_child(fn ->
             result =
               execute_permission_callback(
                 callback,
@@ -2225,7 +2272,9 @@ defmodule ClaudeAgentSDK.Client do
             send(server, {:callback_result, request_id, :permission, signal, tool_input, result})
           end)
 
-        put_pending_callback(state, request_id, pid, signal, :permission)
+        # Monitor the callback task to detect crashes
+        monitor_ref = Process.monitor(pid)
+        put_pending_callback(state, request_id, pid, monitor_ref, signal, :permission)
     end
   end
 
@@ -2359,25 +2408,52 @@ defmodule ClaudeAgentSDK.Client do
     Jason.encode!(response)
   end
 
-  defp put_pending_callback(state, request_id, pid, signal, type) do
+  defp put_pending_callback(state, request_id, pid, monitor_ref, signal, type) do
     pending =
-      Map.put(state.pending_callbacks, request_id, %{pid: pid, signal: signal, type: type})
+      Map.put(state.pending_callbacks, request_id, %{
+        pid: pid,
+        monitor_ref: monitor_ref,
+        signal: signal,
+        type: type
+      })
 
     %{state | pending_callbacks: pending}
   end
 
   defp pop_pending_callback(state, request_id) do
     {entry, pending} = Map.pop(state.pending_callbacks, request_id)
+
+    # Demonitor the callback process if entry exists
+    if entry != nil and Map.has_key?(entry, :monitor_ref) do
+      Process.demonitor(entry.monitor_ref, [:flush])
+    end
+
     {entry, %{state | pending_callbacks: pending}}
   end
 
   defp cancel_pending_callbacks(state) do
-    Enum.each(state.pending_callbacks, fn {_id, %{pid: pid, signal: signal}} ->
-      AbortSignal.cancel(signal)
-      Process.exit(pid, :kill)
+    Enum.each(state.pending_callbacks, fn {_id, entry} ->
+      AbortSignal.cancel(entry.signal)
+
+      # Demonitor if we have a monitor ref
+      if Map.has_key?(entry, :monitor_ref) do
+        Process.demonitor(entry.monitor_ref, [:flush])
+      end
+
+      Process.exit(entry.pid, :kill)
     end)
 
     %{state | pending_callbacks: %{}}
+  end
+
+  defp find_callback_by_monitor_ref(pending_callbacks, ref) do
+    Enum.find_value(pending_callbacks, fn {request_id, entry} ->
+      if Map.get(entry, :monitor_ref) == ref do
+        {request_id, entry}
+      else
+        nil
+      end
+    end)
   end
 
   defp send_cancellation_response(state, request_id, :hook) do

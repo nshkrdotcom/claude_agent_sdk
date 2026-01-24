@@ -8,7 +8,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   - Optional transport injection
   """
 
-  alias ClaudeAgentSDK.{CLI, Errors, Message, Options}
+  alias ClaudeAgentSDK.{CLI, Errors, Message, Options, TaskSupervisor}
 
   @type transport_spec :: module() | {module(), keyword()} | nil
 
@@ -175,7 +175,9 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp maybe_stream_input(module, transport, input) do
-    {:ok, pid} = Task.start(fn -> stream_input_messages(module, transport, input) end)
+    {:ok, pid} =
+      TaskSupervisor.start_child(fn -> stream_input_messages(module, transport, input) end)
+
     pid
   end
 
