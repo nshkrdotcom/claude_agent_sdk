@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Task Supervisor Strict Mode**: Optional `task_supervisor_strict` config to raise when a configured supervisor is missing.
 - **OTP Supervision Compliance**: Added proper supervision for all async callback execution
   - Created `ClaudeAgentSDK.TaskSupervisor` module for supervised task execution
   - Consumers can optionally add this to their supervision tree for full OTP compliance
@@ -29,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Task Supervisor Fallback**: Missing supervisors now fall back to `Task.start/1` instead of raw `spawn/1`.
+- **Callback :DOWN Handling**: Treat `:shutdown` reasons and cancelled signals as non-crash cleanup paths.
+- **Callback Error Messages**: CLI-facing error messages now use bounded exit formatting.
 - **Callback :DOWN Handling**: Ignore normal task exits to avoid false error responses when callback results are still pending.
 - **Task Supervisor Naming**: Custom `task_supervisor` configuration now starts tasks under the configured supervisor name reliably.
 - **Critical OTP Violations**: Fixed 3 `Task.start/1` unsupervised process spawns:
@@ -45,10 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **Supervision Guidance**: Added strict-mode and fallback behavior notes in README and hooks guide.
 - **Supervision Guidance**: Added TaskSupervisor usage notes in README and Hooks guide.
 
 ### Tests
 
+- **Abnormal :DOWN**: Added coverage for non-normal callback task exits.
+- **Fallback Task Identity**: Added coverage that fallback uses Task processes.
 - **Callback :DOWN Race**: Added coverage to ensure normal exits do not emit error responses.
 - **Custom Task Supervisor**: Added coverage for custom supervisor configuration paths.
 
@@ -1123,7 +1130,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.7.7...v0.8.0

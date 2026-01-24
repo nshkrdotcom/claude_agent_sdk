@@ -1208,28 +1208,7 @@ defmodule ClaudeAgentSDK.Client do
         {:noreply, state}
 
       {request_id, entry} ->
-        Logger.error("Callback task crashed",
-          request_id: request_id,
-          type: entry.type,
-          reason: inspect(reason)
-        )
-
-        # Send error response based on callback type
-        error_message = "Callback crashed: #{inspect(reason)}"
-
-        case entry.type do
-          :hook ->
-            json = Protocol.encode_hook_response(request_id, error_message, :error)
-            _ = send_payload(state, json)
-
-          :permission ->
-            json = encode_permission_error_response(request_id, error_message)
-            _ = send_payload(state, json)
-        end
-
-        # Remove the callback from pending_callbacks (no need to demonitor, it's already down)
-        pending = Map.delete(state.pending_callbacks, request_id)
-        {:noreply, %{state | pending_callbacks: pending}}
+        handle_callback_down(state, request_id, entry, reason)
     end
   end
 
@@ -2293,6 +2272,12 @@ defmodule ClaudeAgentSDK.Client do
         rescue
           e ->
             {:error, "Hook exception: #{Exception.message(e)}"}
+        catch
+          :exit, reason ->
+            {:error, "Hook exit: #{format_exit_reason(reason)}"}
+
+          :throw, reason ->
+            {:error, "Hook throw: #{inspect(reason, limit: 10, printable_limit: 200)}"}
         end
       end)
 
@@ -2343,6 +2328,13 @@ defmodule ClaudeAgentSDK.Client do
         rescue
           e ->
             {:error, "Permission callback exception: #{Exception.message(e)}"}
+        catch
+          :exit, reason ->
+            {:error, "Permission callback exit: #{format_exit_reason(reason)}"}
+
+          :throw, reason ->
+            {:error,
+             "Permission callback throw: #{inspect(reason, limit: 10, printable_limit: 200)}"}
         end
       end)
 
@@ -2431,6 +2423,10 @@ defmodule ClaudeAgentSDK.Client do
     {entry, %{state | pending_callbacks: pending}}
   end
 
+  defp drop_pending_callback(state, request_id) do
+    %{state | pending_callbacks: Map.delete(state.pending_callbacks, request_id)}
+  end
+
   defp cancel_pending_callbacks(state) do
     Enum.each(state.pending_callbacks, fn {_id, entry} ->
       AbortSignal.cancel(entry.signal)
@@ -2454,6 +2450,66 @@ defmodule ClaudeAgentSDK.Client do
         nil
       end
     end)
+  end
+
+  defp handle_callback_down(state, request_id, entry, reason) do
+    cond do
+      AbortSignal.cancelled?(entry.signal) ->
+        {:noreply, drop_pending_callback(state, request_id)}
+
+      shutdown_reason?(reason) ->
+        {:noreply, drop_pending_callback(state, request_id)}
+
+      true ->
+        handle_callback_crash(state, request_id, entry, reason)
+    end
+  end
+
+  defp handle_callback_crash(state, request_id, entry, reason) do
+    Logger.error("Callback task crashed",
+      request_id: request_id,
+      type: entry.type,
+      reason: inspect(reason)
+    )
+
+    # Send error response based on callback type
+    error_message = callback_crash_message(reason)
+
+    case entry.type do
+      :hook ->
+        json = Protocol.encode_hook_response(request_id, error_message, :error)
+        _ = send_payload(state, json)
+
+      :permission ->
+        json = encode_permission_error_response(request_id, error_message)
+        _ = send_payload(state, json)
+    end
+
+    {:noreply, drop_pending_callback(state, request_id)}
+  end
+
+  defp shutdown_reason?(reason) do
+    reason == :shutdown or match?({:shutdown, _}, reason)
+  end
+
+  defp callback_crash_message(reason) do
+    "Callback crashed: #{format_exit_reason(reason)}"
+  end
+
+  defp format_exit_reason(reason) do
+    reason
+    |> Exception.format_exit()
+    |> String.replace("\n", " ")
+    |> String.trim()
+    |> trim_message(300)
+  end
+
+  defp trim_message(message, max_len) when is_integer(max_len) and max_len > 0 do
+    if byte_size(message) > max_len do
+      binary_part(message, 0, max_len) <> "..."
+    else
+      message
+    end
   end
 
   defp send_cancellation_response(state, request_id, :hook) do

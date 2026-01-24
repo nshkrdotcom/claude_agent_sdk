@@ -377,6 +377,76 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
       state = :sys.get_state(client)
       assert state.pending_callbacks == %{}
     end
+
+    test "sends error response on abnormal :DOWN and cleans up pending state" do
+      callback = fn _input, _tool_use_id, _context ->
+        Process.sleep(500)
+        %{}
+      end
+
+      options = %Options{
+        hooks: %{
+          pre_tool_use: [
+            Matcher.new("Bash", [callback])
+          ]
+        }
+      }
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
+
+      on_exit(fn -> safe_stop(client) end)
+
+      transport =
+        receive do
+          {:mock_transport_started, pid} -> pid
+        end
+
+      receive do
+        {:mock_transport_send, _} -> :ok
+      after
+        500 -> flunk("Did not receive initialize payload")
+      end
+
+      state = :sys.get_state(client)
+      callback_id = Registry.get_id(state.registry, callback)
+      request_id = "req_abnormal_down"
+
+      send_hook_request(transport, callback_id, request_id)
+
+      {monitor_ref, pid} =
+        SupertesterCase.eventually(
+          fn ->
+            state = :sys.get_state(client)
+
+            case state.pending_callbacks do
+              %{^request_id => %{monitor_ref: ref, pid: task_pid}} -> {ref, task_pid}
+              _ -> nil
+            end
+          end,
+          timeout: 1_000
+        )
+
+      Process.exit(pid, :kill)
+      send(client, {:DOWN, monitor_ref, :process, pid, :killed})
+
+      response =
+        SupertesterCase.eventually(
+          fn ->
+            find_response(transport, request_id)
+          end,
+          timeout: 2_000
+        )
+
+      assert response["response"]["subtype"] == "error"
+      assert response["response"]["error"] =~ "crashed"
+
+      state = :sys.get_state(client)
+      assert state.pending_callbacks == %{}
+    end
   end
 
   # Helper functions

@@ -41,7 +41,7 @@ defmodule ClaudeAgentSdk.MixProject do
     [
       {:erlexec, "~> 2.0", runtime: runtime_erlexec?()},
       {:jason, "~> 1.4"},
-      {:ex_doc, "~> 0.31", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
       {:supertester, "~> 0.5.1", only: :test},

@@ -293,6 +293,13 @@ children = [
 config :claude_agent_sdk, task_supervisor: MyApp.ClaudeTaskSupervisor
 ```
 
+If the configured supervisor is missing at runtime, the SDK logs a warning and
+falls back to `Task.start/1`. For stricter behavior in dev/test:
+
+```elixir
+config :claude_agent_sdk, task_supervisor_strict: true
+```
+
 ### Permission System
 
 Fine-grained control over tool execution:

@@ -128,10 +128,19 @@ defmodule ClaudeAgentSDK.TaskSupervisorTest do
       {:ok, pid} =
         TaskSupervisor.start_child(fn ->
           send(parent, {:fallback_running, self()})
+
+          receive do
+            :stop -> :ok
+          end
         end)
 
       assert is_pid(pid)
       assert_receive {:fallback_running, ^pid}, 1000
+
+      assert {:initial_call, {Task.Supervised, _func, _arity}} =
+               Process.info(pid, :initial_call)
+
+      send(pid, :stop)
     end
   end
 
