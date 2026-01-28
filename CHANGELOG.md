@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-01-28
+
+### Fixed
+
+- **AuthChecker exec timeout**: Fixed `run_command_with_timeout/2` passing `{:timeout, ms}` inside the options list to `:exec.run/2`, which does not accept that tuple as an option. This caused `:exec.run` to return `{:error, {:invalid_option, {:timeout, 30000}}}`, making `authenticated?/0` return `false` even when the CLI is installed and authenticated. The fix uses `:exec.run/3` with the timeout as a separate third argument.
+
+### Tests
+
+- **Exec timeout regression test**: Added `AuthCheckerExecTimeoutTest` verifying that the erlexec call pattern does not produce `{:error, {:invalid_option, _}}`.
+
 ## [0.9.1] - 2026-01-23
 
 ### Added
@@ -1130,7 +1140,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.0...v0.8.1

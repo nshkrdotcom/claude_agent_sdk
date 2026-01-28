@@ -342,6 +342,13 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   # Private helper functions
 
+  if Mix.env() == :test do
+    @doc false
+    def run_command_with_timeout_for_test(command, timeout_ms) do
+      run_command_with_timeout(command, timeout_ms)
+    end
+  end
+
   defp check_cli_installation_private do
     case CLI.find_executable() do
       {:ok, _path} ->
@@ -540,7 +547,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp run_command_with_timeout(command, timeout_ms) do
-    case :exec.run(command, [:sync, :stdout, :stderr, {:timeout, timeout_ms}]) do
+    case :exec.run(command, [:sync, :stdout, :stderr], timeout_ms) do
       {:ok, result} ->
         handle_successful_execution(result)
 
