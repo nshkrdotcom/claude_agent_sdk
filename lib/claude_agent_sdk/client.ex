@@ -76,6 +76,44 @@ defmodule ClaudeAgentSDK.Client do
   @default_stream_buffer_limit 1_000
   @init_timeout_env_var "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT"
   @edit_tools ["Write", "Edit", "MultiEdit"]
+  @check_inbound_size_invariant Application.compile_env(
+                                  :claude_agent_sdk,
+                                  :check_inbound_size_invariant,
+                                  Mix.env() == :test
+                                )
+
+  # Client state intentionally mirrors the control-protocol lifecycle and streaming buffers.
+  defstruct port: nil,
+            transport: nil,
+            transport_module: nil,
+            transport_opts: [],
+            options: nil,
+            registry: nil,
+            hook_callback_timeouts: %{},
+            subscribers: %{},
+            pending_requests: %{},
+            pending_callbacks: %{},
+            initialized: false,
+            buffer: "",
+            session_id: nil,
+            sdk_mcp_servers: %{},
+            pending_permission_change: nil,
+            control_request_timeout_ms: @default_control_request_timeout_ms,
+            permission_bridge: nil,
+            accumulated_text: "",
+            stream_stop_reason: nil,
+            active_subscriber: nil,
+            subscriber_queue: [],
+            init_waiters: [],
+            initialized_waiters: [],
+            pending_inbound: :queue.new(),
+            pending_inbound_size: 0,
+            pending_inbound_dropped: 0,
+            stream_buffer_limit: @default_stream_buffer_limit,
+            server_info: nil,
+            init_request_id: nil,
+            init_timeout: nil,
+            temp_files: []
 
   @typedoc """
   Client state.
@@ -95,12 +133,14 @@ defmodule ClaudeAgentSDK.Client do
   - `active_subscriber` - Current streaming consumer reference (v0.6.0)
   - `subscriber_queue` - Pending message queue (v0.6.0)
   - `init_waiters` - Callers waiting for initialize request send
+  - `initialized_waiters` - Callers waiting for initialize completion
   - `pending_inbound` - Buffered inbound events/messages before first subscriber
-  - `pending_inbound_count` - Count of buffered inbound entries
+  - `pending_inbound_size` - Number of buffered inbound entries before first subscriber
   - `pending_inbound_dropped` - Dropped inbound entries due to buffer limit
   - `stream_buffer_limit` - Max buffered inbound entries before first subscriber
+  - `control_request_timeout_ms` - Per-client timeout for control requests in milliseconds
   """
-  @type state :: %{
+  @type state :: %__MODULE__{
           port: port() | nil,
           transport: pid() | nil,
           transport_module: module() | nil,
@@ -121,23 +161,23 @@ defmodule ClaudeAgentSDK.Client do
           initialized: boolean(),
           buffer: String.t(),
           sdk_mcp_servers: %{String.t() => pid()},
-          current_model: String.t() | nil,
-          pending_model_change: {GenServer.from(), reference()} | nil,
-          current_permission_mode: ClaudeAgentSDK.Permission.permission_mode() | nil,
           pending_permission_change: {GenServer.from(), reference()} | nil,
+          control_request_timeout_ms: pos_integer(),
           permission_bridge: :ets.tid() | nil,
           accumulated_text: String.t(),
+          stream_stop_reason: String.t() | nil,
           active_subscriber: reference() | nil,
           subscriber_queue: [{reference(), String.t()}],
           init_waiters: [GenServer.from()],
+          initialized_waiters: [GenServer.from()],
           pending_inbound: :queue.queue(),
-          pending_inbound_count: non_neg_integer(),
+          pending_inbound_size: non_neg_integer(),
           pending_inbound_dropped: non_neg_integer(),
           stream_buffer_limit: non_neg_integer(),
           server_info: map() | nil,
           init_request_id: String.t() | nil,
-          init_timeout_ref: reference() | nil,
-          init_timeout_ms: pos_integer() | nil
+          init_timeout: {reference(), pos_integer()} | nil,
+          temp_files: [Path.t()]
         }
 
   ## Public API
@@ -151,6 +191,8 @@ defmodule ClaudeAgentSDK.Client do
   ## Parameters
 
   - `options` - ClaudeAgentSDK.Options struct with hooks configuration
+  - `opts` - Optional runtime overrides (e.g. `:transport`, `:transport_opts`,
+    `:control_request_timeout_ms`)
 
   ## Returns
 
@@ -430,8 +472,12 @@ defmodule ClaudeAgentSDK.Client do
         (init_timeout_seconds_from_env() * 1_000) |> trunc()
       end
 
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
-    do_await_initialized(client, deadline)
+    try do
+      GenServer.call(client, :await_initialized, timeout_ms)
+    catch
+      :exit, {:timeout, _} -> {:error, :timeout}
+      :exit, _ -> {:error, :client_not_alive}
+    end
   end
 
   @doc """
@@ -483,25 +529,6 @@ defmodule ClaudeAgentSDK.Client do
           :ok | {:error, :invalid_permission_mode}
   def set_permission_mode(client, mode) when is_pid(client) do
     GenServer.call(client, {:set_permission_mode, mode}, :infinity)
-  end
-
-  defp do_await_initialized(client, deadline_ms) do
-    if System.monotonic_time(:millisecond) > deadline_ms do
-      {:error, :timeout}
-    else
-      state = :sys.get_state(client)
-
-      if Map.get(state, :initialized) == true do
-        :ok
-      else
-        Process.sleep(50)
-        do_await_initialized(client, deadline_ms)
-      end
-    end
-  rescue
-    _ -> {:error, :client_not_alive}
-  catch
-    :exit, _ -> {:error, :client_not_alive}
   end
 
   @doc """
@@ -599,6 +626,7 @@ defmodule ClaudeAgentSDK.Client do
   defp do_init(options, opts) do
     transport_module = Keyword.get(opts, :transport) || default_transport_module(options)
     transport_opts = Keyword.get(opts, :transport_opts, [])
+    control_timeout_ms = resolve_control_request_timeout_ms(opts)
 
     # Validate hooks and permission callback configuration before starting
     with :ok <- validate_hooks(options.hooks),
@@ -615,7 +643,7 @@ defmodule ClaudeAgentSDK.Client do
 
       # Initialize state without starting CLI yet
       # CLI will be started in handle_continue
-      state = %{
+      state = %__MODULE__{
         port: nil,
         transport: nil,
         transport_module: transport_module,
@@ -630,10 +658,8 @@ defmodule ClaudeAgentSDK.Client do
         buffer: "",
         session_id: nil,
         sdk_mcp_servers: sdk_mcp_servers,
-        current_model: updated_options.model,
-        pending_model_change: nil,
-        current_permission_mode: updated_options.permission_mode,
         pending_permission_change: nil,
+        control_request_timeout_ms: control_timeout_ms,
         permission_bridge: permission_bridge,
         # Streaming support fields (v0.6.0)
         accumulated_text: "",
@@ -641,14 +667,14 @@ defmodule ClaudeAgentSDK.Client do
         active_subscriber: nil,
         subscriber_queue: [],
         init_waiters: [],
+        initialized_waiters: [],
         pending_inbound: :queue.new(),
-        pending_inbound_count: 0,
+        pending_inbound_size: 0,
         pending_inbound_dropped: 0,
         stream_buffer_limit: stream_buffer_limit(updated_options),
         server_info: nil,
         init_request_id: nil,
-        init_timeout_ref: nil,
-        init_timeout_ms: nil,
+        init_timeout: nil,
         temp_files: []
       }
 
@@ -699,7 +725,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   def handle_call({:set_model, model}, from, state) do
-    if state.pending_model_change != nil do
+    if model_change_in_progress?(state) do
       {:reply, {:error, :model_change_in_progress}, state}
     else
       set_model_request(model, from, state)
@@ -745,6 +771,14 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
+  def handle_call(:await_initialized, from, state) do
+    if state.initialized do
+      {:reply, :ok, state}
+    else
+      {:noreply, %{state | initialized_waiters: [from | state.initialized_waiters]}}
+    end
+  end
+
   # Legacy subscribe (backwards compatibility) - generate a ref for the pid
   def handle_call({:subscribe}, from, state) do
     {pid, _ref} = from
@@ -784,7 +818,7 @@ defmodule ClaudeAgentSDK.Client do
 
         case send_payload(state, json) do
           :ok ->
-            timer_ref = schedule_control_request_timeout(request_id)
+            timer_ref = schedule_control_request_timeout(state, request_id)
 
             pending_requests =
               Map.put(
@@ -807,7 +841,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   def handle_call(:get_model, _from, state) do
-    case state.current_model do
+    case state.options.model do
       nil -> {:reply, {:error, :model_not_set}, state}
       model -> {:reply, {:ok, model}, state}
     end
@@ -849,7 +883,7 @@ defmodule ClaudeAgentSDK.Client do
 
     case send_payload(state, json) do
       :ok ->
-        timer_ref = schedule_control_request_timeout(request_id)
+        timer_ref = schedule_control_request_timeout(state, request_id)
 
         pending_requests =
           Map.put(state.pending_requests, request_id, {:interrupt, from, timer_ref})
@@ -875,7 +909,7 @@ defmodule ClaudeAgentSDK.Client do
 
         case send_payload(state, json) do
           :ok ->
-            timer_ref = schedule_control_request_timeout(request_id)
+            timer_ref = schedule_control_request_timeout(state, request_id)
 
             pending_requests =
               Map.put(state.pending_requests, request_id, {:rewind_files, from, timer_ref})
@@ -915,17 +949,12 @@ defmodule ClaudeAgentSDK.Client do
     with {:ok, normalized} <- Model.validate(model_string),
          {request_id, json} = Protocol.encode_set_model_request(normalized),
          :ok <- send_payload(state, json) do
-      timer_ref = schedule_control_request_timeout(request_id)
+      timer_ref = schedule_control_request_timeout(state, request_id)
 
       pending_requests =
         Map.put(state.pending_requests, request_id, {:set_model, from, normalized, timer_ref})
 
-      {:noreply,
-       %{
-         state
-         | pending_requests: pending_requests,
-           pending_model_change: request_id
-       }}
+      {:noreply, %{state | pending_requests: pending_requests}}
     else
       {:error, :invalid_model} ->
         suggestions = Model.suggest(model_string)
@@ -934,6 +963,12 @@ defmodule ClaudeAgentSDK.Client do
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
+  end
+
+  defp model_change_in_progress?(state) do
+    Enum.any?(state.pending_requests, fn {_request_id, entry} ->
+      match?({:set_model, _, _, _}, entry)
+    end)
   end
 
   @impl true
@@ -982,7 +1017,7 @@ defmodule ClaudeAgentSDK.Client do
       true ->
         Logger.error("Initialization control request timed out",
           request_id: request_id,
-          timeout_ms: state.init_timeout_ms
+          timeout_ms: elem(state.init_timeout, 1)
         )
 
         new_state =
@@ -1121,7 +1156,7 @@ defmodule ClaudeAgentSDK.Client do
       {:set_model, from, _requested_model, _timer_ref} ->
         Logger.warning("Control request timed out", request_id: request_id, subtype: "set_model")
         GenServer.reply(from, {:error, :timeout})
-        {:noreply, %{state | pending_model_change: nil}}
+        {:noreply, state}
 
       {:set_permission_mode, from, _requested_mode, _timer_ref} ->
         Logger.warning("Control request timed out",
@@ -1582,27 +1617,43 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp maybe_cancel_init_timeout(state, request_id) do
-    if state.init_request_id == request_id and is_reference(state.init_timeout_ref) do
-      _ = Process.cancel_timer(state.init_timeout_ref)
-      %{state | init_timeout_ref: nil, init_request_id: nil, init_timeout_ms: nil}
+    if state.init_request_id == request_id and state.init_timeout != nil do
+      _ = Process.cancel_timer(elem(state.init_timeout, 0))
+      %{state | init_timeout: nil, init_request_id: nil}
     else
       state
     end
   end
 
-  defp control_request_timeout_ms do
-    Application.get_env(
-      :claude_agent_sdk,
-      :control_request_timeout_ms,
-      @default_control_request_timeout_ms
-    )
+  defp control_request_timeout_ms_from_config do
+    case Application.get_env(
+           :claude_agent_sdk,
+           :control_request_timeout_ms,
+           @default_control_request_timeout_ms
+         ) do
+      timeout_ms when is_integer(timeout_ms) and timeout_ms > 0 ->
+        timeout_ms
+
+      _ ->
+        @default_control_request_timeout_ms
+    end
   end
 
-  defp schedule_control_request_timeout(request_id) when is_binary(request_id) do
+  defp resolve_control_request_timeout_ms(opts) do
+    case Keyword.get(opts, :control_request_timeout_ms) do
+      timeout_ms when is_integer(timeout_ms) and timeout_ms > 0 ->
+        timeout_ms
+
+      _ ->
+        control_request_timeout_ms_from_config()
+    end
+  end
+
+  defp schedule_control_request_timeout(state, request_id) when is_binary(request_id) do
     Process.send_after(
       self(),
       {:control_request_timeout, request_id},
-      control_request_timeout_ms()
+      state.control_request_timeout_ms
     )
   end
 
@@ -1647,7 +1698,6 @@ defmodule ClaudeAgentSDK.Client do
     %{
       state
       | pending_requests: %{},
-        pending_model_change: nil,
         pending_permission_change: nil
     }
   end
@@ -1662,9 +1712,16 @@ defmodule ClaudeAgentSDK.Client do
 
   defp notify_init_sent_waiters(state), do: state
 
-  defp cancel_init_timeout(%{init_timeout_ref: ref} = state) when is_reference(ref) do
+  defp notify_initialized_waiters(%{initialized_waiters: []} = state), do: state
+
+  defp notify_initialized_waiters(state) do
+    Enum.each(state.initialized_waiters, &GenServer.reply(&1, :ok))
+    %{state | initialized_waiters: []}
+  end
+
+  defp cancel_init_timeout(%{init_timeout: {ref, _ms}} = state) when is_reference(ref) do
     _ = Process.cancel_timer(ref)
-    %{state | init_timeout_ref: nil, init_timeout_ms: nil}
+    %{state | init_timeout: nil}
   end
 
   defp cancel_init_timeout(state), do: state
@@ -1683,7 +1740,7 @@ defmodule ClaudeAgentSDK.Client do
       {init_request_id, init_json} =
         Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil)
 
-      {init_timeout_ref, init_timeout_ms} = schedule_initialize_timeout(init_request_id)
+      init_timeout = schedule_initialize_timeout(init_request_id)
 
       _ = module.send(transport, ensure_newline(init_json))
 
@@ -1695,8 +1752,7 @@ defmodule ClaudeAgentSDK.Client do
            hook_callback_timeouts: hook_callback_timeouts,
            initialized: false,
            init_request_id: init_request_id,
-           init_timeout_ref: init_timeout_ref,
-           init_timeout_ms: init_timeout_ms
+           init_timeout: init_timeout
        }}
     else
       {:error, reason} ->
@@ -1737,7 +1793,7 @@ defmodule ClaudeAgentSDK.Client do
         {init_request_id, init_json} =
           Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil)
 
-        {init_timeout_ref, init_timeout_ms} = schedule_initialize_timeout(init_request_id)
+        init_timeout = schedule_initialize_timeout(init_request_id)
 
         Port.command(port, ensure_newline(init_json))
 
@@ -1749,8 +1805,7 @@ defmodule ClaudeAgentSDK.Client do
              hook_callback_timeouts: hook_callback_timeouts,
              initialized: false,
              init_request_id: init_request_id,
-             init_timeout_ref: init_timeout_ref,
-             init_timeout_ms: init_timeout_ms,
+             init_timeout: init_timeout,
              temp_files: temp_files
          }}
 
@@ -2018,7 +2073,7 @@ defmodule ClaudeAgentSDK.Client do
         error = response["error"] || "set_model_failed"
         Logger.error("Model change rejected", request_id: request_id, error: error)
         GenServer.reply(from, {:error, error})
-        %{state | pending_model_change: nil}
+        state
 
       other ->
         Logger.warning("Unexpected subtype for set_model response",
@@ -2027,7 +2082,7 @@ defmodule ClaudeAgentSDK.Client do
         )
 
         GenServer.reply(from, {:error, :unexpected_response})
-        %{state | pending_model_change: nil}
+        state
     end
   end
 
@@ -2036,7 +2091,9 @@ defmodule ClaudeAgentSDK.Client do
       {:ok, model} ->
         Logger.info("Model changed successfully", request_id: request_id, model: model)
         GenServer.reply(from, :ok)
-        %{state | current_model: model, pending_model_change: nil}
+
+        state
+        |> put_current_model(model)
 
       {:error, :invalid_response} when is_binary(requested_model) ->
         Logger.info(
@@ -2046,7 +2103,9 @@ defmodule ClaudeAgentSDK.Client do
         )
 
         GenServer.reply(from, :ok)
-        %{state | current_model: requested_model, pending_model_change: nil}
+
+        state
+        |> put_current_model(requested_model)
 
       {:error, reason} ->
         Logger.error(
@@ -2055,8 +2114,12 @@ defmodule ClaudeAgentSDK.Client do
         )
 
         GenServer.reply(from, {:error, reason})
-        %{state | pending_model_change: nil}
+        state
     end
+  end
+
+  defp put_current_model(%{options: %Options{} = options} = state, model) when is_binary(model) do
+    %{state | options: %{options | model: model}}
   end
 
   defp handle_set_permission_mode_response(from, requested_mode, response, request_id, state) do
@@ -2075,7 +2138,6 @@ defmodule ClaudeAgentSDK.Client do
         %{
           state
           | options: updated_options,
-            current_permission_mode: requested_mode,
             pending_permission_change: nil
         }
 
@@ -2131,7 +2193,10 @@ defmodule ClaudeAgentSDK.Client do
           state_with_info
         else
           Logger.info("Client initialized successfully")
-          %{state_with_info | initialized: true}
+
+          state_with_info
+          |> Map.put(:initialized, true)
+          |> notify_initialized_waiters()
         end
 
       "error" ->
@@ -2560,31 +2625,42 @@ defmodule ClaudeAgentSDK.Client do
   defp buffer_inbound(state, entries) when is_list(entries) do
     Enum.reduce(entries, state, fn entry, acc ->
       queue = :queue.in(entry, acc.pending_inbound)
-      count = acc.pending_inbound_count + 1
+      size = acc.pending_inbound_size + 1
 
-      {queue, count, dropped} =
-        trim_inbound_queue(queue, count, acc.stream_buffer_limit, acc.pending_inbound_dropped)
+      {queue, size, dropped} =
+        trim_inbound_queue(queue, size, acc.stream_buffer_limit, acc.pending_inbound_dropped)
+
+      :ok = maybe_assert_inbound_size_invariant(queue, size)
 
       %{
         acc
         | pending_inbound: queue,
-          pending_inbound_count: count,
+          pending_inbound_size: size,
           pending_inbound_dropped: dropped
       }
     end)
   end
 
-  defp trim_inbound_queue(queue, count, limit, dropped)
-       when is_integer(limit) and limit > 0 and count > limit do
+  defp trim_inbound_queue(queue, size, limit, dropped)
+       when is_integer(limit) and limit > 0 and size > limit do
     {{:value, _}, queue} = :queue.out(queue)
-    trim_inbound_queue(queue, count - 1, limit, dropped + 1)
+    trim_inbound_queue(queue, size - 1, limit, dropped + 1)
   end
 
-  defp trim_inbound_queue(queue, count, _limit, dropped), do: {queue, count, dropped}
+  defp trim_inbound_queue(queue, size, _limit, dropped), do: {queue, size, dropped}
 
-  defp flush_pending_inbound(%{pending_inbound_count: 0} = state, _ref, _pid), do: state
+  defp flush_pending_inbound(
+         %{pending_inbound_size: 0, pending_inbound: queue} = state,
+         _ref,
+         _pid
+       ) do
+    :ok = maybe_assert_inbound_size_invariant(queue, 0)
+    state
+  end
 
   defp flush_pending_inbound(state, ref, pid) do
+    :ok = maybe_assert_inbound_size_invariant(state.pending_inbound, state.pending_inbound_size)
+
     if state.pending_inbound_dropped > 0 do
       Logger.warning("Dropped inbound messages before first subscriber",
         dropped: state.pending_inbound_dropped,
@@ -2605,9 +2681,24 @@ defmodule ClaudeAgentSDK.Client do
     %{
       state
       | pending_inbound: :queue.new(),
-        pending_inbound_count: 0,
+        pending_inbound_size: 0,
         pending_inbound_dropped: 0
     }
+  end
+
+  if @check_inbound_size_invariant do
+    defp maybe_assert_inbound_size_invariant(queue, size) do
+      actual = :queue.len(queue)
+
+      if actual != size do
+        raise ArgumentError,
+              "pending_inbound_size invariant violated: expected #{size}, got #{actual}"
+      end
+
+      :ok
+    end
+  else
+    defp maybe_assert_inbound_size_invariant(_queue, _size), do: :ok
   end
 
   defp buffer_stream_events(state, events) do

@@ -26,6 +26,19 @@ defmodule ClaudeAgentSDK.Transport.PortTest do
       assert {:error, {:command_not_found, "nonexistent_command_xyz"}} =
                PortTransport.start_link(command: "nonexistent_command_xyz")
     end
+
+    test "lazy startup defers subprocess start failures" do
+      Process.flag(:trap_exit, true)
+
+      assert {:ok, transport} =
+               PortTransport.start_link(
+                 command: "nonexistent_command_xyz",
+                 startup_mode: :lazy,
+                 options: %Options{}
+               )
+
+      assert_receive {:EXIT, ^transport, {:command_not_found, "nonexistent_command_xyz"}}, 1_000
+    end
   end
 
   describe "send/2" do

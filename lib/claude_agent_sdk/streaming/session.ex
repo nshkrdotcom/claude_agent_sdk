@@ -238,55 +238,43 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   @impl true
   def init({options, start_opts}) when is_list(start_opts) do
     opts = options || %Options{}
-    mock_stream? = Keyword.get(start_opts, :mock_stream, false)
+    startup_mode = startup_mode_from_opts(start_opts)
 
-    if mock_stream? do
-      state = %__MODULE__{
-        subprocess: nil,
-        mock_stream?: true,
-        session_id: nil,
-        options: opts,
-        subscribers: %{},
-        subscriber_queue: [],
-        active_subscriber: nil,
-        message_buffer: "",
-        accumulated_text: "",
-        stop_reason: nil,
-        monitor_ref: nil
-      }
+    case Keyword.get(start_opts, :mock_stream, false) do
+      true ->
+        {:ok, initial_state(opts, true)}
 
-      {:ok, state}
-    else
-      # Build CLI command with streaming flags
-      args = build_streaming_args(opts)
-
-      # Start subprocess with stdin/stdout/stderr pipes
-      case spawn_subprocess(args, opts) do
-        {:ok, subprocess, monitor_ref} ->
-          state = %__MODULE__{
-            subprocess: subprocess,
-            mock_stream?: false,
-            session_id: nil,
-            options: opts,
-            subscribers: %{},
-            subscriber_queue: [],
-            active_subscriber: nil,
-            message_buffer: "",
-            accumulated_text: "",
-            stop_reason: nil,
-            monitor_ref: monitor_ref
-          }
-
-          {:ok, state}
-
-        {:error, reason} ->
-          {:stop, {:subprocess_failed, reason}}
-      end
+      false ->
+        init_with_subprocess(opts, startup_mode)
     end
   end
 
   def init(options) do
     init({options, []})
+  end
+
+  defp init_with_subprocess(opts, :lazy) do
+    {:ok, initial_state(opts, false), {:continue, :start_subprocess}}
+  end
+
+  defp init_with_subprocess(opts, :eager) do
+    state = initial_state(opts, false)
+
+    case start_subprocess(state) do
+      {:ok, connected_state} -> {:ok, connected_state}
+      {:error, reason} -> {:stop, {:subprocess_failed, reason}}
+    end
+  end
+
+  @impl true
+  def handle_continue(:start_subprocess, state) do
+    case start_subprocess(state) do
+      {:ok, connected_state} ->
+        {:noreply, connected_state}
+
+      {:error, reason} ->
+        {:stop, {:subprocess_failed, reason}, state}
+    end
   end
 
   @impl true
@@ -432,6 +420,41 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   ## Private Functions
+
+  defp startup_mode_from_opts(start_opts) do
+    case Keyword.get(start_opts, :startup_mode, :eager) do
+      :lazy -> :lazy
+      _ -> :eager
+    end
+  end
+
+  defp initial_state(opts, mock_stream?) do
+    %__MODULE__{
+      subprocess: nil,
+      mock_stream?: mock_stream?,
+      session_id: nil,
+      options: opts,
+      subscribers: %{},
+      subscriber_queue: [],
+      active_subscriber: nil,
+      message_buffer: "",
+      accumulated_text: "",
+      stop_reason: nil,
+      monitor_ref: nil
+    }
+  end
+
+  defp start_subprocess(state) do
+    args = build_streaming_args(state.options)
+
+    case spawn_subprocess(args, state.options) do
+      {:ok, subprocess, monitor_ref} ->
+        {:ok, %{state | subprocess: subprocess, monitor_ref: monitor_ref}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 
   defp handle_stderr_data(data, stderr_callback) when is_function(stderr_callback, 1) do
     data

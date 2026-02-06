@@ -97,6 +97,17 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       MockTransport.push_message(transport_pid, Jason.encode!(assistant))
       MockTransport.push_message(transport_pid, Jason.encode!(result))
 
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+
+          state.pending_inbound_size == 3 and
+            state.pending_inbound_dropped == 0 and
+            :queue.len(state.pending_inbound) == state.pending_inbound_size
+        end,
+        timeout: 2_000
+      )
+
       task =
         Task.async(fn ->
           Client.stream_messages(client)
@@ -111,6 +122,73 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       assert data.event["delta"]["text"] == "Hello"
       assert data.uuid == nil
       assert data.session_id == nil
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+
+          state.pending_inbound_size == 0 and
+            state.pending_inbound_dropped == 0 and
+            :queue.is_empty(state.pending_inbound)
+        end,
+        timeout: 2_000
+      )
+    end
+
+    test "tracks bounded queue size correctly for larger stream_buffer_limit values" do
+      large_limit = 5_000
+      overflow_entries = 75
+
+      options = %Options{
+        include_partial_messages: true,
+        stream_buffer_limit: large_limit
+      }
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
+
+      assert_receive {:mock_transport_started, transport_pid}, 1_000
+      assert {:ok, request_id} = Client.await_init_sent(client, 1_000)
+
+      init_response = %{
+        "type" => "control_response",
+        "response" => %{
+          "subtype" => "success",
+          "request_id" => request_id,
+          "response" => %{}
+        }
+      }
+
+      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+
+      total_entries = large_limit + overflow_entries
+
+      for index <- 1..total_entries do
+        assistant = %{
+          "type" => "assistant",
+          "message" => %{
+            "role" => "assistant",
+            "content" => [%{"type" => "text", "text" => "message-#{index}"}]
+          },
+          "session_id" => "buffered-large"
+        }
+
+        MockTransport.push_message(transport_pid, Jason.encode!(assistant))
+      end
+
+      eventually(
+        fn ->
+          state = :sys.get_state(client)
+
+          state.pending_inbound_size == large_limit and
+            state.pending_inbound_dropped == overflow_entries and
+            :queue.len(state.pending_inbound) == state.pending_inbound_size
+        end,
+        timeout: 4_000
+      )
     end
   end
 

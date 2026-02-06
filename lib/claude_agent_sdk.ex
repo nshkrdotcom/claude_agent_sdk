@@ -195,9 +195,10 @@ defmodule ClaudeAgentSDK do
     name = Keyword.fetch!(opts, :name)
     version = Keyword.get(opts, :version, "1.0.0")
     tools = Keyword.get(opts, :tools, [])
+    supervisor = Keyword.get(opts, :supervisor)
 
     # Start a registry for this server
-    {:ok, registry_pid} = ClaudeAgentSDK.Tool.Registry.start_link([])
+    registry_pid = start_sdk_registry(supervisor)
 
     # Register all tools
     for tool_module <- tools do
@@ -219,5 +220,31 @@ defmodule ClaudeAgentSDK do
       version: version,
       registry_pid: registry_pid
     }
+  end
+
+  defp start_sdk_registry(nil) do
+    {:ok, registry_pid} = ClaudeAgentSDK.Tool.Registry.start_link([])
+    registry_pid
+  end
+
+  defp start_sdk_registry(supervisor) do
+    child_spec = %{
+      id: {ClaudeAgentSDK.Tool.Registry, make_ref()},
+      start: {ClaudeAgentSDK.Tool.Registry, :start_link, [[]]},
+      restart: :temporary,
+      type: :worker
+    }
+
+    case DynamicSupervisor.start_child(supervisor, child_spec) do
+      {:ok, registry_pid} ->
+        registry_pid
+
+      {:error, {:already_started, registry_pid}} ->
+        registry_pid
+
+      {:error, reason} ->
+        raise ArgumentError,
+              "failed to start SDK MCP Tool.Registry under supervisor #{inspect(supervisor)}: #{inspect(reason)}"
+    end
   end
 end

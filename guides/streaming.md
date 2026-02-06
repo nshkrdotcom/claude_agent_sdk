@@ -144,6 +144,19 @@ ClaudeAgentSDK.query("Hello", %Options{}, {ClaudeAgentSDK.Transport.Port, []})
 |> Enum.to_list()
 ```
 
+You can also defer subprocess startup with lazy mode:
+
+```elixir
+ClaudeAgentSDK.query(
+  "Hello",
+  %Options{},
+  {ClaudeAgentSDK.Transport.Port, [startup_mode: :lazy]}
+)
+|> Enum.to_list()
+```
+
+In lazy mode, startup errors can happen after `start_link` succeeds and are delivered as process exits.
+
 ### Query Streaming Module Configuration
 
 For advanced use cases, you can override the query streaming module globally:

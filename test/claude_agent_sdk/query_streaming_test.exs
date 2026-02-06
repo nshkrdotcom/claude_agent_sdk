@@ -16,11 +16,11 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
 
     task = Task.async(fn -> Enum.take(stream, 1) end)
 
-    assert_receive {:mock_transport_started, transport}, 200
-    assert_receive {:mock_transport_subscribed, _pid}, 200
-    assert_receive {:mock_transport_send, sent_prompt}, 200
+    assert_receive {:mock_transport_started, transport}, 1_000
+    assert_receive {:mock_transport_subscribed, _pid}, 1_000
+    assert_receive {:mock_transport_send, sent_prompt}, 1_000
     assert sent_prompt == hd(prompt)
-    assert_receive {:mock_transport_end_input, ^transport}, 200
+    assert_receive {:mock_transport_end_input, ^transport}, 1_000
 
     assistant = %{
       "type" => "assistant",

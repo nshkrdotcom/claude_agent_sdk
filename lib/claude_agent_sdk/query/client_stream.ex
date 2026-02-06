@@ -91,8 +91,7 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
 
   defp await_initialized(client_pid, timeout_ms)
        when is_pid(client_pid) and is_integer(timeout_ms) do
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
-    do_await_initialized(client_pid, deadline)
+    Client.await_initialized(client_pid, timeout_ms)
   end
 
   defp init_timeout_ms(%Options{} = options) do
@@ -102,29 +101,6 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
       timeout_ms when is_integer(timeout_ms) and timeout_ms > 0 -> min(timeout_ms, default_ms)
       _ -> default_ms
     end
-  end
-
-  defp do_await_initialized(client_pid, deadline_ms) do
-    if System.monotonic_time(:millisecond) > deadline_ms do
-      {:error, :timeout}
-    else
-      state = :sys.get_state(client_pid)
-
-      if Map.get(state, :initialized) == true do
-        :ok
-      else
-        Process.sleep(50)
-        do_await_initialized(client_pid, deadline_ms)
-      end
-    end
-  rescue
-    e ->
-      Logger.debug("Client state check failed: #{Exception.message(e)}")
-      {:error, :client_not_alive}
-  catch
-    :exit, reason ->
-      Logger.debug("Client exited during state check: #{inspect(reason)}")
-      {:error, :client_not_alive}
   end
 
   defp stream_next({:error, [msg | rest]}), do: {[msg], {:error, rest}}

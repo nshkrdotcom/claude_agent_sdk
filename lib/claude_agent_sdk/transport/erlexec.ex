@@ -26,7 +26,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
             stderr_callback: nil,
             temp_files: [],
             max_buffer_size: @default_max_buffer_size,
-            overflowed?: false
+            overflowed?: false,
+            startup_opts: nil
 
   @impl ClaudeAgentSDK.Transport
   def start_link(opts) when is_list(opts) do
@@ -67,27 +68,41 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   def init(opts) do
     options = Keyword.get(opts, :options) || %Options{}
 
-    max_buffer_size = max_buffer_size_from_options(options)
+    state = %__MODULE__{
+      subprocess: nil,
+      status: :disconnected,
+      stderr_callback: options.stderr,
+      temp_files: [],
+      max_buffer_size: max_buffer_size_from_options(options),
+      overflowed?: false,
+      startup_opts: opts
+    }
 
-    with {:ok, command, args, temp_files} <- resolve_command(opts, options),
-         :ok <- Setup.validate_cwd(options.cwd),
-         :ok <- ensure_erlexec_started(),
-         {args, agent_temp_files} <- AgentsFile.externalize_agents_if_needed(args),
-         cmd <- build_command(command, args),
-         exec_opts <- build_exec_opts(options),
-         {:ok, pid, os_pid} <- :exec.run(cmd, exec_opts) do
-      {:ok,
-       %__MODULE__{
-         subprocess: {pid, os_pid},
-         status: :connected,
-         stderr_callback: options.stderr,
-         temp_files: temp_files ++ agent_temp_files,
-         max_buffer_size: max_buffer_size,
-         overflowed?: false
-       }}
-    else
-      {:error, reason} -> {:stop, reason}
-      other -> {:stop, other}
+    case startup_mode_from_opts(opts) do
+      :lazy ->
+        {:ok, state, {:continue, :start_subprocess}}
+
+      :eager ->
+        case start_subprocess(state, opts, options) do
+          {:ok, connected_state} ->
+            {:ok, connected_state}
+
+          {:error, reason} ->
+            {:stop, reason}
+        end
+    end
+  end
+
+  @impl GenServer
+  def handle_continue(:start_subprocess, %{startup_opts: opts} = state) do
+    options = Keyword.get(opts, :options) || %Options{}
+
+    case start_subprocess(state, opts, options) do
+      {:ok, connected_state} ->
+        {:noreply, connected_state}
+
+      {:error, reason} ->
+        {:stop, reason, state}
     end
   end
 
@@ -111,6 +126,35 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     case Application.ensure_all_started(:erlexec) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, {:erlexec_not_started, reason}}
+    end
+  end
+
+  defp startup_mode_from_opts(opts) do
+    case Keyword.get(opts, :startup_mode, :eager) do
+      :lazy -> :lazy
+      _ -> :eager
+    end
+  end
+
+  defp start_subprocess(state, opts, options) do
+    with {:ok, command, args, temp_files} <- resolve_command(opts, options),
+         :ok <- Setup.validate_cwd(options.cwd),
+         :ok <- ensure_erlexec_started(),
+         {args, agent_temp_files} <- AgentsFile.externalize_agents_if_needed(args),
+         cmd <- build_command(command, args),
+         exec_opts <- build_exec_opts(options),
+         {:ok, pid, os_pid} <- :exec.run(cmd, exec_opts) do
+      {:ok,
+       %{
+         state
+         | subprocess: {pid, os_pid},
+           status: :connected,
+           stderr_callback: options.stderr,
+           temp_files: temp_files ++ agent_temp_files,
+           max_buffer_size: max_buffer_size_from_options(options),
+           overflowed?: false,
+           startup_opts: nil
+       }}
     end
   end
 
@@ -151,6 +195,10 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     _, _ -> {:reply, {:error, :send_failed}, state}
   end
 
+  def handle_call({:send, _message}, _from, %{subprocess: nil} = state) do
+    {:reply, {:error, :not_connected}, state}
+  end
+
   def handle_call(:status, _from, state) do
     {:reply, state.status, state}
   end
@@ -160,6 +208,10 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     {:reply, :ok, state}
   catch
     _, _ -> {:reply, {:error, :send_failed}, state}
+  end
+
+  def handle_call(:end_input, _from, %{subprocess: nil} = state) do
+    {:reply, {:error, :not_connected}, state}
   end
 
   @impl GenServer

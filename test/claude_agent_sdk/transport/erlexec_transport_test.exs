@@ -33,6 +33,23 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
     ErlexecTransport.close(transport)
   end
 
+  test "lazy startup defers subprocess start failures" do
+    Process.flag(:trap_exit, true)
+
+    missing_cwd =
+      Path.join(System.tmp_dir!(), "erlexec_missing_cwd_#{System.unique_integer([:positive])}")
+
+    assert {:ok, transport} =
+             ErlexecTransport.start_link(
+               command: "/bin/cat",
+               args: [],
+               startup_mode: :lazy,
+               options: %Options{cwd: missing_cwd}
+             )
+
+    assert_receive {:EXIT, ^transport, {:cwd_not_found, ^missing_cwd}}, 1_000
+  end
+
   test "exec opts include :user when Options.user is set" do
     exec_opts = ErlexecTransport.__exec_opts__(%Options{user: "runner"})
     assert {:user, ~c"runner"} in exec_opts

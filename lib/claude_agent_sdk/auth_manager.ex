@@ -211,33 +211,35 @@ defmodule ClaudeAgentSDK.AuthManager do
     storage_backend = Keyword.get(opts, :storage_backend, TokenStore)
     provider_backend = Keyword.get(opts, :provider_backend, Provider)
 
-    # Load existing token from storage
+    state = %__MODULE__{storage_backend: storage_backend, provider_backend: provider_backend}
+    {:ok, state, {:continue, :load_token}}
+  end
+
+  @impl true
+  def handle_continue(:load_token, state) do
     state =
-      case storage_backend.load() do
+      case state.storage_backend.load() do
         {:ok, token_data} ->
           Logger.info("AuthManager: Loaded existing token from storage")
 
-          %__MODULE__{
-            token: token_data.token,
-            expiry: token_data.expiry,
-            provider: token_data.provider || :anthropic,
-            storage_backend: storage_backend,
-            provider_backend: provider_backend
+          %{
+            state
+            | token: token_data.token,
+              expiry: token_data.expiry,
+              provider: token_data.provider || :anthropic
           }
 
         {:error, :not_found} ->
           Logger.info("AuthManager: No stored token found, will authenticate on demand")
-          %__MODULE__{storage_backend: storage_backend, provider_backend: provider_backend}
+          state
 
         {:error, reason} ->
           Logger.warning("AuthManager: Failed to load token: #{inspect(reason)}")
-          %__MODULE__{storage_backend: storage_backend, provider_backend: provider_backend}
+          state
       end
 
-    # Schedule auto-refresh if we have a valid token
     state = if valid_token?(state), do: schedule_refresh(state), else: state
-
-    {:ok, state}
+    {:noreply, state}
   end
 
   @impl true

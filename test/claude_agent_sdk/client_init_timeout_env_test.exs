@@ -59,11 +59,11 @@ defmodule ClaudeAgentSDK.ClientInitTimeoutEnvTest do
 
       state = :sys.get_state(client)
 
-      assert state.init_timeout_ms == 120_000
-      assert is_reference(state.init_timeout_ref)
+      assert {ref, 120_000} = state.init_timeout
+      assert is_reference(ref)
       assert is_binary(state.init_request_id)
 
-      remaining = Process.read_timer(state.init_timeout_ref)
+      remaining = Process.read_timer(ref)
       assert is_integer(remaining)
       assert remaining <= 120_000
       assert remaining > 0

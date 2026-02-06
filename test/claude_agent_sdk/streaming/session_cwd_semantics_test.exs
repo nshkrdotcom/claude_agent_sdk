@@ -18,4 +18,19 @@ defmodule ClaudeAgentSDK.Streaming.SessionCwdSemanticsTest do
     assert {:error, {:subprocess_failed, {:cwd_not_found, ^cwd}}} =
              Session.start_link(%Options{cwd: cwd})
   end
+
+  test "lazy startup defers cwd validation failure to post-init" do
+    cwd =
+      Path.join(
+        System.tmp_dir!(),
+        "claude_agent_sdk_lazy_missing_cwd_#{System.unique_integer([:positive])}"
+      )
+
+    _ = File.rm_rf(cwd)
+
+    Process.flag(:trap_exit, true)
+
+    assert {:ok, session} = Session.start_link(%Options{cwd: cwd}, startup_mode: :lazy)
+    assert_receive {:EXIT, ^session, {:subprocess_failed, {:cwd_not_found, ^cwd}}}, 1_000
+  end
 end

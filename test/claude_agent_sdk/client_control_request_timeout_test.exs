@@ -4,28 +4,14 @@ defmodule ClaudeAgentSDK.ClientControlRequestTimeoutTest do
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.TestSupport.MockTransport
 
-  setup do
-    original = Application.get_env(:claude_agent_sdk, :control_request_timeout_ms)
-    Application.put_env(:claude_agent_sdk, :control_request_timeout_ms, 50)
-
-    on_exit(fn ->
-      if is_nil(original) do
-        Application.delete_env(:claude_agent_sdk, :control_request_timeout_ms)
-      else
-        Application.put_env(:claude_agent_sdk, :control_request_timeout_ms, original)
-      end
-    end)
-
-    :ok
-  end
-
   test "control requests time out and are cleaned up" do
     options = %Options{permission_mode: :default}
 
     {:ok, client} =
       Client.start_link(options,
         transport: MockTransport,
-        transport_opts: [test_pid: self()]
+        transport_opts: [test_pid: self()],
+        control_request_timeout_ms: 50
       )
 
     assert_receive {:mock_transport_started, transport_pid}, 1_000
@@ -62,7 +48,8 @@ defmodule ClaudeAgentSDK.ClientControlRequestTimeoutTest do
     {:ok, client} =
       Client.start_link(options,
         transport: MockTransport,
-        transport_opts: [test_pid: self()]
+        transport_opts: [test_pid: self()],
+        control_request_timeout_ms: 50
       )
 
     assert_receive {:mock_transport_started, transport_pid}, 1_000

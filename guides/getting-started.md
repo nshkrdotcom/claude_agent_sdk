@@ -217,6 +217,17 @@ ClaudeAgentSDK.query("What is Elixir best known for?", options)
 end)
 ```
 
+For advanced transport lifecycle control, query supports transport injection:
+
+```elixir
+ClaudeAgentSDK.query(
+  "Hello",
+  options,
+  {ClaudeAgentSDK.Transport.Port, [startup_mode: :lazy]}
+)
+|> Enum.to_list()
+```
+
 ### Using the OptionBuilder
 
 For common configurations, use the pre-built option presets:

@@ -151,6 +151,16 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
   end
 
+  defmodule SlowLoadStorage do
+    def save(_data), do: :ok
+    def clear, do: :ok
+
+    def load do
+      Process.sleep(400)
+      {:error, :not_found}
+    end
+  end
+
   setup do
     # Clean environment before each test
     System.delete_env("ANTHROPIC_API_KEY")
@@ -452,6 +462,21 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
       Process.sleep(50)
 
       assert InstrumentedStorage.save_calls() == save_calls
+    end
+  end
+
+  describe "startup lifecycle" do
+    test "start_link does not block on storage load" do
+      :ok = stop_supervised(AuthManager)
+
+      start_ms = System.monotonic_time(:millisecond)
+      {:ok, pid} = AuthManager.start_link(storage_backend: SlowLoadStorage)
+      elapsed_ms = System.monotonic_time(:millisecond) - start_ms
+
+      assert elapsed_ms < 250
+      assert Process.alive?(pid)
+
+      GenServer.stop(pid)
     end
   end
 

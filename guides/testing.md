@@ -858,6 +858,9 @@ config :claude_agent_sdk,
 When testing SessionStore startup behavior, remember cache hydration is deferred.
 Use bounded retries/assertions for `list/search` immediately after start, or assert via `load_session/1` (disk fallback path).
 
+For transport/session startup lifecycle tests, `startup_mode: :lazy` lets you assert post-init
+startup failures deterministically (process exits after `start_link`).
+
 ### Development Configuration (config/dev.exs)
 
 ```elixir

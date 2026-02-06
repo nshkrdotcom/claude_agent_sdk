@@ -21,6 +21,9 @@ config :claude_agent_sdk,
 
 `process_module` is still accepted as a fallback key for query streaming, but it is deprecated.
 
+For lifecycle tests and demos, transport/session modules also support `startup_mode: :lazy`
+to defer subprocess startup until `handle_continue/2`.
+
 ## Mix Task Example (Recommended Starting Point)
 
 A complete working example app showing how to integrate Claude into your own Mix project:

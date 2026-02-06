@@ -207,6 +207,14 @@ ClaudeAgentSDK.query(prompts, opts) |> Enum.to_list()
 ClaudeAgentSDK.query("Hello", opts, {ClaudeAgentSDK.Transport.Port, []})
 |> Enum.to_list()
 
+# Lazy transport startup (defer subprocess spawn to handle_continue)
+ClaudeAgentSDK.query(
+  "Hello",
+  opts,
+  {ClaudeAgentSDK.Transport.Port, [startup_mode: :lazy]}
+)
+|> Enum.to_list()
+
 # Continue a conversation
 ClaudeAgentSDK.continue("Can you give an example?") |> Enum.to_list()
 
@@ -377,6 +385,16 @@ server = ClaudeAgentSDK.create_sdk_mcp_server(
   tools: [MyTools.Calculate]
 )
 
+# Optional: start tool registry under your DynamicSupervisor
+{:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
+
+server = ClaudeAgentSDK.create_sdk_mcp_server(
+  name: "calculator",
+  version: "1.0.0",
+  tools: [MyTools.Calculate],
+  supervisor: sup
+)
+
 opts = %ClaudeAgentSDK.Options{
   mcp_servers: %{"calc" => server},
   allowed_tools: ["mcp__calc__calculate"]
@@ -423,6 +441,10 @@ but it is deprecated and logs a warning once per legacy module.
 
 `SessionStore` now hydrates on-disk cache in a `handle_continue/2` step. Startup is faster,
 but `list/search` can be briefly incomplete immediately after boot while warmup finishes.
+
+`Transport.Port`, `Transport.Erlexec`, and `Streaming.Session` support `startup_mode: :lazy`
+to defer subprocess startup to `handle_continue/2`. In lazy mode, `start_link` can succeed
+before the subprocess is spawned; startup failures then surface as process exit after init.
 
 ### SDK Logging
 

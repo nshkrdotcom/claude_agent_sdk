@@ -24,4 +24,19 @@ defmodule ClaudeAgentSDK.ClientInitSentTest do
 
     Client.stop(client)
   end
+
+  test "client runtime state is a Client struct" do
+    {:ok, client} =
+      Client.start_link(%Options{},
+        transport: MockTransport,
+        transport_opts: [test_pid: self()]
+      )
+
+    assert_receive {:mock_transport_started, _transport_pid}, 1_000
+
+    state = :sys.get_state(client)
+    assert %Client{} = state
+
+    Client.stop(client)
+  end
 end

@@ -246,5 +246,47 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
       assert hd(tools1).name == "add"
       assert hd(tools2).name == "greet_user"
     end
+
+    test "starts registry under provided dynamic supervisor" do
+      {:ok, supervisor} = DynamicSupervisor.start_link(strategy: :one_for_one)
+
+      server =
+        ClaudeAgentSDK.create_sdk_mcp_server(
+          name: "supervised-server",
+          version: "1.0.0",
+          tools: [CalculatorTools.Add],
+          supervisor: supervisor
+        )
+
+      assert Process.alive?(server.registry_pid)
+
+      assert %{active: active} = DynamicSupervisor.count_children(supervisor)
+      assert active >= 1
+    end
+
+    test "can create multiple SDK MCP servers under the same supervisor" do
+      {:ok, supervisor} = DynamicSupervisor.start_link(strategy: :one_for_one)
+
+      server1 =
+        ClaudeAgentSDK.create_sdk_mcp_server(
+          name: "supervised-server-1",
+          version: "1.0.0",
+          tools: [CalculatorTools.Add],
+          supervisor: supervisor
+        )
+
+      server2 =
+        ClaudeAgentSDK.create_sdk_mcp_server(
+          name: "supervised-server-2",
+          version: "1.0.0",
+          tools: [CalculatorTools.GreetUser],
+          supervisor: supervisor
+        )
+
+      assert server1.registry_pid != server2.registry_pid
+
+      assert %{active: active} = DynamicSupervisor.count_children(supervisor)
+      assert active >= 2
+    end
   end
 end

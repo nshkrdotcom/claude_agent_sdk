@@ -703,6 +703,14 @@ defp do_query_until_complete(prompt, options, remaining, acc) do
 end
 ```
 
+When using `startup_mode: :lazy` on transport/session start options, startup failures can
+arrive after `start_link` succeeds. Handle transport exits as part of normal supervision:
+
+```elixir
+{:ok, session} = ClaudeAgentSDK.Streaming.Session.start_link(%Options{}, startup_mode: :lazy)
+# If cwd/command startup fails, the session process exits with {:subprocess_failed, reason}
+```
+
 ---
 
 ## Retry Strategies

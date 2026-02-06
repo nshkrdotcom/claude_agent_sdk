@@ -999,6 +999,26 @@ The SDK automatically selects the appropriate transport based on configured feat
 %Options{preferred_transport: :auto}
 ```
 
+### Transport Startup Mode
+
+`Transport.Port`, `Transport.Erlexec`, and `Streaming.Session` support
+`startup_mode: :eager | :lazy` in their start options.
+
+- `:eager` (default): subprocess startup happens in `init/1`
+- `:lazy`: subprocess startup is deferred to `handle_continue/2`
+
+```elixir
+ClaudeAgentSDK.query(
+  "Hello",
+  %Options{},
+  {ClaudeAgentSDK.Transport.Port, [startup_mode: :lazy]}
+)
+|> Enum.to_list()
+```
+
+In lazy mode, `start_link` can return `{:ok, pid}` before subprocess creation.
+If startup later fails (for example invalid cwd/command), the process exits with the startup reason.
+
 ### Enable Character-Level Streaming
 
 ```elixir
@@ -1070,6 +1090,16 @@ server = ClaudeAgentSDK.create_sdk_mcp_server(
   name: "calculator",
   version: "1.0.0",
   tools: [Calculator.Add, Calculator.Multiply]
+)
+
+# Optional: place each SDK MCP registry under your own DynamicSupervisor
+{:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
+
+server = ClaudeAgentSDK.create_sdk_mcp_server(
+  name: "calculator",
+  version: "1.0.0",
+  tools: [Calculator.Add, Calculator.Multiply],
+  supervisor: sup
 )
 
 options = %ClaudeAgentSDK.Options{

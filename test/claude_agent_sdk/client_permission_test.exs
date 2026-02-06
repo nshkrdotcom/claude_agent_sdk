@@ -161,7 +161,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         assert :ok = Task.await(task, 500)
 
         state = :sys.get_state(client)
-        assert state.current_permission_mode == mode
+        assert state.options.permission_mode == mode
       end
 
       Client.stop(client)
@@ -216,7 +216,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
       assert :ok = Task.await(task, 500)
 
       state = :sys.get_state(client)
-      assert state.current_permission_mode == :plan
+      assert state.options.permission_mode == :plan
       Client.stop(client)
     end
 
@@ -265,7 +265,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
       assert {:error, "permission mode rejected"} = Task.await(task, 500)
 
       state = :sys.get_state(client)
-      assert state.current_permission_mode == :default
+      assert state.options.permission_mode == :default
       Client.stop(client)
     end
 
@@ -830,7 +830,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
       MockTransport.push_message(transport_pid, Jason.encode!(response))
 
       assert :ok = Task.await(task, 500)
-      assert :sys.get_state(client).current_permission_mode == :bypass_permissions
+      assert :sys.get_state(client).options.permission_mode == :bypass_permissions
 
       Client.stop(client)
     end
@@ -881,7 +881,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
       MockTransport.push_message(transport_pid, Jason.encode!(response))
 
       assert :ok = Task.await(task, 500)
-      assert :sys.get_state(client).current_permission_mode == :accept_edits
+      assert :sys.get_state(client).options.permission_mode == :accept_edits
 
       Client.stop(client)
     end

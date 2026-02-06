@@ -30,25 +30,15 @@ defmodule ClaudeAgentSDK.Transport.Port do
 
   @impl ClaudeAgentSDK.Transport
   def start_link(opts) when is_list(opts) do
-    options = Keyword.get(opts, :options) || %Options{}
+    case startup_mode_from_opts(opts) do
+      :lazy ->
+        GenServer.start_link(__MODULE__, opts)
 
-    with :ok <- Setup.validate_cwd(options.cwd),
-         {:ok, {command, default_args}} <- resolve_command(opts) do
-      args = Keyword.get(opts, :args, default_args)
-      {args, temp_files} = AgentsFile.externalize_agents_if_needed(args, opts)
-      stderr_callback = options.stderr
-      stderr_to_stdout? = is_function(stderr_callback, 1)
-
-      opts =
-        opts
-        |> Keyword.put(:command, command)
-        |> Keyword.put(:args, args)
-        |> Keyword.put(:temp_files, temp_files)
-        |> Keyword.put(:stderr_callback, stderr_callback)
-        |> Keyword.put(:stderr_to_stdout, stderr_to_stdout?)
-        |> __build_port_options__(options)
-
-      GenServer.start_link(__MODULE__, opts)
+      :eager ->
+        with {:ok, prepared_opts} <- prepare_startup_opts(opts) do
+          prepared_opts = Keyword.put(prepared_opts, :prepared_startup, true)
+          GenServer.start_link(__MODULE__, prepared_opts)
+        end
     end
   end
 
@@ -108,29 +98,38 @@ defmodule ClaudeAgentSDK.Transport.Port do
   def init(opts) do
     Process.flag(:trap_exit, true)
 
-    command = Keyword.fetch!(opts, :command)
-    temp_files = Keyword.get(opts, :temp_files, [])
-    stderr_callback = Keyword.get(opts, :stderr_callback)
-    max_buffer_size = max_buffer_size_from_opts(opts)
+    state = %__MODULE__{
+      port: nil,
+      subscribers: %{},
+      buffer: "",
+      status: :disconnected,
+      options: opts,
+      temp_files: [],
+      stderr_callback: nil,
+      max_buffer_size: max_buffer_size_from_opts(opts),
+      overflowed?: false
+    }
 
-    case open_port(command, opts) do
-      {:ok, port} ->
-        state = %__MODULE__{
-          port: port,
-          subscribers: %{},
-          buffer: "",
-          status: :connected,
-          options: opts,
-          temp_files: temp_files,
-          stderr_callback: stderr_callback,
-          max_buffer_size: max_buffer_size,
-          overflowed?: false
-        }
+    case startup_mode_from_opts(opts) do
+      :lazy ->
+        {:ok, state, {:continue, :start_subprocess}}
 
-        {:ok, state}
+      :eager ->
+        case start_subprocess(state, opts) do
+          {:ok, connected_state} -> {:ok, connected_state}
+          {:error, reason} -> {:stop, reason}
+        end
+    end
+  end
+
+  @impl GenServer
+  def handle_continue(:start_subprocess, state) do
+    case start_subprocess(state, state.options) do
+      {:ok, connected_state} ->
+        {:noreply, connected_state}
 
       {:error, reason} ->
-        {:stop, reason}
+        {:stop, reason, state}
     end
   end
 
@@ -268,6 +267,65 @@ defmodule ClaudeAgentSDK.Transport.Port do
   end
 
   ## Helpers
+
+  defp startup_mode_from_opts(opts) do
+    case Keyword.get(opts, :startup_mode, :eager) do
+      :lazy -> :lazy
+      _ -> :eager
+    end
+  end
+
+  defp start_subprocess(state, opts) do
+    with {:ok, prepared_opts} <- prepare_startup_opts(opts),
+         command <- Keyword.fetch!(prepared_opts, :command),
+         temp_files <- Keyword.get(prepared_opts, :temp_files, []),
+         stderr_callback <- Keyword.get(prepared_opts, :stderr_callback),
+         max_buffer_size <- max_buffer_size_from_opts(prepared_opts),
+         {:ok, port} <- open_port(command, prepared_opts) do
+      {:ok,
+       %{
+         state
+         | port: port,
+           status: :connected,
+           options: prepared_opts,
+           temp_files: temp_files,
+           stderr_callback: stderr_callback,
+           max_buffer_size: max_buffer_size,
+           overflowed?: false
+       }}
+    end
+  end
+
+  defp prepare_startup_opts(opts) do
+    if Keyword.get(opts, :prepared_startup, false) do
+      {:ok, opts}
+    else
+      do_prepare_startup_opts(opts)
+    end
+  end
+
+  defp do_prepare_startup_opts(opts) do
+    options = Keyword.get(opts, :options) || %Options{}
+
+    with :ok <- Setup.validate_cwd(options.cwd),
+         {:ok, {command, default_args}} <- resolve_command(opts) do
+      args = Keyword.get(opts, :args, default_args)
+      {args, temp_files} = AgentsFile.externalize_agents_if_needed(args, opts)
+      stderr_callback = options.stderr
+      stderr_to_stdout? = is_function(stderr_callback, 1)
+
+      prepared_opts =
+        opts
+        |> Keyword.put(:command, command)
+        |> Keyword.put(:args, args)
+        |> Keyword.put(:temp_files, temp_files)
+        |> Keyword.put(:stderr_callback, stderr_callback)
+        |> Keyword.put(:stderr_to_stdout, stderr_to_stdout?)
+        |> __build_port_options__(options)
+
+      {:ok, prepared_opts}
+    end
+  end
 
   defp resolve_command(opts) do
     command = Keyword.get(opts, :command)
