@@ -115,6 +115,9 @@ Note: when `can_use_tool` is set, the SDK enables `include_partial_messages` and
 | `resume` | `String.t()` | `nil` | Resume specific session by ID |
 | `fork_session` | `boolean()` | `nil` | Create new session when resuming |
 
+SessionStore lifecycle note: persisted session cache is hydrated in a deferred startup step (`handle_continue/2`).
+`load_session/1` always falls back to disk, but `list/search` can be briefly incomplete right after SessionStore boot.
+
 ### Agent Options
 
 | Field | Type | Default | Description |
@@ -782,8 +785,14 @@ status = ClaudeAgentSDK.AuthManager.status()
 # }
 
 # Clear authentication
-:ok = ClaudeAgentSDK.AuthManager.clear_auth()
+case ClaudeAgentSDK.AuthManager.clear_auth() do
+  :ok -> :ok
+  {:error, reason} -> IO.puts("Failed to clear auth: #{inspect(reason)}")
+end
 ```
+
+`setup_token/0` and `refresh_token/0` run setup work in background tasks internally.
+Public calls still return the same result tuples, but the `AuthManager` process stays responsive while setup is in progress.
 
 ### Application Configuration
 
@@ -794,8 +803,13 @@ config :claude_agent_sdk,
   auth_file_path: "~/.claude_sdk/token.json",
   auto_refresh: true,
   refresh_before_expiry: 86_400_000,      # 1 day in ms
+  tool_execution_timeout_ms: 30_000,      # Tool.Registry execution timeout
+  cli_stream_module: ClaudeAgentSDK.Query.CLIStream,
   log_level: :warning                     # :debug | :info | :warning | :error
 ```
+
+`process_module` is still read as a fallback for query streaming but is deprecated.
+Prefer `cli_stream_module`.
 
 ### Authentication by Provider
 

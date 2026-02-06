@@ -71,6 +71,7 @@ defmodule ClaudeAgentSDK.Permission.Update do
           destination: destination() | nil
         }
 
+  @enforce_keys [:type]
   defstruct [:type, :rules, :behavior, :mode, :directories, :destination]
 
   @doc """

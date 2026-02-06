@@ -16,6 +16,7 @@ defmodule ClaudeAgentSDK.Query do
   you still get the same Stream interface.
   """
 
+  alias ClaudeAgentSDK.Config
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Query.ClientStream
   alias ClaudeAgentSDK.Transport.StreamingRouter
@@ -147,11 +148,7 @@ defmodule ClaudeAgentSDK.Query do
   end
 
   defp cli_stream_module do
-    Application.get_env(
-      :claude_agent_sdk,
-      :cli_stream_module,
-      Application.get_env(:claude_agent_sdk, :process_module, ClaudeAgentSDK.Query.CLIStream)
-    )
+    Config.cli_stream_module()
   end
 
   defp stream_json_args(%Options{} = options) do

@@ -121,7 +121,7 @@ defmodule ClaudeAgentSDK.TaskSupervisorTest do
   end
 
   describe "fallback behavior" do
-    test "starts unlinked task when supervisor is not available" do
+    test "falls back to Task.start/1 when supervisor is not available" do
       # Supervisor is not running (cleaned up in setup)
       parent = self()
 
@@ -141,6 +141,20 @@ defmodule ClaudeAgentSDK.TaskSupervisorTest do
                Process.info(pid, :initial_call)
 
       send(pid, :stop)
+    end
+
+    test "raises in strict mode when explicit configured supervisor is missing" do
+      Application.put_env(:claude_agent_sdk, :task_supervisor, :missing_custom_supervisor)
+      Application.put_env(:claude_agent_sdk, :task_supervisor_strict, true)
+
+      on_exit(fn ->
+        Application.delete_env(:claude_agent_sdk, :task_supervisor)
+        Application.delete_env(:claude_agent_sdk, :task_supervisor_strict)
+      end)
+
+      assert_raise RuntimeError, fn ->
+        TaskSupervisor.start_child(fn -> :ok end)
+      end
     end
   end
 

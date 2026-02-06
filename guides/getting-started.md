@@ -84,6 +84,23 @@ Set the `CLAUDE_AGENT_OAUTH_TOKEN` environment variable:
 export CLAUDE_AGENT_OAUTH_TOKEN="your-oauth-token"
 ```
 
+#### Option D: SDK Token Setup Task (Interactive)
+
+You can also generate and persist an OAuth token with the SDK task:
+
+```bash
+mix claude.setup_token
+```
+
+To clear stored auth:
+
+```elixir
+case ClaudeAgentSDK.AuthManager.clear_auth() do
+  :ok -> IO.puts("Auth cleared")
+  {:error, reason} -> IO.puts("Failed to clear auth: #{inspect(reason)}")
+end
+```
+
 ### Verify Your Setup
 
 Run a quick test to ensure everything is working:

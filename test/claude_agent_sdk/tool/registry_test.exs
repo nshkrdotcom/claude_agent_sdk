@@ -132,6 +132,86 @@ defmodule ClaudeAgentSDK.Tool.RegistryTest do
     test "handles missing tool execution", %{registry: registry} do
       assert {:error, :not_found} = Registry.execute_tool(registry, "nonexistent", %{})
     end
+
+    defmodule ControlledSlowExecutor do
+      @owner_key {__MODULE__, :owner}
+
+      def put_owner(pid), do: :persistent_term.put(@owner_key, pid)
+      def clear_owner, do: :persistent_term.erase(@owner_key)
+
+      def execute(_args) do
+        owner = :persistent_term.get(@owner_key)
+        send(owner, {:slow_executor_started, self()})
+
+        receive do
+          :release_slow_executor ->
+            {:ok, %{"result" => "released"}}
+        end
+      end
+    end
+
+    defmodule TimeoutExecutor do
+      def execute(_args) do
+        Process.sleep(200)
+        {:ok, %{"result" => "late"}}
+      end
+    end
+
+    test "list_tools remains responsive while a slow tool executes", %{registry: registry} do
+      ControlledSlowExecutor.put_owner(self())
+
+      on_exit(fn ->
+        ControlledSlowExecutor.clear_owner()
+      end)
+
+      tool = %{
+        name: "slow_tool",
+        description: "Slow",
+        input_schema: %{},
+        module: ControlledSlowExecutor
+      }
+
+      Registry.register_tool(registry, tool)
+
+      execute_task = Task.async(fn -> Registry.execute_tool(registry, "slow_tool", %{}) end)
+
+      assert_receive {:slow_executor_started, tool_pid}, 1_000
+
+      list_task = Task.async(fn -> Registry.list_tools(registry) end)
+      assert {:ok, tools} = Task.await(list_task, 100)
+      assert Enum.any?(tools, &(&1.name == "slow_tool"))
+
+      send(tool_pid, :release_slow_executor)
+      assert {:ok, %{"result" => "released"}} = Task.await(execute_task, 1_000)
+    end
+
+    test "tool execution timeout returns structured error", %{registry: registry} do
+      previous = Application.get_env(:claude_agent_sdk, :tool_execution_timeout_ms)
+      Application.put_env(:claude_agent_sdk, :tool_execution_timeout_ms, 50)
+
+      on_exit(fn ->
+        if is_nil(previous) do
+          Application.delete_env(:claude_agent_sdk, :tool_execution_timeout_ms)
+        else
+          Application.put_env(:claude_agent_sdk, :tool_execution_timeout_ms, previous)
+        end
+      end)
+
+      tool = %{
+        name: "timeout_tool",
+        description: "Timeout",
+        input_schema: %{},
+        module: TimeoutExecutor
+      }
+
+      Registry.register_tool(registry, tool)
+
+      assert {:error, %{"is_error" => true, "content" => [%{"text" => message}]}} =
+               Registry.execute_tool(registry, "timeout_tool", %{})
+
+      assert message =~ "timed out"
+      assert {:ok, _tools} = Registry.list_tools(registry)
+    end
   end
 
   describe "registry state management" do

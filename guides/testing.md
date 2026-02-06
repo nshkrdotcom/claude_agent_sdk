@@ -846,12 +846,17 @@ import Config
 
 config :claude_agent_sdk,
   use_mock: true,
-  cli_command: "claude"
+  cli_command: "claude",
+  # Keep tool timeout short in tests that exercise Tool.Registry timeouts
+  tool_execution_timeout_ms: 5_000
 
 # Optional: Customize timeouts for tests
 config :claude_agent_sdk,
   timeout_ms: 30_000
 ```
+
+When testing SessionStore startup behavior, remember cache hydration is deferred.
+Use bounded retries/assertions for `list/search` immediately after start, or assert via `load_session/1` (disk fallback path).
 
 ### Development Configuration (config/dev.exs)
 

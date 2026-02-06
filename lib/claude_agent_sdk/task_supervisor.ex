@@ -90,12 +90,10 @@ defmodule ClaudeAgentSDK.TaskSupervisor do
 
   - `{:ok, pid}` - Task started successfully (falls back to `Task.start/1` if needed)
   """
-  @spec start_child((-> any()), keyword()) :: {:ok, pid()}
+  @spec start_child((-> any()), keyword()) :: {:ok, pid()} | {:error, term()}
   def start_child(fun, opts \\ []) when is_function(fun, 0) do
     {supervisor, explicit?} = configured_supervisor()
     do_start_child(fun, opts, supervisor, explicit?)
-  rescue
-    _ -> Task.start(fun)
   end
 
   @doc """
@@ -117,20 +115,32 @@ defmodule ClaudeAgentSDK.TaskSupervisor do
   end
 
   defp do_start_child(fun, opts, supervisor, explicit?) do
-    if supervisor_available?(supervisor) do
-      case Task.Supervisor.start_child(
-             supervisor,
-             fun,
-             Keyword.put_new(opts, :restart, :temporary)
-           ) do
-        {:ok, pid} -> {:ok, pid}
-        {:error, _reason} -> fallback_start(fun, false, supervisor, explicit?)
-      end
-    else
-      fallback_start(fun, true, supervisor, explicit?)
+    case Task.Supervisor.start_child(
+           supervisor,
+           fun,
+           Keyword.put_new(opts, :restart, :temporary)
+         ) do
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, {:noproc, _}} ->
+        fallback_start(fun, true, supervisor, explicit?)
+
+      {:error, :noproc} ->
+        fallback_start(fun, true, supervisor, explicit?)
+
+      {:error, _reason} ->
+        fallback_start(fun, false, supervisor, explicit?)
     end
-  rescue
-    _ -> fallback_start(fun, false, supervisor, explicit?)
+  catch
+    :exit, {:noproc, _} ->
+      fallback_start(fun, true, supervisor, explicit?)
+
+    :exit, :noproc ->
+      fallback_start(fun, true, supervisor, explicit?)
+
+    :exit, _reason ->
+      fallback_start(fun, false, supervisor, explicit?)
   end
 
   defp fallback_start(fun, missing?, supervisor, explicit?) do
@@ -139,8 +149,6 @@ defmodule ClaudeAgentSDK.TaskSupervisor do
     end
 
     Task.start(fun)
-  rescue
-    _ -> {:ok, spawn(fun)}
   end
 
   defp handle_missing_supervisor(supervisor, true) when supervisor != __MODULE__ do

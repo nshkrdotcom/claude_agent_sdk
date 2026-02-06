@@ -31,7 +31,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
   This module detects and validates all supported authentication methods.
   """
 
-  alias ClaudeAgentSDK.CLI
+  alias ClaudeAgentSDK.{CLI, Config}
 
   @type auth_status ::
           :ready | :cli_not_found | :not_authenticated | :invalid_credentials | :unknown
@@ -364,7 +364,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp check_cli_auth_status do
     # Check if mocking is enabled
-    if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+    if Config.use_mock?() do
       {:ok, :authenticated}
     else
       execute_auth_test()

@@ -69,7 +69,7 @@ defmodule ClaudeAgentSDK.Auth.TokenStore do
             token_data = %{
               token: data["token"],
               expiry: parse_expiry(data["expiry"]),
-              provider: String.to_atom(data["provider"] || "anthropic")
+              provider: parse_provider(data["provider"])
             }
 
             {:ok, token_data}
@@ -109,4 +109,10 @@ defmodule ClaudeAgentSDK.Auth.TokenStore do
       {:error, _} -> nil
     end
   end
+
+  defp parse_provider("anthropic"), do: :anthropic
+  defp parse_provider("bedrock"), do: :bedrock
+  defp parse_provider("vertex"), do: :vertex
+  defp parse_provider(nil), do: :anthropic
+  defp parse_provider(_unknown), do: :anthropic
 end

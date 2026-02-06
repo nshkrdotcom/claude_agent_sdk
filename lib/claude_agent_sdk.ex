@@ -123,16 +123,10 @@ defmodule ClaudeAgentSDK do
   end
 
   defp ensure_session_store_started(opts) do
-    case Process.whereis(ClaudeAgentSDK.SessionStore) do
-      nil ->
-        case ClaudeAgentSDK.SessionStore.start_link(opts) do
-          {:ok, _pid} -> :ok
-          {:error, {:already_started, _pid}} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
-
-      _pid ->
-        :ok
+    case ClaudeAgentSDK.SessionStore.start_link(opts) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+      {:error, reason} -> {:error, reason}
     end
   end
 

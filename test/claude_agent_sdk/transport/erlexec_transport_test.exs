@@ -38,6 +38,47 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
     assert {:user, ~c"runner"} in exec_opts
   end
 
+  test "repeated subscribe calls do not create duplicate subscriber monitors" do
+    script =
+      create_test_script("""
+      while read -r line; do
+        echo "$line"
+      done
+      """)
+
+    {:ok, transport} = ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+    assert :ok = ErlexecTransport.subscribe(transport, self())
+    assert :ok = ErlexecTransport.subscribe(transport, self())
+
+    state = :sys.get_state(transport)
+    assert map_size(state.subscribers) == 1
+
+    ErlexecTransport.close(transport)
+  end
+
+  test "unsubscribe removes subscriber monitor" do
+    script =
+      create_test_script("""
+      while read -r line; do
+        echo "$line"
+      done
+      """)
+
+    {:ok, transport} = ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+    assert :ok = ErlexecTransport.subscribe(transport, self())
+    state = :sys.get_state(transport)
+    assert map_size(state.subscribers) == 1
+
+    assert :ok = ErlexecTransport.unsubscribe(transport, self())
+
+    updated_state = :sys.get_state(transport)
+    assert map_size(updated_state.subscribers) == 0
+
+    ErlexecTransport.close(transport)
+  end
+
   defp create_test_script(body) do
     dir = Path.join(System.tmp_dir!(), "erlexec_transport_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)

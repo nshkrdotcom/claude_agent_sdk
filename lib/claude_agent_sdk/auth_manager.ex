@@ -50,7 +50,17 @@ defmodule ClaudeAgentSDK.AuthManager do
     # Timer reference for auto-refresh
     :refresh_timer,
     # Module implementing storage behavior
-    :storage_backend
+    :storage_backend,
+    # Module implementing provider setup behavior
+    :provider_backend,
+    # PID of in-flight setup task
+    :setup_task_pid,
+    # Monitor ref for in-flight setup task
+    :setup_task_ref,
+    # setup operation for in-flight task
+    :setup_operation,
+    # queued call waiters waiting for setup completion
+    setup_waiters: []
   ]
 
   @type t :: %__MODULE__{
@@ -58,8 +68,15 @@ defmodule ClaudeAgentSDK.AuthManager do
           expiry: DateTime.t() | nil,
           provider: atom(),
           refresh_timer: reference() | nil,
-          storage_backend: module()
+          storage_backend: module(),
+          provider_backend: module(),
+          setup_task_pid: pid() | nil,
+          setup_task_ref: reference() | nil,
+          setup_operation: :ensure | :setup | :refresh | :auto_refresh | nil,
+          setup_waiters: [{GenServer.from(), :ensure | :setup | :refresh}]
         }
+
+  @refresh_retry_ms 3_600_000
 
   ## Public API
 
@@ -162,7 +179,7 @@ defmodule ClaudeAgentSDK.AuthManager do
       iex> ClaudeAgentSDK.AuthManager.clear_auth()
       :ok
   """
-  @spec clear_auth() :: :ok
+  @spec clear_auth() :: :ok | {:error, term()}
   def clear_auth do
     GenServer.call(__MODULE__, :clear_auth)
   end
@@ -192,6 +209,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   def init(opts) do
     # Determine storage backend
     storage_backend = Keyword.get(opts, :storage_backend, TokenStore)
+    provider_backend = Keyword.get(opts, :provider_backend, Provider)
 
     # Load existing token from storage
     state =
@@ -203,16 +221,17 @@ defmodule ClaudeAgentSDK.AuthManager do
             token: token_data.token,
             expiry: token_data.expiry,
             provider: token_data.provider || :anthropic,
-            storage_backend: storage_backend
+            storage_backend: storage_backend,
+            provider_backend: provider_backend
           }
 
         {:error, :not_found} ->
           Logger.info("AuthManager: No stored token found, will authenticate on demand")
-          %__MODULE__{storage_backend: storage_backend}
+          %__MODULE__{storage_backend: storage_backend, provider_backend: provider_backend}
 
         {:error, reason} ->
           Logger.warning("AuthManager: Failed to load token: #{inspect(reason)}")
-          %__MODULE__{storage_backend: storage_backend}
+          %__MODULE__{storage_backend: storage_backend, provider_backend: provider_backend}
       end
 
     # Schedule auto-refresh if we have a valid token
@@ -222,7 +241,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   end
 
   @impl true
-  def handle_call(:ensure_authenticated, _from, state) do
+  def handle_call(:ensure_authenticated, from, state) do
     cond do
       # Priority 1: Environment variable (no token needed)
       env_key_present?() ->
@@ -234,10 +253,7 @@ defmodule ClaudeAgentSDK.AuthManager do
 
       # Priority 3: Try automatic setup
       can_setup_interactively?() ->
-        case perform_token_setup(state) do
-          {:ok, new_state} -> {:reply, :ok, new_state}
-          {:error, reason} -> {:reply, {:error, reason}, state}
-        end
+        {:noreply, enqueue_setup_request(state, from, :ensure)}
 
       # Priority 4: Fail with helpful message
       true ->
@@ -247,15 +263,8 @@ defmodule ClaudeAgentSDK.AuthManager do
   end
 
   @impl true
-  def handle_call(:setup_token, _from, state) do
-    case perform_token_setup(state) do
-      {:ok, new_state} ->
-        token = new_state.token
-        {:reply, {:ok, token}, new_state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
+  def handle_call(:setup_token, from, state) do
+    {:noreply, enqueue_setup_request(state, from, :setup)}
   end
 
   @impl true
@@ -275,28 +284,25 @@ defmodule ClaudeAgentSDK.AuthManager do
   end
 
   @impl true
-  def handle_call(:refresh_token, _from, state) do
-    case perform_token_setup(state) do
-      {:ok, new_state} ->
-        {:reply, {:ok, new_state.token}, new_state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
+  def handle_call(:refresh_token, from, state) do
+    {:noreply, enqueue_setup_request(state, from, :refresh)}
   end
 
   @impl true
   def handle_call(:clear_auth, _from, state) do
-    # Clear from storage
-    :ok = state.storage_backend.clear()
+    new_state =
+      state
+      |> cancel_setup_task(:authentication_cleared)
+      |> cancel_refresh_timer()
+      |> clear_token_state()
 
-    # Cancel refresh timer
-    if state.refresh_timer, do: Process.cancel_timer(state.refresh_timer)
+    case clear_token_from_storage(state.storage_backend) do
+      :ok ->
+        {:reply, :ok, new_state}
 
-    # Reset state
-    new_state = %{state | token: nil, expiry: nil, refresh_timer: nil}
-
-    {:reply, :ok, new_state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, new_state}
+    end
   end
 
   @impl true
@@ -307,20 +313,53 @@ defmodule ClaudeAgentSDK.AuthManager do
 
   @impl true
   def handle_info(:refresh_token, state) do
-    Logger.info("AuthManager: Auto-refreshing token")
+    state = %{state | refresh_timer: nil}
 
-    case perform_token_setup(state) do
-      {:ok, new_state} ->
-        Logger.info("AuthManager: Token refresh successful")
-        {:noreply, new_state}
+    cond do
+      setup_in_progress?(state) ->
+        {:noreply, state}
 
-      {:error, reason} ->
-        Logger.error("AuthManager: Token refresh failed: #{inspect(reason)}")
-        # Schedule retry in 1 hour
-        timer = Process.send_after(self(), :refresh_token, 3_600_000)
-        {:noreply, %{state | refresh_timer: timer}}
+      state.token == nil ->
+        {:noreply, state}
+
+      true ->
+        Logger.info("AuthManager: Auto-refreshing token")
+        {:noreply, start_setup_task(state, :auto_refresh)}
     end
   end
+
+  @impl true
+  def handle_info({:setup_complete, operation, result}, state) do
+    state =
+      state
+      |> demonitor_setup_task()
+      |> clear_setup_task_state()
+      |> apply_setup_result(operation, result)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{setup_task_ref: ref} = state) do
+    operation = state.setup_operation
+
+    if reason == :normal do
+      {:noreply, state}
+    else
+      Logger.error("AuthManager: setup task crashed: #{inspect(reason)}")
+
+      state =
+        state
+        |> clear_setup_task_state()
+        |> reply_setup_waiters({:error, {:setup_crashed, reason}})
+        |> maybe_schedule_retry_on_failure(operation)
+
+      {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_info(_message, state), do: {:noreply, state}
 
   ## Private Helpers
 
@@ -352,27 +391,19 @@ defmodule ClaudeAgentSDK.AuthManager do
     System.get_env("CI") != "true"
   end
 
-  defp perform_token_setup(state) do
+  defp perform_token_setup_work(state) do
     # Determine which provider to use
     provider = detect_provider()
 
     # Execute token setup for the provider
-    case Provider.setup_token(provider) do
+    case state.provider_backend.setup_token(provider) do
       {:ok, token, expiry} ->
-        new_state = %{state | token: token, expiry: expiry, provider: provider}
+        token_data = %{token: token, expiry: expiry, provider: provider}
 
-        # Save to storage
-        :ok =
-          state.storage_backend.save(%{
-            token: token,
-            expiry: expiry,
-            provider: provider
-          })
-
-        # Schedule refresh
-        new_state = schedule_refresh(new_state)
-
-        {:ok, new_state}
+        case save_token_to_storage(state.storage_backend, token_data) do
+          :ok -> {:ok, token, expiry, provider}
+          {:error, reason} -> {:error, reason}
+        end
 
       {:error, reason} ->
         {:error, reason}
@@ -388,8 +419,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   end
 
   defp schedule_refresh(state) do
-    # Cancel existing timer
-    if state.refresh_timer, do: Process.cancel_timer(state.refresh_timer)
+    state = cancel_refresh_timer(state)
 
     # Get refresh interval from config
     refresh_before_ms =
@@ -438,5 +468,160 @@ defmodule ClaudeAgentSDK.AuthManager do
   defp calculate_expiry_hours(expiry) do
     diff_ms = DateTime.diff(expiry, DateTime.utc_now(), :millisecond)
     Float.round(diff_ms / 3_600_000, 1)
+  end
+
+  defp enqueue_setup_request(state, from, operation) do
+    state = %{state | setup_waiters: [{from, operation} | state.setup_waiters]}
+
+    if setup_in_progress?(state) do
+      state
+    else
+      start_setup_task(state, operation)
+    end
+  end
+
+  defp start_setup_task(state, operation) do
+    server = self()
+    setup_state = state
+
+    {:ok, pid} =
+      ClaudeAgentSDK.TaskSupervisor.start_child(fn ->
+        result = perform_token_setup_work(setup_state)
+        send(server, {:setup_complete, operation, result})
+      end)
+
+    ref = Process.monitor(pid)
+
+    %{
+      state
+      | setup_task_pid: pid,
+        setup_task_ref: ref,
+        setup_operation: operation
+    }
+  end
+
+  defp setup_in_progress?(state) do
+    is_pid(state.setup_task_pid) and is_reference(state.setup_task_ref)
+  end
+
+  defp apply_setup_result(state, _operation, {:ok, token, expiry, provider}) do
+    state
+    |> set_token_state(token, expiry, provider)
+    |> schedule_refresh()
+    |> reply_setup_waiters({:ok, token})
+  end
+
+  defp apply_setup_result(state, operation, {:error, reason}) do
+    state
+    |> reply_setup_waiters({:error, reason})
+    |> maybe_schedule_retry_on_failure(operation)
+  end
+
+  defp maybe_schedule_retry_on_failure(state, :auto_refresh), do: schedule_refresh_retry(state)
+  defp maybe_schedule_retry_on_failure(state, _operation), do: state
+
+  defp schedule_refresh_retry(state) do
+    timer = Process.send_after(self(), :refresh_token, @refresh_retry_ms)
+    %{state | refresh_timer: timer}
+  end
+
+  defp reply_setup_waiters(%{setup_waiters: []} = state, _result), do: state
+
+  defp reply_setup_waiters(state, result) do
+    Enum.each(state.setup_waiters, fn {from, operation} ->
+      GenServer.reply(from, format_setup_reply(operation, result))
+    end)
+
+    %{state | setup_waiters: []}
+  end
+
+  defp format_setup_reply(:ensure, {:ok, _token}), do: :ok
+  defp format_setup_reply(:setup, {:ok, token}), do: {:ok, token}
+  defp format_setup_reply(:refresh, {:ok, token}), do: {:ok, token}
+  defp format_setup_reply(_operation, {:error, reason}), do: {:error, reason}
+
+  defp cancel_setup_task(state, reason) do
+    state
+    |> stop_setup_task()
+    |> reply_setup_waiters({:error, reason})
+    |> clear_setup_task_state()
+  end
+
+  defp stop_setup_task(%{setup_task_pid: pid, setup_task_ref: ref} = state) do
+    if is_reference(ref) do
+      Process.demonitor(ref, [:flush])
+    end
+
+    if is_pid(pid) and Process.alive?(pid) do
+      Process.exit(pid, :kill)
+    end
+
+    state
+  end
+
+  defp demonitor_setup_task(%{setup_task_ref: ref} = state) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    state
+  end
+
+  defp demonitor_setup_task(state), do: state
+
+  defp clear_setup_task_state(state) do
+    %{
+      state
+      | setup_task_pid: nil,
+        setup_task_ref: nil,
+        setup_operation: nil
+    }
+  end
+
+  defp cancel_refresh_timer(%{refresh_timer: timer} = state) when is_reference(timer) do
+    _ = Process.cancel_timer(timer)
+    flush_refresh_timer_messages()
+    %{state | refresh_timer: nil}
+  end
+
+  defp cancel_refresh_timer(state), do: state
+
+  defp flush_refresh_timer_messages do
+    receive do
+      :refresh_token -> flush_refresh_timer_messages()
+    after
+      0 -> :ok
+    end
+  end
+
+  defp clear_token_state(state) do
+    %{state | token: nil, expiry: nil, provider: nil}
+  end
+
+  defp set_token_state(state, token, expiry, provider) do
+    %{state | token: token, expiry: expiry, provider: provider}
+  end
+
+  defp save_token_to_storage(storage_backend, token_data) do
+    case storage_backend.save(token_data) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+
+      other ->
+        {:error, {:unexpected_storage_response, other}}
+    end
+  end
+
+  defp clear_token_from_storage(storage_backend) do
+    case storage_backend.clear() do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+
+      other ->
+        {:error, {:unexpected_storage_response, other}}
+    end
   end
 end

@@ -50,6 +50,107 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
   end
 
+  defmodule InstrumentedStorage do
+    @table :auth_manager_test_instrumented_storage
+
+    def start_link do
+      case :ets.whereis(@table) do
+        :undefined ->
+          :ets.new(@table, [:named_table, :public, :set])
+
+        _ ->
+          :ok
+      end
+
+      reset()
+      {:ok, self()}
+    end
+
+    def reset do
+      case :ets.whereis(@table) do
+        :undefined ->
+          :ok
+
+        _ ->
+          :ets.delete_all_objects(@table)
+          configure([])
+      end
+    end
+
+    def configure(opts) do
+      :ets.insert(@table, {:save_return, Keyword.get(opts, :save_return, :ok)})
+      :ets.insert(@table, {:clear_return, Keyword.get(opts, :clear_return, :ok)})
+      :ets.insert(@table, {:load_return, Keyword.get(opts, :load_return, :not_found)})
+      :ets.insert(@table, {:save_delay_ms, Keyword.get(opts, :save_delay_ms, 0)})
+      :ets.insert(@table, {:save_calls, 0})
+      :ets.insert(@table, {:clear_calls, 0})
+      :ok
+    end
+
+    def save(data) do
+      increment_counter(:save_calls)
+      maybe_delay()
+
+      case lookup(:save_return, :ok) do
+        :ok ->
+          :ets.insert(@table, {:token_data, data})
+          :ok
+
+        {:error, _reason} = error ->
+          error
+      end
+    end
+
+    def load do
+      case lookup(:load_return, :not_found) do
+        :token_data ->
+          case :ets.lookup(@table, :token_data) do
+            [{:token_data, data}] -> {:ok, data}
+            [] -> {:error, :not_found}
+          end
+
+        :not_found ->
+          {:error, :not_found}
+      end
+    end
+
+    def clear do
+      increment_counter(:clear_calls)
+
+      case lookup(:clear_return, :ok) do
+        :ok ->
+          :ets.delete(@table, :token_data)
+          :ok
+
+        {:error, _reason} = error ->
+          error
+      end
+    end
+
+    def save_calls, do: lookup(:save_calls, 0)
+    def clear_calls, do: lookup(:clear_calls, 0)
+
+    defp maybe_delay do
+      case lookup(:save_delay_ms, 0) do
+        ms when is_integer(ms) and ms > 0 -> Process.sleep(ms)
+        _ -> :ok
+      end
+    end
+
+    defp increment_counter(key) do
+      value = lookup(key, 0)
+      :ets.insert(@table, {key, value + 1})
+      :ok
+    end
+
+    defp lookup(key, default) do
+      case :ets.lookup(@table, key) do
+        [{^key, value}] -> value
+        [] -> default
+      end
+    end
+  end
+
   setup do
     # Clean environment before each test
     System.delete_env("ANTHROPIC_API_KEY")
@@ -59,6 +160,8 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     # Start mock storage (ETS-based, survives restarts)
     MockStorage.start_link()
     MockStorage.reset()
+    InstrumentedStorage.start_link()
+    InstrumentedStorage.reset()
 
     # Start AuthManager with mock storage
     start_supervised!({AuthManager, storage_backend: MockStorage})
@@ -71,6 +174,7 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
       # Clear mock storage
       MockStorage.reset()
+      InstrumentedStorage.reset()
     end)
 
     :ok
@@ -245,6 +349,112 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
   end
 
+  describe "backend failures and async setup behavior" do
+    setup do
+      previous_bedrock = System.get_env("CLAUDE_AGENT_USE_BEDROCK")
+      previous_vertex = System.get_env("CLAUDE_AGENT_USE_VERTEX")
+      previous_profile = System.get_env("AWS_PROFILE")
+
+      on_exit(fn ->
+        restore_env("CLAUDE_AGENT_USE_BEDROCK", previous_bedrock)
+        restore_env("CLAUDE_AGENT_USE_VERTEX", previous_vertex)
+        restore_env("AWS_PROFILE", previous_profile)
+      end)
+
+      :ok
+    end
+
+    test "clear_auth surfaces backend clear failure without crashing manager" do
+      :ok = stop_supervised(AuthManager)
+      InstrumentedStorage.configure(clear_return: {:error, :clear_failed})
+      start_supervised!({AuthManager, storage_backend: InstrumentedStorage})
+
+      assert {:error, :clear_failed} = AuthManager.clear_auth()
+      assert Process.alive?(Process.whereis(AuthManager))
+    end
+
+    test "setup_token surfaces backend save failure without crashing manager" do
+      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
+      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
+      System.put_env("AWS_PROFILE", "test-profile")
+
+      :ok = stop_supervised(AuthManager)
+      InstrumentedStorage.configure(save_return: {:error, :disk_full})
+      start_supervised!({AuthManager, storage_backend: InstrumentedStorage})
+
+      assert {:error, :disk_full} = AuthManager.setup_token()
+      assert Process.alive?(Process.whereis(AuthManager))
+    end
+
+    test "status remains responsive while setup_token is in progress" do
+      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
+      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
+      System.put_env("AWS_PROFILE", "test-profile")
+
+      :ok = stop_supervised(AuthManager)
+
+      InstrumentedStorage.configure(
+        save_return: :ok,
+        save_delay_ms: 250
+      )
+
+      start_supervised!({AuthManager, storage_backend: InstrumentedStorage})
+
+      setup_task = Task.async(fn -> AuthManager.setup_token() end)
+
+      assert_eventually(fn -> InstrumentedStorage.save_calls() == 1 end)
+
+      status_task = Task.async(fn -> AuthManager.status() end)
+      status = Task.await(status_task, 100)
+
+      assert is_map(status)
+      assert {:ok, "aws-bedrock"} = Task.await(setup_task, 1_000)
+    end
+
+    test "concurrent setup_token calls are deduplicated while a setup is running" do
+      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
+      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
+      System.put_env("AWS_PROFILE", "test-profile")
+
+      :ok = stop_supervised(AuthManager)
+
+      InstrumentedStorage.configure(
+        save_return: :ok,
+        save_delay_ms: 200
+      )
+
+      start_supervised!({AuthManager, storage_backend: InstrumentedStorage})
+
+      task_one = Task.async(fn -> AuthManager.setup_token() end)
+      assert_eventually(fn -> InstrumentedStorage.save_calls() == 1 end)
+
+      task_two = Task.async(fn -> AuthManager.setup_token() end)
+
+      assert {:ok, "aws-bedrock"} = Task.await(task_one, 1_000)
+      assert {:ok, "aws-bedrock"} = Task.await(task_two, 1_000)
+      assert InstrumentedStorage.save_calls() == 1
+    end
+
+    test "stale refresh messages are ignored after auth is cleared" do
+      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
+      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
+      System.put_env("AWS_PROFILE", "test-profile")
+
+      :ok = stop_supervised(AuthManager)
+      InstrumentedStorage.configure(save_return: :ok, clear_return: :ok)
+      start_supervised!({AuthManager, storage_backend: InstrumentedStorage})
+
+      assert {:ok, "aws-bedrock"} = AuthManager.setup_token()
+      save_calls = InstrumentedStorage.save_calls()
+      assert :ok = AuthManager.clear_auth()
+
+      send(AuthManager, :refresh_token)
+      Process.sleep(50)
+
+      assert InstrumentedStorage.save_calls() == save_calls
+    end
+  end
+
   describe "setup_token/0 (integration)" do
     # Skip by default - requires actual claude CLI
     @describetag :skip
@@ -281,4 +491,17 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
   defp restore_env(key, nil), do: System.delete_env(key)
   defp restore_env(key, value), do: System.put_env(key, value)
+
+  defp assert_eventually(fun, attempts \\ 30)
+
+  defp assert_eventually(fun, attempts) when attempts > 0 do
+    if fun.() do
+      assert true
+    else
+      Process.sleep(20)
+      assert_eventually(fun, attempts - 1)
+    end
+  end
+
+  defp assert_eventually(_fun, 0), do: flunk("condition not met")
 end

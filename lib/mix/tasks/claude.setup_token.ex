@@ -42,7 +42,13 @@ defmodule Mix.Tasks.Claude.SetupToken do
     Mix.Task.run("app.start")
 
     # Start AuthManager manually if not in supervision tree
-    ensure_auth_manager_started()
+    case ensure_auth_manager_started() do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Mix.raise("Failed to start AuthManager: #{inspect(reason)}")
+    end
 
     # Parse options
     {opts, _args, _invalid} =
@@ -63,17 +69,19 @@ defmodule Mix.Tasks.Claude.SetupToken do
     end
   end
 
-  defp ensure_auth_manager_started do
-    # Check if AuthManager is already running
-    case Process.whereis(ClaudeAgentSDK.AuthManager) do
-      nil ->
-        # Start it manually
-        {:ok, _pid} = ClaudeAgentSDK.AuthManager.start_link()
+  @doc false
+  @spec ensure_auth_manager_started((-> {:ok, pid()} | {:error, term()})) ::
+          :ok | {:error, term()}
+  def ensure_auth_manager_started(start_fun \\ fn -> ClaudeAgentSDK.AuthManager.start_link() end) do
+    case start_fun.() do
+      {:ok, _pid} ->
         :ok
 
-      _pid ->
-        # Already running
+      {:error, {:already_started, _pid}} ->
         :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -110,8 +118,14 @@ defmodule Mix.Tasks.Claude.SetupToken do
 
   defp clear_auth do
     Mix.shell().info("🗑️  Clearing authentication...")
-    :ok = ClaudeAgentSDK.AuthManager.clear_auth()
-    Mix.shell().info("✅ Authentication cleared")
+
+    case ClaudeAgentSDK.AuthManager.clear_auth() do
+      :ok ->
+        Mix.shell().info("✅ Authentication cleared")
+
+      {:error, reason} ->
+        Mix.raise("Failed to clear authentication: #{inspect(reason)}")
+    end
   end
 
   defp show_status do

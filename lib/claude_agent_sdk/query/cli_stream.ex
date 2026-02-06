@@ -8,7 +8,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   - Optional transport injection
   """
 
-  alias ClaudeAgentSDK.{CLI, Errors, Message, Options, TaskSupervisor}
+  alias ClaudeAgentSDK.{CLI, Config, Errors, Message, Options, TaskSupervisor}
 
   @type transport_spec :: module() | {module(), keyword()} | nil
   @transport_close_grace_ms 2_000
@@ -365,7 +365,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     case {System.get_env("LIVE_MODE"), System.get_env("LIVE_TESTS")} do
       {"true", _} -> false
       {_, "true"} -> false
-      _ -> Application.get_env(:claude_agent_sdk, :use_mock, false)
+      _ -> Config.use_mock?()
     end
   end
 

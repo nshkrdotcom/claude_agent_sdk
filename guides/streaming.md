@@ -144,6 +144,18 @@ ClaudeAgentSDK.query("Hello", %Options{}, {ClaudeAgentSDK.Transport.Port, []})
 |> Enum.to_list()
 ```
 
+### Query Streaming Module Configuration
+
+For advanced use cases, you can override the query streaming module globally:
+
+```elixir
+config :claude_agent_sdk,
+  cli_stream_module: ClaudeAgentSDK.Query.CLIStream
+```
+
+`process_module` remains as a deprecated fallback key for backward compatibility, but new
+config should use `cli_stream_module`.
+
 ---
 
 ## Streaming API

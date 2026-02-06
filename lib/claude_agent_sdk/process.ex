@@ -14,7 +14,7 @@ defmodule ClaudeAgentSDK.Process do
 
   alias ClaudeAgentSDK.Log, as: Logger
 
-  alias ClaudeAgentSDK.{CLI, Message, Options}
+  alias ClaudeAgentSDK.{CLI, Config, Message, Options}
   alias ClaudeAgentSDK.Transport.AgentsFile
 
   @default_max_buffer_size 1_048_576
@@ -53,7 +53,7 @@ defmodule ClaudeAgentSDK.Process do
     case {System.get_env("LIVE_MODE"), System.get_env("LIVE_TESTS")} do
       {"true", _} -> false
       {_, "true"} -> false
-      _ -> Application.get_env(:claude_agent_sdk, :use_mock, false)
+      _ -> Config.use_mock?()
     end
   end
 

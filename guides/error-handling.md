@@ -468,6 +468,19 @@ defp do_query(prompt, options) do
 end
 ```
 
+`AuthManager` now surfaces token storage failures as `{:error, reason}` (instead of crashing).
+That applies to save paths during setup/refresh and to `clear_auth/0`:
+
+```elixir
+case ClaudeAgentSDK.AuthManager.clear_auth() do
+  :ok ->
+    :ok
+
+  {:error, reason} ->
+    Logger.error("Failed to clear auth storage: #{inspect(reason)}")
+end
+```
+
 ---
 
 ## Handling Errors in Streams

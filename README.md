@@ -149,6 +149,16 @@ For persistent authentication without re-login:
 mix claude.setup_token
 ```
 
+`AuthManager` keeps running if token storage save/clear fails and returns `{:error, reason}`.
+Handle `clear_auth/0` accordingly in your app code:
+
+```elixir
+case ClaudeAgentSDK.AuthManager.clear_auth() do
+  :ok -> :ok
+  {:error, reason} -> IO.puts("Failed to clear auth: #{inspect(reason)}")
+end
+```
+
 Check authentication status:
 
 ```elixir
@@ -397,6 +407,22 @@ Key options for `ClaudeAgentSDK.Options`:
 | `max_buffer_size` | integer | Maximum JSON buffer size (default: 1MB, overflow yields `CLIJSONDecodeError`) |
 
 CLI path override: set `path_to_claude_code_executable` or `executable` in `Options` (Python `cli_path` equivalent).
+
+### Runtime Application Config
+
+```elixir
+config :claude_agent_sdk,
+  # Timeout for in-process tool execution tasks in Tool.Registry
+  tool_execution_timeout_ms: 30_000,
+  # Query CLI stream backend module
+  cli_stream_module: ClaudeAgentSDK.Query.CLIStream
+```
+
+`config :claude_agent_sdk, :process_module` is still read as a fallback for query streaming,
+but it is deprecated and logs a warning once per legacy module.
+
+`SessionStore` now hydrates on-disk cache in a `handle_continue/2` step. Startup is faster,
+but `list/search` can be briefly incomplete immediately after boot while warmup finishes.
 
 ### SDK Logging
 

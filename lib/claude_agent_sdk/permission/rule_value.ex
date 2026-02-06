@@ -25,6 +25,7 @@ defmodule ClaudeAgentSDK.Permission.RuleValue do
           rule_content: String.t() | nil
         }
 
+  @enforce_keys [:tool_name]
   defstruct [:tool_name, :rule_content]
 
   @doc """

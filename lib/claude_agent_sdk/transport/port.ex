@@ -16,6 +16,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
   @line_length 65_536
   alias ClaudeAgentSDK.{CLI, Options}
   alias ClaudeAgentSDK.Transport.AgentsFile
+  alias ClaudeAgentSDK.Transport.Setup
 
   defstruct port: nil,
             subscribers: %{},
@@ -31,7 +32,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
   def start_link(opts) when is_list(opts) do
     options = Keyword.get(opts, :options) || %Options{}
 
-    with :ok <- validate_cwd(options),
+    with :ok <- Setup.validate_cwd(options.cwd),
          {:ok, {command, default_args}} <- resolve_command(opts) do
       args = Keyword.get(opts, :args, default_args)
       {args, temp_files} = AgentsFile.externalize_agents_if_needed(args, opts)
@@ -325,18 +326,6 @@ defmodule ClaudeAgentSDK.Transport.Port do
   end
 
   defp maybe_put_cd_from_options(opts, _), do: opts
-
-  defp validate_cwd(%Options{cwd: nil}), do: :ok
-
-  defp validate_cwd(%Options{cwd: cwd}) when is_binary(cwd) do
-    if File.dir?(cwd) do
-      :ok
-    else
-      {:error, {:cwd_not_found, cwd}}
-    end
-  end
-
-  defp validate_cwd(_), do: :ok
 
   defp maybe_put_line_length_from_options(opts, %Options{max_buffer_size: size})
        when is_integer(size) and size > 0 do

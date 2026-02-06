@@ -9,6 +9,18 @@ These examples demonstrate real integration with the Claude Code CLI.
 - **Claude Code CLI:** `npm install -g @anthropic-ai/claude-code`
 - **Authentication:** `claude login` (or set `ANTHROPIC_API_KEY` / `CLAUDE_AGENT_OAUTH_TOKEN`)
 
+## Runtime Config Notes
+
+Some examples that exercise in-process tools and query streaming are affected by runtime config:
+
+```elixir
+config :claude_agent_sdk,
+  tool_execution_timeout_ms: 30_000,
+  cli_stream_module: ClaudeAgentSDK.Query.CLIStream
+```
+
+`process_module` is still accepted as a fallback key for query streaming, but it is deprecated.
+
 ## Mix Task Example (Recommended Starting Point)
 
 A complete working example app showing how to integrate Claude into your own Mix project:

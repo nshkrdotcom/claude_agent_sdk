@@ -58,7 +58,8 @@ defmodule ClaudeAgentSDK.SessionStore do
     :storage_dir,
     # ETS cache for fast access
     :cache,
-    :cleanup_timer
+    :cleanup_timer,
+    :cache_loaded?
   ]
 
   @type session_metadata :: %{
@@ -213,13 +214,17 @@ defmodule ClaudeAgentSDK.SessionStore do
     state = %__MODULE__{
       storage_dir: storage_dir,
       cache: cache,
-      cleanup_timer: cleanup_timer
+      cleanup_timer: cleanup_timer,
+      cache_loaded?: false
     }
 
-    # Load existing sessions into cache
-    load_sessions_into_cache(state)
+    {:ok, state, {:continue, :load_cache}}
+  end
 
-    {:ok, state}
+  @impl true
+  def handle_continue(:load_cache, state) do
+    load_sessions_into_cache(state)
+    {:noreply, %{state | cache_loaded?: true}}
   end
 
   @impl true
@@ -251,11 +256,12 @@ defmodule ClaudeAgentSDK.SessionStore do
       {:ok, session_data} ->
         # Deserialize messages
         messages = deserialize_messages(session_data["messages"])
+        metadata = normalize_metadata(session_data["metadata"])
 
         result = %{
           session_id: session_id,
           messages: messages,
-          metadata: session_data["metadata"]
+          metadata: metadata
         }
 
         {:reply, {:ok, result}, state}
@@ -271,17 +277,7 @@ defmodule ClaudeAgentSDK.SessionStore do
       :ets.tab2list(state.cache)
       |> Enum.map(fn {_id, metadata} -> metadata end)
       |> filter_by_criteria(criteria)
-      |> Enum.sort_by(
-        fn session ->
-          # Handle both atom and string keys
-          updated_at = session[:updated_at] || session["updated_at"]
-
-          if is_binary(updated_at),
-            do: DateTime.from_iso8601(updated_at) |> elem(1),
-            else: updated_at
-        end,
-        {:desc, DateTime}
-      )
+      |> sort_sessions_by_updated_at()
 
     {:reply, results, state}
   end
@@ -291,57 +287,26 @@ defmodule ClaudeAgentSDK.SessionStore do
     sessions =
       :ets.tab2list(state.cache)
       |> Enum.map(fn {_id, metadata} -> metadata end)
-      |> Enum.sort_by(
-        fn session ->
-          # Handle both atom and string keys
-          updated_at = session[:updated_at] || session["updated_at"]
-
-          if is_binary(updated_at),
-            do: DateTime.from_iso8601(updated_at) |> elem(1),
-            else: updated_at
-        end,
-        {:desc, DateTime}
-      )
+      |> sort_sessions_by_updated_at()
 
     {:reply, sessions, state}
   end
 
   @impl true
   def handle_call({:delete_session, session_id}, _from, state) do
-    # Delete from disk
-    path = session_path(state.storage_dir, session_id)
-    File.rm(path)
-
-    # Delete from cache
-    :ets.delete(state.cache, session_id)
-
-    {:reply, :ok, state}
+    {:reply, :ok, delete_session_internal(state, session_id)}
   end
 
   @impl true
   def handle_call({:cleanup_old, opts}, _from, state) do
     max_age_days = Keyword.get(opts, :max_age_days, @max_age_days)
-    cutoff_date = DateTime.add(DateTime.utc_now(), -max_age_days * 86_400, :second)
-
-    # Find old sessions
-    old_sessions =
-      :ets.tab2list(state.cache)
-      |> Enum.filter(fn {_id, metadata} ->
-        DateTime.compare(metadata.updated_at, cutoff_date) == :lt
-      end)
-
-    # Delete them
-    Enum.each(old_sessions, fn {session_id, _metadata} ->
-      delete_session(session_id)
-    end)
-
-    {:reply, length(old_sessions), state}
+    {deleted_count, new_state} = cleanup_old_internal(state, max_age_days)
+    {:reply, deleted_count, new_state}
   end
 
   @impl true
   def handle_info(:cleanup_check, state) do
-    # Periodic cleanup
-    _deleted = cleanup_old_sessions(max_age_days: @max_age_days)
+    {_deleted_count, state} = cleanup_old_internal(state, @max_age_days)
 
     # Reschedule
     cleanup_timer = schedule_cleanup()
@@ -456,7 +421,8 @@ defmodule ClaudeAgentSDK.SessionStore do
 
     case read_session_file(state.storage_dir, session_id) do
       {:ok, data} ->
-        :ets.insert(state.cache, {session_id, data["metadata"]})
+        metadata = normalize_metadata(data["metadata"])
+        :ets.insert(state.cache, {session_id, metadata})
 
       {:error, _} ->
         :ok
@@ -488,13 +454,7 @@ defmodule ClaudeAgentSDK.SessionStore do
     date = to_datetime(date)
 
     Enum.filter(sessions, fn session ->
-      # Handle both atom and string keys
-      created_at = session[:created_at] || session["created_at"]
-
-      created_at =
-        if is_binary(created_at),
-          do: DateTime.from_iso8601(created_at) |> elem(1),
-          else: created_at
+      created_at = parse_datetime_value(session[:created_at] || session["created_at"])
 
       DateTime.compare(created_at, date) in [:gt, :eq]
     end)
@@ -506,13 +466,7 @@ defmodule ClaudeAgentSDK.SessionStore do
     date = to_datetime(date)
 
     Enum.filter(sessions, fn session ->
-      # Handle both atom and string keys
-      created_at = session[:created_at] || session["created_at"]
-
-      created_at =
-        if is_binary(created_at),
-          do: DateTime.from_iso8601(created_at) |> elem(1),
-          else: created_at
+      created_at = parse_datetime_value(session[:created_at] || session["created_at"])
 
       DateTime.compare(created_at, date) in [:lt, :eq]
     end)
@@ -543,6 +497,142 @@ defmodule ClaudeAgentSDK.SessionStore do
   defp to_datetime(%Date{} = date) do
     DateTime.new!(date, ~T[00:00:00])
   end
+
+  defp sort_sessions_by_updated_at(sessions) do
+    Enum.sort_by(
+      sessions,
+      fn session -> parse_datetime_value(session[:updated_at] || session["updated_at"]) end,
+      {:desc, DateTime}
+    )
+  end
+
+  defp cleanup_old_internal(state, max_age_days) do
+    cutoff_date = DateTime.add(DateTime.utc_now(), -max_age_days * 86_400, :second)
+
+    old_sessions =
+      :ets.tab2list(state.cache)
+      |> Enum.filter(fn {_id, metadata} ->
+        DateTime.compare(
+          parse_datetime_value(metadata[:updated_at] || metadata["updated_at"]),
+          cutoff_date
+        ) ==
+          :lt
+      end)
+
+    new_state =
+      Enum.reduce(old_sessions, state, fn {session_id, _metadata}, acc ->
+        delete_session_internal(acc, session_id)
+      end)
+
+    {length(old_sessions), new_state}
+  end
+
+  defp delete_session_internal(state, session_id) do
+    path = session_path(state.storage_dir, session_id)
+    _ = File.rm(path)
+    :ets.delete(state.cache, session_id)
+    state
+  end
+
+  defp normalize_metadata(metadata) when is_map(metadata) do
+    now = DateTime.utc_now()
+    session_id = metadata_value(metadata, :session_id, "")
+    created_at = metadata_datetime(metadata, :created_at, now)
+    updated_at = metadata_datetime(metadata, :updated_at, created_at)
+    message_count = metadata_integer(metadata, :message_count, 0)
+    total_cost = metadata_float(metadata, :total_cost, 0.0)
+    tags = metadata_tags(metadata, :tags)
+    description = metadata_value(metadata, :description)
+    model = metadata_value(metadata, :model)
+
+    %{
+      session_id: session_id,
+      created_at: created_at,
+      updated_at: updated_at,
+      message_count: message_count,
+      total_cost: total_cost,
+      tags: tags,
+      description: description,
+      model: model
+    }
+  end
+
+  defp normalize_metadata(_metadata), do: normalize_metadata(%{})
+
+  defp parse_datetime_value(%DateTime{} = datetime), do: datetime
+
+  defp parse_datetime_value(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _offset} -> datetime
+      {:error, _reason} -> DateTime.utc_now()
+    end
+  end
+
+  defp parse_datetime_value(_value), do: DateTime.utc_now()
+
+  defp metadata_value(metadata, key, default \\ nil) do
+    Map.get(metadata, key, Map.get(metadata, Atom.to_string(key), default))
+  end
+
+  defp metadata_datetime(metadata, key, fallback) do
+    case metadata_value(metadata, key, fallback) do
+      %DateTime{} = datetime ->
+        datetime
+
+      value when is_binary(value) ->
+        case DateTime.from_iso8601(value) do
+          {:ok, datetime, _offset} -> datetime
+          {:error, _reason} -> fallback
+        end
+
+      _value ->
+        fallback
+    end
+  end
+
+  defp metadata_integer(metadata, key, default) do
+    metadata
+    |> metadata_value(key, default)
+    |> normalize_integer()
+  end
+
+  defp metadata_float(metadata, key, default) do
+    metadata
+    |> metadata_value(key, default)
+    |> normalize_float()
+  end
+
+  defp metadata_tags(metadata, key) do
+    metadata
+    |> metadata_value(key, [])
+    |> normalize_tags()
+  end
+
+  defp normalize_integer(value) when is_integer(value), do: value
+
+  defp normalize_integer(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {integer, _rest} -> integer
+      :error -> 0
+    end
+  end
+
+  defp normalize_integer(_value), do: 0
+
+  defp normalize_float(value) when is_float(value), do: value
+  defp normalize_float(value) when is_integer(value), do: value * 1.0
+
+  defp normalize_float(value) when is_binary(value) do
+    case Float.parse(value) do
+      {float, _rest} -> float
+      :error -> 0.0
+    end
+  end
+
+  defp normalize_float(_value), do: 0.0
+
+  defp normalize_tags(tags) when is_list(tags), do: Enum.map(tags, &to_string/1)
+  defp normalize_tags(_tags), do: []
 
   defp schedule_cleanup do
     # Check for old sessions every 24 hours

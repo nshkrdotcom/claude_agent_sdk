@@ -15,11 +15,12 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   alias ClaudeAgentSDK.{CLI, Options}
   alias ClaudeAgentSDK.Process, as: SDKProcess
   alias ClaudeAgentSDK.Transport.AgentsFile
+  alias ClaudeAgentSDK.Transport.Setup
 
   @default_max_buffer_size 1_048_576
 
   defstruct subprocess: nil,
-            subscribers: MapSet.new(),
+            subscribers: %{},
             stdout_buffer: "",
             status: :disconnected,
             stderr_callback: nil,
@@ -40,6 +41,11 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   @impl ClaudeAgentSDK.Transport
   def subscribe(transport, pid) when is_pid(transport) and is_pid(pid) do
     GenServer.call(transport, {:subscribe, pid})
+  end
+
+  @spec unsubscribe(pid(), pid()) :: :ok
+  def unsubscribe(transport, pid) when is_pid(transport) and is_pid(pid) do
+    GenServer.call(transport, {:unsubscribe, pid})
   end
 
   @impl ClaudeAgentSDK.Transport
@@ -64,7 +70,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     max_buffer_size = max_buffer_size_from_options(options)
 
     with {:ok, command, args, temp_files} <- resolve_command(opts, options),
-         :ok <- validate_cwd(options.cwd),
+         :ok <- Setup.validate_cwd(options.cwd),
          :ok <- ensure_erlexec_started(),
          {args, agent_temp_files} <- AgentsFile.externalize_agents_if_needed(args),
          cmd <- build_command(command, args),
@@ -101,16 +107,6 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     end
   end
 
-  defp validate_cwd(cwd) when is_binary(cwd) do
-    if File.dir?(cwd) do
-      :ok
-    else
-      {:error, {:cwd_not_found, cwd}}
-    end
-  end
-
-  defp validate_cwd(_cwd), do: :ok
-
   defp ensure_erlexec_started do
     case Application.ensure_all_started(:erlexec) do
       {:ok, _} -> :ok
@@ -120,8 +116,27 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   @impl GenServer
   def handle_call({:subscribe, pid}, _from, state) do
-    Process.monitor(pid)
-    {:reply, :ok, %{state | subscribers: MapSet.put(state.subscribers, pid)}}
+    subscribers =
+      case Map.fetch(state.subscribers, pid) do
+        {:ok, _ref} ->
+          state.subscribers
+
+        :error ->
+          ref = Process.monitor(pid)
+          Map.put(state.subscribers, pid, ref)
+      end
+
+    {:reply, :ok, %{state | subscribers: subscribers}}
+  end
+
+  def handle_call({:unsubscribe, pid}, _from, state) do
+    {monitor_ref, subscribers} = Map.pop(state.subscribers, pid)
+
+    if is_reference(monitor_ref) do
+      Process.demonitor(monitor_ref, [:flush])
+    end
+
+    {:reply, :ok, %{state | subscribers: subscribers}}
   end
 
   def handle_call({:send, message}, _from, %{subprocess: {pid, _os_pid}} = state) do
@@ -176,8 +191,14 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     {:stop, :normal, %{state | status: :disconnected, subprocess: nil}}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
+  def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
+    subscribers =
+      case Map.pop(state.subscribers, pid) do
+        {^ref, rest} -> rest
+        {_, rest} -> rest
+      end
+
+    {:noreply, %{state | subscribers: subscribers}}
   end
 
   def handle_info(_other, state), do: {:noreply, state}
@@ -197,7 +218,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   defp broadcast(subscribers, message) do
-    Enum.each(subscribers, fn pid -> Kernel.send(pid, message) end)
+    Enum.each(subscribers, fn {pid, _monitor_ref} -> Kernel.send(pid, message) end)
   end
 
   defp handle_stdout_data(%{overflowed?: true} = state, data) do
