@@ -166,7 +166,7 @@ model: "claude-sonnet-4"
 
 # Maximum capability for complex tasks
 model: "opus"
-model: "claude-opus-4"
+model: "claude-opus-4-6"
 ```
 
 ### Tool Configuration

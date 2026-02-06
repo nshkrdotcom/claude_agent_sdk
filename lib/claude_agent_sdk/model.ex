@@ -8,7 +8,7 @@ defmodule ClaudeAgentSDK.Model do
 
   ## Supported Models
 
-  - `"opus"` - Claude Opus 4.1 (claude-opus-4-1-20250805)
+  - `"opus"` - Claude Opus 4.6 (claude-opus-4-6)
   - `"sonnet"` - Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)
   - `"haiku"` - Claude Haiku 4.5 (claude-haiku-4-5-20251001) - **default**
   - `"sonnet[1m]"` - Claude Sonnet 4.5 with 1M context (claude-sonnet-4-5-20250929[1m])
@@ -25,7 +25,7 @@ defmodule ClaudeAgentSDK.Model do
       {:error, :invalid_model}
 
       iex> ClaudeAgentSDK.Model.list_models()
-      ["claude-haiku-4-5-20251001", "claude-opus-4-1-20250805", ...]
+      ["claude-haiku-4-5-20251001", "claude-opus-4-6", ...]
 
       iex> ClaudeAgentSDK.Model.suggest("opuss")
       ["opus"]
@@ -39,7 +39,7 @@ defmodule ClaudeAgentSDK.Model do
     # 1M context variant - only sonnet[1m] works, not sonnet-1m
     "sonnet[1m]" => "sonnet[1m]",
     # Full model IDs (for reference/validation)
-    "claude-opus-4-1-20250805" => "claude-opus-4-1-20250805",
+    "claude-opus-4-6" => "claude-opus-4-6",
     "claude-sonnet-4-5-20250929" => "claude-sonnet-4-5-20250929",
     "claude-haiku-4-5-20251001" => "claude-haiku-4-5-20251001",
     "claude-sonnet-4-5-20250929[1m]" => "claude-sonnet-4-5-20250929[1m]"

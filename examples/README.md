@@ -40,6 +40,8 @@ bash examples/run_all.sh
 Sets `CLAUDE_EXAMPLES_FORCE_HALT=true` to ensure each script exits cleanly.
 The runner continues after failures and prints a summary at the end (non-zero exit
 if any example failed).
+Note: `resume_persistence_repro_live.exs` is a known-failing repro and will fail
+until resume turn persistence is fixed.
 
 ### Run Individual Examples
 
@@ -55,6 +57,7 @@ mix run examples/basic_example.exs
 |---------|-------------|
 | `basic_example.exs` | Minimal `ClaudeAgentSDK.query/2` with message extraction |
 | `session_features_example.exs` | SessionStore save/search, resume, session CLI flags |
+| `resume_persistence_repro_live.exs` | Known-failing repro for `--print --resume` dropping intermediate turns |
 | `structured_output_live.exs` | Structured JSON via `--json-schema` |
 | `sandbox_settings_live.exs` | Sandbox merged into `--settings` |
 | `tools_and_betas_live.exs` | `--tools` variations |

@@ -118,12 +118,13 @@ defmodule ClaudeAgentSDK.Query do
 
     args =
       if prompt do
-        ["--print", "--resume", session_id] ++ base_args ++ ["--", prompt]
+        ["--resume", session_id, "--input-format", "stream-json"] ++ base_args
       else
         ["--resume", session_id] ++ base_args
       end
 
-    cli_stream_module().stream_args(args, options)
+    input = resume_input(prompt, session_id)
+    cli_stream_module().stream_args(args, options, nil, input)
   end
 
   # Check if options contain SDK MCP servers
@@ -177,4 +178,19 @@ defmodule ClaudeAgentSDK.Query do
   end
 
   defp maybe_enable_partial_messages(options), do: options
+
+  defp resume_input(nil, _session_id), do: nil
+
+  defp resume_input(prompt, session_id) when is_binary(prompt) and is_binary(session_id) do
+    [
+      %{
+        "type" => "user",
+        "message" => %{
+          "role" => "user",
+          "content" => prompt
+        },
+        "session_id" => session_id
+      }
+    ]
+  end
 end

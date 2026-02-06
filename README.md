@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.9.2"}
+    {:claude_agent_sdk, "~> 0.10.0"}
   ]
 end
 ```
@@ -512,6 +512,10 @@ cd examples/email_agent && mix deps.get && mix email.assistant "find emails from
 ## Upgrading
 
 For breaking changes and migration notes, see `CHANGELOG.md`.
+
+**0.10.0 fix (resume turn persistence):**
+- `resume/3` no longer uses `--print --resume` (one-shot mode that dropped intermediate turns). It now uses `--resume` with `--input-format stream-json`, preserving the full conversation history across resume calls.
+- Updated default Opus model to `claude-opus-4-6`.
 
 **0.9.0 breaking change (streaming):**
 - Stream event wrappers now require `uuid` and `session_id`. Missing keys raise and terminate the streaming client.

@@ -165,6 +165,13 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   def handle_info({:DOWN, os_pid, :process, pid, reason}, %{subprocess: {pid, os_pid}} = state) do
+    # Defer final shutdown briefly so any queued stdout frames are drained first.
+    Process.send_after(self(), {:finalize_exit, os_pid, pid, reason}, 25)
+    {:noreply, state}
+  end
+
+  def handle_info({:finalize_exit, os_pid, pid, reason}, %{subprocess: {pid, os_pid}} = state) do
+    state = flush_stdout_buffer(state)
     broadcast(state.subscribers, {:transport_exit, reason})
     {:stop, :normal, %{state | status: :disconnected, subprocess: nil}}
   end
@@ -276,6 +283,18 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
       {"", rest} -> {rest, ""}
       {last, rest} -> {rest, last}
     end
+  end
+
+  defp flush_stdout_buffer(%{stdout_buffer: ""} = state), do: state
+
+  defp flush_stdout_buffer(state) do
+    line = String.trim(state.stdout_buffer)
+
+    if line != "" do
+      broadcast(state.subscribers, {:transport_message, line})
+    end
+
+    %{state | stdout_buffer: "", overflowed?: false}
   end
 
   defp build_command(command, args) when is_binary(command) and is_list(args) do

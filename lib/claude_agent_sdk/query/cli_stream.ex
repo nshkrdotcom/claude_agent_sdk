@@ -11,6 +11,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   alias ClaudeAgentSDK.{CLI, Errors, Message, Options, TaskSupervisor}
 
   @type transport_spec :: module() | {module(), keyword()} | nil
+  @transport_close_grace_ms 2_000
 
   @doc """
   Streams messages for a single query prompt.
@@ -71,6 +72,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp start_transport(args, %Options{} = options, transport, input) do
+    drain_stale_transport_messages()
+
     {module, transport_opts} = normalize_transport(transport, options, input)
 
     transport_opts =
@@ -200,7 +203,11 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         {[transport_error_message(error)], %{state | done?: true}}
 
       {:transport_exit, _reason} ->
-        {:halt, %{state | done?: true}}
+        if Process.alive?(state.transport) do
+          receive_next(state)
+        else
+          {:halt, %{state | done?: true}}
+        end
     after
       30_000 ->
         if Process.alive?(state.transport) do
@@ -289,11 +296,62 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       Process.exit(task, :kill)
     end
 
-    _ = module.close(transport)
+    if graceful_close?(module) do
+      wait_for_transport_exit(transport, @transport_close_grace_ms)
+
+      if Process.alive?(transport) do
+        _ = module.close(transport)
+      end
+    else
+      _ = module.close(transport)
+    end
+
     :ok
   end
 
   defp cleanup(_), do: :ok
+
+  defp drain_stale_transport_messages do
+    receive do
+      {:transport_message, _line} ->
+        drain_stale_transport_messages()
+
+      {:transport_error, _error} ->
+        drain_stale_transport_messages()
+
+      {:transport_exit, _reason} ->
+        drain_stale_transport_messages()
+    after
+      0 ->
+        :ok
+    end
+  end
+
+  defp wait_for_transport_exit(transport, timeout_ms)
+       when is_pid(transport) and is_integer(timeout_ms) and timeout_ms > 0 do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_wait_for_transport_exit(transport, deadline)
+  end
+
+  defp wait_for_transport_exit(_transport, _timeout_ms), do: :ok
+
+  defp do_wait_for_transport_exit(transport, deadline_ms) do
+    cond do
+      not Process.alive?(transport) ->
+        :ok
+
+      System.monotonic_time(:millisecond) >= deadline_ms ->
+        :ok
+
+      true ->
+        Process.sleep(20)
+        do_wait_for_transport_exit(transport, deadline_ms)
+    end
+  end
+
+  defp graceful_close?(module) do
+    module in [ClaudeAgentSDK.Transport.Erlexec, ClaudeAgentSDK.Transport.Port]
+  end
 
   defp should_use_mock?(transport, %Options{} = options) do
     use_mock?() and is_nil(transport) and not force_real?(options)

@@ -145,6 +145,10 @@ ClaudeAgentSDK.continue("Now add error handling", options)
 
 Use `ClaudeAgentSDK.resume/3` to resume a **specific** conversation by its session ID. This is essential for building applications that manage multiple concurrent conversations.
 
+> **v0.10.0 fix:** Prior versions used `--print --resume` (one-shot mode) which
+> dropped intermediate turns from the session history. Resume now uses
+> `--input-format stream-json` so all prior turns are preserved.
+
 ### Basic Resume
 
 ```elixir

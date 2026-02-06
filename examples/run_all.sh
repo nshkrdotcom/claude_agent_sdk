@@ -5,8 +5,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 if command -v stty >/dev/null 2>&1; then
-  trap 'stty sane >/dev/null 2>&1 || true' EXIT INT TERM
+  trap 'stty sane >/dev/null 2>&1 || true' EXIT
 fi
+trap 'exit 130' INT
+trap 'exit 1' TERM
 
 echo "Running LIVE examples (real Claude CLI calls)."
 echo "These may incur API costs."
@@ -32,7 +34,7 @@ preflight_out="$(mktemp)"
 preflight_rc=0
 
 if command -v timeout >/dev/null 2>&1; then
-  timeout "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+  timeout --foreground "${PREFLIGHT_TIMEOUT_SECONDS}s" \
     claude --print "$PREFLIGHT_PROMPT" --max-turns 1 --model haiku \
     >"$preflight_out" 2>&1 || preflight_rc=$?
 else
@@ -64,6 +66,7 @@ export CLAUDE_EXAMPLES_FORCE_HALT="true"
 examples=(
   "examples/basic_example.exs"
   "examples/session_features_example.exs"
+  "examples/resume_persistence_repro_live.exs"
   "examples/structured_output_live.exs"
   "examples/sandbox_settings_live.exs"
   "examples/tools_and_betas_live.exs"

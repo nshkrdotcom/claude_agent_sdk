@@ -23,7 +23,7 @@ defmodule ClaudeAgentSDK.ModelTest do
     end
 
     test "should_return_same_name_when_given_full_form" do
-      assert {:ok, "claude-opus-4-1-20250805"} = Model.validate("claude-opus-4-1-20250805")
+      assert {:ok, "claude-opus-4-6"} = Model.validate("claude-opus-4-6")
       assert {:ok, "claude-sonnet-4-5-20250929"} = Model.validate("claude-sonnet-4-5-20250929")
       assert {:ok, "claude-haiku-4-5-20251001"} = Model.validate("claude-haiku-4-5-20251001")
     end
@@ -57,7 +57,7 @@ defmodule ClaudeAgentSDK.ModelTest do
       assert "haiku" in models
 
       # Should include full forms
-      assert "claude-opus-4-1-20250805" in models
+      assert "claude-opus-4-6" in models
       assert "claude-sonnet-4-5-20250929" in models
       assert "claude-haiku-4-5-20251001" in models
     end
@@ -72,7 +72,7 @@ defmodule ClaudeAgentSDK.ModelTest do
     test "should_suggest_opus_when_given_opuss" do
       suggestions = Model.suggest("opuss")
       assert is_list(suggestions)
-      assert "opus" in suggestions or "claude-opus-4-1-20250805" in suggestions
+      assert "opus" in suggestions or "claude-opus-4-6" in suggestions
     end
 
     test "should_suggest_sonnet_when_given_sonet" do

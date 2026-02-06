@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-02-05
+
+### Fixed
+
+- **Resume turn persistence**: `resume/3` no longer uses `--print --resume` (one-shot mode) which dropped intermediate turns from the CLI session history. It now uses `--resume` with `--input-format stream-json` and sends the user prompt via stdin, preserving the full conversation across resume calls.
+- **Transport exit race**: `CLIStream` now defers halt on `:transport_exit` when the transport process is still alive, preventing premature stream termination before all messages are drained.
+- **Erlexec stdout flush on exit**: The erlexec transport now flushes any remaining `stdout_buffer` before broadcasting `:transport_exit`, ensuring no final message is lost.
+- **Stale transport messages**: `CLIStream` drains leftover `:transport_message`, `:transport_error`, and `:transport_exit` messages from the caller's mailbox before starting a new transport, preventing cross-stream contamination.
+- **Graceful transport close**: Transport shutdown now waits briefly for the process to exit on its own before force-closing, avoiding premature kills that could drop in-flight data.
+
+### Changed
+
+- **Default Opus model**: Updated `"opus"` alias from `claude-opus-4-1-20250805` to `claude-opus-4-6` across model map, guides, and tests.
+
+### Added
+
+- **Resume persistence repro**: New `examples/resume_persistence_repro_live.exs` live example that verifies intermediate turns survive across `resume/3` calls (known-failing until upstream CLI fix).
+- **Resume persistence unit test**: New `QueryResumePersistenceTest` asserting that `resume/3` avoids one-shot `--print` mode and sends `stream-json` input.
+
 ## [0.9.2] - 2026-01-28
 
 ### Fixed
@@ -1140,7 +1159,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.8.1...v0.9.0
