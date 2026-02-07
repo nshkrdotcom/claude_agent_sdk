@@ -2,6 +2,7 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.{Options, Process}
+  alias ClaudeAgentSDK.Streaming.Session
   alias ClaudeAgentSDK.Transport.Port, as: PortTransport
 
   test "env builder merges option overrides and user" do
@@ -59,5 +60,16 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
 
   test "shell escaping preserves empty string arguments" do
     assert Process.__shell_escape__("") == "\"\""
+  end
+
+  test "shell escaping includes redirection operators" do
+    assert Process.__shell_escape__("a>b") == "\"a>b\""
+    assert Process.__shell_escape__("a<b") == "\"a<b\""
+  end
+
+  test "process and streaming session use the same shell escaping rules" do
+    for arg <- ["plain", "needs space", "quote\"test", "bang!", "a>b", "a<b"] do
+      assert Process.__shell_escape__(arg) == Session.__shell_escape__(arg)
+    end
   end
 end

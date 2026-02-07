@@ -135,6 +135,9 @@ ClaudeAgentSDK.query(prompts, %Options{})
 |> Enum.to_list()
 ```
 
+If the internal input-stream worker crashes (or EOF signaling fails), the query
+now emits an explicit `:error_during_execution` result message instead of waiting indefinitely.
+
 ### Custom Transport Injection
 
 You can inject a transport for query flows (module or `{module, opts}` tuple):
@@ -609,6 +612,10 @@ resumed = ClaudeAgentSDK.resume(session_id, "What's my name?", options)
 
 ## Error Handling in Streams
 
+Control-client streaming surfaces startup/send failures immediately as stream
+events (`%{type: :error, error: reason}`), so callers no longer need to wait for
+the generic 5-minute stream timeout to detect initialization failures.
+
 ### Handling Stream Errors
 
 ```elixir
@@ -642,6 +649,9 @@ case result do
 
   {:error, :connection_closed} ->
     IO.puts("Connection was closed")
+
+  {:error, :not_connected} ->
+    IO.puts("Transport not connected")
 
   {:error, reason} ->
     IO.puts("Error: #{inspect(reason)}")
@@ -683,7 +693,7 @@ defmodule ResilientChat do
       {:ok, text} ->
         {:ok, text}
 
-      {:error, :connection_closed} when retries < @max_retries ->
+      {:error, reason} when reason in [:connection_closed, :not_connected] and retries < @max_retries ->
         IO.puts("[Retrying... attempt #{retries + 1}]")
         Process.sleep(1000 * (retries + 1))  # Exponential backoff
         send_with_retry(session, message, retries + 1)

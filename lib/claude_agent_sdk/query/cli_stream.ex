@@ -8,7 +8,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   - Optional transport injection
   """
 
-  alias ClaudeAgentSDK.{CLI, Config, Errors, Message, Options, TaskSupervisor}
+  alias ClaudeAgentSDK.{CLI, Errors, Message, Options, Runtime, TaskSupervisor, Transport}
 
   @type transport_spec :: module() | {module(), keyword()} | nil
   @transport_close_grace_ms 2_000
@@ -83,9 +83,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
     with {:ok, transport_opts} <- maybe_put_cli_command(module, transport_opts, options),
          {:ok, transport_pid} <- module.start_link(transport_opts),
-         :ok <- module.subscribe(transport_pid, self()) do
-      input_task = maybe_stream_input(module, transport_pid, input)
-
+         :ok <- module.subscribe(transport_pid, self()),
+         {:ok, input_task} <- maybe_stream_input(module, transport_pid, input) do
       %{
         module: module,
         transport: transport_pid,
@@ -98,15 +97,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       }
     else
       {:error, reason} ->
-        error_msg = %Message{
-          type: :result,
-          subtype: :error_during_execution,
-          data: %{
-            error: "Failed to start CLI transport: #{inspect(reason)}",
-            session_id: "error",
-            is_error: true
-          }
-        }
+        error_msg = Message.error_result("Failed to start CLI transport: #{inspect(reason)}")
 
         {:error, [error_msg]}
     end
@@ -171,22 +162,50 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   # For non-streaming queries (nil input), close stdin immediately so the CLI starts processing
   defp maybe_stream_input(module, transport, nil) do
     if function_exported?(module, :end_input, 1) do
-      module.end_input(transport)
+      case module.end_input(transport) do
+        :ok -> {:ok, nil}
+        {:error, reason} -> {:error, {:end_input_failed, Transport.normalize_reason(reason)}}
+      end
+    else
+      {:ok, nil}
     end
-
-    nil
   end
 
   defp maybe_stream_input(module, transport, input) do
-    {:ok, pid} =
-      TaskSupervisor.start_child(fn -> stream_input_messages(module, transport, input) end)
-
-    pid
+    with {:ok, pid} <-
+           TaskSupervisor.start_child(fn -> stream_input_messages(module, transport, input) end) do
+      {:ok, %{pid: pid, monitor_ref: Process.monitor(pid)}}
+    end
   end
 
   defp stream_input_messages(module, transport, input) do
-    Enum.each(input, fn message -> module.send(transport, message) end)
-    module.end_input(transport)
+    send_result =
+      Enum.reduce_while(input, :ok, fn message, _acc ->
+        case module.send(transport, message) do
+          :ok ->
+            {:cont, :ok}
+
+          {:error, reason} ->
+            {:halt, {:error, {:send_failed, Transport.normalize_reason(reason)}}}
+        end
+      end)
+
+    end_result =
+      case module.end_input(transport) do
+        :ok -> :ok
+        {:error, reason} -> {:error, Transport.normalize_reason(reason)}
+      end
+
+    case {send_result, end_result} do
+      {:ok, :ok} ->
+        :ok
+
+      {{:error, reason}, _} ->
+        exit({:input_stream_failed, reason})
+
+      {:ok, {:error, reason}} ->
+        exit({:end_input_failed, reason})
+    end
   end
 
   defp receive_next({:error, [msg | rest]}), do: {[msg], {:error, rest}}
@@ -196,6 +215,9 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp receive_next(state) do
     receive do
+      {:DOWN, monitor_ref, :process, _pid, reason} ->
+        maybe_handle_input_task_down(state, monitor_ref, reason)
+
       {:transport_message, line} when is_binary(line) ->
         handle_line(line, state)
 
@@ -203,14 +225,14 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         {[transport_error_message(error)], %{state | done?: true}}
 
       {:transport_exit, _reason} ->
-        if Process.alive?(state.transport) do
+        if process_running?(state.transport) do
           receive_next(state)
         else
           {:halt, %{state | done?: true}}
         end
     after
       30_000 ->
-        if Process.alive?(state.transport) do
+        if process_running?(state.transport) do
           receive_next(state)
         else
           {:halt, %{state | done?: true}}
@@ -253,63 +275,76 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         original_error: original_error
       }
 
-    %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: Exception.message(error),
-        error_struct: error,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    Message.error_result(Exception.message(error), error_struct: error)
   end
 
   defp transport_error_message(%Errors.CLIJSONDecodeError{} = error) do
-    %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: Exception.message(error),
-        error_struct: error,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    Message.error_result(Exception.message(error), error_struct: error)
   end
 
   defp transport_error_message(error) do
-    %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: "Transport error: #{inspect(error)}",
-        error_struct: error,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    Message.error_result("Transport error: #{inspect(error)}", error_struct: error)
+  end
+
+  defp input_task_error_message(reason) do
+    Message.error_result("Input stream worker failed: #{inspect(reason)}", error_struct: reason)
+  end
+
+  defp maybe_handle_input_task_down(%{input_task: nil} = state, _monitor_ref, _reason) do
+    receive_next(state)
+  end
+
+  defp maybe_handle_input_task_down(
+         %{input_task: %{monitor_ref: monitor_ref}} = state,
+         monitor_ref,
+         :normal
+       ) do
+    receive_next(%{state | input_task: nil})
+  end
+
+  defp maybe_handle_input_task_down(
+         %{input_task: %{monitor_ref: monitor_ref}} = state,
+         monitor_ref,
+         reason
+       ) do
+    {[input_task_error_message(reason)], %{state | input_task: nil, done?: true}}
+  end
+
+  defp maybe_handle_input_task_down(state, _monitor_ref, _reason) do
+    receive_next(state)
   end
 
   defp cleanup(%{module: module, transport: transport, input_task: task}) do
-    if is_pid(task) do
-      Process.exit(task, :kill)
-    end
+    cleanup_input_task(task)
 
     if graceful_close?(module) do
       wait_for_transport_exit(transport, @transport_close_grace_ms)
-
-      if Process.alive?(transport) do
-        _ = module.close(transport)
-      end
-    else
-      _ = module.close(transport)
     end
+
+    safe_close_transport(module, transport)
 
     :ok
   end
 
   defp cleanup(_), do: :ok
+
+  defp cleanup_input_task(%{pid: pid, monitor_ref: monitor_ref}) do
+    Process.demonitor(monitor_ref, [:flush])
+    Process.exit(pid, :kill)
+    :ok
+  end
+
+  defp cleanup_input_task(_), do: :ok
+
+  defp safe_close_transport(module, transport) when is_pid(transport) do
+    _ = module.close(transport)
+    :ok
+  catch
+    :exit, {:noproc, _} -> :ok
+    :exit, :noproc -> :ok
+  end
+
+  defp safe_close_transport(_module, _transport), do: :ok
 
   defp drain_stale_transport_messages do
     receive do
@@ -337,7 +372,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp do_wait_for_transport_exit(transport, deadline_ms) do
     cond do
-      not Process.alive?(transport) ->
+      not process_running?(transport) ->
         :ok
 
       System.monotonic_time(:millisecond) >= deadline_ms ->
@@ -353,20 +388,11 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     module in [ClaudeAgentSDK.Transport.Erlexec, ClaudeAgentSDK.Transport.Port]
   end
 
+  defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
+  defp process_running?(_pid), do: false
+
   defp should_use_mock?(transport, %Options{} = options) do
-    use_mock?() and is_nil(transport) and not force_real?(options)
-  end
-
-  defp force_real?(%Options{executable: executable, path_to_claude_code_executable: path}) do
-    is_binary(executable) or is_binary(path)
-  end
-
-  defp use_mock? do
-    case {System.get_env("LIVE_MODE"), System.get_env("LIVE_TESTS")} do
-      {"true", _} -> false
-      {_, "true"} -> false
-      _ -> Config.use_mock?()
-    end
+    Runtime.use_mock?() and is_nil(transport) and not Runtime.force_real?(options)
   end
 
   defp mock_prompt_from(prompt) when is_binary(prompt), do: nil

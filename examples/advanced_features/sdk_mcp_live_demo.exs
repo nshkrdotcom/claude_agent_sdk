@@ -184,7 +184,7 @@ try do
     IO.puts("  2. The server was passed to Claude via mcp_servers option")
     IO.puts("  3. Claude discovered the tools via MCP 'tools/list' request")
     IO.puts("  4. Claude used the tools via MCP 'tools/call' requests")
-    IO.puts("  5. Tool execution happened in-process (no subprocess overhead)")
+    IO.puts("  5. Tool execution happened in-process and was dispatched asynchronously")
     IO.puts("\n💡 Key Benefits:")
     IO.puts("  - Tools run in the same Elixir process")
     IO.puts("  - No subprocess spawning or IPC overhead")

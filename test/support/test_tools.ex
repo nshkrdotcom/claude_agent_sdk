@@ -88,3 +88,22 @@ defmodule ClaudeAgentSDK.TestSupport.ImageTools do
     end
   end
 end
+
+defmodule ClaudeAgentSDK.TestSupport.SlowTools do
+  @moduledoc false
+
+  use ClaudeAgentSDK.Tool
+
+  deftool :slow_echo,
+          "Sleeps for a short period before returning",
+          %{
+            type: "object",
+            properties: %{sleep_ms: %{type: "number"}},
+            required: ["sleep_ms"]
+          } do
+    def execute(%{"sleep_ms" => sleep_ms}) do
+      Process.sleep(trunc(sleep_ms))
+      {:ok, %{"content" => [%{"type" => "text", "text" => "slow tool done"}]}}
+    end
+  end
+end

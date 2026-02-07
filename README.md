@@ -112,6 +112,9 @@ end)
 Streaming.close_session(session)
 ```
 
+If session initialization or message send fails, the stream now emits an immediate
+`%{type: :error, error: reason}` event instead of waiting for the 5-minute stream timeout.
+
 ---
 
 ## Authentication
@@ -311,12 +314,18 @@ children = [
 config :claude_agent_sdk, task_supervisor: MyApp.ClaudeTaskSupervisor
 ```
 
-If the configured supervisor is missing at runtime, the SDK logs a warning and
-falls back to `Task.start/1`. For stricter behavior in dev/test:
+If an explicitly configured supervisor is missing at runtime, the SDK logs a warning and
+falls back to `Task.start/1`. With default settings, missing
+`ClaudeAgentSDK.TaskSupervisor` falls back silently for backward compatibility.
+For stricter behavior in dev/test:
 
 ```elixir
 config :claude_agent_sdk, task_supervisor_strict: true
 ```
+
+In strict mode, `ClaudeAgentSDK.TaskSupervisor.start_child/2` returns
+`{:error, {:task_supervisor_unavailable, supervisor}}` instead of spawning
+an unsupervised fallback task.
 
 ### Permission System
 
@@ -433,7 +442,11 @@ config :claude_agent_sdk,
   # Timeout for in-process tool execution tasks in Tool.Registry
   tool_execution_timeout_ms: 30_000,
   # Query CLI stream backend module
-  cli_stream_module: ClaudeAgentSDK.Query.CLIStream
+  cli_stream_module: ClaudeAgentSDK.Query.CLIStream,
+  # Fail fast when configured task supervisor is unavailable
+  task_supervisor_strict: false,
+  # Max age (seconds) for stale temp --agents files cleanup
+  agents_temp_file_max_age_seconds: 86_400
 ```
 
 `config :claude_agent_sdk, :process_module` is still read as a fallback for query streaming,
@@ -445,6 +458,10 @@ but `list/search` can be briefly incomplete immediately after boot while warmup 
 `Transport.Port`, `Transport.Erlexec`, and `Streaming.Session` support `startup_mode: :lazy`
 to defer subprocess startup to `handle_continue/2`. In lazy mode, `start_link` can succeed
 before the subprocess is spawned; startup failures then surface as process exit after init.
+
+Query-side transport errors normalize equivalent reasons to stable atoms where possible:
+`:port_closed` is treated as `:not_connected`, and `{:command_not_found, "claude"}`
+is treated as `:cli_not_found`.
 
 ### SDK Logging
 

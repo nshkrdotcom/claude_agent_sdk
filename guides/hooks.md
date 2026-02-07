@@ -1161,12 +1161,21 @@ children = [
 config :claude_agent_sdk, task_supervisor: MyApp.ClaudeTaskSupervisor
 ```
 
-If the configured supervisor is missing at runtime, the SDK logs a warning and
-falls back to `Task.start/1`. For stricter behavior in dev/test:
+If an explicitly configured supervisor is missing at runtime, the SDK logs a warning and
+falls back to `Task.start/1`. With default settings, missing
+`ClaudeAgentSDK.TaskSupervisor` falls back silently for backward compatibility.
+For stricter behavior in dev/test:
 
 ```elixir
 config :claude_agent_sdk, task_supervisor_strict: true
 ```
+
+In strict mode, `ClaudeAgentSDK.TaskSupervisor.start_child/2` returns
+`{:error, {:task_supervisor_unavailable, supervisor}}` instead of creating
+an unsupervised fallback task.
+
+SDK MCP `tools/call` requests are dispatched asynchronously, so long-running tool
+execution no longer blocks the main `Client` callback path.
 
 ### 5. Use ETS for Stateful Hooks
 

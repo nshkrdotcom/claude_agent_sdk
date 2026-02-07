@@ -132,19 +132,14 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
           query_timed_out?(state) ->
             safe_stop(client_pid)
 
-            error_msg = %Message{
-              type: :result,
-              subtype: :error_during_execution,
-              data: %{
-                error: "Timed out waiting for Claude CLI response",
-                session_id: "timeout",
-                is_error: true
-              }
-            }
+            error_msg =
+              Message.error_result("Timed out waiting for Claude CLI response",
+                session_id: "timeout"
+              )
 
             {[error_msg], {:ok, %{state | done?: true}}}
 
-          Process.alive?(client_pid) ->
+          process_running?(client_pid) ->
             stream_next({:ok, state})
 
           true ->
@@ -178,19 +173,20 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
   defp query_timed_out?(_), do: false
 
   defp safe_stop(client_pid) when is_pid(client_pid) do
-    if Process.alive?(client_pid) do
-      Client.stop(client_pid)
-    end
-
+    Client.stop(client_pid)
+  catch
+    :exit, {:noproc, _} -> :ok
+    :exit, :noproc -> :ok
+  else
+    _ -> :ok
+  after
     :ok
   end
 
   defp cleanup_client({:ok, %{client: client_pid, ref: ref}}) when is_pid(client_pid) do
     Logger.debug("Stopping control client for query", pid: inspect(client_pid))
 
-    if is_reference(ref) and Process.alive?(client_pid) do
-      GenServer.cast(client_pid, {:unsubscribe, ref})
-    end
+    maybe_unsubscribe(client_pid, ref)
 
     safe_stop(client_pid)
   end
@@ -223,16 +219,19 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
   defp prompt_type(_prompt), do: :stream
 
   defp make_error_result(error_message) do
-    error_msg = %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: error_message,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    error_msg = Message.error_result(error_message)
 
     {:error, [error_msg]}
   end
+
+  defp maybe_unsubscribe(client_pid, ref) when is_pid(client_pid) and is_reference(ref) do
+    GenServer.cast(client_pid, {:unsubscribe, ref})
+  catch
+    :exit, {:noproc, _} -> :ok
+    :exit, :noproc -> :ok
+  end
+
+  defp maybe_unsubscribe(_client_pid, _ref), do: :ok
+
+  defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
 end

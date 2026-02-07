@@ -56,7 +56,7 @@ defmodule ClaudeAgentSDK.DebugMode do
 
   """
 
-  alias ClaudeAgentSDK.{AuthChecker, BuildEnv, ContentExtractor, Message, Options}
+  alias ClaudeAgentSDK.{AuthChecker, BuildEnv, ContentExtractor, Message, Options, Runtime}
 
   @doc """
   Executes a query in debug mode with detailed logging and timing.
@@ -303,7 +303,7 @@ defmodule ClaudeAgentSDK.DebugMode do
     # Check environment
     IO.puts("📋 Environment:")
     IO.puts("   Build env: #{BuildEnv.current()}")
-    IO.puts("   Mock enabled: #{Application.get_env(:claude_agent_sdk, :use_mock, false)}")
+    IO.puts("   Mock enabled: #{Runtime.use_mock?()}")
     IO.puts("   Elixir: #{System.version()}")
     IO.puts("   OTP: #{System.otp_release()}")
 
@@ -492,7 +492,7 @@ defmodule ClaudeAgentSDK.DebugMode do
 
   defp check_environment do
     mock_status =
-      if Application.get_env(:claude_agent_sdk, :use_mock, false), do: "mock", else: "live"
+      if Runtime.use_mock?(), do: "mock", else: "live"
 
     "#{BuildEnv.current()}/#{mock_status}"
   end
@@ -686,7 +686,7 @@ defmodule ClaudeAgentSDK.DebugMode do
 
   defp test_basic_connectivity do
     # Check if mocking is enabled
-    if Application.get_env(:claude_agent_sdk, :use_mock, false) do
+    if Runtime.use_mock?() do
       IO.puts("   ✅ Basic connectivity OK (mocked)")
     else
       perform_connectivity_test()

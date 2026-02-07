@@ -76,13 +76,9 @@ defmodule ClaudeAgentSDK.Client do
   @default_stream_buffer_limit 1_000
   @init_timeout_env_var "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT"
   @edit_tools ["Write", "Edit", "MultiEdit"]
-  @check_inbound_size_invariant Application.compile_env(
-                                  :claude_agent_sdk,
-                                  :check_inbound_size_invariant,
-                                  Mix.env() == :test
-                                )
 
   # Client state intentionally mirrors the control-protocol lifecycle and streaming buffers.
+  # credo:disable-for-next-line Credo.Check.Warning.StructFieldAmount
   defstruct port: nil,
             transport: nil,
             transport_module: nil,
@@ -91,6 +87,7 @@ defmodule ClaudeAgentSDK.Client do
             registry: nil,
             hook_callback_timeouts: %{},
             subscribers: %{},
+            subscriber_monitors: %{},
             pending_requests: %{},
             pending_callbacks: %{},
             initialized: false,
@@ -124,6 +121,7 @@ defmodule ClaudeAgentSDK.Client do
   - `registry` - Hook callback registry
   - `hook_callback_timeouts` - Map of callback_id => timeout_ms
   - `subscribers` - Map of ref => pid for streaming subscriptions
+  - `subscriber_monitors` - Map of ref => monitor_ref for subscriber lifecycle cleanup
   - `pending_requests` - Map of request_id => {from, ref}
   - `pending_callbacks` - Map of request_id => %{pid, monitor_ref, signal, type} for in-flight control callbacks
   - `initialized` - Whether initialization handshake completed
@@ -149,6 +147,7 @@ defmodule ClaudeAgentSDK.Client do
           registry: Registry.t(),
           hook_callback_timeouts: %{String.t() => pos_integer()},
           subscribers: %{reference() => pid()},
+          subscriber_monitors: %{reference() => reference()},
           pending_requests: %{String.t() => {GenServer.from(), reference()}},
           pending_callbacks: %{
             String.t() => %{
@@ -652,6 +651,7 @@ defmodule ClaudeAgentSDK.Client do
         registry: Registry.new(),
         hook_callback_timeouts: %{},
         subscribers: %{},
+        subscriber_monitors: %{},
         pending_requests: %{},
         pending_callbacks: %{},
         initialized: false,
@@ -736,8 +736,7 @@ defmodule ClaudeAgentSDK.Client do
     {pid, _from_ref} = from
     was_empty = map_size(state.subscribers) == 0
 
-    # Add to subscribers map
-    subscribers = Map.put(state.subscribers, ref, pid)
+    state = put_subscriber(state, ref, pid)
 
     # Activate if no active subscriber, otherwise subscriber waits
     new_active =
@@ -749,8 +748,7 @@ defmodule ClaudeAgentSDK.Client do
 
     state = %{
       state
-      | subscribers: subscribers,
-        active_subscriber: new_active
+      | active_subscriber: new_active
     }
 
     state =
@@ -785,13 +783,13 @@ defmodule ClaudeAgentSDK.Client do
     # For backwards compat, create a ref for this pid subscription
     ref = make_ref()
     was_empty = map_size(state.subscribers) == 0
-    subscribers = Map.put(state.subscribers, ref, pid)
+    state = put_subscriber(state, ref, pid)
 
     state =
       if state.active_subscriber == nil do
-        %{state | subscribers: subscribers, active_subscriber: ref}
+        %{state | active_subscriber: ref}
       else
-        %{state | subscribers: subscribers}
+        state
       end
 
     state =
@@ -973,36 +971,7 @@ defmodule ClaudeAgentSDK.Client do
 
   @impl true
   def handle_cast({:unsubscribe, ref}, state) do
-    # Remove from subscribers map
-    subscribers = Map.delete(state.subscribers, ref)
-
-    # Remove from queue if present
-    queue = Enum.reject(state.subscriber_queue, fn {r, _msg} -> r == ref end)
-
-    # If this was the active subscriber, activate next in queue
-    {new_active, new_queue} =
-      if state.active_subscriber == ref do
-        case queue do
-          [{next_ref, next_message} | rest] ->
-            # Send queued message and activate
-            json = encode_outgoing_message(next_message)
-            _ = send_payload(state, json)
-            {next_ref, rest}
-
-          [] ->
-            {nil, []}
-        end
-      else
-        {state.active_subscriber, queue}
-      end
-
-    {:noreply,
-     %{
-       state
-       | subscribers: subscribers,
-         subscriber_queue: new_queue,
-         active_subscriber: new_active
-     }}
+    {:noreply, drop_subscriber(state, ref)}
   end
 
   @impl true
@@ -1183,6 +1152,11 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
+  def handle_info({:sdk_mcp_async_response, request_id, response}, state) do
+    send_sdk_mcp_response(state, request_id, response)
+    {:noreply, state}
+  end
+
   @impl true
   def handle_info({port, {:data, {:eol, line}}}, %{port: port} = state) when is_binary(line) do
     # Process complete line (EOL mode from port)
@@ -1230,20 +1204,23 @@ defmodule ClaudeAgentSDK.Client do
   # 2. Send an error response to the CLI
   # 3. Clean up the pending_callbacks map
   @impl true
-  def handle_info({:DOWN, _ref, :process, _pid, :normal}, state) do
-    # Normal exits can arrive before the callback_result message; let the result handler clean up.
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
-    case find_callback_by_monitor_ref(state.pending_callbacks, ref) do
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) when is_reference(ref) do
+    case find_subscriber_ref_by_monitor(state, ref) do
       nil ->
-        # Not a callback we're tracking, ignore
-        {:noreply, state}
+        case find_callback_by_monitor_ref(state.pending_callbacks, ref) do
+          nil ->
+            {:noreply, state}
 
-      {request_id, entry} ->
-        handle_callback_down(state, request_id, entry, reason)
+          {_request_id, _entry} when reason == :normal ->
+            # Normal exits can arrive before callback_result messages.
+            {:noreply, state}
+
+          {request_id, entry} ->
+            handle_callback_down(state, request_id, entry, reason)
+        end
+
+      subscriber_ref ->
+        {:noreply, drop_subscriber(state, subscriber_ref, skip_demonitor: true)}
     end
   end
 
@@ -2465,6 +2442,70 @@ defmodule ClaudeAgentSDK.Client do
     Jason.encode!(response)
   end
 
+  defp put_subscriber(state, ref, pid) when is_reference(ref) and is_pid(pid) do
+    state = remove_subscriber_monitor(state, ref)
+    monitor_ref = Process.monitor(pid)
+
+    %{
+      state
+      | subscribers: Map.put(state.subscribers, ref, pid),
+        subscriber_monitors: Map.put(state.subscriber_monitors, ref, monitor_ref)
+    }
+  end
+
+  defp remove_subscriber_monitor(state, ref) do
+    case Map.pop(state.subscriber_monitors, ref) do
+      {monitor_ref, monitors} when is_reference(monitor_ref) ->
+        Process.demonitor(monitor_ref, [:flush])
+        %{state | subscriber_monitors: monitors}
+
+      {_, monitors} ->
+        %{state | subscriber_monitors: monitors}
+    end
+  end
+
+  defp drop_subscriber(state, ref, opts \\ []) do
+    skip_demonitor? = Keyword.get(opts, :skip_demonitor, false)
+
+    state =
+      if skip_demonitor? do
+        %{state | subscriber_monitors: Map.delete(state.subscriber_monitors, ref)}
+      else
+        remove_subscriber_monitor(state, ref)
+      end
+
+    subscribers = Map.delete(state.subscribers, ref)
+    queue = Enum.reject(state.subscriber_queue, fn {queue_ref, _msg} -> queue_ref == ref end)
+
+    {new_active, new_queue} =
+      if state.active_subscriber == ref do
+        case queue do
+          [{next_ref, next_message} | rest] ->
+            json = encode_outgoing_message(next_message)
+            _ = send_payload(state, json)
+            {next_ref, rest}
+
+          [] ->
+            {nil, []}
+        end
+      else
+        {state.active_subscriber, queue}
+      end
+
+    %{
+      state
+      | subscribers: subscribers,
+        subscriber_queue: new_queue,
+        active_subscriber: new_active
+    }
+  end
+
+  defp find_subscriber_ref_by_monitor(state, monitor_ref) when is_reference(monitor_ref) do
+    Enum.find_value(state.subscriber_monitors, fn {subscriber_ref, ref} ->
+      if ref == monitor_ref, do: subscriber_ref
+    end)
+  end
+
   defp put_pending_callback(state, request_id, pid, monitor_ref, signal, type) do
     pending =
       Map.put(state.pending_callbacks, request_id, %{
@@ -2686,19 +2727,21 @@ defmodule ClaudeAgentSDK.Client do
     }
   end
 
-  if @check_inbound_size_invariant do
-    defp maybe_assert_inbound_size_invariant(queue, size) do
+  defp maybe_assert_inbound_size_invariant(queue, size) do
+    if check_inbound_size_invariant?() do
       actual = :queue.len(queue)
 
       if actual != size do
         raise ArgumentError,
               "pending_inbound_size invariant violated: expected #{size}, got #{actual}"
       end
-
-      :ok
     end
-  else
-    defp maybe_assert_inbound_size_invariant(_queue, _size), do: :ok
+
+    :ok
+  end
+
+  defp check_inbound_size_invariant? do
+    Application.get_env(:claude_agent_sdk, :check_inbound_size_invariant, false)
   end
 
   defp buffer_stream_events(state, events) do
@@ -2731,7 +2774,7 @@ defmodule ClaudeAgentSDK.Client do
     after
       30_000 ->
         # No message for 30 seconds, check if client still alive
-        if Process.alive?(client) do
+        if process_running?(client) do
           receive_next_message({client, ref})
         else
           {:halt, {client, ref}}
@@ -2799,11 +2842,82 @@ defmodule ClaudeAgentSDK.Client do
         state
 
       registry_pid ->
-        # Route to JSONRPC handler
-        response = handle_sdk_mcp_jsonrpc(registry_pid, server_name, message, sdk_mcp_info)
+        dispatch_sdk_mcp_request(
+          state,
+          request_id,
+          registry_pid,
+          server_name,
+          message,
+          sdk_mcp_info
+        )
+    end
+  end
+
+  defp dispatch_sdk_mcp_request(
+         state,
+         request_id,
+         registry_pid,
+         server_name,
+         %{"method" => "tools/call"} = message,
+         sdk_mcp_info
+       ) do
+    client = self()
+    message_id = message["id"]
+
+    case TaskSupervisor.start_child(fn ->
+           response =
+             safe_handle_sdk_mcp_jsonrpc(
+               registry_pid,
+               server_name,
+               message,
+               sdk_mcp_info,
+               message_id
+             )
+
+           send(client, {:sdk_mcp_async_response, request_id, response})
+         end) do
+      {:ok, _pid} ->
+        state
+
+      {:error, reason} ->
+        response = sdk_mcp_internal_error_response(message_id, reason)
         send_sdk_mcp_response(state, request_id, response)
         state
     end
+  end
+
+  defp dispatch_sdk_mcp_request(
+         state,
+         request_id,
+         registry_pid,
+         server_name,
+         message,
+         sdk_mcp_info
+       ) do
+    response = handle_sdk_mcp_jsonrpc(registry_pid, server_name, message, sdk_mcp_info)
+    send_sdk_mcp_response(state, request_id, response)
+    state
+  end
+
+  defp safe_handle_sdk_mcp_jsonrpc(registry_pid, server_name, message, sdk_mcp_info, message_id) do
+    handle_sdk_mcp_jsonrpc(registry_pid, server_name, message, sdk_mcp_info)
+  rescue
+    exception ->
+      sdk_mcp_internal_error_response(message_id, Exception.message(exception))
+  catch
+    kind, reason ->
+      sdk_mcp_internal_error_response(message_id, {kind, reason})
+  end
+
+  defp sdk_mcp_internal_error_response(message_id, reason) do
+    %{
+      "jsonrpc" => "2.0",
+      "id" => message_id,
+      "error" => %{
+        "code" => -32_603,
+        "message" => "Internal error: #{inspect(reason)}"
+      }
+    }
   end
 
   @doc false
@@ -3053,6 +3167,8 @@ defmodule ClaudeAgentSDK.Client do
   defp connected?(%{port: port}) when is_port(port), do: true
   defp connected?(_), do: false
 
+  defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
+
   defp send_payload(%{transport: transport, transport_module: module}, payload)
        when is_pid(transport) do
     module.send(transport, ensure_newline(payload))
@@ -3177,28 +3293,10 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp transport_error_message(%ClaudeAgentSDK.Errors.CLIJSONDecodeError{} = error) do
-    %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: Exception.message(error),
-        error_struct: error,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    Message.error_result(Exception.message(error), error_struct: error)
   end
 
   defp transport_error_message(error) do
-    %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: "Transport error: #{inspect(error)}",
-        error_struct: error,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    Message.error_result("Transport error: #{inspect(error)}", error_struct: error)
   end
 end

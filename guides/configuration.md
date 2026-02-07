@@ -805,11 +805,18 @@ config :claude_agent_sdk,
   refresh_before_expiry: 86_400_000,      # 1 day in ms
   tool_execution_timeout_ms: 30_000,      # Tool.Registry execution timeout
   cli_stream_module: ClaudeAgentSDK.Query.CLIStream,
+  task_supervisor: ClaudeAgentSDK.TaskSupervisor,
+  task_supervisor_strict: false,          # true => return {:error, {:task_supervisor_unavailable, sup}}
+  agents_temp_file_max_age_seconds: 86_400,
+  check_inbound_size_invariant: false,
   log_level: :warning                     # :debug | :info | :warning | :error
 ```
 
 `process_module` is still read as a fallback for query streaming but is deprecated.
 Prefer `cli_stream_module`.
+
+Path defaults like `auth_file_path` and `session_storage_dir` are expanded at runtime.
+Using `~` stays portable across build/runtime users.
 
 ### Authentication by Provider
 

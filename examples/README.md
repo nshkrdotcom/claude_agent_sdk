@@ -16,10 +16,22 @@ Some examples that exercise in-process tools and query streaming are affected by
 ```elixir
 config :claude_agent_sdk,
   tool_execution_timeout_ms: 30_000,
-  cli_stream_module: ClaudeAgentSDK.Query.CLIStream
+  cli_stream_module: ClaudeAgentSDK.Query.CLIStream,
+  task_supervisor_strict: false,
+  agents_temp_file_max_age_seconds: 86_400
 ```
 
 `process_module` is still accepted as a fallback key for query streaming, but it is deprecated.
+
+All live examples call `Examples.Support.ensure_live!/0`, which starts
+`ClaudeAgentSDK.TaskSupervisor` for clean supervised async task execution.
+
+If you enable strict mode (`task_supervisor_strict: true`) and the configured task
+supervisor is missing, background task scheduling returns
+`{:error, {:task_supervisor_unavailable, supervisor}}` instead of unsupervised fallback.
+
+Transport-level close/missing-command errors normalize to `:not_connected` and
+`:cli_not_found` at query/control boundaries.
 
 For lifecycle tests and demos, transport/session modules also support `startup_mode: :lazy`
 to defer subprocess startup until `handle_continue/2`.
@@ -83,7 +95,7 @@ mix run examples/basic_example.exs
 |---------|-------------|
 | `advanced_features/agents_live.exs` | Multi-agent workflow via `resume/3` |
 | `advanced_features/permissions_live.exs` | Tool permission callback (`can_use_tool`), fails if CLI doesn't emit control callbacks |
-| `advanced_features/sdk_mcp_live_demo.exs` | SDK MCP tools invoked in-process |
+| `advanced_features/sdk_mcp_live_demo.exs` | SDK MCP tools invoked in-process (`tools/call` handled asynchronously in Client) |
 | `advanced_features/subagent_spawning_live.exs` | Parallel subagent spawning (research-agent pattern) |
 | `advanced_features/web_tools_live.exs` | WebSearch and WebFetch for web access |
 

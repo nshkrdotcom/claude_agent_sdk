@@ -796,6 +796,33 @@ defmodule MyApp.MCPToolsTest do
 end
 ```
 
+### Testing Async MCP Dispatch
+
+Long-running SDK MCP tool calls should not block the `Client` process mailbox.
+Keep a regression test that proves other requests are still handled while a slow tool runs.
+
+```elixir
+test "slow tools/call does not block client responsiveness" do
+  # 1) Trigger a slow tools/call request
+  # 2) While it is running, send a fast control request (or ping)
+  # 3) Assert the fast request returns before the slow tool finishes
+end
+```
+
+### Testing Strict TaskSupervisor Mode
+
+When strict mode is enabled, unavailable supervisors should fail fast with a stable error tuple:
+
+```elixir
+test "strict mode returns explicit unavailable supervisor error" do
+  Application.put_env(:claude_agent_sdk, :task_supervisor, Missing.Supervisor)
+  Application.put_env(:claude_agent_sdk, :task_supervisor_strict, true)
+
+  assert {:error, {:task_supervisor_unavailable, Missing.Supervisor}} =
+           ClaudeAgentSDK.TaskSupervisor.start_child(fn -> :ok end)
+end
+```
+
 ### Testing Streaming
 
 ```elixir
@@ -857,6 +884,9 @@ config :claude_agent_sdk,
 
 When testing SessionStore startup behavior, remember cache hydration is deferred.
 Use bounded retries/assertions for `list/search` immediately after start, or assert via `load_session/1` (disk fallback path).
+
+For transport failures, assert normalized reasons (`:not_connected`, `:cli_not_found`)
+instead of transport-specific internals (`:port_closed`, `{:command_not_found, "claude"}`).
 
 For transport/session startup lifecycle tests, `startup_mode: :lazy` lets you assert post-init
 startup failures deterministically (process exits after `start_link`).

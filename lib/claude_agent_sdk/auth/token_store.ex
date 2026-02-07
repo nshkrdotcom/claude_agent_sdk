@@ -20,7 +20,7 @@ defmodule ClaudeAgentSDK.Auth.TokenStore do
 
   ## Default File-Based Implementation
 
-  @default_path Path.expand("~/.claude_sdk/token.json")
+  @default_path "~/.claude_sdk/token.json"
 
   @doc """
   Saves token data to storage.

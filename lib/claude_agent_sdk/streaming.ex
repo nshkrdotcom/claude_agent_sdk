@@ -406,56 +406,54 @@ defmodule ClaudeAgentSDK.Streaming do
 
     with :ok <- Client.await_initialized(client_pid),
          :ok <- Client.send_message(client_pid, message) do
-      :ok
+      # Return stream that adapts client messages to events
+      # State: {client_pid, ref, status, accumulated_text, stop_reason}
+      # stop_reason is tracked so we can continue streaming for multi-turn tool conversations
+      Stream.resource(
+        fn -> {client_pid, ref, :active, "", nil} end,
+        fn state ->
+          case state do
+            {_client, _ref, :complete, _accumulated, _stop_reason} ->
+              {:halt, state}
+
+            {client, ref, :active, accumulated, stop_reason} ->
+              receive do
+                # Stream events from control client
+                {:stream_event, ^ref, event} ->
+                  {new_stop_reason, message_complete?} =
+                    Termination.step(event, stop_reason)
+
+                  new_status =
+                    if message_complete? do
+                      :complete
+                    else
+                      :active
+                    end
+
+                  new_accumulated = Map.get(event, :accumulated, accumulated)
+
+                  {[event], {client, ref, new_status, new_accumulated, new_stop_reason}}
+
+                # Regular messages (tool results, etc.) - convert to event format
+                {:claude_message, message} ->
+                  event = message_to_event(message, accumulated)
+                  {[event], state}
+              after
+                300_000 ->
+                  # 5 minutes timeout
+                  timeout_event = %{type: :error, error: :timeout}
+                  {[timeout_event], {client, ref, :complete, accumulated, stop_reason}}
+              end
+          end
+        end,
+        fn {client, ref, _, _, _} ->
+          GenServer.cast(client, {:unsubscribe, ref})
+        end
+      )
     else
       {:error, reason} ->
         return_error_stream(client_pid, ref, reason)
     end
-
-    # Return stream that adapts client messages to events
-    # State: {client_pid, ref, status, accumulated_text, stop_reason}
-    # stop_reason is tracked so we can continue streaming for multi-turn tool conversations
-    Stream.resource(
-      fn -> {client_pid, ref, :active, "", nil} end,
-      fn state ->
-        case state do
-          {_client, _ref, :complete, _accumulated, _stop_reason} ->
-            {:halt, state}
-
-          {client, ref, :active, accumulated, stop_reason} ->
-            receive do
-              # Stream events from control client
-              {:stream_event, ^ref, event} ->
-                {new_stop_reason, message_complete?} =
-                  Termination.step(event, stop_reason)
-
-                new_status =
-                  if message_complete? do
-                    :complete
-                  else
-                    :active
-                  end
-
-                new_accumulated = Map.get(event, :accumulated, accumulated)
-
-                {[event], {client, ref, new_status, new_accumulated, new_stop_reason}}
-
-              # Regular messages (tool results, etc.) - convert to event format
-              {:claude_message, message} ->
-                event = message_to_event(message, accumulated)
-                {[event], state}
-            after
-              300_000 ->
-                # 5 minutes timeout
-                timeout_event = %{type: :error, error: :timeout}
-                {[timeout_event], {client, ref, :complete, accumulated, stop_reason}}
-            end
-        end
-      end,
-      fn {client, ref, _, _, _} ->
-        GenServer.cast(client, {:unsubscribe, ref})
-      end
-    )
   end
 
   defp return_error_stream(client, ref, reason) do
@@ -470,8 +468,12 @@ defmodule ClaudeAgentSDK.Streaming do
             {[%{type: :error, error: reason}], {:done, client, ref, reason}}
         end
       end,
-      fn {client, ref, _} ->
-        GenServer.cast(client, {:unsubscribe, ref})
+      fn
+        {client, ref, _} ->
+          GenServer.cast(client, {:unsubscribe, ref})
+
+        {:done, client, ref, _reason} ->
+          GenServer.cast(client, {:unsubscribe, ref})
       end
     )
   end

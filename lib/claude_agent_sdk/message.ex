@@ -149,6 +149,30 @@ defmodule ClaudeAgentSDK.Message do
 
   def content_blocks(_message), do: []
 
+  @doc false
+  @spec error_result(String.t(), keyword()) :: t()
+  def error_result(error_message, opts \\ []) when is_binary(error_message) and is_list(opts) do
+    session_id = Keyword.get(opts, :session_id, "error")
+
+    data =
+      %{
+        error: error_message,
+        session_id: session_id,
+        is_error: true
+      }
+      |> maybe_put_error_struct(Keyword.get(opts, :error_struct))
+
+    %__MODULE__{
+      type: :result,
+      subtype: :error_during_execution,
+      data: data,
+      raw: %{}
+    }
+  end
+
+  defp maybe_put_error_struct(data, nil), do: data
+  defp maybe_put_error_struct(data, error_struct), do: Map.put(data, :error_struct, error_struct)
+
   # Manual JSON parsing for our specific message formats
   defp parse_json_manual(str) do
     cond do

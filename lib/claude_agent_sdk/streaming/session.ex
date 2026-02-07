@@ -42,9 +42,11 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   use GenServer
   alias ClaudeAgentSDK.Log, as: Logger
 
-  alias ClaudeAgentSDK.{CLI, Options}
+  alias ClaudeAgentSDK.{CLI, Options, Runtime}
+  alias ClaudeAgentSDK.Shell
   alias ClaudeAgentSDK.Streaming.EventParser
   alias ClaudeAgentSDK.Streaming.Termination
+  alias ClaudeAgentSDK.Transport.ExecOptions
 
   @type subscriber_ref :: reference()
   @type subscriber_pid :: pid()
@@ -60,6 +62,8 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     :options,
     # %{ref => pid} - all subscribers
     :subscribers,
+    # %{ref => monitor_ref} - subscriber process monitors
+    :subscriber_monitors,
     # [{ref, message}] - FIFO queue of pending subscribers with their messages
     :subscriber_queue,
     # ref - currently active subscriber receiving events
@@ -279,8 +283,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   @impl true
   def handle_call({:subscribe, ref, pid}, _from, state) do
-    # Add to subscribers map
-    subscribers = Map.put(state.subscribers, ref, pid)
+    state = put_subscriber(state, ref, pid)
 
     # If no active subscriber, activate this one immediately
     new_active =
@@ -290,7 +293,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
         state.active_subscriber
       end
 
-    {:reply, :ok, %{state | subscribers: subscribers, active_subscriber: new_active}}
+    {:reply, :ok, %{state | active_subscriber: new_active}}
   end
 
   @impl true
@@ -334,28 +337,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   @impl true
   def handle_cast({:unsubscribe, ref}, state) do
-    subscribers = Map.delete(state.subscribers, ref)
-    queue = Enum.reject(state.subscriber_queue, fn {r, _msg} -> r == ref end)
-
-    # If this was the active subscriber, activate next in queue
-    {new_active, new_queue} =
-      if state.active_subscriber == ref do
-        case queue do
-          [] -> {nil, []}
-          # Will be activated by message_stop
-          _ -> {nil, queue}
-        end
-      else
-        {state.active_subscriber, queue}
-      end
-
-    {:noreply,
-     %{
-       state
-       | subscribers: subscribers,
-         subscriber_queue: new_queue,
-         active_subscriber: new_active
-     }}
+    {:noreply, drop_subscriber(state, ref)}
   end
 
   @impl true
@@ -384,8 +366,20 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   def handle_info({:stderr, _os_pid, _data}, state), do: {:noreply, state}
 
-  def handle_info({:DOWN, _os_pid, :process, _pid, _reason}, %{subprocess: nil} = state) do
+  def handle_info({:DOWN, os_pid, :process, _pid, _reason}, %{subprocess: nil} = state)
+      when is_integer(os_pid) do
     {:noreply, state}
+  end
+
+  def handle_info({:DOWN, monitor_ref, :process, _pid, _reason}, state)
+      when is_reference(monitor_ref) do
+    case find_subscriber_ref_by_monitor(state, monitor_ref) do
+      nil ->
+        {:noreply, state}
+
+      subscriber_ref ->
+        {:noreply, drop_subscriber(state, subscriber_ref, skip_demonitor: true, promote: true)}
+    end
   end
 
   @impl true
@@ -435,6 +429,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
       session_id: nil,
       options: opts,
       subscribers: %{},
+      subscriber_monitors: %{},
       subscriber_queue: [],
       active_subscriber: nil,
       message_buffer: "",
@@ -558,7 +553,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   defp spawn_subprocess(args, %Options{} = options) do
-    ensure_erlexec_started!()
+    Runtime.ensure_erlexec_started!()
 
     if is_binary(options.cwd) and not File.dir?(options.cwd) do
       {:error, {:cwd_not_found, options.cwd}}
@@ -593,54 +588,18 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   defp shell_escape(arg) when is_binary(arg) do
-    # Simple shell escaping - wrap in quotes if contains special chars or is empty
-    if arg == "" or
-         String.contains?(arg, [" ", "\"", "'", "$", "`", "\\", "&", "|", ";", "(", ")", "<", ">"]) do
-      ~s("#{String.replace(arg, "\"", "\\\"")}")
-    else
-      arg
-    end
+    Shell.escape_arg(arg)
   end
 
-  defp ensure_erlexec_started! do
-    case Application.ensure_all_started(:erlexec) do
-      {:ok, _} -> :ok
-      {:error, reason} -> raise "Failed to start erlexec application: #{inspect(reason)}"
-    end
-  end
+  @doc false
+  def __shell_escape__(arg) when is_binary(arg), do: shell_escape(arg)
 
   defp build_exec_opts(%Options{} = options) do
-    env = build_env_vars(options)
-
-    [:stdin, :stdout, :stderr, :monitor]
-    |> maybe_put_env_option(env)
-    |> maybe_put_user_option(options.user)
-    |> maybe_put_cd_option(options.cwd)
+    ExecOptions.erlexec(options)
   end
 
   @doc false
   def __exec_opts__(%Options{} = options), do: build_exec_opts(options)
-
-  defp build_env_vars(%Options{} = options) do
-    options
-    |> ClaudeAgentSDK.Process.__env_vars__()
-    |> Enum.map(fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
-  end
-
-  defp maybe_put_env_option(opts, []), do: opts
-  defp maybe_put_env_option(opts, env) when is_list(env), do: [{:env, env} | opts]
-
-  defp maybe_put_user_option(opts, nil), do: opts
-
-  defp maybe_put_user_option(opts, user) when is_binary(user) do
-    [{:user, String.to_charlist(user)} | opts]
-  end
-
-  defp maybe_put_cd_option(opts, nil), do: opts
-
-  defp maybe_put_cd_option(opts, cwd) when is_binary(cwd) do
-    [{:cd, cwd} | opts]
-  end
 
   defp env_keys(opts) do
     opts
@@ -651,6 +610,74 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     |> Enum.map(fn
       {key, _} when is_list(key) -> to_string(key)
       {key, _} -> inspect(key)
+    end)
+  end
+
+  defp put_subscriber(state, ref, pid) when is_reference(ref) and is_pid(pid) do
+    state = remove_subscriber_monitor(state, ref)
+    monitor_ref = Process.monitor(pid)
+
+    %{
+      state
+      | subscribers: Map.put(state.subscribers, ref, pid),
+        subscriber_monitors: Map.put(state.subscriber_monitors, ref, monitor_ref)
+    }
+  end
+
+  defp remove_subscriber_monitor(state, ref) do
+    case Map.pop(state.subscriber_monitors, ref) do
+      {monitor_ref, monitors} when is_reference(monitor_ref) ->
+        Process.demonitor(monitor_ref, [:flush])
+        %{state | subscriber_monitors: monitors}
+
+      {_, monitors} ->
+        %{state | subscriber_monitors: monitors}
+    end
+  end
+
+  defp drop_subscriber(state, ref, opts \\ []) do
+    skip_demonitor? = Keyword.get(opts, :skip_demonitor, false)
+    promote? = Keyword.get(opts, :promote, false)
+
+    state =
+      if skip_demonitor? do
+        %{state | subscriber_monitors: Map.delete(state.subscriber_monitors, ref)}
+      else
+        remove_subscriber_monitor(state, ref)
+      end
+
+    subscribers = Map.delete(state.subscribers, ref)
+    queue = Enum.reject(state.subscriber_queue, fn {queue_ref, _msg} -> queue_ref == ref end)
+
+    state = %{state | subscribers: subscribers, subscriber_queue: queue}
+
+    cond do
+      state.active_subscriber != ref ->
+        state
+
+      not promote? ->
+        %{state | active_subscriber: nil}
+
+      true ->
+        promote_subscriber_after_drop(state)
+    end
+  end
+
+  defp promote_subscriber_after_drop(%{subscriber_queue: []} = state) do
+    %{state | active_subscriber: nil}
+  end
+
+  defp promote_subscriber_after_drop(
+         %{subscriber_queue: [{next_ref, next_message} | rest]} = state
+       ) do
+    state = %{state | active_subscriber: next_ref, subscriber_queue: rest}
+    :ok = send_queued_message(state, next_message)
+    state
+  end
+
+  defp find_subscriber_ref_by_monitor(state, monitor_ref) when is_reference(monitor_ref) do
+    Enum.find_value(state.subscriber_monitors, fn {subscriber_ref, ref} ->
+      if ref == monitor_ref, do: subscriber_ref
     end)
   end
 

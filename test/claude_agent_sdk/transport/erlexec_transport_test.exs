@@ -96,6 +96,20 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
     ErlexecTransport.close(transport)
   end
 
+  test "close/1 is idempotent when process is already gone" do
+    script =
+      create_test_script("""
+      while read -r line; do
+        echo "$line"
+      done
+      """)
+
+    {:ok, transport} = ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+    assert :ok = ErlexecTransport.close(transport)
+    assert :ok = ErlexecTransport.close(transport)
+  end
+
   defp create_test_script(body) do
     dir = Path.join(System.tmp_dir!(), "erlexec_transport_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)

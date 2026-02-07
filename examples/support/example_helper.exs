@@ -47,6 +47,7 @@ defmodule Examples.Support do
 
   def ensure_live! do
     Application.put_env(:claude_agent_sdk, :use_mock, false)
+    ensure_task_supervisor_started!()
 
     case CLI.find_executable() do
       {:ok, _path} ->
@@ -62,6 +63,19 @@ defmodule Examples.Support do
         Then authenticate:
           claude login
         """
+    end
+  end
+
+  defp ensure_task_supervisor_started! do
+    case ClaudeAgentSDK.TaskSupervisor.start_link() do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        :ok
+
+      other ->
+        raise "Failed to start ClaudeAgentSDK.TaskSupervisor: #{inspect(other)}"
     end
   end
 

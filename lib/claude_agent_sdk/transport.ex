@@ -60,4 +60,10 @@ defmodule ClaudeAgentSDK.Transport do
   @callback end_input(t()) :: :ok | {:error, term()}
 
   @optional_callbacks [end_input: 1]
+
+  @doc false
+  @spec normalize_reason(term()) :: term()
+  def normalize_reason(:port_closed), do: :not_connected
+  def normalize_reason({:command_not_found, "claude"}), do: :cli_not_found
+  def normalize_reason(reason), do: reason
 end

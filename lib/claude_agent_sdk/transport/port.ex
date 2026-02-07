@@ -369,7 +369,7 @@ defmodule ClaudeAgentSDK.Transport.Port do
             {:ok, {executable, args}}
 
           {:error, :not_found} ->
-            {:error, {:command_not_found, "claude"}}
+            {:error, :cli_not_found}
         end
 
       _ ->

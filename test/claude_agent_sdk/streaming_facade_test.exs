@@ -111,6 +111,28 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
 
       close_session_safe(session)
     end
+
+    test "returns immediate error event when control client send fails" do
+      hook = TestFixtures.allow_all_hook()
+      options = %Options{hooks: %{pre_tool_use: [hook]}}
+
+      {:ok, {:control_client, client} = session} = start_session_with_mock(options)
+
+      :sys.replace_state(client, fn state ->
+        %{state | transport: nil}
+      end)
+
+      task =
+        Task.async(fn ->
+          session
+          |> Streaming.send_message("Hello")
+          |> Enum.take(1)
+        end)
+
+      assert [%{type: :error, error: :not_connected}] = Task.await(task, 1_000)
+
+      close_session_safe(session)
+    end
   end
 
   describe "close_session/1 polymorphism" do

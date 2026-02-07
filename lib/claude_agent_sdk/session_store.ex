@@ -51,7 +51,7 @@ defmodule ClaudeAgentSDK.SessionStore do
   use GenServer
   alias ClaudeAgentSDK.Log, as: Logger
 
-  @default_storage_dir Path.expand("~/.claude_sdk/sessions")
+  @default_storage_dir "~/.claude_sdk/sessions"
   @max_age_days 30
 
   defstruct [
@@ -195,18 +195,13 @@ defmodule ClaudeAgentSDK.SessionStore do
 
   @impl true
   def init(opts) do
-    storage_dir =
-      Keyword.get(
-        opts,
-        :storage_dir,
-        Application.get_env(:claude_agent_sdk, :session_storage_dir, @default_storage_dir)
-      )
+    storage_dir = resolve_storage_dir(opts)
 
     # Ensure storage directory exists
     File.mkdir_p!(storage_dir)
 
     # Create ETS cache
-    cache = :ets.new(:session_cache, [:set, :public])
+    cache = :ets.new(:session_cache, [:set, :protected, read_concurrency: true])
 
     # Schedule periodic cleanup
     cleanup_timer = schedule_cleanup()
@@ -219,6 +214,15 @@ defmodule ClaudeAgentSDK.SessionStore do
     }
 
     {:ok, state, {:continue, :load_cache}}
+  end
+
+  defp resolve_storage_dir(opts) do
+    opts
+    |> Keyword.get(
+      :storage_dir,
+      Application.get_env(:claude_agent_sdk, :session_storage_dir, @default_storage_dir)
+    )
+    |> Path.expand()
   end
 
   @impl true

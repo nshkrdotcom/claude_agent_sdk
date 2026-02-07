@@ -14,7 +14,9 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   alias ClaudeAgentSDK.{CLI, Options}
   alias ClaudeAgentSDK.Process, as: SDKProcess
+  alias ClaudeAgentSDK.Runtime
   alias ClaudeAgentSDK.Transport.AgentsFile
+  alias ClaudeAgentSDK.Transport.ExecOptions
   alias ClaudeAgentSDK.Transport.Setup
 
   @default_max_buffer_size 1_048_576
@@ -52,6 +54,9 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   @impl ClaudeAgentSDK.Transport
   def close(transport) when is_pid(transport) do
     GenServer.stop(transport, :normal)
+  catch
+    :exit, {:noproc, _} -> :ok
+    :exit, :noproc -> :ok
   end
 
   @impl ClaudeAgentSDK.Transport
@@ -123,10 +128,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   defp ensure_erlexec_started do
-    case Application.ensure_all_started(:erlexec) do
-      {:ok, _} -> :ok
-      {:error, reason} -> {:error, {:erlexec_not_started, reason}}
-    end
+    Runtime.ensure_erlexec_started()
   end
 
   defp startup_mode_from_opts(opts) do
@@ -376,27 +378,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   defp build_exec_opts(%Options{} = options) do
-    env =
-      options
-      |> SDKProcess.__env_vars__()
-      |> Enum.map(fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
-
-    [:stdin, :stdout, :stderr, :monitor]
-    |> maybe_put_env_option(env)
-    |> maybe_put_user_option(options.user)
-    |> maybe_put_cd_option(options.cwd)
+    ExecOptions.erlexec(options)
   end
-
-  defp maybe_put_env_option(opts, []), do: opts
-  defp maybe_put_env_option(opts, env), do: [{:env, env} | opts]
-
-  defp maybe_put_user_option(opts, nil), do: opts
-
-  defp maybe_put_user_option(opts, user) when is_binary(user),
-    do: [{:user, String.to_charlist(user)} | opts]
-
-  defp maybe_put_cd_option(opts, nil), do: opts
-  defp maybe_put_cd_option(opts, cwd) when is_binary(cwd), do: [{:cd, cwd} | opts]
 
   defp normalize_payload(message) when is_binary(message), do: message
 

@@ -14,7 +14,8 @@ defmodule ClaudeAgentSDK.Process do
 
   alias ClaudeAgentSDK.Log, as: Logger
 
-  alias ClaudeAgentSDK.{CLI, Config, Message, Options}
+  alias ClaudeAgentSDK.{CLI, Message, Options, Runtime}
+  alias ClaudeAgentSDK.Shell
   alias ClaudeAgentSDK.Transport.AgentsFile
 
   @default_max_buffer_size 1_048_576
@@ -40,25 +41,11 @@ defmodule ClaudeAgentSDK.Process do
           Enumerable.t(ClaudeAgentSDK.Message.t())
   def stream(args, %Options{} = options, stdin_input \\ nil) do
     # Check if we should use mock
-    if use_mock?() and not force_real?(options) do
+    if Runtime.use_mock?() and not Runtime.force_real?(options) do
       ClaudeAgentSDK.Mock.Process.stream(args, options, stdin_input)
     else
       stream_real(args, options, stdin_input)
     end
-  end
-
-  defp use_mock? do
-    # Check LIVE_MODE environment variable first (set by mix run.live)
-    # This overrides the Application config (even when MIX_ENV=test)
-    case {System.get_env("LIVE_MODE"), System.get_env("LIVE_TESTS")} do
-      {"true", _} -> false
-      {_, "true"} -> false
-      _ -> Config.use_mock?()
-    end
-  end
-
-  defp force_real?(%Options{executable: executable, path_to_claude_code_executable: path}) do
-    is_binary(executable) or is_binary(path)
   end
 
   defp stream_real(args, options, stdin_input) do
@@ -70,7 +57,7 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp start_claude_process(args, options, stdin_input) do
-    ensure_erlexec_started!()
+    Runtime.ensure_erlexec_started!()
     {cmd, temp_files} = build_claude_command(args, options, stdin_input)
 
     case validate_cwd(options.cwd, temp_files) do
@@ -80,13 +67,6 @@ defmodule ClaudeAgentSDK.Process do
       :ok ->
         exec_options = build_exec_options(options)
         start_exec(cmd, exec_options, options, stdin_input, temp_files)
-    end
-  end
-
-  defp ensure_erlexec_started! do
-    case Application.ensure_all_started(:erlexec) do
-      {:ok, _} -> :ok
-      {:error, reason} -> raise "Failed to start erlexec application: #{inspect(reason)}"
     end
   end
 
@@ -108,16 +88,7 @@ defmodule ClaudeAgentSDK.Process do
         reason: :cwd_not_found
       }
 
-    error_msg = %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: Exception.message(error),
-        error_struct: error,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    error_msg = Message.error_result(Exception.message(error), error_struct: error)
 
     %{
       mode: :error,
@@ -336,15 +307,7 @@ defmodule ClaudeAgentSDK.Process do
             "#{timeout_seconds} seconds"
           end
 
-        error_msg = %Message{
-          type: :result,
-          subtype: :error_during_execution,
-          data: %{
-            error: "Command timed out after #{timeout_display}",
-            session_id: "error",
-            is_error: true
-          }
-        }
+        error_msg = Message.error_result("Command timed out after #{timeout_display}")
 
         %{
           mode: :error,
@@ -465,15 +428,8 @@ defmodule ClaudeAgentSDK.Process do
     Map.put(env_map, "PWD", cwd)
   end
 
-  defp shell_escape(""), do: "\"\""
-
   defp shell_escape(arg) do
-    # Escape arguments that contain spaces or special characters
-    if String.contains?(arg, [" ", "!", "\"", "'", "$", "`", "\\", "|", "&", ";", "(", ")"]) do
-      "\"#{String.replace(arg, "\"", "\\\"")}\""
-    else
-      arg
-    end
+    Shell.escape_arg(arg)
   end
 
   defp version_string do
@@ -669,16 +625,7 @@ defmodule ClaudeAgentSDK.Process do
         original_error: original_error
       }
 
-    %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: Exception.message(error),
-        error_struct: error,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    Message.error_result(Exception.message(error), error_struct: error)
   end
 
   defp buffer_overflow_error_message(line, max_buffer_size) do
@@ -689,16 +636,7 @@ defmodule ClaudeAgentSDK.Process do
         original_error: {:buffer_overflow, byte_size(line), max_buffer_size}
       }
 
-    %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: Exception.message(error),
-        error_struct: error,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    Message.error_result(Exception.message(error), error_struct: error)
   end
 
   defp truncate_line(line) when is_binary(line) do
@@ -724,16 +662,7 @@ defmodule ClaudeAgentSDK.Process do
         stderr: stderr
       }
 
-    %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: Exception.message(error),
-        error_struct: error,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    Message.error_result(Exception.message(error), error_struct: error)
   end
 
   defp extract_process_error_details(reason) when is_list(reason) do
@@ -768,16 +697,7 @@ defmodule ClaudeAgentSDK.Process do
         data: data
       }
 
-    %Message{
-      type: :result,
-      subtype: :error_during_execution,
-      data: %{
-        error: Exception.message(error) <> " (#{inspect(reason)})",
-        error_struct: error,
-        session_id: "error",
-        is_error: true
-      }
-    }
+    Message.error_result(Exception.message(error) <> " (#{inspect(reason)})", error_struct: error)
   end
 
   defp receive_messages(%{done: true} = state) do

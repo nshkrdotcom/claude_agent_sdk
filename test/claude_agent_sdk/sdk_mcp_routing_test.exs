@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.SDKMCPRoutingTest do
   @moduletag capture_log: true
 
   alias ClaudeAgentSDK.{Client, Options}
-  alias ClaudeAgentSDK.TestSupport.{CalculatorTools, ErrorTools, MockTransport}
+  alias ClaudeAgentSDK.TestSupport.{CalculatorTools, ErrorTools, MockTransport, SlowTools}
 
   setup do
     Process.flag(:trap_exit, true)
@@ -502,6 +502,58 @@ defmodule ClaudeAgentSDK.SDKMCPRoutingTest do
     result = mcp_response["result"]
     assert result["is_error"] == true
     assert is_list(result["content"])
+  end
+
+  test "tools/call does not block other client calls while tool executes" do
+    server =
+      ClaudeAgentSDK.create_sdk_mcp_server(
+        name: "slow",
+        version: "1.0.0",
+        tools: [SlowTools.SlowEcho]
+      )
+
+    options = %Options{
+      mcp_servers: %{"slow" => server}
+    }
+
+    {:ok, client} =
+      Client.start_link(options,
+        transport: MockTransport,
+        transport_opts: [test_pid: self()]
+      )
+
+    on_exit(fn -> safe_stop(client) end)
+
+    _transport =
+      receive do
+        {:mock_transport_started, pid} -> pid
+      after
+        500 -> flunk("Transport did not start")
+      end
+
+    _ = :sys.get_state(client)
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => "req_tool_call_slow",
+      "request" => %{
+        "subtype" => "sdk_mcp_request",
+        "serverName" => "slow",
+        "message" => %{
+          "jsonrpc" => "2.0",
+          "id" => "1",
+          "method" => "tools/call",
+          "params" => %{
+            "name" => "slow_echo",
+            "arguments" => %{"sleep_ms" => 300}
+          }
+        }
+      }
+    }
+
+    send(client, {:transport_message, Jason.encode!(request)})
+
+    assert {:error, :model_not_set} = GenServer.call(client, :get_model, 150)
   end
 
   defp safe_stop(client) do

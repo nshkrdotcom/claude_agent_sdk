@@ -711,6 +711,34 @@ arrive after `start_link` succeeds. Handle transport exits as part of normal sup
 # If cwd/command startup fails, the session process exits with {:subprocess_failed, reason}
 ```
 
+### Transport Reason Normalization
+
+Query/control streaming boundaries normalize equivalent low-level transport errors:
+
+- `:port_closed` becomes `:not_connected`
+- `{:command_not_found, "claude"}` becomes `:cli_not_found`
+
+Use the normalized reason atoms in retry/fallback logic:
+
+```elixir
+case reason do
+  :not_connected -> reconnect()
+  :cli_not_found -> install_or_configure_cli()
+  other -> {:error, other}
+end
+```
+
+### Strict TaskSupervisor Errors
+
+If `config :claude_agent_sdk, task_supervisor_strict: true` is enabled and the configured
+task supervisor is unavailable, task scheduling returns:
+
+```elixir
+{:error, {:task_supervisor_unavailable, supervisor}}
+```
+
+Handle this as an explicit infrastructure/configuration error in application boot/tests.
+
 ---
 
 ## Retry Strategies

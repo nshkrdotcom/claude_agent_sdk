@@ -19,7 +19,8 @@ defmodule ClaudeAgentSDK.TaskSupervisor do
       ]
 
   The SDK will automatically detect and use this supervisor when available.
-  If the supervisor is not started, the SDK falls back to `Task.start/1`.
+  If the supervisor is not started, the SDK falls back to `Task.start/1`
+  unless strict mode is enabled.
 
   ## Configuration
 
@@ -88,9 +89,11 @@ defmodule ClaudeAgentSDK.TaskSupervisor do
 
   ## Returns
 
-  - `{:ok, pid}` - Task started successfully (falls back to `Task.start/1` if needed)
+  - `{:ok, pid}` - Task started successfully
+  - `{:error, {:task_supervisor_unavailable, supervisor}}` - Strict mode blocked fallback
   """
-  @spec start_child((-> any()), keyword()) :: {:ok, pid()} | {:error, term()}
+  @spec start_child((-> any()), keyword()) ::
+          {:ok, pid()} | {:error, {:task_supervisor_unavailable, pid() | atom()}}
   def start_child(fun, opts \\ []) when is_function(fun, 0) do
     {supervisor, explicit?} = configured_supervisor()
     do_start_child(fun, opts, supervisor, explicit?)
@@ -144,26 +147,43 @@ defmodule ClaudeAgentSDK.TaskSupervisor do
   end
 
   defp fallback_start(fun, missing?, supervisor, explicit?) do
+    strict? = strict_task_supervisor?()
+
     if missing? do
-      handle_missing_supervisor(supervisor, explicit?)
+      handle_missing_supervisor(supervisor, explicit?, strict?)
     end
 
-    Task.start(fun)
+    if strict? do
+      {:error, {:task_supervisor_unavailable, supervisor}}
+    else
+      Task.start(fun)
+    end
   end
 
-  defp handle_missing_supervisor(supervisor, true) when supervisor != __MODULE__ do
+  defp handle_missing_supervisor(supervisor, true, strict?) when supervisor != __MODULE__ do
+    action =
+      if strict?,
+        do: "strict mode enabled; refusing fallback",
+        else: "falling back to Task.start/1"
+
     message =
       "Task supervisor configured but not running: #{inspect(supervisor)} " <>
-        "(falling back to Task.start/1)"
-
-    if strict_task_supervisor?() do
-      raise RuntimeError, message
-    end
+        "(#{action})"
 
     warn_missing_supervisor(message, supervisor)
   end
 
-  defp handle_missing_supervisor(_supervisor, _explicit?), do: :ok
+  # Keep backward compatibility: default missing SDK supervisor should still
+  # transparently fall back without noisy logs unless strict mode is enabled.
+  defp handle_missing_supervisor(_supervisor, false, false), do: :ok
+
+  defp handle_missing_supervisor(supervisor, _explicit?, true) do
+    warn_missing_supervisor(
+      "Task supervisor not running: #{inspect(supervisor)} " <>
+        "(strict mode enabled; refusing fallback)",
+      supervisor
+    )
+  end
 
   defp warn_missing_supervisor(message, supervisor) do
     key = {@missing_supervisor_warned_key, supervisor}
@@ -178,12 +198,13 @@ defmodule ClaudeAgentSDK.TaskSupervisor do
     Application.get_env(:claude_agent_sdk, :task_supervisor_strict, false)
   end
 
-  defp supervisor_available?(pid) when is_pid(pid), do: Process.alive?(pid)
+  defp supervisor_available?(pid) when is_pid(pid), do: process_running?(pid)
 
   defp supervisor_available?(name) do
-    case Process.whereis(name) do
-      nil -> false
-      pid when is_pid(pid) -> Process.alive?(pid)
-    end
+    is_pid(Process.whereis(name))
+  end
+
+  defp process_running?(pid) when is_pid(pid) do
+    Process.info(pid, :status) != nil
   end
 end

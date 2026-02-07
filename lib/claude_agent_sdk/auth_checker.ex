@@ -31,7 +31,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
   This module detects and validates all supported authentication methods.
   """
 
-  alias ClaudeAgentSDK.{CLI, Config}
+  alias ClaudeAgentSDK.{CLI, Runtime}
 
   @type auth_status ::
           :ready | :cli_not_found | :not_authenticated | :invalid_credentials | :unknown
@@ -364,7 +364,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp check_cli_auth_status do
     # Check if mocking is enabled
-    if Config.use_mock?() do
+    if Runtime.use_mock?() do
       {:ok, :authenticated}
     else
       execute_auth_test()
@@ -534,16 +534,8 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp execute_with_timeout(command, timeout_ms) do
-    with :ok <- ensure_erlexec_started() do
-      run_command_with_timeout(command, timeout_ms)
-    end
-  end
-
-  defp ensure_erlexec_started do
-    case Application.ensure_all_started(:erlexec) do
-      {:ok, _} -> :ok
-      {:error, reason} -> raise "Failed to start erlexec application: #{inspect(reason)}"
-    end
+    Runtime.ensure_erlexec_started!()
+    run_command_with_timeout(command, timeout_ms)
   end
 
   defp run_command_with_timeout(command, timeout_ms) do

@@ -5,6 +5,8 @@ defmodule ClaudeAgentSDK.TaskSupervisorTest do
 
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias ClaudeAgentSDK.TaskSupervisor
 
   # Ensure we clean up any running supervisor before and after tests
@@ -23,6 +25,12 @@ defmodule ClaudeAgentSDK.TaskSupervisorTest do
     _ -> :ok
   catch
     :exit, _ -> :ok
+  end
+
+  defp clear_missing_supervisor_warning(supervisor) do
+    key = {{ClaudeAgentSDK.TaskSupervisor, :missing_task_supervisor}, supervisor}
+    :persistent_term.erase(key)
+    :ok
   end
 
   describe "start_link/1" do
@@ -143,18 +151,70 @@ defmodule ClaudeAgentSDK.TaskSupervisorTest do
       send(pid, :stop)
     end
 
+    test "does not log warning when default supervisor is missing in non-strict mode" do
+      Application.delete_env(:claude_agent_sdk, :task_supervisor)
+      Application.delete_env(:claude_agent_sdk, :task_supervisor_strict)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, pid} = TaskSupervisor.start_child(fn -> :ok end)
+          assert is_pid(pid)
+        end)
+
+      refute log =~ "Task supervisor not running"
+    end
+
+    test "logs warning when explicitly configured supervisor is missing" do
+      Application.put_env(:claude_agent_sdk, :task_supervisor, :missing_custom_supervisor)
+      Application.delete_env(:claude_agent_sdk, :task_supervisor_strict)
+      clear_missing_supervisor_warning(:missing_custom_supervisor)
+
+      on_exit(fn ->
+        Application.delete_env(:claude_agent_sdk, :task_supervisor)
+      end)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, pid} = TaskSupervisor.start_child(fn -> :ok end)
+          assert is_pid(pid)
+        end)
+
+      assert log =~ "Task supervisor configured but not running: :missing_custom_supervisor"
+      assert log =~ "falling back to Task.start/1"
+    end
+
     test "raises in strict mode when explicit configured supervisor is missing" do
       Application.put_env(:claude_agent_sdk, :task_supervisor, :missing_custom_supervisor)
       Application.put_env(:claude_agent_sdk, :task_supervisor_strict, true)
+      clear_missing_supervisor_warning(:missing_custom_supervisor)
 
       on_exit(fn ->
         Application.delete_env(:claude_agent_sdk, :task_supervisor)
         Application.delete_env(:claude_agent_sdk, :task_supervisor_strict)
       end)
 
-      assert_raise RuntimeError, fn ->
-        TaskSupervisor.start_child(fn -> :ok end)
-      end
+      log =
+        capture_log(fn ->
+          assert {:error, {:task_supervisor_unavailable, :missing_custom_supervisor}} =
+                   TaskSupervisor.start_child(fn -> :ok end)
+        end)
+
+      assert log =~ "strict mode enabled; refusing fallback"
+    end
+
+    test "returns error in strict mode when default supervisor is missing" do
+      Application.put_env(:claude_agent_sdk, :task_supervisor_strict, true)
+      clear_missing_supervisor_warning(ClaudeAgentSDK.TaskSupervisor)
+      on_exit(fn -> Application.delete_env(:claude_agent_sdk, :task_supervisor_strict) end)
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:task_supervisor_unavailable, ClaudeAgentSDK.TaskSupervisor}} =
+                   TaskSupervisor.start_child(fn -> :ok end)
+        end)
+
+      assert log =~ "Task supervisor not running: ClaudeAgentSDK.TaskSupervisor"
+      assert log =~ "strict mode enabled; refusing fallback"
     end
   end
 

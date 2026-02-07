@@ -34,14 +34,19 @@ defmodule ClaudeAgentSDK.SessionStoreTest do
   test "periodic cleanup message does not terminate the session store", %{
     storage_dir: storage_dir
   } do
+    insert_old_session("periodic-old-session", storage_dir)
+
     pid = Process.whereis(SessionStore)
     ref = Process.monitor(pid)
-
-    insert_old_session("periodic-old-session", storage_dir)
 
     send(pid, :cleanup_check)
 
     refute_receive {:DOWN, ^ref, :process, ^pid, _reason}, 500
+  end
+
+  test "cache ETS table is protected", _context do
+    state = :sys.get_state(SessionStore)
+    assert :ets.info(state.cache, :protection) == :protected
   end
 
   test "metadata from disk is normalized after restart", %{storage_dir: storage_dir} do
@@ -84,20 +89,13 @@ defmodule ClaudeAgentSDK.SessionStoreTest do
       updated_at: DateTime.add(DateTime.utc_now(), -3_600, :second)
     )
 
-    state = :sys.get_state(SessionStore)
+    assert :ok = stop_supervised(SessionStore)
+    start_supervised!({SessionStore, storage_dir: storage_dir})
 
-    metadata = %{
-      session_id: session_id,
-      created_at: DateTime.add(DateTime.utc_now(), -7_200, :second),
-      updated_at: DateTime.add(DateTime.utc_now(), -3_600, :second),
-      message_count: 1,
-      total_cost: 0.0,
-      tags: ["old"],
-      description: "old session",
-      model: "test-model"
-    }
-
-    :ets.insert(state.cache, {session_id, metadata})
+    assert_eventually(fn ->
+      SessionStore.list_sessions()
+      |> Enum.any?(fn session -> session.session_id == session_id end)
+    end)
   end
 
   defp write_legacy_session_file(storage_dir, session_id, opts) do
