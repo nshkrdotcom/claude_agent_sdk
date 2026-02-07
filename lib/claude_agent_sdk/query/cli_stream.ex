@@ -59,12 +59,12 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp build_prompt_args(prompt, %Options{} = options) when is_binary(prompt) do
     base_args = base_stream_args(options)
-    {["--print"] ++ base_args ++ ["--", prompt], nil}
+    {base_args ++ ["--", prompt], nil}
   end
 
   defp build_prompt_args(prompt, %Options{} = options) do
     base_args = base_stream_args(options)
-    {["--print", "--input-format", "stream-json"] ++ base_args, prompt}
+    {["--input-format", "stream-json"] ++ base_args, prompt}
   end
 
   defp base_stream_args(%Options{} = options) do

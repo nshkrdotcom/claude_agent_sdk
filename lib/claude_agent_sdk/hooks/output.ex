@@ -41,6 +41,8 @@ defmodule ClaudeAgentSDK.Hooks.Output do
   See: https://docs.anthropic.com/en/docs/claude-code/hooks#hook-output
   """
 
+  alias ClaudeAgentSDK.Permission.Result, as: PermissionResult
+
   @typedoc """
   Permission decision for PreToolUse hooks.
   """
@@ -48,12 +50,36 @@ defmodule ClaudeAgentSDK.Hooks.Output do
 
   @typedoc """
   Hook-specific output for different event types.
+
+  Includes both:
+  - Event-specific complete shapes (e.g. PreToolUse, PermissionRequest)
+  - Composable/partial shapes produced by helper pipelines
   """
   @type hook_specific_output ::
           pre_tool_use_output()
           | post_tool_use_output()
           | user_prompt_submit_output()
           | session_start_output()
+          | permission_request_output()
+          | composable_hook_specific_output()
+
+  @typedoc """
+  Composable hook-specific output used by helper pipelines.
+
+  Helpers such as `with_additional_context/2`, `with_updated_input/2`,
+  and `with_updated_mcp_output/2` can be chained onto outputs that do not
+  yet have a fully event-qualified `hookSpecificOutput` map.
+  """
+  @type composable_hook_specific_output :: %{
+          optional(:hookEventName) => String.t(),
+          optional(:permissionDecision) => String.t() | map(),
+          optional(:permissionDecisionReason) => String.t(),
+          optional(:additionalContext) => String.t(),
+          optional(:updatedInput) => map(),
+          optional(:updatedMCPToolOutput) => term(),
+          optional(:decision) => map(),
+          optional(atom()) => term()
+        }
 
   @typedoc """
   PreToolUse hook-specific output.
@@ -105,6 +131,18 @@ defmodule ClaudeAgentSDK.Hooks.Output do
   @type session_start_output :: %{
           hookEventName: String.t(),
           additionalContext: String.t()
+        }
+
+  @typedoc """
+  PermissionRequest hook-specific output.
+
+  Controls permission dialogs programmatically:
+  - `hookEventName` - Must be "PermissionRequest"
+  - `decision` - Permission decision map (e.g. `%{"type" => "allow"}`)
+  """
+  @type permission_request_output :: %{
+          hookEventName: String.t(),
+          decision: map()
         }
 
   @typedoc """
@@ -421,6 +459,140 @@ defmodule ClaudeAgentSDK.Hooks.Output do
     hook_output = Map.get(output, :hookSpecificOutput, %{})
     updated_hook_output = Map.put(hook_output, :updatedInput, updated_input)
     Map.put(output, :hookSpecificOutput, updated_hook_output)
+  end
+
+  @doc """
+  Adds additional context to hook output.
+
+  This is a composable alternative to `add_context/2` that can be piped
+  onto existing hook outputs. Works with PostToolUse, UserPromptSubmit,
+  and SessionStart hooks.
+
+  ## Parameters
+
+  - `output` - Existing hook output
+  - `context` - Contextual information to inject
+
+  ## Examples
+
+      Output.allow("Approved")
+      |> Output.with_additional_context("Command took 2.3s")
+
+      Output.continue()
+      |> Output.with_additional_context("Current time: 10:00 AM")
+  """
+  @spec with_additional_context(t(), String.t()) :: t()
+  def with_additional_context(output, context) when is_map(output) and is_binary(context) do
+    hook_output = Map.get(output, :hookSpecificOutput, %{})
+    updated = Map.put(hook_output, :additionalContext, context)
+    Map.put(output, :hookSpecificOutput, updated)
+  end
+
+  @doc """
+  Sets updated MCP tool output in hook output.
+
+  Used for PostToolUse hooks to modify or annotate MCP tool responses
+  before they're returned to Claude. Accepts any value type to match
+  the Python SDK's `updatedMCPToolOutput: Any`.
+
+  ## Parameters
+
+  - `output` - Existing hook output
+  - `mcp_output` - Updated MCP tool output (any type)
+
+  ## Examples
+
+      Output.continue()
+      |> Output.with_updated_mcp_output(%{"content" => [%{"type" => "text", "text" => "filtered"}]})
+  """
+  @spec with_updated_mcp_output(t(), term()) :: t()
+  def with_updated_mcp_output(output, mcp_output) when is_map(output) do
+    hook_output = Map.get(output, :hookSpecificOutput, %{})
+    updated = Map.put(hook_output, :updatedMCPToolOutput, mcp_output)
+    Map.put(output, :hookSpecificOutput, updated)
+  end
+
+  @doc """
+  Creates a PermissionRequest hook output with a permission decision.
+
+  Used with PermissionRequest hooks to programmatically respond to
+  permission dialogs without user interaction.
+
+  Accepts either a `PermissionResult` struct (converted to the CLI wire
+  format `%{"type" => "allow"}` / `%{"type" => "deny", "reason" => "..."}`)
+  or a raw map that is passed through unchanged.
+
+  ## Parameters
+
+  - `result` - A `PermissionResult` struct or raw decision map
+
+  ## Examples
+
+      Output.permission_decision(Permission.Result.allow())
+
+      Output.permission_decision(Permission.Result.deny("Not allowed"))
+
+      # Raw map passthrough
+      Output.permission_decision(%{"type" => "allow"})
+  """
+  @spec permission_decision(PermissionResult.t() | map()) :: t()
+  def permission_decision(%PermissionResult{behavior: :allow}) do
+    %{
+      hookSpecificOutput: %{
+        hookEventName: "PermissionRequest",
+        decision: %{"type" => "allow"}
+      }
+    }
+  end
+
+  def permission_decision(%PermissionResult{behavior: :deny} = result) do
+    %{
+      hookSpecificOutput: %{
+        hookEventName: "PermissionRequest",
+        decision: %{"type" => "deny", "reason" => result.message || ""}
+      }
+    }
+  end
+
+  def permission_decision(decision) when is_map(decision) do
+    %{
+      hookSpecificOutput: %{
+        hookEventName: "PermissionRequest",
+        decision: decision
+      }
+    }
+  end
+
+  @doc """
+  Creates a PermissionRequest hook output that allows the tool.
+
+  Shorthand for `permission_decision(Permission.Result.allow())`.
+
+  ## Examples
+
+      Output.permission_allow()
+  """
+  @spec permission_allow() :: t()
+  def permission_allow do
+    permission_decision(PermissionResult.allow())
+  end
+
+  @doc """
+  Creates a PermissionRequest hook output that denies the tool.
+
+  Shorthand for `permission_decision(Permission.Result.deny(reason))`.
+
+  ## Parameters
+
+  - `reason` - Explanation for denying
+
+  ## Examples
+
+      Output.permission_deny("Tool not permitted in this context")
+  """
+  @spec permission_deny(String.t()) :: t()
+  def permission_deny(reason) when is_binary(reason) do
+    permission_decision(PermissionResult.deny(reason))
   end
 
   @doc """

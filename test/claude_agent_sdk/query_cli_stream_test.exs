@@ -28,7 +28,7 @@ defmodule ClaudeAgentSDK.QueryCLIStreamTest do
     args = CLIStream.__build_args__([%{"type" => "user"}], %Options{})
 
     assert flag_value(args, "--input-format") == "stream-json"
-    assert "--print" in args
+    refute "--print" in args
   end
 
   test "replay-user-messages is opt-in via extra_args" do

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-02-06
+
+### Breaking Changes
+
+- **`--print` flag removed**: The `--print` CLI flag has been removed from all 5 modules (`CLIStream`, `Query`, `Streaming.Session`, `Transport.Port`, `Transport.Erlexec`, `Process`). All queries now use `--output-format stream-json` exclusively. This aligns with Python SDK v0.1.24.
+- **`--agents` CLI flag removed**: Agents are no longer passed via `--agents` CLI argument. They are now sent through the `initialize` control request. `Options.to_args/1` no longer emits `--agents`. Use `Options.agents_for_initialize/1` to get the agents map for the initialize request.
+- **`AgentsFile` module deleted**: `ClaudeAgentSDK.Transport.AgentsFile` has been removed along with all `temp_files` tracking across transports.
+
+### Added
+
+- **6 new hook events**: `PostToolUseFailure`, `Notification`, `SubagentStart`, `PermissionRequest`, `SessionStart`, `SessionEnd` — all 12 hook events from the Python SDK are now supported.
+- **Enhanced hook input fields**: `hook_input` type now includes fields for all new events: `error`, `is_interrupt`, `message`, `title`, `notification_type`, `agent_id`, `agent_type`, `agent_transcript_path`, `permission_suggestions`, `permission_mode`, `source`, `reason`, `trigger`, `custom_instructions`, `stop_hook_active`.
+- **New hook output helpers**: `Output.with_additional_context/2`, `Output.with_updated_mcp_output/2`, `Output.permission_decision/1`, `Output.permission_allow/0`, `Output.permission_deny/1`.
+- **MCP tool annotations**: `deftool` macro now accepts a 5th argument with options including `:annotations` for MCP tool annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`). Annotations are included in `tools/list` responses.
+- **MCP status API**: `Client.get_mcp_status/1` sends a `mcp_status` control request and returns the MCP server status.
+- **`tool_use_result` field**: User messages now parse the `tool_use_result` field from CLI JSON.
+- **`agents_for_initialize/1`**: New public function on `Options` to convert agents map to CLI format for the initialize control request.
+
+### Changed
+
+- **Agents via initialize**: Agent definitions are now sent through the control protocol `initialize` request instead of `--agents` CLI flag. This avoids ARG_MAX limits and aligns with Python SDK v0.1.19.
+- **Continue/resume routing**: `Query.continue/2` and `Query.resume/3` now route through the control client when hooks, SDK MCP servers, or `can_use_tool` are configured, ensuring agents are properly sent via initialize.
+- **`encode_initialize_request/4`**: Now accepts an optional 4th `agents` parameter.
+
 ## [0.10.0] - 2026-02-05
 
 ### Fixed

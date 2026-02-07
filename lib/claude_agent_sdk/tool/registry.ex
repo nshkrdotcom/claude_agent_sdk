@@ -32,10 +32,11 @@ defmodule ClaudeAgentSDK.Tool.Registry do
   @default_execution_timeout_ms 30_000
 
   @type tool_metadata :: %{
-          name: tool_name(),
-          description: String.t(),
-          input_schema: map(),
-          module: module()
+          required(:name) => tool_name(),
+          required(:description) => String.t(),
+          required(:input_schema) => map(),
+          required(:module) => module(),
+          optional(:annotations) => map()
         }
 
   @type state :: %{

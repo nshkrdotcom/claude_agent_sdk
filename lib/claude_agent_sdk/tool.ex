@@ -52,7 +52,7 @@ defmodule ClaudeAgentSDK.Tool do
   """
   defmacro __using__(_opts) do
     quote do
-      import ClaudeAgentSDK.Tool, only: [deftool: 3, deftool: 4]
+      import ClaudeAgentSDK.Tool, only: [deftool: 3, deftool: 4, deftool: 5]
 
       Module.register_attribute(__MODULE__, :tools, accumulate: true)
 
@@ -74,30 +74,53 @@ defmodule ClaudeAgentSDK.Tool do
   end
 
   @doc """
-  Defines a tool with name, description, and input schema.
+  Defines a tool with name, description, input schema, and optional options.
 
   ## Parameters
 
   - `name` - Atom tool name (e.g., `:calculator`)
   - `description` - String description of what the tool does
   - `input_schema` - JSON Schema map defining expected input
+  - `opts` - Keyword list of options
   - `do_block` - Block containing `execute/1` function definition
+
+  ## Options
+
+  - `:annotations` - MCP tool annotations map (see MCP spec)
+
+  ## Annotations
+
+  Standard MCP tool annotations:
+  - `title` - Human-readable title
+  - `readOnlyHint` - Tool doesn't modify state (boolean)
+  - `destructiveHint` - Tool may perform destructive operations (boolean)
+  - `idempotentHint` - Repeated calls have same effect (boolean)
+  - `openWorldHint` - Tool interacts with external entities (boolean)
 
   ## Examples
 
-      deftool :add, "Add two numbers", %{
-        type: "object",
-        properties: %{a: %{type: "number"}, b: %{type: "number"}},
-        required: ["a", "b"]
-      } do
-        def execute(%{"a" => a, "b" => b}) do
-          {:ok, %{"content" => [%{"type" => "text", "text" => "Result: \#{a + b}"}]}}
+      deftool :read_file, "Read a file", %{type: "object"},
+        annotations: %{readOnlyHint: true, openWorldHint: false} do
+        def execute(%{"path" => path}) do
+          {:ok, %{"content" => [%{"type" => "text", "text" => File.read!(path)}]}}
         end
       end
   """
+  defmacro deftool(name, description, input_schema, opts, do: block)
+           when is_atom(name) and is_list(opts) do
+    annotations = Keyword.get(opts, :annotations)
+    do_deftool(name, description, input_schema, annotations, block)
+  end
+
   defmacro deftool(name, description, input_schema, do: block) when is_atom(name) do
+    do_deftool(name, description, input_schema, nil, block)
+  end
+
+  defp do_deftool(name, description, input_schema, annotations, block) do
     # Generate module name from tool name (e.g., :my_tool -> MyTool)
     module_name = name |> Atom.to_string() |> Macro.camelize() |> String.to_atom()
+    # Escape nil annotations to avoid unquote issues, but pass AST maps through directly
+    escaped_annotations = if is_nil(annotations), do: nil, else: annotations
 
     quote location: :keep do
       # Register tool metadata for discovery BEFORE defining the module
@@ -105,6 +128,7 @@ defmodule ClaudeAgentSDK.Tool do
         name: unquote(name),
         description: unquote(description),
         input_schema: unquote(input_schema),
+        annotations: unquote(escaped_annotations),
         module: Module.concat(__MODULE__, unquote(module_name))
       })
 
@@ -123,17 +147,24 @@ defmodule ClaudeAgentSDK.Tool do
         @tool_name unquote(name)
         @tool_description unquote(description)
         @tool_input_schema unquote(input_schema)
+        @tool_annotations unquote(escaped_annotations)
 
         @doc """
         Returns metadata about this tool.
         """
         def __tool_metadata__ do
-          %{
+          metadata = %{
             name: @tool_name,
             description: @tool_description,
             input_schema: @tool_input_schema,
             module: __MODULE__
           }
+
+          if @tool_annotations do
+            Map.put(metadata, :annotations, @tool_annotations)
+          else
+            metadata
+          end
         end
 
         # Inject the execute function from the do block

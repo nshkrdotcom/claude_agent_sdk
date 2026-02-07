@@ -16,7 +16,6 @@ defmodule ClaudeAgentSDK.Process do
 
   alias ClaudeAgentSDK.{CLI, Message, Options, Runtime}
   alias ClaudeAgentSDK.Shell
-  alias ClaudeAgentSDK.Transport.AgentsFile
 
   @default_max_buffer_size 1_048_576
 
@@ -34,7 +33,7 @@ defmodule ClaudeAgentSDK.Process do
 
   ## Examples
 
-      ClaudeAgentSDK.Process.stream(["--print", "Hello"], %ClaudeAgentSDK.Options{})
+      ClaudeAgentSDK.Process.stream(["--output-format", "stream-json", "--verbose"], %ClaudeAgentSDK.Options{})
 
   """
   @spec stream([String.t()], Options.t(), String.t() | nil) ::
@@ -58,29 +57,29 @@ defmodule ClaudeAgentSDK.Process do
 
   defp start_claude_process(args, options, stdin_input) do
     Runtime.ensure_erlexec_started!()
-    {cmd, temp_files} = build_claude_command(args, options, stdin_input)
+    cmd = build_claude_command(args, options, stdin_input)
 
-    case validate_cwd(options.cwd, temp_files) do
+    case validate_cwd(options.cwd) do
       {:error, error_state} ->
         error_state
 
       :ok ->
         exec_options = build_exec_options(options)
-        start_exec(cmd, exec_options, options, stdin_input, temp_files)
+        start_exec(cmd, exec_options, options, stdin_input)
     end
   end
 
-  defp validate_cwd(cwd, temp_files) when is_binary(cwd) do
+  defp validate_cwd(cwd) when is_binary(cwd) do
     if File.dir?(cwd) do
       :ok
     else
-      {:error, cwd_not_found_state(cwd, temp_files)}
+      {:error, cwd_not_found_state(cwd)}
     end
   end
 
-  defp validate_cwd(_cwd, _temp_files), do: :ok
+  defp validate_cwd(_cwd), do: :ok
 
-  defp cwd_not_found_state(cwd, temp_files) do
+  defp cwd_not_found_state(cwd) do
     error =
       %ClaudeAgentSDK.Errors.CLIConnectionError{
         message: "Working directory does not exist: #{cwd}",
@@ -94,12 +93,11 @@ defmodule ClaudeAgentSDK.Process do
       mode: :error,
       messages: [error_msg],
       current_index: 0,
-      done: false,
-      temp_files: temp_files
+      done: false
     }
   end
 
-  defp start_exec(cmd, exec_options, options, nil, temp_files) do
+  defp start_exec(cmd, exec_options, options, nil) do
     case :exec.run(cmd, exec_options) do
       {:ok, result} ->
         _ = dispatch_stderr_from_result(result, options)
@@ -109,8 +107,7 @@ defmodule ClaudeAgentSDK.Process do
           result: result,
           messages: parse_sync_result(result, options),
           current_index: 0,
-          done: false,
-          temp_files: temp_files
+          done: false
         }
 
       {:error, reason} ->
@@ -127,17 +124,16 @@ defmodule ClaudeAgentSDK.Process do
           mode: :error,
           messages: [error_msg],
           current_index: 0,
-          done: false,
-          temp_files: temp_files
+          done: false
         }
     end
   end
 
-  defp start_exec(cmd, exec_options, options, input, temp_files) when is_binary(input) do
-    run_with_stdin_erlexec(cmd, input, exec_options, options, temp_files)
+  defp start_exec(cmd, exec_options, options, input) when is_binary(input) do
+    run_with_stdin_erlexec(cmd, input, exec_options, options)
   end
 
-  defp run_with_stdin_erlexec(cmd, input, _exec_options, options, temp_files) do
+  defp run_with_stdin_erlexec(cmd, input, _exec_options, options) do
     # Add stdin to the exec options and use async execution
     # Build fresh options with env vars for async mode
     env_vars = build_env_vars(options)
@@ -160,7 +156,7 @@ defmodule ClaudeAgentSDK.Process do
         Logger.debug("Using timeout for CLI run", timeout_ms: timeout_ms)
 
         # Collect output until process exits
-        receive_exec_output(pid, os_pid, [], [], timeout_ms, temp_files, options)
+        receive_exec_output(pid, os_pid, [], [], timeout_ms, options)
 
       {:error, reason} ->
         Logger.error("Failed to start Claude CLI (stdin run)",
@@ -176,13 +172,12 @@ defmodule ClaudeAgentSDK.Process do
           mode: :error,
           messages: [error_msg],
           current_index: 0,
-          done: false,
-          temp_files: temp_files
+          done: false
         }
     end
   end
 
-  defp receive_exec_output(pid, os_pid, stdout_acc, stderr_acc, timeout_ms, temp_files, options) do
+  defp receive_exec_output(pid, os_pid, stdout_acc, stderr_acc, timeout_ms, options) do
     receive do
       {:stdout, ^os_pid, data} ->
         # Check for challenge URL in the output
@@ -213,8 +208,7 @@ defmodule ClaudeAgentSDK.Process do
             mode: :error,
             messages: [error_msg],
             current_index: 0,
-            done: false,
-            temp_files: temp_files
+            done: false
           }
         else
           receive_exec_output(
@@ -223,7 +217,6 @@ defmodule ClaudeAgentSDK.Process do
             [data | stdout_acc],
             stderr_acc,
             timeout_ms,
-            temp_files,
             options
           )
         end
@@ -259,8 +252,7 @@ defmodule ClaudeAgentSDK.Process do
             mode: :error,
             messages: [error_msg],
             current_index: 0,
-            done: false,
-            temp_files: temp_files
+            done: false
           }
         else
           receive_exec_output(
@@ -269,7 +261,6 @@ defmodule ClaudeAgentSDK.Process do
             stdout_acc,
             [data | stderr_acc],
             timeout_ms,
-            temp_files,
             options
           )
         end
@@ -289,8 +280,7 @@ defmodule ClaudeAgentSDK.Process do
           result: result,
           messages: parse_sync_result(result, options),
           current_index: 0,
-          done: false,
-          temp_files: temp_files
+          done: false
         }
     after
       timeout_ms ->
@@ -313,8 +303,7 @@ defmodule ClaudeAgentSDK.Process do
           mode: :error,
           messages: [error_msg],
           current_index: 0,
-          done: false,
-          temp_files: temp_files
+          done: false
         }
     end
   end
@@ -352,9 +341,8 @@ defmodule ClaudeAgentSDK.Process do
     final_args = ensure_json_flags(args)
 
     # Always return the command string format - erlexec handles both cases
-    {final_args, temp_files} = AgentsFile.externalize_agents_if_needed(final_args)
     quoted_args = Enum.map(final_args, &shell_escape/1)
-    {Enum.join([executable | quoted_args], " "), temp_files}
+    Enum.join([executable | quoted_args], " ")
   end
 
   defp build_exec_options(options) do
@@ -724,8 +712,7 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp cleanup_process(state) do
-    _ = AgentsFile.cleanup_temp_files(Map.get(state, :temp_files, []))
+  defp cleanup_process(_state) do
     :ok
   end
 

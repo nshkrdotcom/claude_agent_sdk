@@ -67,9 +67,14 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
 
       {id, json} = Protocol.encode_initialize_request(hooks, sdk_servers, nil)
   """
-  @spec encode_initialize_request(map() | nil, map() | nil, request_id() | nil) ::
+  @spec encode_initialize_request(map() | nil, map() | nil, request_id() | nil, map() | nil) ::
           {request_id(), String.t()}
-  def encode_initialize_request(hooks_config, sdk_mcp_servers \\ nil, request_id \\ nil) do
+  def encode_initialize_request(
+        hooks_config,
+        sdk_mcp_servers \\ nil,
+        request_id \\ nil,
+        agents \\ nil
+      ) do
     req_id = request_id || generate_request_id()
 
     request_data = %{
@@ -85,6 +90,14 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
         request_data
       end
 
+    # Add agents if provided (Python SDK parity: agents sent via initialize, not CLI args)
+    request_data =
+      if agents && map_size(agents) > 0 do
+        Map.put(request_data, "agents", agents)
+      else
+        request_data
+      end
+
     request = %{
       "type" => "control_request",
       "request_id" => req_id,
@@ -93,6 +106,30 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
 
     json = Jason.encode!(request)
     {req_id, json}
+  end
+
+  @doc """
+  Encodes an MCP status control request.
+
+  Returns `{request_id, json}`.
+
+  ## Examples
+
+      {id, json} = Protocol.encode_mcp_status_request()
+  """
+  @spec encode_mcp_status_request(request_id() | nil) :: {request_id(), String.t()}
+  def encode_mcp_status_request(request_id \\ nil) do
+    req_id = request_id || generate_request_id()
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => req_id,
+      "request" => %{
+        "subtype" => "mcp_status"
+      }
+    }
+
+    {req_id, Jason.encode!(request)}
   end
 
   @doc """

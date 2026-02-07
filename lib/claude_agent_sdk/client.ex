@@ -69,7 +69,6 @@ defmodule ClaudeAgentSDK.Client do
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
   alias ClaudeAgentSDK.Permission.{Context, Result}
   alias ClaudeAgentSDK.Streaming.{EventParser, Termination}
-  alias ClaudeAgentSDK.Transport.AgentsFile
   @default_hook_timeout_ms 60_000
   @default_init_timeout_ms 60_000
   @default_control_request_timeout_ms 60_000
@@ -109,8 +108,7 @@ defmodule ClaudeAgentSDK.Client do
             stream_buffer_limit: @default_stream_buffer_limit,
             server_info: nil,
             init_request_id: nil,
-            init_timeout: nil,
-            temp_files: []
+            init_timeout: nil
 
   @typedoc """
   Client state.
@@ -175,8 +173,7 @@ defmodule ClaudeAgentSDK.Client do
           stream_buffer_limit: non_neg_integer(),
           server_info: map() | nil,
           init_request_id: String.t() | nil,
-          init_timeout: {reference(), pos_integer()} | nil,
-          temp_files: [Path.t()]
+          init_timeout: {reference(), pos_integer()} | nil
         }
 
   ## Public API
@@ -610,6 +607,35 @@ defmodule ClaudeAgentSDK.Client do
     GenServer.call(client, :get_available_agents)
   end
 
+  @doc """
+  Gets current MCP server connection status.
+
+  Returns a map with `"mcpServers"` key containing a list of server status
+  objects, each with:
+  - `"name"` - Server name
+  - `"status"` - Connection status: `"connected"`, `"pending"`, `"failed"`,
+    `"needs-auth"`, `"disabled"`
+
+  ## Parameters
+
+    * `client` - The client PID
+
+  ## Returns
+
+  `{:ok, map()}` or `{:error, reason}`
+
+  ## Examples
+
+      {:ok, status} = Client.get_mcp_status(client)
+      for server <- status["mcpServers"] do
+        IO.puts("\#{server["name"]}: \#{server["status"]}")
+      end
+  """
+  @spec get_mcp_status(pid()) :: {:ok, map()} | {:error, term()}
+  def get_mcp_status(client) when is_pid(client) do
+    GenServer.call(client, :get_mcp_status, :infinity)
+  end
+
   ## GenServer Callbacks
 
   @impl true
@@ -674,8 +700,7 @@ defmodule ClaudeAgentSDK.Client do
         stream_buffer_limit: stream_buffer_limit(updated_options),
         server_info: nil,
         init_request_id: nil,
-        init_timeout: nil,
-        temp_files: []
+        init_timeout: nil
       }
 
       {:ok, state, {:continue, :start_cli}}
@@ -941,6 +966,17 @@ defmodule ClaudeAgentSDK.Client do
     {:reply, {:ok, agent_names}, state}
   end
 
+  def handle_call(:get_mcp_status, from, state) do
+    {req_id, json} = Protocol.encode_mcp_status_request()
+    timer_ref = schedule_control_request_timeout(state, req_id)
+
+    pending =
+      Map.put(state.pending_requests, req_id, {:mcp_status, from, timer_ref})
+
+    _ = send_payload(state, ensure_newline(json))
+    {:noreply, %{state | pending_requests: pending}}
+  end
+
   defp set_model_request(model, from, state) do
     model_string = model |> to_string() |> String.trim()
 
@@ -1149,6 +1185,15 @@ defmodule ClaudeAgentSDK.Client do
 
         GenServer.reply(from, {:error, :timeout})
         {:noreply, state}
+
+      {:mcp_status, from, _timer_ref} ->
+        Logger.warning("Control request timed out",
+          request_id: request_id,
+          subtype: "mcp_status"
+        )
+
+        GenServer.reply(from, {:error, :timeout})
+        {:noreply, state}
     end
   end
 
@@ -1317,8 +1362,6 @@ defmodule ClaudeAgentSDK.Client do
         :ok
     end
 
-    _ = AgentsFile.cleanup_temp_files(state.temp_files || [])
-
     :ok
   end
 
@@ -1328,8 +1371,6 @@ defmodule ClaudeAgentSDK.Client do
     |> cancel_pending_callbacks()
 
     Logger.debug("Terminating client (no port)", reason: reason)
-
-    _ = AgentsFile.cleanup_temp_files(state.temp_files || [])
 
     :ok
   end
@@ -1648,6 +1689,9 @@ defmodule ClaudeAgentSDK.Client do
   defp cancel_control_request_timeout({:rewind_files, _from, timer_ref}),
     do: Process.cancel_timer(timer_ref)
 
+  defp cancel_control_request_timeout({:mcp_status, _from, timer_ref}),
+    do: Process.cancel_timer(timer_ref)
+
   defp cancel_control_request_timeout(_other), do: :ok
 
   defp fail_pending_control_requests(state, reason) do
@@ -1665,6 +1709,9 @@ defmodule ClaudeAgentSDK.Client do
           GenServer.reply(from, {:error, reason})
 
         {:rewind_files, from, _timer_ref} ->
+          GenServer.reply(from, {:error, reason})
+
+        {:mcp_status, from, _timer_ref} ->
           GenServer.reply(from, {:error, reason})
 
         _ ->
@@ -1708,6 +1755,7 @@ defmodule ClaudeAgentSDK.Client do
     hook_callback_timeouts = build_hook_timeout_map(registry, state.options.hooks)
     hooks_config = build_hooks_config(registry, state.options.hooks)
     sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
+    agents_for_init = Options.agents_for_initialize(state.options.agents)
 
     # Pass Options to transport so it can build CLI command with streaming flags
     transport_opts = Keyword.put(state.transport_opts || [], :options, state.options)
@@ -1715,7 +1763,7 @@ defmodule ClaudeAgentSDK.Client do
     with {:ok, transport} <- module.start_link(transport_opts),
          :ok <- module.subscribe(transport, self()) do
       {init_request_id, init_json} =
-        Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil)
+        Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil, agents_for_init)
 
       init_timeout = schedule_initialize_timeout(init_request_id)
 
@@ -1744,7 +1792,7 @@ defmodule ClaudeAgentSDK.Client do
 
     # Build CLI command
     case build_cli_command(state.options) do
-      {:ok, {cmd, temp_files}} ->
+      {:ok, cmd} ->
         port_opts =
           [
             :binary,
@@ -1766,9 +1814,10 @@ defmodule ClaudeAgentSDK.Client do
 
         hooks_config = build_hooks_config(registry, state.options.hooks)
         sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
+        agents_for_init = Options.agents_for_initialize(state.options.agents)
 
         {init_request_id, init_json} =
-          Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil)
+          Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil, agents_for_init)
 
         init_timeout = schedule_initialize_timeout(init_request_id)
 
@@ -1782,8 +1831,7 @@ defmodule ClaudeAgentSDK.Client do
              hook_callback_timeouts: hook_callback_timeouts,
              initialized: false,
              init_request_id: init_request_id,
-             init_timeout: init_timeout,
-             temp_files: temp_files
+             init_timeout: init_timeout
          }}
 
       {:error, reason} ->
@@ -1853,11 +1901,8 @@ defmodule ClaudeAgentSDK.Client do
     case CLI.resolve_executable(options) do
       {:ok, executable} ->
         # Build arguments for streaming mode.
-        #
-        # Claude Code CLI only enables stream-json input/output in `--print` mode.
-        # (see `claude --help` for the current semantics)
+        # Python SDK parity: uses --input-format/--output-format stream-json only (no --print).
         args = [
-          "--print",
           "--output-format",
           "stream-json",
           "--input-format",
@@ -1867,7 +1912,6 @@ defmodule ClaudeAgentSDK.Client do
 
         # Add other options
         args = args ++ Options.to_stream_json_args(options)
-        {args, temp_files} = AgentsFile.externalize_agents_if_needed(args)
 
         # Redirect stderr to /dev/null to suppress benign EPIPE errors during cleanup
         # These errors occur when the Elixir side closes the connection while the CLI
@@ -1880,7 +1924,7 @@ defmodule ClaudeAgentSDK.Client do
           end
 
         cmd = Enum.join([executable | args], " ") <> stderr_redirect
-        {:ok, {cmd, temp_files}}
+        {:ok, cmd}
 
       {:error, :not_found} ->
         {:error, :claude_not_found}
@@ -2028,6 +2072,16 @@ defmodule ClaudeAgentSDK.Client do
          state
        ) do
     handle_simple_control_response(:rewind_files, from, response, request_id, state)
+  end
+
+  defp dispatch_control_response(
+         {:mcp_status, from, _timer_ref},
+         _response_data,
+         response,
+         request_id,
+         state
+       ) do
+    handle_simple_control_response(:mcp_status, from, response, request_id, state)
   end
 
   defp dispatch_control_response(nil, _response_data, response, request_id, state) do
@@ -2968,11 +3022,17 @@ defmodule ClaudeAgentSDK.Client do
 
     tools_data =
       Enum.map(tools, fn tool ->
-        %{
+        base = %{
           "name" => to_string(tool.name),
           "description" => tool.description,
           "inputSchema" => tool.input_schema
         }
+
+        case Map.get(tool, :annotations) do
+          nil -> base
+          annotations when map_size(annotations) == 0 -> base
+          annotations -> Map.put(base, "annotations", annotations)
+        end
       end)
 
     %{

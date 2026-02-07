@@ -15,7 +15,6 @@ defmodule ClaudeAgentSDK.Transport.Port do
   @default_max_buffer_size 1_048_576
   @line_length 65_536
   alias ClaudeAgentSDK.{CLI, Options}
-  alias ClaudeAgentSDK.Transport.AgentsFile
   alias ClaudeAgentSDK.Transport.Setup
 
   defstruct port: nil,
@@ -23,7 +22,6 @@ defmodule ClaudeAgentSDK.Transport.Port do
             buffer: "",
             status: :disconnected,
             options: [],
-            temp_files: [],
             stderr_callback: nil,
             max_buffer_size: @default_max_buffer_size,
             overflowed?: false
@@ -104,7 +102,6 @@ defmodule ClaudeAgentSDK.Transport.Port do
       buffer: "",
       status: :disconnected,
       options: opts,
-      temp_files: [],
       stderr_callback: nil,
       max_buffer_size: max_buffer_size_from_opts(opts),
       overflowed?: false
@@ -255,14 +252,12 @@ defmodule ClaudeAgentSDK.Transport.Port do
   end
 
   @impl GenServer
-  def terminate(_reason, %{port: port, temp_files: temp_files}) when is_port(port) do
-    _ = AgentsFile.cleanup_temp_files(temp_files)
+  def terminate(_reason, %{port: port}) when is_port(port) do
     Port.close(port)
     :ok
   end
 
-  def terminate(_reason, %{temp_files: temp_files}) do
-    _ = AgentsFile.cleanup_temp_files(temp_files)
+  def terminate(_reason, _state) do
     :ok
   end
 
@@ -278,7 +273,6 @@ defmodule ClaudeAgentSDK.Transport.Port do
   defp start_subprocess(state, opts) do
     with {:ok, prepared_opts} <- prepare_startup_opts(opts),
          command <- Keyword.fetch!(prepared_opts, :command),
-         temp_files <- Keyword.get(prepared_opts, :temp_files, []),
          stderr_callback <- Keyword.get(prepared_opts, :stderr_callback),
          max_buffer_size <- max_buffer_size_from_opts(prepared_opts),
          {:ok, port} <- open_port(command, prepared_opts) do
@@ -288,7 +282,6 @@ defmodule ClaudeAgentSDK.Transport.Port do
          | port: port,
            status: :connected,
            options: prepared_opts,
-           temp_files: temp_files,
            stderr_callback: stderr_callback,
            max_buffer_size: max_buffer_size,
            overflowed?: false
@@ -310,7 +303,6 @@ defmodule ClaudeAgentSDK.Transport.Port do
     with :ok <- Setup.validate_cwd(options.cwd),
          {:ok, {command, default_args}} <- resolve_command(opts) do
       args = Keyword.get(opts, :args, default_args)
-      {args, temp_files} = AgentsFile.externalize_agents_if_needed(args, opts)
       stderr_callback = options.stderr
       stderr_to_stdout? = is_function(stderr_callback, 1)
 
@@ -318,7 +310,6 @@ defmodule ClaudeAgentSDK.Transport.Port do
         opts
         |> Keyword.put(:command, command)
         |> Keyword.put(:args, args)
-        |> Keyword.put(:temp_files, temp_files)
         |> Keyword.put(:stderr_callback, stderr_callback)
         |> Keyword.put(:stderr_to_stdout, stderr_to_stdout?)
         |> __build_port_options__(options)
@@ -357,7 +348,6 @@ defmodule ClaudeAgentSDK.Transport.Port do
             _ = CLI.warn_if_outdated()
 
             args = [
-              "--print",
               "--output-format",
               "stream-json",
               "--input-format",

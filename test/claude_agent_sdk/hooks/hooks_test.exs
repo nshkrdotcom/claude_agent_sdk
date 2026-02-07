@@ -118,7 +118,7 @@ defmodule ClaudeAgentSDK.Hooks.HooksTest do
       assert Hooks.validate_config(config) == :ok
     end
 
-    test "rejects unsupported hook events" do
+    test "accepts all 12 hook events" do
       matcher = %ClaudeAgentSDK.Hooks.Matcher{
         matcher: nil,
         hooks: [fn _, _, _ -> %{} end]
@@ -127,11 +127,25 @@ defmodule ClaudeAgentSDK.Hooks.HooksTest do
       config = %{
         session_start: [matcher],
         session_end: [matcher],
-        notification: [matcher]
+        notification: [matcher],
+        permission_request: [matcher],
+        post_tool_use_failure: [matcher],
+        subagent_start: [matcher]
       }
 
+      assert Hooks.validate_config(config) == :ok
+    end
+
+    test "rejects invalid hook events" do
+      matcher = %ClaudeAgentSDK.Hooks.Matcher{
+        matcher: nil,
+        hooks: [fn _, _, _ -> %{} end]
+      }
+
+      config = %{totally_invalid: [matcher]}
+
       assert {:error, msg} = Hooks.validate_config(config)
-      assert msg =~ "Unsupported hook event"
+      assert msg =~ "Invalid hook event"
     end
   end
 
@@ -145,7 +159,13 @@ defmodule ClaudeAgentSDK.Hooks.HooksTest do
       assert :stop in events
       assert :subagent_stop in events
       assert :pre_compact in events
-      assert length(events) == 6
+      assert :post_tool_use_failure in events
+      assert :subagent_start in events
+      assert :notification in events
+      assert :permission_request in events
+      assert :session_start in events
+      assert :session_end in events
+      assert length(events) == 12
     end
   end
 end

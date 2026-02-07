@@ -82,16 +82,21 @@ defmodule ClaudeAgentSDK.Query do
   """
   @spec continue(String.t() | nil, Options.t()) :: Enumerable.t(ClaudeAgentSDK.Message.t())
   def continue(prompt, %Options{} = options) do
-    base_args = stream_json_args(options)
+    if control_client_required?(options) do
+      opts = %{options | continue_conversation: true}
+      client_stream_module().stream(prompt, opts)
+    else
+      base_args = stream_json_args(options)
 
-    args =
-      if prompt do
-        ["--print", "--continue"] ++ base_args ++ ["--", prompt]
-      else
-        ["--continue"] ++ base_args
-      end
+      args =
+        if prompt do
+          ["--continue"] ++ base_args ++ ["--", prompt]
+        else
+          ["--continue"] ++ base_args
+        end
 
-    cli_stream_module().stream_args(args, options)
+      cli_stream_module().stream_args(args, options)
+    end
   end
 
   @doc """
@@ -115,17 +120,22 @@ defmodule ClaudeAgentSDK.Query do
   @spec resume(String.t(), String.t() | nil, Options.t()) ::
           Enumerable.t(ClaudeAgentSDK.Message.t())
   def resume(session_id, prompt, %Options{} = options) do
-    base_args = stream_json_args(options)
+    if control_client_required?(options) do
+      opts = %{options | resume: session_id}
+      client_stream_module().stream(prompt, opts)
+    else
+      base_args = stream_json_args(options)
 
-    args =
-      if prompt do
-        ["--resume", session_id, "--input-format", "stream-json"] ++ base_args
-      else
-        ["--resume", session_id] ++ base_args
-      end
+      args =
+        if prompt do
+          ["--resume", session_id, "--input-format", "stream-json"] ++ base_args
+        else
+          ["--resume", session_id] ++ base_args
+        end
 
-    input = resume_input(prompt, session_id)
-    cli_stream_module().stream_args(args, options, nil, input)
+      input = resume_input(prompt, session_id)
+      cli_stream_module().stream_args(args, options, nil, input)
+    end
   end
 
   # Check if options contain SDK MCP servers

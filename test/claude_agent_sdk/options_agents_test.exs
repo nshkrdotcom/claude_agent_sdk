@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
   Tests for agent-related Options functionality.
 
   Tests the integration of agents into the Options struct,
-  including CLI argument generation and validation.
+  including agents_for_initialize/1 and validation.
   """
   use ClaudeAgentSDK.SupertesterCase
 
@@ -73,37 +73,30 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
     end
   end
 
-  describe "to_args/1 with agents" do
-    test "generates --agents CLI argument with single agent" do
+  describe "agents_for_initialize/1" do
+    test "returns nil for nil agents" do
+      assert Options.agents_for_initialize(nil) == nil
+    end
+
+    test "returns nil for empty agents map" do
+      assert Options.agents_for_initialize(%{}) == nil
+    end
+
+    test "converts single agent to CLI map format" do
       agent =
         Agent.new(
           description: "Test agent",
           prompt: "You are a test"
         )
 
-      options =
-        Options.new(
-          agents: %{test: agent},
-          output_format: :stream_json
-        )
+      result = Options.agents_for_initialize(%{test: agent})
 
-      args = Options.to_args(options)
-
-      # Should contain --agents with JSON
-      agents_index = Enum.find_index(args, &(&1 == "--agents"))
-      assert agents_index != nil
-
-      json_arg = Enum.at(args, agents_index + 1)
-      assert is_binary(json_arg)
-
-      # Verify JSON structure
-      {:ok, decoded} = Jason.decode(json_arg)
-      assert Map.has_key?(decoded, "test")
-      assert decoded["test"]["description"] == "Test agent"
-      assert decoded["test"]["prompt"] == "You are a test"
+      assert Map.has_key?(result, "test")
+      assert result["test"]["description"] == "Test agent"
+      assert result["test"]["prompt"] == "You are a test"
     end
 
-    test "generates --agents with multiple agents" do
+    test "converts multiple agents to CLI map format" do
       code_agent =
         Agent.new(
           description: "Coder",
@@ -118,31 +111,26 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
           model: "opus"
         )
 
-      options =
-        Options.new(
-          agents: %{
-            coder: code_agent,
-            writer: doc_agent
-          },
-          output_format: :stream_json
+      result = Options.agents_for_initialize(%{coder: code_agent, writer: doc_agent})
+
+      assert Map.has_key?(result, "coder")
+      assert Map.has_key?(result, "writer")
+      assert result["coder"]["tools"] == ["Write"]
+      assert result["writer"]["model"] == "opus"
+    end
+  end
+
+  describe "to_args/1 does not include --agents" do
+    test "omits --agents from CLI args (agents sent via initialize)" do
+      agent =
+        Agent.new(
+          description: "Test agent",
+          prompt: "You are a test"
         )
 
-      args = Options.to_args(options)
-
-      agents_index = Enum.find_index(args, &(&1 == "--agents"))
-      json_arg = Enum.at(args, agents_index + 1)
-
-      {:ok, decoded} = Jason.decode(json_arg)
-      assert Map.has_key?(decoded, "coder")
-      assert Map.has_key?(decoded, "writer")
-      assert decoded["coder"]["tools"] == ["Write"]
-      assert decoded["writer"]["model"] == "opus"
-    end
-
-    test "omits --agents when agents is nil" do
       options =
         Options.new(
-          agents: nil,
+          agents: %{test: agent},
           output_format: :stream_json
         )
 
@@ -186,23 +174,6 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
       args = Options.to_args(options)
 
       refute Enum.member?(args, "--agent")
-    end
-
-    test "generates both --agents and --agent when specified" do
-      agent1 = Agent.new(description: "Agent 1", prompt: "Prompt 1")
-      agent2 = Agent.new(description: "Agent 2", prompt: "Prompt 2")
-
-      options =
-        Options.new(
-          agents: %{a1: agent1, a2: agent2},
-          agent: :a1,
-          output_format: :stream_json
-        )
-
-      args = Options.to_args(options)
-
-      assert Enum.member?(args, "--agents")
-      assert Enum.member?(args, "--agent")
     end
   end
 

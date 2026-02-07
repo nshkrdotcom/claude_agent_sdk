@@ -15,7 +15,6 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   alias ClaudeAgentSDK.{CLI, Options}
   alias ClaudeAgentSDK.Process, as: SDKProcess
   alias ClaudeAgentSDK.Runtime
-  alias ClaudeAgentSDK.Transport.AgentsFile
   alias ClaudeAgentSDK.Transport.ExecOptions
   alias ClaudeAgentSDK.Transport.Setup
 
@@ -26,7 +25,6 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
             stdout_buffer: "",
             status: :disconnected,
             stderr_callback: nil,
-            temp_files: [],
             max_buffer_size: @default_max_buffer_size,
             overflowed?: false,
             startup_opts: nil
@@ -77,7 +75,6 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
       subprocess: nil,
       status: :disconnected,
       stderr_callback: options.stderr,
-      temp_files: [],
       max_buffer_size: max_buffer_size_from_options(options),
       overflowed?: false,
       startup_opts: opts
@@ -114,14 +111,14 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   defp resolve_command(opts, options) do
     case Keyword.fetch(opts, :command) do
       {:ok, command} when is_binary(command) ->
-        {:ok, command, Keyword.get(opts, :args, []), []}
+        {:ok, command, Keyword.get(opts, :args, [])}
 
       {:ok, _command} ->
         {:error, :invalid_command}
 
       :error ->
         case build_command_from_options(options) do
-          {:ok, {cmd, args, temp_files}} -> {:ok, cmd, args, temp_files}
+          {:ok, {cmd, args}} -> {:ok, cmd, args}
           {:error, reason} -> {:error, reason}
         end
     end
@@ -139,10 +136,9 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   defp start_subprocess(state, opts, options) do
-    with {:ok, command, args, temp_files} <- resolve_command(opts, options),
+    with {:ok, command, args} <- resolve_command(opts, options),
          :ok <- Setup.validate_cwd(options.cwd),
          :ok <- ensure_erlexec_started(),
-         {args, agent_temp_files} <- AgentsFile.externalize_agents_if_needed(args),
          cmd <- build_command(command, args),
          exec_opts <- build_exec_opts(options),
          {:ok, pid, os_pid} <- :exec.run(cmd, exec_opts) do
@@ -152,7 +148,6 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
          | subprocess: {pid, os_pid},
            status: :connected,
            stderr_callback: options.stderr,
-           temp_files: temp_files ++ agent_temp_files,
            max_buffer_size: max_buffer_size_from_options(options),
            overflowed?: false,
            startup_opts: nil
@@ -258,16 +253,14 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   def handle_info(_other, state), do: {:noreply, state}
 
   @impl GenServer
-  def terminate(_reason, %{subprocess: {pid, _os_pid}, temp_files: temp_files}) do
+  def terminate(_reason, %{subprocess: {pid, _os_pid}}) do
     :exec.stop(pid)
-    _ = AgentsFile.cleanup_temp_files(temp_files)
     :ok
   catch
     _, _ -> :ok
   end
 
-  def terminate(_reason, %{temp_files: temp_files}) do
-    _ = AgentsFile.cleanup_temp_files(temp_files)
+  def terminate(_reason, _state) do
     :ok
   end
 
@@ -411,7 +404,6 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     case CLI.resolve_executable(options) do
       {:ok, executable} ->
         args = [
-          "--print",
           "--output-format",
           "stream-json",
           "--input-format",
@@ -420,8 +412,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
         ]
 
         args = args ++ ClaudeAgentSDK.Options.to_stream_json_args(options)
-        {args, temp_files} = AgentsFile.externalize_agents_if_needed(args)
-        {:ok, {executable, args, temp_files}}
+        {:ok, {executable, args}}
 
       {:error, :not_found} ->
         {:error, :cli_not_found}

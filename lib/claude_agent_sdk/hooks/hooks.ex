@@ -15,13 +15,16 @@ defmodule ClaudeAgentSDK.Hooks do
 
   - `:pre_tool_use` - Before a tool executes
   - `:post_tool_use` - After a tool executes
+  - `:post_tool_use_failure` - After a tool execution fails
   - `:user_prompt_submit` - When user submits a prompt
   - `:stop` - When the agent finishes
+  - `:subagent_start` - When a subagent spawns
   - `:subagent_stop` - When a subagent finishes
   - `:pre_compact` - Before context compaction
-
-  The CLI currently does not support `SessionStart`, `SessionEnd`, or `Notification`
-  hook events in the Python SDK. These are rejected during validation.
+  - `:notification` - When agent sends a notification
+  - `:permission_request` - When a permission dialog would be shown
+  - `:session_start` - When a session begins
+  - `:session_end` - When a session ends
 
   ## Examples
 
@@ -57,21 +60,34 @@ defmodule ClaudeAgentSDK.Hooks do
   @type hook_event ::
           :pre_tool_use
           | :post_tool_use
+          | :post_tool_use_failure
           | :user_prompt_submit
           | :stop
+          | :subagent_start
           | :subagent_stop
           | :pre_compact
+          | :notification
+          | :permission_request
+          | :session_start
+          | :session_end
 
   @supported_events [
     :pre_tool_use,
     :post_tool_use,
+    :post_tool_use_failure,
     :user_prompt_submit,
     :stop,
+    :subagent_start,
     :subagent_stop,
-    :pre_compact
+    :pre_compact,
+    :notification,
+    :permission_request,
+    :session_start,
+    :session_end
   ]
 
-  @unsupported_events [:session_start, :session_end, :notification]
+  # All events are now supported. Kept for future use if events become unsupported.
+  # @unsupported_events []
 
   @typedoc """
   Input data passed to hook callbacks.
@@ -83,9 +99,16 @@ defmodule ClaudeAgentSDK.Hooks do
   - `cwd` - Current working directory
 
   Event-specific fields:
-  - PreToolUse/PostToolUse: `tool_name`, `tool_input`, `tool_response`
+  - PreToolUse/PostToolUse/PostToolUseFailure/PermissionRequest: `tool_name`, `tool_input`
+  - PostToolUse: `tool_response`
+  - PostToolUseFailure: `error`, `is_interrupt`
   - UserPromptSubmit: `prompt`
   - Stop/SubagentStop: `stop_hook_active`
+  - SubagentStart/SubagentStop: `agent_id`, `agent_type`, `agent_transcript_path`
+  - Notification: `message`, `title`, `notification_type`
+  - PermissionRequest: `permission_suggestions`, `permission_mode`
+  - SessionStart: `source`
+  - SessionEnd: `reason`
   - PreCompact: `trigger`, `custom_instructions`
   """
   @type hook_input :: %{
@@ -93,11 +116,31 @@ defmodule ClaudeAgentSDK.Hooks do
           required(:session_id) => String.t(),
           required(:transcript_path) => String.t(),
           required(:cwd) => String.t(),
+          # Tool-related
           optional(:tool_name) => String.t(),
           optional(:tool_input) => map(),
           optional(:tool_response) => term(),
-          optional(:prompt) => String.t(),
+          optional(:tool_use_id) => String.t(),
+          # Subagent-related
+          optional(:agent_id) => String.t(),
+          optional(:agent_transcript_path) => String.t(),
+          optional(:agent_type) => String.t(),
+          # PostToolUseFailure-specific
+          optional(:error) => String.t(),
+          optional(:is_interrupt) => boolean(),
+          # Notification-specific
           optional(:message) => String.t(),
+          optional(:title) => String.t(),
+          optional(:notification_type) => String.t(),
+          # PermissionRequest-specific
+          optional(:permission_suggestions) => [map()],
+          optional(:permission_mode) => String.t(),
+          # SessionStart-specific
+          optional(:source) => String.t(),
+          # SessionEnd-specific
+          optional(:reason) => String.t(),
+          # UserPromptSubmit/PreCompact
+          optional(:prompt) => String.t(),
           optional(:trigger) => String.t(),
           optional(:custom_instructions) => String.t(),
           optional(:stop_hook_active) => boolean(),
@@ -168,10 +211,16 @@ defmodule ClaudeAgentSDK.Hooks do
   @spec event_to_string(hook_event()) :: String.t()
   def event_to_string(:pre_tool_use), do: "PreToolUse"
   def event_to_string(:post_tool_use), do: "PostToolUse"
+  def event_to_string(:post_tool_use_failure), do: "PostToolUseFailure"
   def event_to_string(:user_prompt_submit), do: "UserPromptSubmit"
   def event_to_string(:stop), do: "Stop"
+  def event_to_string(:subagent_start), do: "SubagentStart"
   def event_to_string(:subagent_stop), do: "SubagentStop"
   def event_to_string(:pre_compact), do: "PreCompact"
+  def event_to_string(:notification), do: "Notification"
+  def event_to_string(:permission_request), do: "PermissionRequest"
+  def event_to_string(:session_start), do: "SessionStart"
+  def event_to_string(:session_end), do: "SessionEnd"
 
   @doc """
   Converts a CLI hook event string to Elixir atom.
@@ -189,10 +238,16 @@ defmodule ClaudeAgentSDK.Hooks do
   @spec string_to_event(String.t()) :: hook_event() | nil
   def string_to_event("PreToolUse"), do: :pre_tool_use
   def string_to_event("PostToolUse"), do: :post_tool_use
+  def string_to_event("PostToolUseFailure"), do: :post_tool_use_failure
   def string_to_event("UserPromptSubmit"), do: :user_prompt_submit
   def string_to_event("Stop"), do: :stop
+  def string_to_event("SubagentStart"), do: :subagent_start
   def string_to_event("SubagentStop"), do: :subagent_stop
   def string_to_event("PreCompact"), do: :pre_compact
+  def string_to_event("Notification"), do: :notification
+  def string_to_event("PermissionRequest"), do: :permission_request
+  def string_to_event("SessionStart"), do: :session_start
+  def string_to_event("SessionEnd"), do: :session_end
   def string_to_event(_), do: nil
 
   @doc """
@@ -204,7 +259,7 @@ defmodule ClaudeAgentSDK.Hooks do
       iex> :pre_tool_use in events
       true
       iex> length(events)
-      6
+      12
   """
   @spec all_valid_events() :: [hook_event()]
   def all_valid_events do
@@ -241,9 +296,6 @@ defmodule ClaudeAgentSDK.Hooks do
     cond do
       not is_atom(event) ->
         {:halt, {:error, "Hook event must be an atom, got: #{inspect(event)}"}}
-
-      event in @unsupported_events ->
-        {:halt, {:error, "Unsupported hook event: #{event}"}}
 
       event not in all_valid_events() ->
         {:halt, {:error, "Invalid hook event: #{event}"}}

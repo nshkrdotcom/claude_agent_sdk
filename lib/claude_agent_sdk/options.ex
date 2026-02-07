@@ -362,7 +362,6 @@ defmodule ClaudeAgentSDK.Options do
     |> add_model_args(options)
     |> add_fallback_model_args(options)
     |> add_betas_args(options)
-    |> add_agents_args(options)
     |> add_agent_args(options)
     |> add_session_id_args(options)
     |> add_fork_session_args(options)
@@ -821,20 +820,29 @@ defmodule ClaudeAgentSDK.Options do
   defp add_fallback_model_args(args, %{fallback_model: model}),
     do: args ++ ["--fallback-model", model]
 
-  defp add_agents_args(args, %{agents: nil}), do: args
+  @doc """
+  Converts the agents map to CLI-compatible format for the initialize request.
 
-  defp add_agents_args(args, %{agents: agents}) when is_map(agents) do
-    # Convert agents map to JSON format expected by CLI
-    # Transform %{atom_name => Agent.t()} to %{"string_name" => cli_map}
-    agents_json =
-      agents
-      |> Enum.map(fn {name, agent} ->
-        {to_string(name), ClaudeAgentSDK.Agent.to_cli_map(agent)}
-      end)
-      |> Map.new()
-      |> Jason.encode!()
+  Transforms `%{atom_name => Agent.t()}` to `%{"string_name" => cli_map}`.
 
-    args ++ ["--agents", agents_json]
+  ## Parameters
+
+  - `agents` - Map of atom names to Agent structs
+
+  ## Returns
+
+  Map of string names to CLI-compatible maps, or nil if no agents.
+  """
+  @spec agents_for_initialize(%{agent_name() => agent_definition()} | nil) :: map() | nil
+  def agents_for_initialize(nil), do: nil
+  def agents_for_initialize(agents) when agents == %{}, do: nil
+
+  def agents_for_initialize(agents) when is_map(agents) do
+    agents
+    |> Enum.map(fn {name, agent} ->
+      {to_string(name), ClaudeAgentSDK.Agent.to_cli_map(agent)}
+    end)
+    |> Map.new()
   end
 
   defp add_agent_args(args, %{agent: nil}), do: args

@@ -537,7 +537,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   defp build_streaming_args(%Options{} = options) do
     base_args = [
-      "--print",
       "--input-format",
       "stream-json",
       "--output-format",

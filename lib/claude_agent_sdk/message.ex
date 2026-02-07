@@ -308,7 +308,8 @@ defmodule ClaudeAgentSDK.Message do
       %{
         message: raw["message"],
         session_id: raw["session_id"],
-        parent_tool_use_id: raw["parent_tool_use_id"]
+        parent_tool_use_id: raw["parent_tool_use_id"],
+        tool_use_result: raw["tool_use_result"]
       }
       |> maybe_put_uuid(raw)
 
