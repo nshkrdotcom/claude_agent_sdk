@@ -1,6 +1,6 @@
 # MCP Tools Guide
 
-**Version:** 0.9.0 | **Last Updated:** 2026-01-17
+**Version:** 0.11.0 | **Last Updated:** 2026-02-06
 
 ---
 
@@ -177,6 +177,48 @@ defmodule Calculator do
   end
 end
 ```
+
+### Tool Annotations
+
+The `deftool` macro accepts a 5th argument with options, including `:annotations` for MCP tool annotations. Annotations are metadata hints for the client about tool behavior:
+
+```elixir
+deftool :read_file, "Read a file from disk", %{
+  type: "object",
+  properties: %{
+    path: %{type: "string", description: "File path to read"}
+  },
+  required: ["path"]
+},
+  annotations: %{
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+    title: "Read File"
+  } do
+  def execute(%{"path" => path}) do
+    case File.read(path) do
+      {:ok, content} ->
+        {:ok, %{"content" => [%{"type" => "text", "text" => content}]}}
+      {:error, reason} ->
+        {:error, "Failed to read #{path}: #{inspect(reason)}"}
+    end
+  end
+end
+```
+
+**Standard annotation fields:**
+
+| Annotation | Type | Description |
+|-----------|------|-------------|
+| `title` | string | Human-readable display name |
+| `readOnlyHint` | boolean | Tool does not modify state |
+| `destructiveHint` | boolean | Tool may perform destructive operations |
+| `idempotentHint` | boolean | Repeated calls produce the same result |
+| `openWorldHint` | boolean | Tool interacts with external entities |
+
+Annotations are included in `tools/list` responses and help clients make informed decisions about tool execution.
 
 ### What deftool Generates
 
@@ -521,6 +563,7 @@ server = ClaudeAgentSDK.create_sdk_mcp_server(
 | `name` | String | Yes | Unique server identifier |
 | `version` | String | No | Server version (defaults to `1.0.0`) |
 | `tools` | List | Yes | List of tool modules |
+| `supervisor` | pid/name | No | DynamicSupervisor to start the registry under |
 
 ### Server Structure
 
@@ -1185,6 +1228,27 @@ options = %ClaudeAgentSDK.Options{
 }
 
 ClaudeAgentSDK.query("prompt", options)
+```
+
+---
+
+## Documentation
+
+### MCP Status API
+
+Query the MCP server status at runtime:
+
+```elixir
+{:ok, status} = ClaudeAgentSDK.Client.get_mcp_status(client)
+IO.inspect(status, label: "MCP status")
+```
+
+### Async Tool Dispatch
+
+SDK MCP `tools/call` requests are dispatched asynchronously via `TaskSupervisor`, so long-running tool execution no longer blocks the `Client` callback path. Configure the execution timeout via application config:
+
+```elixir
+config :claude_agent_sdk, tool_execution_timeout_ms: 30_000
 ```
 
 ---

@@ -114,6 +114,7 @@ Note: when `can_use_tool` is set, the SDK enables `include_partial_messages` and
 | `continue_conversation` | `boolean()` | `nil` | Continue most recent conversation |
 | `resume` | `String.t()` | `nil` | Resume specific session by ID |
 | `fork_session` | `boolean()` | `nil` | Create new session when resuming |
+| `control_request_timeout_ms` | `integer()` | `nil` | Per-client timeout for control requests |
 
 SessionStore lifecycle note: persisted session cache is hydrated in a deferred startup step (`handle_continue/2`).
 `load_session/1` always falls back to disk, but `list/search` can be briefly incomplete right after SessionStore boot.
@@ -807,7 +808,6 @@ config :claude_agent_sdk,
   cli_stream_module: ClaudeAgentSDK.Query.CLIStream,
   task_supervisor: ClaudeAgentSDK.TaskSupervisor,
   task_supervisor_strict: false,          # true => return {:error, {:task_supervisor_unavailable, sup}}
-  agents_temp_file_max_age_seconds: 86_400,
   check_inbound_size_invariant: false,
   log_level: :warning                     # :debug | :info | :warning | :error
 ```

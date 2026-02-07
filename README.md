@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.10.0"}
+    {:claude_agent_sdk, "~> 0.11.0"}
   ]
 end
 ```
@@ -282,13 +282,14 @@ opts = %Options{
 {:ok, client} = Client.start_link(opts)
 ```
 
-**Available Hook Events:**
-- `pre_tool_use` / `post_tool_use` - Before/after tool execution
+**Available Hook Events (all 12 Python SDK events supported):**
+- `pre_tool_use` / `post_tool_use` / `post_tool_use_failure` - Tool execution lifecycle
 - `user_prompt_submit` - Before sending user messages
-- `stop` / `subagent_stop` - Completion events
+- `stop` / `subagent_stop` / `subagent_start` - Agent lifecycle
+- `notification` - CLI notifications
+- `permission_request` - Permission dialog interception
+- `session_start` / `session_end` - Session lifecycle
 - `pre_compact` - Before context compaction
-
-Note: `SessionStart`, `SessionEnd`, and `Notification` hook events are not supported by the Python SDK and are rejected for parity.
 
 See the [Hooks Guide](guides/hooks.md) for comprehensive documentation.
 
@@ -444,9 +445,7 @@ config :claude_agent_sdk,
   # Query CLI stream backend module
   cli_stream_module: ClaudeAgentSDK.Query.CLIStream,
   # Fail fast when configured task supervisor is unavailable
-  task_supervisor_strict: false,
-  # Max age (seconds) for stale temp --agents files cleanup
-  agents_temp_file_max_age_seconds: 86_400
+  task_supervisor_strict: false
 ```
 
 `config :claude_agent_sdk, :process_module` is still read as a fallback for query streaming,
@@ -577,6 +576,13 @@ cd examples/email_agent && mix deps.get && mix email.assistant "find emails from
 ## Upgrading
 
 For breaking changes and migration notes, see `CHANGELOG.md`.
+
+**0.11.0 breaking changes:**
+- `--print` flag removed from all modules. All queries now use `--output-format stream-json` exclusively.
+- `--agents` CLI flag removed. Agents are now sent via the `initialize` control request. Use `Options.agents_for_initialize/1`.
+- `AgentsFile` module deleted. Remove any `agents_temp_file_max_age_seconds` config.
+- `Client` state is now a `defstruct`. Four deprecated fields removed: `current_model`, `pending_model_change`, `current_permission_mode`, `pending_inbound_count`.
+- All 12 hook events are now supported (6 new: `post_tool_use_failure`, `notification`, `subagent_start`, `permission_request`, `session_start`, `session_end`).
 
 **0.10.0 fix (resume turn persistence):**
 - `resume/3` no longer uses `--print --resume` (one-shot mode that dropped intermediate turns). It now uses `--resume` with `--input-format stream-json`, preserving the full conversation history across resume calls.

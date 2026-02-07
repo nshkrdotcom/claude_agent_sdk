@@ -61,18 +61,22 @@ When hooks are configured, the SDK automatically uses the control protocol trans
 
 ## Hook Events
 
-The SDK supports six hook event types, each triggered at specific moments:
+The SDK supports all 12 hook event types from the Python SDK, each triggered at specific moments:
 
 | Event | Description | Common Use Cases |
 |-------|-------------|------------------|
 | `:pre_tool_use` | Before a tool executes | Security validation, permission checks |
 | `:post_tool_use` | After a tool executes | Audit logging, result processing |
+| `:post_tool_use_failure` | After a tool execution fails | Error tracking, retry logic |
 | `:user_prompt_submit` | When user submits a prompt | Context injection, preprocessing |
 | `:stop` | When the agent finishes | Finalization, reporting |
+| `:subagent_start` | When a subagent is spawned | Subagent tracking, resource limits |
 | `:subagent_stop` | When a subagent finishes | Subagent result processing |
 | `:pre_compact` | Before context compaction | Preserve important context |
-
-Note: `SessionStart`, `SessionEnd`, and `Notification` are not supported by the Python SDK and are rejected during validation.
+| `:notification` | CLI notification received | Alert routing, logging |
+| `:permission_request` | Permission dialog triggered | Programmatic permission responses |
+| `:session_start` | Session begins | Initialization, context setup |
+| `:session_end` | Session ends | Cleanup, final reporting |
 
 ### Event Configuration Examples
 
@@ -116,7 +120,9 @@ Hooks.string_to_event("PostToolUse")   # => :post_tool_use
 
 # Get all valid events
 Hooks.all_valid_events()
-# => [:pre_tool_use, :post_tool_use, :user_prompt_submit, :stop, :subagent_stop, :pre_compact]
+# => [:pre_tool_use, :post_tool_use, :post_tool_use_failure, :user_prompt_submit,
+#     :stop, :subagent_start, :subagent_stop, :pre_compact, :notification,
+#     :permission_request, :session_start, :session_end]
 ```
 
 ---
@@ -242,9 +248,16 @@ The input map varies by event type but always includes:
 |-------|-------------------|
 | `:pre_tool_use` | `tool_name`, `tool_input` |
 | `:post_tool_use` | `tool_name`, `tool_input`, `tool_response` |
+| `:post_tool_use_failure` | `tool_name`, `tool_input`, `error` |
 | `:user_prompt_submit` | `prompt` |
-| `:stop`, `:subagent_stop` | `stop_hook_active` |
+| `:stop` | `stop_hook_active`, `reason` |
+| `:subagent_start` | `agent_id`, `agent_type`, `agent_transcript_path` |
+| `:subagent_stop` | `stop_hook_active`, `agent_id`, `agent_type` |
 | `:pre_compact` | `trigger`, `custom_instructions` |
+| `:notification` | `message`, `title`, `notification_type`, `is_interrupt` |
+| `:permission_request` | `tool_name`, `tool_input`, `permission_suggestions`, `permission_mode` |
+| `:session_start` | `source` |
+| `:session_end` | `reason` |
 
 #### `tool_use_id` - Tool Invocation ID
 
@@ -456,6 +469,51 @@ Hide the output from the transcript:
 ```elixir
 Output.allow()
 |> Output.suppress_output()
+```
+
+#### `Output.with_additional_context/2`
+
+Add additional context to hook-specific output:
+
+```elixir
+Output.allow("Approved")
+|> Output.with_additional_context("Command took 2.3 seconds")
+```
+
+#### `Output.with_updated_mcp_output/2`
+
+Set updated MCP tool output in PostToolUse hooks:
+
+```elixir
+Output.continue()
+|> Output.with_updated_mcp_output(%{"content" => [%{"type" => "text", "text" => "filtered"}]})
+```
+
+#### `Output.permission_decision/1`
+
+Create a PermissionRequest hook output with a permission decision. Accepts a `Permission.Result` struct or a raw decision map:
+
+```elixir
+alias ClaudeAgentSDK.Permission.Result
+
+# From a Permission.Result struct
+Output.permission_decision(Result.allow())
+Output.permission_decision(Result.deny("Not allowed"))
+
+# Raw map passthrough
+Output.permission_decision(%{"type" => "allow"})
+```
+
+#### `Output.permission_allow/0` and `Output.permission_deny/1`
+
+Shorthand helpers for PermissionRequest hooks:
+
+```elixir
+# Allow the tool
+Output.permission_allow()
+
+# Deny with reason
+Output.permission_deny("Tool not permitted in this context")
 ```
 
 #### `Output.async/1`
@@ -1341,7 +1399,12 @@ Hooks provide a powerful mechanism for controlling Claude Agent SDK behavior:
 |----------|------------|---------------|
 | Security validation | `:pre_tool_use` | `Output.allow/0`, `Output.deny/1` |
 | Audit logging | `:pre_tool_use`, `:post_tool_use` | Return `%{}` |
-| Context injection | `:user_prompt_submit`, `:pre_compact` | `Output.add_context/2` |
+| Error tracking | `:post_tool_use_failure` | Return `%{}` |
+| Context injection | `:user_prompt_submit`, `:session_start`, `:pre_compact` | `Output.add_context/2`, `Output.with_additional_context/2` |
+| Permission automation | `:permission_request` | `Output.permission_allow/0`, `Output.permission_deny/1` |
+| Notification routing | `:notification` | Return `%{}` |
+| Agent lifecycle | `:subagent_start`, `:subagent_stop` | Return `%{}` |
+| Session lifecycle | `:session_start`, `:session_end` | `Output.add_context/2` |
 | Rate limiting | `:pre_tool_use` | ETS counters + `Output.deny/1` |
 | Execution control | Any | `Output.stop/1`, `Output.continue/0` |
 

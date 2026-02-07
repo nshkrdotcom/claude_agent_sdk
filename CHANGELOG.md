@@ -11,25 +11,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking Changes
 
-- **`--print` flag removed**: The `--print` CLI flag has been removed from all 5 modules (`CLIStream`, `Query`, `Streaming.Session`, `Transport.Port`, `Transport.Erlexec`, `Process`). All queries now use `--output-format stream-json` exclusively. This aligns with Python SDK v0.1.24.
+- **`--print` flag removed**: The `--print` CLI flag has been removed from all modules (`CLIStream`, `Query`, `Streaming.Session`, `Transport.Port`, `Transport.Erlexec`, `Process`). All queries now use `--output-format stream-json` exclusively. This aligns with Python SDK v0.1.24.
 - **`--agents` CLI flag removed**: Agents are no longer passed via `--agents` CLI argument. They are now sent through the `initialize` control request. `Options.to_args/1` no longer emits `--agents`. Use `Options.agents_for_initialize/1` to get the agents map for the initialize request.
 - **`AgentsFile` module deleted**: `ClaudeAgentSDK.Transport.AgentsFile` has been removed along with all `temp_files` tracking across transports.
+- **Client state is now a defstruct**: `Client` state is a `%Client{}` struct instead of a bare map. Four deprecated fields removed: `current_model`, `pending_model_change`, `current_permission_mode`, `pending_inbound_count`.
 
 ### Added
+
+#### Hooks & Lifecycle
 
 - **6 new hook events**: `PostToolUseFailure`, `Notification`, `SubagentStart`, `PermissionRequest`, `SessionStart`, `SessionEnd` — all 12 hook events from the Python SDK are now supported.
 - **Enhanced hook input fields**: `hook_input` type now includes fields for all new events: `error`, `is_interrupt`, `message`, `title`, `notification_type`, `agent_id`, `agent_type`, `agent_transcript_path`, `permission_suggestions`, `permission_mode`, `source`, `reason`, `trigger`, `custom_instructions`, `stop_hook_active`.
 - **New hook output helpers**: `Output.with_additional_context/2`, `Output.with_updated_mcp_output/2`, `Output.permission_decision/1`, `Output.permission_allow/0`, `Output.permission_deny/1`.
+- **Subscriber lifecycle monitoring**: `Client` and `Streaming.Session` now monitor subscriber processes and automatically remove dead subscribers, preventing message sends to terminated processes.
+
+#### MCP & Tools
+
 - **MCP tool annotations**: `deftool` macro now accepts a 5th argument with options including `:annotations` for MCP tool annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`). Annotations are included in `tools/list` responses.
 - **MCP status API**: `Client.get_mcp_status/1` sends a `mcp_status` control request and returns the MCP server status.
+- **Async MCP dispatch**: SDK MCP `tools/call` requests are dispatched asynchronously via `TaskSupervisor`, so long-running tool execution no longer blocks the `Client` callback path.
+- **DynamicSupervisor for Tool.Registry**: `create_sdk_mcp_server/1` accepts a `:supervisor` option to start the tool registry under your own `DynamicSupervisor`.
+- **Async tool execution**: `Tool.Registry` executes tools in async tasks with configurable timeout via `tool_execution_timeout_ms`.
 - **`tool_use_result` field**: User messages now parse the `tool_use_result` field from CLI JSON.
+
+#### Transport & Startup
+
+- **Lazy transport startup**: `Transport.Port`, `Transport.Erlexec`, and `Streaming.Session` support `startup_mode: :lazy` to defer subprocess startup to `handle_continue/2`. `start_link` returns before the subprocess is spawned; startup failures surface as process exit after init.
+- **Transport reason normalization**: `Transport.normalize_reason/1` maps equivalent reasons to stable atoms (`:port_closed` → `:not_connected`, `{:command_not_found, "claude"}` → `:cli_not_found`).
+- **Immediate error surfacing**: Control-client startup/send failures surface as immediate `%{type: :error}` stream events instead of waiting for the 5-minute stream timeout. Input-stream worker crashes also surface immediately.
+
+#### Auth & Config
+
+- **Async AuthManager**: `setup_token/0` and `refresh_token/0` run in background tasks. The `AuthManager` GenServer stays responsive while setup is in progress. Concurrent callers wait for the same in-flight setup.
+- **`Config` module**: New `ClaudeAgentSDK.Config` module centralizes application env reads.
+- **`Transport.Setup` module**: Shared transport setup logic extracted into a dedicated module.
+
+#### Client & Session
+
+- **`Client.await_initialized/2`**: Proper `GenServer.call`-based wait for client initialization, replacing the old polling loop.
+- **Per-client `control_request_timeout_ms`**: Configurable timeout for individual control requests.
 - **`agents_for_initialize/1`**: New public function on `Options` to convert agents map to CLI format for the initialize control request.
+- **`Message.error_result/2`**: Standardized constructor for error result messages.
+
+#### Shared Modules
+
+- **`Runtime` module**: Shared runtime utilities extracted from multiple modules.
+- **`Shell` module**: Shell command execution utilities.
+- **`Transport.ExecOptions` module**: Shared exec option building for both transports.
 
 ### Changed
 
 - **Agents via initialize**: Agent definitions are now sent through the control protocol `initialize` request instead of `--agents` CLI flag. This avoids ARG_MAX limits and aligns with Python SDK v0.1.19.
 - **Continue/resume routing**: `Query.continue/2` and `Query.resume/3` now route through the control client when hooks, SDK MCP servers, or `can_use_tool` are configured, ensuring agents are properly sent via initialize.
 - **`encode_initialize_request/4`**: Now accepts an optional 4th `agents` parameter.
+- **SessionStore ETS access**: ETS table changed from `:public` to `:protected` for data isolation.
+- **SessionStore deferred hydration**: On-disk session cache is hydrated in `handle_continue/2` for faster startup.
+- **Transport `unsubscribe/2`**: New function on erlexec transport for explicit subscriber removal.
+
+### Fixed
+
+- **Atom exhaustion in TokenStore**: `String.to_atom/1` on JSON provider data replaced with a provider whitelist, preventing unbounded atom creation.
+- **Permission struct enforcement**: `@enforce_keys` added to `Permission.RuleValue` and `Permission.Update` structs.
+- **`clear_auth/0` error handling**: Return type changed to `:ok | {:error, term()}`, propagating storage errors to callers.
+- **Process.alive? race**: Replaced `Process.alive?` checks with `try`/`:exit` guards in subscriber notification paths.
+- **Stale temp file cleanup**: `AgentsFile` cleanup of stale temp files (before module deletion).
+
+### Removed
+
+- **`AgentsFile` module**: Entirely removed — agents are now sent via `initialize`.
+- **4 deprecated Client state fields**: `current_model`, `pending_model_change`, `current_permission_mode`, `pending_inbound_count`.
 
 ## [0.10.0] - 2026-02-05
 

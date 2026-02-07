@@ -189,6 +189,20 @@ allowed_tools: []
 
 ---
 
+## How Agents Are Sent to the CLI
+
+As of v0.11.0, agent definitions are sent through the control protocol `initialize` request instead of the `--agents` CLI flag. This avoids operating system `ARG_MAX` limits for large agent configurations and aligns with Python SDK v0.1.19.
+
+The SDK handles this automatically:
+
+- `Options.to_args/1` no longer emits `--agents`
+- `Options.agents_for_initialize/1` converts your agents map to the format expected by the `initialize` control request
+- `Query.continue/2` and `Query.resume/3` automatically route through the control client when agents are configured
+
+You do not need to change your agent definitions — just upgrade to v0.11.0 and the new transport mechanism is used transparently.
+
+---
+
 ## Using Agents in Options
 
 To use agents, add them to the `Options` struct and specify which agent is active.
@@ -937,7 +951,7 @@ Agents in the Claude Agent SDK enable you to:
 
 Key modules:
 - `ClaudeAgentSDK.Agent` - Agent struct and validation
-- `ClaudeAgentSDK.Options` - Configuration with agents
+- `ClaudeAgentSDK.Options` - Configuration with agents (including `agents_for_initialize/1`)
 - `ClaudeAgentSDK.Session` - Session ID extraction for agent switching
 
 For more examples, see:

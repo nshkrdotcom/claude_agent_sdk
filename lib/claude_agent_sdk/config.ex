@@ -1,5 +1,10 @@
 defmodule ClaudeAgentSDK.Config do
-  @moduledoc false
+  @moduledoc """
+  Centralizes application environment reads for the SDK.
+
+  Provides accessor functions for configuration values such as mock mode
+  and the CLI stream module, with deprecation handling for legacy keys.
+  """
 
   alias ClaudeAgentSDK.Log, as: Logger
 

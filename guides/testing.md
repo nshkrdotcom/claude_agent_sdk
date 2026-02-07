@@ -242,16 +242,22 @@ The hooks system provides lifecycle event interception for testing security poli
 
 ### Hook Events
 
+All 12 hook events from the Python SDK are supported:
+
 | Event | When Triggered | Use Case |
 |-------|----------------|----------|
 | `pre_tool_use` | Before tool executes | Security validation, logging |
 | `post_tool_use` | After tool executes | Audit trails, monitoring |
+| `post_tool_use_failure` | After tool execution fails | Error tracking |
 | `user_prompt_submit` | When user submits prompt | Context injection |
 | `stop` | When agent finishes | Final logging |
+| `subagent_start` | When subagent is spawned | Subagent tracking |
 | `subagent_stop` | When subagent finishes | Subagent result handling |
 | `pre_compact` | Before context compaction | Preserve context |
-
-Note: `session_start`, `session_end`, and `notification` hooks are not supported by the Python SDK and are rejected.
+| `notification` | CLI notification received | Alert routing |
+| `permission_request` | Permission dialog triggered | Programmatic responses |
+| `session_start` | Session begins | Initialization |
+| `session_end` | Session ends | Cleanup |
 
 ### Creating Test Hooks
 

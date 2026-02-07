@@ -869,7 +869,11 @@ options = %Options{
 {:ok, session} = Streaming.start_session(options)
 ```
 
-### 10. Clean Shutdown Pattern
+### 10. Subscriber Lifecycle Monitoring
+
+`Client` and `Streaming.Session` automatically monitor subscriber processes and prune dead subscribers. You do not need to manually unsubscribe when a subscriber process terminates — the SDK handles cleanup via `Process.monitor/1`. This prevents message sends to terminated processes in production.
+
+### 11. Clean Shutdown Pattern
 
 ```elixir
 defmodule ChatManager do
