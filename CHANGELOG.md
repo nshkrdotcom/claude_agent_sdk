@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`Transport.Port` removed**: The Erlang Port-based transport has been removed. `Transport.Erlexec` is now the sole built-in transport for all subprocess communication. All code paths already defaulted to Erlexec since 0.11.0. Users who explicitly passed `Transport.Port` must switch to `Transport.Erlexec` (or omit the transport option to use the default).
 - **`Transport.normalize_reason(:port_closed)` removed**: The `:port_closed` -> `:not_connected` normalization has been removed. Custom transports should return `:not_connected` directly.
+- **Transport error tuple shape updated**: low-level transport failures now use `{:error, {:transport, reason}}` instead of bare `{:error, reason}`.
+
+### Added
+
+- **`subscribe/3` tagged subscriptions**: transport consumers can subscribe with `:legacy | reference()` and receive namespaced events (`{:claude_agent_sdk_transport, ref, event}`).
+- **`force_close/1` transport callback**: immediate shutdown API for robust cleanup paths.
+- **`stderr/1` transport callback**: retrieves bounded stderr capture from transport.
+- **`ClaudeAgentSDK.ProcessSupport.await_down/3`**: monitor-based process shutdown helper used by stream cleanup cascade.
 
 ## [0.11.0] - 2026-02-06
 

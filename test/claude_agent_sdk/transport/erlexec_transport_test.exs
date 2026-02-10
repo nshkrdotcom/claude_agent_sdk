@@ -176,6 +176,193 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
     assert :ok = ErlexecTransport.close(transport)
   end
 
+  describe "force_close/1" do
+    test "force_close stops subprocess and returns :ok" do
+      script = create_test_script("while read -r line; do echo $line; done")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      ErlexecTransport.subscribe(transport, self())
+      assert :ok = ErlexecTransport.force_close(transport)
+    end
+
+    test "returns typed error after transport exits" do
+      script = create_test_script("echo hi")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      ErlexecTransport.subscribe(transport, self())
+      assert_receive {:transport_exit, _}, 2_000
+      Process.sleep(100)
+      assert {:error, {:transport, :not_connected}} = ErlexecTransport.send(transport, "data")
+    end
+  end
+
+  describe "safe_call/3 isolation" do
+    test "handles transport death during call gracefully" do
+      script = create_test_script("echo hi")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      ErlexecTransport.subscribe(transport, self())
+      assert_receive {:transport_exit, _}, 2_000
+      Process.sleep(100)
+      # Should not raise; status reports disconnected after exit
+      assert :disconnected = ErlexecTransport.status(transport)
+    end
+  end
+
+  describe "tagged subscriber dispatch" do
+    test "dispatches events with tagged ref" do
+      ref = make_ref()
+      script = create_test_script("echo hello")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      ErlexecTransport.subscribe(transport, self(), ref)
+
+      assert_receive {:claude_agent_sdk_transport, ^ref, {:message, "hello"}}, 2_000
+      assert_receive {:claude_agent_sdk_transport, ^ref, {:exit, _}}, 2_000
+    end
+
+    test "legacy subscribers still receive bare tuples" do
+      script = create_test_script("echo hello")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      ErlexecTransport.subscribe(transport, self())
+
+      assert_receive {:transport_message, "hello"}, 2_000
+      assert_receive {:transport_exit, _}, 2_000
+    end
+  end
+
+  describe "stderr dispatch" do
+    test "dispatches stderr events to tagged subscribers" do
+      ref = make_ref()
+      script = create_test_script("echo err >&2; echo out; exit 0")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      ErlexecTransport.subscribe(transport, self(), ref)
+
+      assert_receive {:claude_agent_sdk_transport, ^ref, {:message, "out"}}, 2_000
+      assert_receive {:claude_agent_sdk_transport, ^ref, {:exit, _}}, 2_000
+    end
+  end
+
+  describe "queue-based drain" do
+    test "handles burst output without losing messages" do
+      script = create_test_script("for i in $(seq 1 500); do echo \"line_$i\"; done")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      ErlexecTransport.subscribe(transport, self())
+
+      lines = collect_messages([], 5_000)
+      assert length(lines) == 500
+      assert "line_1" in lines
+      assert "line_500" in lines
+    end
+  end
+
+  describe "stderr buffer" do
+    test "stderr/1 returns captured stderr" do
+      script = create_test_script("echo err >&2; echo out; exit 0")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      ErlexecTransport.subscribe(transport, self())
+      assert_receive {:transport_exit, _}, 2_000
+      stderr = ErlexecTransport.stderr(transport)
+      assert stderr =~ "err"
+    end
+
+    test "caps stderr buffer to max_stderr_buffer_size" do
+      script =
+        create_test_script(
+          ~s|python3 -c "import sys; sys.stderr.write('x' * 1000000)"; echo done|
+        )
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(
+          command: script,
+          args: [],
+          options: %Options{},
+          max_stderr_buffer_size: 256
+        )
+
+      ErlexecTransport.subscribe(transport, self())
+      assert_receive {:transport_exit, _}, 5_000
+      stderr = ErlexecTransport.stderr(transport)
+      assert byte_size(stderr) <= 256
+    end
+  end
+
+  describe "headless timeout" do
+    test "auto-stops transport when no subscribers after timeout" do
+      script = create_test_script("sleep 60")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(
+          command: script,
+          args: [],
+          options: %Options{},
+          headless_timeout_ms: 100
+        )
+
+      monitor = Process.monitor(transport)
+      assert_receive {:DOWN, ^monitor, :process, ^transport, _}, 2_000
+    end
+
+    test "cancels headless timer on subscribe" do
+      script = create_test_script("while read -r line; do echo $line; done")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(
+          command: script,
+          args: [],
+          options: %Options{},
+          headless_timeout_ms: 200
+        )
+
+      ErlexecTransport.subscribe(transport, self())
+      Process.sleep(300)
+      assert :connected = ErlexecTransport.status(transport)
+      ErlexecTransport.close(transport)
+    end
+  end
+
+  describe "subscriber lifecycle" do
+    test "auto-stops when last subscriber goes down" do
+      script = create_test_script("while read -r line; do echo $line; done")
+
+      subscriber =
+        spawn(fn ->
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      ErlexecTransport.subscribe(transport, subscriber)
+      monitor = Process.monitor(transport)
+
+      send(subscriber, :stop)
+      assert_receive {:DOWN, ^monitor, :process, ^transport, _}, 5_000
+    end
+  end
+
   defp create_test_script(body) do
     dir = Path.join(System.tmp_dir!(), "erlexec_transport_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
@@ -192,5 +379,14 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
     ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(dir) end)
 
     path
+  end
+
+  defp collect_messages(acc, timeout) do
+    receive do
+      {:transport_message, line} -> collect_messages([line | acc], timeout)
+      {:transport_exit, _} -> Enum.reverse(acc)
+    after
+      timeout -> Enum.reverse(acc)
+    end
   end
 end

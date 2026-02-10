@@ -53,6 +53,14 @@ end
 
 Errors can originate from local validation (invalid model name) or from the CLI itself (for example if a paid tier is required). The response includes the failure reason surfaced by the control protocol.
 
+Transport implementations now normalize low-level failures as:
+
+```elixir
+{:error, {:transport, reason}}
+```
+
+Examples include `{:error, {:transport, :not_connected}}`, `{:error, {:transport, :timeout}}`, and `{:error, {:transport, {:send_failed, detail}}}`.
+
 ### Inspecting the Current Model
 
 ```elixir

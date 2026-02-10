@@ -12,6 +12,10 @@ defmodule MyApp.Transport.WebSocket do
 
   alias MyApp.Transport.WebSocket.State
 
+  def start(opts) do
+    WebSockex.start(__MODULE__, opts[:url], %State{subscribers: MapSet.new(), opts: opts})
+  end
+
   def start_link(opts) do
     WebSockex.start_link(opts[:url], __MODULE__, %State{subscribers: MapSet.new(), opts: opts})
   end
@@ -24,9 +28,15 @@ defmodule MyApp.Transport.WebSocket do
     GenServer.call(pid, {:subscribe, subscriber})
   end
 
+  def subscribe(pid, subscriber, _tag) do
+    subscribe(pid, subscriber)
+  end
+
   def close(pid), do: WebSockex.close(pid)
+  def force_close(pid), do: close(pid)
 
   def status(pid), do: GenServer.call(pid, :status)
+  def stderr(_pid), do: ""
 
   defp append_newline(message) when is_binary(message) do
     if String.ends_with?(message, \"\\n\"), do: message, else: message <> \"\\n\"
@@ -37,10 +47,22 @@ end
 The callbacks should:
 
 - **start_link/1** – boot whatever process manages your connection
+- **start/1** – optional unlinked startup path (recommended for stream/resource usage)
 - **send/2** – forward newline-terminated JSON strings to Claude (or your proxy)
 - **subscribe/2** – register calling processes so they receive `{:transport_message, payload}` messages
+- **subscribe/3** – optional tagged subscription (`:legacy | reference()`) for namespaced events
 - **close/1** – shut down gracefully
+- **force_close/1** – optional fast shutdown path (terminate transport immediately)
 - **status/1** – expose a health indicator (connected/disconnected/error)
+- **stderr/1** – optional stderr buffer accessor; return `""` on unavailable/error
+
+When supporting tagged subscriptions (`subscribe/3`), emit:
+- `{:claude_agent_sdk_transport, ref, {:message, line}}`
+- `{:claude_agent_sdk_transport, ref, {:error, reason}}`
+- `{:claude_agent_sdk_transport, ref, {:stderr, data}}`
+- `{:claude_agent_sdk_transport, ref, {:exit, reason}}`
+
+Transport failures should use the typed shape: `{:error, {:transport, reason}}`.
 
 ## 2. Start the Client with Your Transport
 

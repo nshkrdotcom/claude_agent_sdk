@@ -8,7 +8,16 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   - Optional transport injection
   """
 
-  alias ClaudeAgentSDK.{CLI, Errors, Message, Options, Runtime, TaskSupervisor, Transport}
+  alias ClaudeAgentSDK.{
+    CLI,
+    Errors,
+    Message,
+    Options,
+    ProcessSupport,
+    Runtime,
+    TaskSupervisor,
+    Transport
+  }
 
   @type transport_spec :: module() | {module(), keyword()} | nil
   @transport_close_grace_ms 2_000
@@ -81,13 +90,16 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       |> Keyword.put_new(:args, args)
       |> Keyword.put_new(:options, options)
 
+    transport_ref = make_ref()
+
     with {:ok, transport_opts} <- maybe_put_cli_command(module, transport_opts, options),
          {:ok, transport_pid} <- module.start_link(transport_opts),
-         :ok <- module.subscribe(transport_pid, self()),
+         :ok <- subscribe_transport(module, transport_pid, transport_ref),
          {:ok, input_task} <- maybe_stream_input(module, transport_pid, input) do
       %{
         module: module,
         transport: transport_pid,
+        transport_ref: transport_ref,
         input_task: input_task,
         done?: false,
         # Track if we've received at least one message for better error diagnostics
@@ -212,6 +224,23 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       {:DOWN, monitor_ref, :process, _pid, reason} ->
         maybe_handle_input_task_down(state, monitor_ref, reason)
 
+      {:claude_agent_sdk_transport, ref, {:message, line}}
+      when ref == state.transport_ref and is_binary(line) ->
+        handle_line(line, state)
+
+      {:claude_agent_sdk_transport, ref, {:error, error}} when ref == state.transport_ref ->
+        {[transport_error_message(error)], %{state | done?: true}}
+
+      {:claude_agent_sdk_transport, ref, {:stderr, _data}} when ref == state.transport_ref ->
+        receive_next(state)
+
+      {:claude_agent_sdk_transport, ref, {:exit, _reason}} when ref == state.transport_ref ->
+        if process_running?(state.transport) do
+          receive_next(state)
+        else
+          {:halt, %{state | done?: true}}
+        end
+
       {:transport_message, line} when is_binary(line) ->
         handle_line(line, state)
 
@@ -308,14 +337,15 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     receive_next(state)
   end
 
-  defp cleanup(%{module: module, transport: transport, input_task: task}) do
+  defp cleanup(%{
+         module: module,
+         transport: transport,
+         transport_ref: transport_ref,
+         input_task: task
+       }) do
     cleanup_input_task(task)
-
-    if graceful_close?(module) do
-      wait_for_transport_exit(transport, @transport_close_grace_ms)
-    end
-
-    safe_close_transport(module, transport)
+    close_transport_with_timeout(module, transport, @transport_close_grace_ms)
+    flush_transport_messages(transport_ref)
 
     :ok
   end
@@ -330,18 +360,19 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp cleanup_input_task(_), do: :ok
 
-  defp safe_close_transport(module, transport) when is_pid(transport) do
-    _ = module.close(transport)
-    :ok
-  catch
-    :exit, {:noproc, _} -> :ok
-    :exit, :noproc -> :ok
+  defp close_transport_with_timeout(module, transport, timeout_ms) when is_pid(transport) do
+    ref = Process.monitor(transport)
+    _ = safe_force_close(module, transport)
+    await_down_or_shutdown(ref, transport, timeout_ms)
   end
 
-  defp safe_close_transport(_module, _transport), do: :ok
+  defp close_transport_with_timeout(_module, _transport, _timeout_ms), do: :ok
 
   defp drain_stale_transport_messages do
     receive do
+      {:claude_agent_sdk_transport, _ref, _event} ->
+        drain_stale_transport_messages()
+
       {:transport_message, _line} ->
         drain_stale_transport_messages()
 
@@ -356,30 +387,86 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     end
   end
 
-  defp wait_for_transport_exit(transport, timeout_ms)
-       when is_pid(transport) and is_integer(timeout_ms) and timeout_ms > 0 do
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
-    do_wait_for_transport_exit(transport, deadline)
-  end
-
-  defp wait_for_transport_exit(_transport, _timeout_ms), do: :ok
-
-  defp do_wait_for_transport_exit(transport, deadline_ms) do
-    cond do
-      not process_running?(transport) ->
+  defp flush_transport_messages(ref) when is_reference(ref) do
+    receive do
+      {:claude_agent_sdk_transport, ^ref, _event} ->
+        flush_transport_messages(ref)
+    after
+      0 ->
         :ok
-
-      System.monotonic_time(:millisecond) >= deadline_ms ->
-        :ok
-
-      true ->
-        Process.sleep(20)
-        do_wait_for_transport_exit(transport, deadline_ms)
     end
   end
 
-  defp graceful_close?(module) do
-    module == ClaudeAgentSDK.Transport.Erlexec
+  defp flush_transport_messages(_), do: :ok
+
+  defp await_down_or_shutdown(ref, transport, timeout_ms) do
+    case ProcessSupport.await_down(ref, transport, timeout_ms) do
+      :down ->
+        :ok
+
+      :timeout ->
+        safe_shutdown(transport)
+        await_down_or_kill(ref, transport, 250)
+    end
+  end
+
+  defp await_down_or_kill(ref, transport, timeout_ms) do
+    case ProcessSupport.await_down(ref, transport, timeout_ms) do
+      :down ->
+        :ok
+
+      :timeout ->
+        safe_kill(transport)
+        await_down_or_demonitor(ref, transport, 250)
+    end
+  end
+
+  defp await_down_or_demonitor(ref, transport, timeout_ms) do
+    case ProcessSupport.await_down(ref, transport, timeout_ms) do
+      :down ->
+        :ok
+
+      :timeout ->
+        Process.demonitor(ref, [:flush])
+        :ok
+    end
+  end
+
+  defp safe_force_close(module, transport) when is_pid(transport) do
+    if function_exported?(module, :force_close, 1) do
+      module.force_close(transport)
+    else
+      module.close(transport)
+    end
+  catch
+    :exit, _ -> {:error, {:transport, :not_connected}}
+  end
+
+  defp safe_shutdown(transport) when is_pid(transport) do
+    Process.exit(transport, :shutdown)
+    :ok
+  catch
+    :exit, _ -> :ok
+  end
+
+  defp safe_kill(transport) when is_pid(transport) do
+    Process.exit(transport, :kill)
+    :ok
+  catch
+    :exit, _ -> :ok
+  end
+
+  defp subscribe_transport(module, transport_pid, transport_ref) do
+    cond do
+      function_exported?(module, :subscribe, 3) ->
+        module.subscribe(transport_pid, self(), transport_ref)
+
+      function_exported?(module, :subscribe, 2) ->
+        module.subscribe(transport_pid, self())
+
+      true ->
+        {:error, :subscribe_not_supported}
+    end
   end
 
   defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil

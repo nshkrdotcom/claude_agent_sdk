@@ -18,6 +18,12 @@ defmodule ClaudeAgentSDK.Transport do
 
   @typedoc "Transport-specific options propagated from `Client.start_link/1`."
   @type opts :: keyword()
+  @type subscription_tag :: :legacy | reference()
+
+  @doc """
+  Starts the transport process and establishes the CLI connection.
+  """
+  @callback start(opts()) :: {:ok, t()} | {:error, term()}
 
   @doc """
   Starts the transport process and establishes the CLI connection.
@@ -33,11 +39,13 @@ defmodule ClaudeAgentSDK.Transport do
   Subscribes the given process to receive inbound messages.
   """
   @callback subscribe(t(), pid()) :: :ok
+  @callback subscribe(t(), pid(), subscription_tag()) :: :ok | {:error, term()}
 
   @doc """
   Closes the transport and releases any external resources.
   """
   @callback close(t()) :: :ok
+  @callback force_close(t()) :: :ok | {:error, term()}
 
   @doc """
   Returns the current connection status for observability/health checks.
@@ -58,8 +66,9 @@ defmodule ClaudeAgentSDK.Transport do
   - This callback is optional - transports may not support it
   """
   @callback end_input(t()) :: :ok | {:error, term()}
+  @callback stderr(t()) :: binary()
 
-  @optional_callbacks [end_input: 1]
+  @optional_callbacks [end_input: 1, subscribe: 3, force_close: 1, stderr: 1]
 
   @doc false
   @spec normalize_reason(term()) :: term()

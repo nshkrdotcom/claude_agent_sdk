@@ -14,6 +14,7 @@ This guide covers error handling in the Claude Agent SDK for Elixir, including e
 8. [Result Subtypes](#result-subtypes)
 9. [Retry Strategies](#retry-strategies)
 10. [Best Practices](#best-practices)
+11. [Transport Error Contract](#transport-error-contract)
 
 ---
 
@@ -238,6 +239,26 @@ Raised when the SDK fails to parse JSON output from the CLI.
 
 **Common causes:**
 - Corrupted CLI output
+
+---
+
+## Transport Error Contract
+
+Transport callback failures are normalized to a typed tuple:
+
+```elixir
+{:error, {:transport, reason}}
+```
+
+Common reasons:
+
+- `:not_connected`
+- `:timeout`
+- `:transport_stopped`
+- `{:send_failed, detail}`
+- `{:call_exit, detail}`
+
+This contract applies to transport APIs such as `send/2`, `end_input/1`, `subscribe/3`, and `force_close/1`.
 - Partial message received due to process termination
 - Non-JSON output mixed with JSON (debug output, warnings)
 - JSON frames exceeding `max_buffer_size` (default: 1MB)

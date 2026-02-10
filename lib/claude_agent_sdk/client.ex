@@ -737,6 +737,9 @@ defmodule ClaudeAgentSDK.Client do
       :ok ->
         {:reply, :ok, state}
 
+      {:error, {:transport, :not_connected}} ->
+        {:reply, {:error, :not_connected}, state}
+
       {:error, :not_connected} ->
         {:reply, {:error, :not_connected}, state}
 
@@ -3228,7 +3231,10 @@ defmodule ClaudeAgentSDK.Client do
 
   defp send_payload(%{transport: transport, transport_module: module}, payload)
        when is_pid(transport) do
-    module.send(transport, ensure_newline(payload))
+    case module.send(transport, ensure_newline(payload)) do
+      {:error, {:transport, reason}} -> {:error, reason}
+      other -> other
+    end
   end
 
   defp send_payload(%{port: port}, payload) when is_port(port) do
