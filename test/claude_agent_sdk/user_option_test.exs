@@ -3,7 +3,6 @@ defmodule ClaudeAgentSDK.UserOptionTest do
 
   alias ClaudeAgentSDK.{Options, Process}
   alias ClaudeAgentSDK.Streaming.Session
-  alias ClaudeAgentSDK.Transport.Port
 
   defp env_list_to_map(nil), do: %{}
 
@@ -27,22 +26,6 @@ defmodule ClaudeAgentSDK.UserOptionTest do
       end)
       |> env_list_to_map()
 
-    assert env_map["USER"] == "runner"
-    assert env_map["LOGNAME"] == "runner"
-  end
-
-  test "transport port env includes user overrides" do
-    options = %Options{user: "runner"}
-
-    opts =
-      Port.__build_port_options__([{:env, [{"EXISTING", "1"}]}], options)
-
-    env_map =
-      opts
-      |> Keyword.get(:env)
-      |> env_list_to_map()
-
-    assert env_map["EXISTING"] == "1"
     assert env_map["USER"] == "runner"
     assert env_map["LOGNAME"] == "runner"
   end

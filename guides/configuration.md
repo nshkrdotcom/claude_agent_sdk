@@ -1008,7 +1008,7 @@ The SDK automatically selects the appropriate transport based on configured feat
 
 ### Transport Startup Mode
 
-`Transport.Port`, `Transport.Erlexec`, and `Streaming.Session` support
+`Transport.Erlexec` and `Streaming.Session` support
 `startup_mode: :eager | :lazy` in their start options.
 
 - `:eager` (default): subprocess startup happens in `init/1`
@@ -1018,7 +1018,7 @@ The SDK automatically selects the appropriate transport based on configured feat
 ClaudeAgentSDK.query(
   "Hello",
   %Options{},
-  {ClaudeAgentSDK.Transport.Port, [startup_mode: :lazy]}
+  {ClaudeAgentSDK.Transport.Erlexec, [startup_mode: :lazy]}
 )
 |> Enum.to_list()
 ```

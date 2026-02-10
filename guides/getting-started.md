@@ -223,7 +223,7 @@ For advanced transport lifecycle control, query supports transport injection:
 ClaudeAgentSDK.query(
   "Hello",
   options,
-  {ClaudeAgentSDK.Transport.Port, [startup_mode: :lazy]}
+  {ClaudeAgentSDK.Transport.Erlexec, [startup_mode: :lazy]}
 )
 |> Enum.to_list()
 ```

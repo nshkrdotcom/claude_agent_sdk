@@ -92,9 +92,9 @@ For your WebSocket transport write a focused integration test that uses a local 
 
 ## 5. Reference Implementation
 
-See `ClaudeAgentSDK.Transport.Port` for a complete example of a transport module. It demonstrates:
+See `ClaudeAgentSDK.Transport.Erlexec` for a complete example of a transport module. It demonstrates:
 
-- Port lifecycle management
+- Subprocess lifecycle management via erlexec
 - Broadcasting messages to subscribers
 - Maintaining connection status
 - Graceful shutdown semantics

@@ -65,7 +65,7 @@ end
 
 ## Transport Abstraction
 
-Every client now delegates IO to a transport module. The default port-based transport mirrors the previous behaviour, but you can provide your own implementation:
+Every client now delegates IO to a transport module. The default erlexec-based transport mirrors previous behaviour, but you can provide your own implementation:
 
 ```elixir
 {:ok, client} =
@@ -89,7 +89,7 @@ defmodule MyApp.Transport.WebSocket do
 end
 ```
 
-The SDK expects newline-terminated JSON frames for CLI compatibility. Use the helper `ClaudeAgentSDK.Transport.Port.ensure_newline/1` (or replicate the logic) to avoid protocol mismatches.
+The SDK expects newline-terminated JSON frames for CLI compatibility. Ensure outbound payloads end with a newline character to avoid protocol mismatches.
 
 ### Writing Tests with the Mock Transport
 
@@ -122,5 +122,5 @@ These helpers keep the transport layer simple and make it easy to write integrat
 ## Migration Notes
 
 - Applications that previously held onto the client port should now treat the transport as an opaque module. Use `Client.stop/1` to trigger a graceful shutdown.
-- `Client.start_link/2` accepts an optional keyword list with `:transport` and `:transport_opts`. Existing code that only passes `%Options{}` will continue to use the port transport automatically.
+- `Client.start_link/2` accepts an optional keyword list with `:transport` and `:transport_opts`. Existing code that only passes `%Options{}` will continue to use the erlexec transport automatically.
 - Tests that previously called the CLI directly should be switched to the mock transport to benefit from deterministic messaging. See `test/support/mock_transport.ex` for reference.

@@ -715,7 +715,6 @@ arrive after `start_link` succeeds. Handle transport exits as part of normal sup
 
 Query/control streaming boundaries normalize equivalent low-level transport errors:
 
-- `:port_closed` becomes `:not_connected`
 - `{:command_not_found, "claude"}` becomes `:cli_not_found`
 
 Use the normalized reason atoms in retry/fallback logic:

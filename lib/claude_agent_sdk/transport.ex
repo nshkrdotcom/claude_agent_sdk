@@ -53,8 +53,8 @@ defmodule ClaudeAgentSDK.Transport do
 
   ## Implementation Notes
 
-  - For Port-based transports: Close the stdin pipe
-  - For erlexec-based transports: Send `:eof` signal
+  - The built-in erlexec transport sends an `:eof` signal
+  - Custom transports should close the stdin pipe or equivalent
   - This callback is optional - transports may not support it
   """
   @callback end_input(t()) :: :ok | {:error, term()}
@@ -63,7 +63,6 @@ defmodule ClaudeAgentSDK.Transport do
 
   @doc false
   @spec normalize_reason(term()) :: term()
-  def normalize_reason(:port_closed), do: :not_connected
   def normalize_reason({:command_not_found, "claude"}), do: :cli_not_found
   def normalize_reason(reason), do: reason
 end

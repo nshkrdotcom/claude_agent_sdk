@@ -2,7 +2,7 @@ defmodule ClaudeAgentSDK.Transport.StderrCallbackTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Options
-  alias ClaudeAgentSDK.Transport.Port, as: PortTransport
+  alias ClaudeAgentSDK.Transport.Erlexec, as: ErlexecTransport
 
   test "invokes Options.stderr callback for non-JSON stderr lines" do
     test_pid = self()
@@ -11,20 +11,22 @@ defmodule ClaudeAgentSDK.Transport.StderrCallbackTest do
       create_test_script("""
       echo "ERR_LINE" 1>&2
       echo '{"type":"system","subtype":"init","session_id":"s"}'
-      exec cat
+      while read -r line; do
+        echo "$line"
+      done
       """)
 
     stderr_cb = fn line -> send(test_pid, {:stderr_line, line}) end
     options = %Options{stderr: stderr_cb}
 
-    {:ok, transport} = PortTransport.start_link(command: script, args: [], options: options)
-    PortTransport.subscribe(transport, self())
+    {:ok, transport} = ErlexecTransport.start_link(command: script, args: [], options: options)
+    ErlexecTransport.subscribe(transport, self())
 
-    assert_receive {:stderr_line, "ERR_LINE"}, 500
-    assert_receive {:transport_message, json_line}, 500
+    assert_receive {:stderr_line, "ERR_LINE"}, 1_000
+    assert_receive {:transport_message, json_line}, 1_000
     assert json_line =~ ~s("type":"system")
 
-    PortTransport.close(transport)
+    ErlexecTransport.close(transport)
   end
 
   defp create_test_script(body) do

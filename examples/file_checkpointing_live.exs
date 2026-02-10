@@ -33,7 +33,7 @@ defmodule FileCheckpointingLive do
         max_turns: 3
       }
 
-      {:ok, client} = Client.start_link(options, transport: ClaudeAgentSDK.Transport.Port)
+      {:ok, client} = Client.start_link(options, transport: ClaudeAgentSDK.Transport.Erlexec)
 
       checkpoint_id =
         run_step(

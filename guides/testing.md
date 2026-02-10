@@ -892,7 +892,7 @@ When testing SessionStore startup behavior, remember cache hydration is deferred
 Use bounded retries/assertions for `list/search` immediately after start, or assert via `load_session/1` (disk fallback path).
 
 For transport failures, assert normalized reasons (`:not_connected`, `:cli_not_found`)
-instead of transport-specific internals (`:port_closed`, `{:command_not_found, "claude"}`).
+instead of transport-specific internals (for example `{:command_not_found, "claude"}`).
 
 For transport/session startup lifecycle tests, `startup_mode: :lazy` lets you assert post-init
 startup failures deterministically (process exits after `start_link`).

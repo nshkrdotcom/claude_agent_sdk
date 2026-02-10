@@ -143,7 +143,7 @@ now emits an explicit `:error_during_execution` result message instead of waitin
 You can inject a transport for query flows (module or `{module, opts}` tuple):
 
 ```elixir
-ClaudeAgentSDK.query("Hello", %Options{}, {ClaudeAgentSDK.Transport.Port, []})
+ClaudeAgentSDK.query("Hello", %Options{}, {ClaudeAgentSDK.Transport.Erlexec, []})
 |> Enum.to_list()
 ```
 
@@ -153,7 +153,7 @@ You can also defer subprocess startup with lazy mode:
 ClaudeAgentSDK.query(
   "Hello",
   %Options{},
-  {ClaudeAgentSDK.Transport.Port, [startup_mode: :lazy]}
+  {ClaudeAgentSDK.Transport.Erlexec, [startup_mode: :lazy]}
 )
 |> Enum.to_list()
 ```

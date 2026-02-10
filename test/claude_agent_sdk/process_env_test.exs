@@ -3,7 +3,6 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
 
   alias ClaudeAgentSDK.{Options, Process}
   alias ClaudeAgentSDK.Streaming.Session
-  alias ClaudeAgentSDK.Transport.Port, as: PortTransport
 
   test "env builder merges option overrides and user" do
     options = %Options{
@@ -32,30 +31,6 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
       |> Map.new()
 
     assert env_map["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] == "true"
-  end
-
-  test "port transport env builder sets file checkpointing env var when enabled" do
-    env_var = "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"
-    original_value = System.get_env(env_var)
-    System.put_env(env_var, "false")
-
-    on_exit(fn ->
-      if is_binary(original_value) do
-        System.put_env(env_var, original_value)
-      else
-        System.delete_env(env_var)
-      end
-    end)
-
-    options = %Options{enable_file_checkpointing: true}
-    opts = PortTransport.__build_port_options__([], options)
-
-    env_map =
-      opts
-      |> Keyword.fetch!(:env)
-      |> Map.new()
-
-    assert env_map[env_var] == "true"
   end
 
   test "shell escaping preserves empty string arguments" do

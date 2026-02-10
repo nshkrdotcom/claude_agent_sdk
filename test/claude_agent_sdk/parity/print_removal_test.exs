@@ -14,7 +14,6 @@ defmodule ClaudeAgentSDK.Parity.PrintRemovalTest do
   @source_files [
     {"lib/claude_agent_sdk/query/cli_stream.ex", "CLIStream"},
     {"lib/claude_agent_sdk/streaming/session.ex", "Streaming.Session"},
-    {"lib/claude_agent_sdk/transport/port.ex", "Transport.Port"},
     {"lib/claude_agent_sdk/transport/erlexec.ex", "Transport.Erlexec"},
     {"lib/claude_agent_sdk/process.ex", "Process"}
   ]

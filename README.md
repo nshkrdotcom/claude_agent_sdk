@@ -207,14 +207,14 @@ prompts = [
 ClaudeAgentSDK.query(prompts, opts) |> Enum.to_list()
 
 # Custom transport injection
-ClaudeAgentSDK.query("Hello", opts, {ClaudeAgentSDK.Transport.Port, []})
+ClaudeAgentSDK.query("Hello", opts, {ClaudeAgentSDK.Transport.Erlexec, []})
 |> Enum.to_list()
 
 # Lazy transport startup (defer subprocess spawn to handle_continue)
 ClaudeAgentSDK.query(
   "Hello",
   opts,
-  {ClaudeAgentSDK.Transport.Port, [startup_mode: :lazy]}
+  {ClaudeAgentSDK.Transport.Erlexec, [startup_mode: :lazy]}
 )
 |> Enum.to_list()
 
@@ -454,13 +454,12 @@ but it is deprecated and logs a warning once per legacy module.
 `SessionStore` now hydrates on-disk cache in a `handle_continue/2` step. Startup is faster,
 but `list/search` can be briefly incomplete immediately after boot while warmup finishes.
 
-`Transport.Port`, `Transport.Erlexec`, and `Streaming.Session` support `startup_mode: :lazy`
+`Transport.Erlexec` and `Streaming.Session` support `startup_mode: :lazy`
 to defer subprocess startup to `handle_continue/2`. In lazy mode, `start_link` can succeed
 before the subprocess is spawned; startup failures then surface as process exit after init.
 
 Query-side transport errors normalize equivalent reasons to stable atoms where possible:
-`:port_closed` is treated as `:not_connected`, and `{:command_not_found, "claude"}`
-is treated as `:cli_not_found`.
+`{:command_not_found, "claude"}` is treated as `:cli_not_found`.
 
 ### SDK Logging
 

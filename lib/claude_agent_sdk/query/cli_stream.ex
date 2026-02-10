@@ -115,20 +115,14 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp needs_cli_command?(module, transport_opts) do
-    module in [ClaudeAgentSDK.Transport.Port, ClaudeAgentSDK.Transport.Erlexec] and
+    module == ClaudeAgentSDK.Transport.Erlexec and
       Keyword.get(transport_opts, :command) == nil
   end
 
-  defp normalize_transport(nil, %Options{user: user}, input) when is_binary(user) do
+  defp normalize_transport(nil, _options, input) do
     module = ClaudeAgentSDK.Transport.Erlexec
     ensure_streaming_transport!(module, input)
     {module, []}
-  end
-
-  # Always use Erlexec - Port transport can't close stdin independently, and the
-  # Claude CLI hangs if stdin isn't closed for non-streaming (--print) queries.
-  defp normalize_transport(nil, _options, _input) do
-    {ClaudeAgentSDK.Transport.Erlexec, []}
   end
 
   defp normalize_transport({module, opts}, _options, input) when is_atom(module) do
@@ -385,7 +379,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp graceful_close?(module) do
-    module in [ClaudeAgentSDK.Transport.Erlexec, ClaudeAgentSDK.Transport.Port]
+    module == ClaudeAgentSDK.Transport.Erlexec
   end
 
   defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil

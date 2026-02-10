@@ -716,10 +716,7 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  defp default_transport_module(%Options{user: user}) when is_binary(user),
-    do: ClaudeAgentSDK.Transport.Erlexec
-
-  defp default_transport_module(_), do: ClaudeAgentSDK.Transport.Port
+  defp default_transport_module(_options), do: ClaudeAgentSDK.Transport.Erlexec
 
   @impl true
   def handle_continue(:start_cli, state) do

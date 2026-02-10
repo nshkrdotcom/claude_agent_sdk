@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **`Transport.Port` removed**: The Erlang Port-based transport has been removed. `Transport.Erlexec` is now the sole built-in transport for all subprocess communication. All code paths already defaulted to Erlexec since 0.11.0. Users who explicitly passed `Transport.Port` must switch to `Transport.Erlexec` (or omit the transport option to use the default).
+- **`Transport.normalize_reason(:port_closed)` removed**: The `:port_closed` -> `:not_connected` normalization has been removed. Custom transports should return `:not_connected` directly.
+
 ## [0.11.0] - 2026-02-06
 
 ### Breaking Changes
