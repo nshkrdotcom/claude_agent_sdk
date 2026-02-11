@@ -927,11 +927,18 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       assert data.session_id == "sess_stop"
     end
 
-    test "crashes when stream_event wrapper is missing uuid", %{
+    test "handles stream_event wrapper missing uuid without crashing", %{
       client: client,
       transport: transport
     } do
-      Process.flag(:trap_exit, true)
+      stream =
+        client
+        |> Client.stream_messages()
+        |> Stream.take(1)
+
+      task = Task.async(fn -> Enum.to_list(stream) end)
+
+      assert_receive {:mock_transport_subscribed, _pid}, 500
 
       stream_event = %{
         "type" => "stream_event",
@@ -941,14 +948,27 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       MockTransport.push_message(transport, Jason.encode!(stream_event))
 
-      assert_receive {:EXIT, ^client, {{:badkey, "uuid"}, _}}, 1_000
+      [message] = Task.await(task, 2_000)
+
+      assert %Message{type: :stream_event, data: data} = message
+      assert data.event["type"] == "message_stop"
+      assert data.uuid == nil
+      assert data.session_id == "sess_missing_uuid"
+      assert Process.alive?(client)
     end
 
-    test "crashes when stream_event wrapper is missing session_id", %{
+    test "handles stream_event wrapper missing session_id without crashing", %{
       client: client,
       transport: transport
     } do
-      Process.flag(:trap_exit, true)
+      stream =
+        client
+        |> Client.stream_messages()
+        |> Stream.take(1)
+
+      task = Task.async(fn -> Enum.to_list(stream) end)
+
+      assert_receive {:mock_transport_subscribed, _pid}, 500
 
       stream_event = %{
         "type" => "stream_event",
@@ -958,7 +978,13 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       MockTransport.push_message(transport, Jason.encode!(stream_event))
 
-      assert_receive {:EXIT, ^client, {{:badkey, "session_id"}, _}}, 1_000
+      [message] = Task.await(task, 2_000)
+
+      assert %Message{type: :stream_event, data: data} = message
+      assert data.event["type"] == "message_stop"
+      assert data.uuid == "evt_missing_session"
+      assert data.session_id == nil
+      assert Process.alive?(client)
     end
   end
 

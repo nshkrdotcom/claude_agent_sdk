@@ -12,6 +12,9 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
     @behaviour ClaudeAgentSDK.Transport
 
     @impl ClaudeAgentSDK.Transport
+    def start(opts), do: GenServer.start(__MODULE__, opts)
+
+    @impl ClaudeAgentSDK.Transport
     def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
 
     @impl ClaudeAgentSDK.Transport
@@ -58,6 +61,9 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
     import Kernel, except: [send: 2]
 
     @behaviour ClaudeAgentSDK.Transport
+
+    @impl ClaudeAgentSDK.Transport
+    def start(opts), do: GenServer.start(__MODULE__, opts)
 
     @impl ClaudeAgentSDK.Transport
     def start_link(opts), do: GenServer.start_link(__MODULE__, opts)

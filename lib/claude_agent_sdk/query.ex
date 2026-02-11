@@ -188,15 +188,14 @@ defmodule ClaudeAgentSDK.Query do
 
   defp resume_input(nil, _session_id), do: nil
 
-  defp resume_input(prompt, session_id) when is_binary(prompt) and is_binary(session_id) do
+  defp resume_input(prompt, _session_id) when is_binary(prompt) do
     [
       %{
         "type" => "user",
         "message" => %{
           "role" => "user",
           "content" => prompt
-        },
-        "session_id" => session_id
+        }
       }
     ]
   end

@@ -62,11 +62,18 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   @impl ClaudeAgentSDK.Transport
   def start_link(opts) when is_list(opts) do
-    case GenServer.start_link(__MODULE__, opts) do
-      {:ok, pid} -> {:ok, pid}
-      {:error, reason} -> transport_error(reason)
+    case start(opts) do
+      {:ok, pid} ->
+        Process.link(pid)
+        {:ok, pid}
+
+      {:error, _reason} = error ->
+        error
     end
   catch
+    :error, :badarg ->
+      transport_error(:not_connected)
+
     :exit, reason ->
       transport_error(reason)
   end
@@ -375,31 +382,54 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   defp safe_call(transport, message, timeout)
        when is_pid(transport) and is_integer(timeout) and timeout >= 0 do
-    with {:ok, task} <-
-           start_call_task(fn ->
-             try do
-               {:ok, GenServer.call(transport, message, :infinity)}
-             catch
-               :exit, reason -> {:error, normalize_call_exit(reason)}
-             end
-           end) do
-      case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
-        {:ok, result} ->
-          result
+    case start_call_task(fn ->
+           try do
+             {:ok, GenServer.call(transport, message, :infinity)}
+           catch
+             :exit, reason -> {:error, normalize_call_exit(reason)}
+           end
+         end) do
+      {:ok, task} ->
+        await_call_task(task, timeout)
 
-        {:exit, reason} ->
-          {:error, normalize_call_exit(reason)}
-
-        nil ->
-          {:error, :timeout}
-      end
-    else
       {:error, reason} ->
         {:error, normalize_call_task_start_error(reason)}
     end
   end
 
-  defp normalize_call_task_start_error(:noproc), do: :transport_stopped
+  defp await_call_task(task, timeout) when is_integer(timeout) and timeout >= 0 do
+    task_ref = Map.get(task, :ref)
+    task_pid = Map.get(task, :pid)
+
+    if is_reference(task_ref) do
+      receive do
+        {^task_ref, result} ->
+          Process.demonitor(task_ref, [:flush])
+          result
+
+        {:DOWN, ^task_ref, :process, _pid, reason} ->
+          {:error, normalize_call_exit(reason)}
+      after
+        timeout ->
+          maybe_kill_task(task_pid)
+          Process.demonitor(task_ref, [:flush])
+          {:error, :timeout}
+      end
+    else
+      {:error, {:call_exit, :invalid_task_ref}}
+    end
+  end
+
+  defp maybe_kill_task(pid) when is_pid(pid) do
+    Process.exit(pid, :kill)
+    :ok
+  catch
+    :exit, _ ->
+      :ok
+  end
+
+  defp maybe_kill_task(_), do: :ok
+
   defp normalize_call_task_start_error(reason), do: {:call_exit, reason}
 
   defp normalize_call_exit({:noproc, _}), do: :not_connected
@@ -446,7 +476,9 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   defp resolve_command(opts, options) do
     case Keyword.fetch(opts, :command) do
       {:ok, command} when is_binary(command) ->
-        {:ok, command, Keyword.get(opts, :args, [])}
+        with :ok <- validate_command(command) do
+          {:ok, command, Keyword.get(opts, :args, [])}
+        end
 
       {:ok, _command} ->
         {:error, :invalid_command}
@@ -463,6 +495,31 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     case Keyword.get(opts, :startup_mode, :eager) do
       :lazy -> :lazy
       _ -> :eager
+    end
+  end
+
+  defp validate_command(command) when is_binary(command) do
+    if command_exists?(command) do
+      :ok
+    else
+      {:error, {:command_not_found, command}}
+    end
+  end
+
+  defp command_exists?(command) when is_binary(command) do
+    cond do
+      String.trim(command) == "" ->
+        false
+
+      String.contains?(command, [" ", "\t", "\n"]) ->
+        # Treat composite shell command strings as caller-managed.
+        true
+
+      String.contains?(command, "/") ->
+        File.exists?(command)
+
+      true ->
+        not is_nil(System.find_executable(command))
     end
   end
 
@@ -567,26 +624,23 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   defp start_io_task(state, fun) when is_function(fun, 0) do
-    try do
-      {:ok, Task.Supervisor.async_nolink(state.task_supervisor, fun)}
-    catch
-      :exit, {:noproc, _} ->
-        try do
-          {:ok, Task.async(fun)}
-        catch
-          :exit, reason -> {:error, {:task_start_failed, reason}}
-        end
+    {:ok, Task.Supervisor.async_nolink(state.task_supervisor, fun)}
+  catch
+    :exit, {:noproc, _} ->
+      fallback_start_io_task(fun)
 
-      :exit, :noproc ->
-        try do
-          {:ok, Task.async(fun)}
-        catch
-          :exit, reason -> {:error, {:task_start_failed, reason}}
-        end
+    :exit, :noproc ->
+      fallback_start_io_task(fun)
 
-      :exit, reason ->
-        {:error, {:task_start_failed, reason}}
-    end
+    :exit, reason ->
+      {:error, {:task_start_failed, reason}}
+  end
+
+  defp fallback_start_io_task(fun) when is_function(fun, 0) do
+    {:ok, Task.async(fun)}
+  catch
+    :exit, reason ->
+      {:error, {:task_start_failed, reason}}
   end
 
   defp send_payload(pid, message) do

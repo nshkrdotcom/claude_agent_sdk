@@ -30,7 +30,14 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
 
     options = %Options{stderr: stderr_cb}
 
-    {:ok, transport} = ErlexecTransport.start_link(command: script, args: [], options: options)
+    {:ok, transport} =
+      ErlexecTransport.start_link(
+        command: script,
+        args: [],
+        options: options,
+        subscriber: self()
+      )
+
     assert :ok = ErlexecTransport.subscribe(transport, self())
 
     assert_receive {:stderr_line, "ERR_LINE"}, 1_000
@@ -181,7 +188,12 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
       script = create_test_script("while read -r line; do echo $line; done")
 
       {:ok, transport} =
-        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+        ErlexecTransport.start_link(
+          command: script,
+          args: [],
+          options: %Options{},
+          subscriber: self()
+        )
 
       ErlexecTransport.subscribe(transport, self())
       assert :ok = ErlexecTransport.force_close(transport)
@@ -191,7 +203,12 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
       script = create_test_script("echo hi")
 
       {:ok, transport} =
-        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+        ErlexecTransport.start_link(
+          command: script,
+          args: [],
+          options: %Options{},
+          subscriber: self()
+        )
 
       ErlexecTransport.subscribe(transport, self())
       assert_receive {:transport_exit, _}, 2_000
@@ -218,24 +235,28 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
   describe "tagged subscriber dispatch" do
     test "dispatches events with tagged ref" do
       ref = make_ref()
-      script = create_test_script("echo hello")
+      script = create_test_script("while read -r line; do echo \"$line\"; done")
 
       {:ok, transport} =
         ErlexecTransport.start_link(command: script, args: [], options: %Options{})
 
       ErlexecTransport.subscribe(transport, self(), ref)
+      assert :ok = ErlexecTransport.send(transport, "hello")
+      assert :ok = ErlexecTransport.end_input(transport)
 
       assert_receive {:claude_agent_sdk_transport, ^ref, {:message, "hello"}}, 2_000
       assert_receive {:claude_agent_sdk_transport, ^ref, {:exit, _}}, 2_000
     end
 
     test "legacy subscribers still receive bare tuples" do
-      script = create_test_script("echo hello")
+      script = create_test_script("while read -r line; do echo \"$line\"; done")
 
       {:ok, transport} =
         ErlexecTransport.start_link(command: script, args: [], options: %Options{})
 
       ErlexecTransport.subscribe(transport, self())
+      assert :ok = ErlexecTransport.send(transport, "hello")
+      assert :ok = ErlexecTransport.end_input(transport)
 
       assert_receive {:transport_message, "hello"}, 2_000
       assert_receive {:transport_exit, _}, 2_000
@@ -245,14 +266,25 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
   describe "stderr dispatch" do
     test "dispatches stderr events to tagged subscribers" do
       ref = make_ref()
-      script = create_test_script("echo err >&2; echo out; exit 0")
+
+      script =
+        create_test_script("""
+        while read -r line; do
+          echo err >&2
+          echo "$line"
+        done
+        """)
 
       {:ok, transport} =
         ErlexecTransport.start_link(command: script, args: [], options: %Options{})
 
       ErlexecTransport.subscribe(transport, self(), ref)
+      assert :ok = ErlexecTransport.send(transport, "out")
+      assert :ok = ErlexecTransport.end_input(transport)
 
       assert_receive {:claude_agent_sdk_transport, ^ref, {:message, "out"}}, 2_000
+      assert_receive {:claude_agent_sdk_transport, ^ref, {:stderr, stderr_data}}, 2_000
+      assert stderr_data =~ "err"
       assert_receive {:claude_agent_sdk_transport, ^ref, {:exit, _}}, 2_000
     end
   end
@@ -262,7 +294,12 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
       script = create_test_script("for i in $(seq 1 500); do echo \"line_$i\"; done")
 
       {:ok, transport} =
-        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+        ErlexecTransport.start_link(
+          command: script,
+          args: [],
+          options: %Options{},
+          subscriber: self()
+        )
 
       ErlexecTransport.subscribe(transport, self())
 
@@ -275,21 +312,29 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
 
   describe "stderr buffer" do
     test "stderr/1 returns captured stderr" do
-      script = create_test_script("echo err >&2; echo out; exit 0")
+      script =
+        create_test_script("""
+        echo err >&2
+        while read -r _line; do
+          :
+        done
+        """)
 
       {:ok, transport} =
         ErlexecTransport.start_link(command: script, args: [], options: %Options{})
 
       ErlexecTransport.subscribe(transport, self())
-      assert_receive {:transport_exit, _}, 2_000
+      assert_receive {:transport_stderr, stderr_data}, 2_000
+      assert stderr_data =~ "err"
       stderr = ErlexecTransport.stderr(transport)
       assert stderr =~ "err"
+      ErlexecTransport.close(transport)
     end
 
     test "caps stderr buffer to max_stderr_buffer_size" do
       script =
         create_test_script(
-          ~s|python3 -c "import sys; sys.stderr.write('x' * 1000000)"; echo done|
+          ~s|python3 -c "import sys; sys.stderr.write('x' * 1000000)"; while read -r _line; do :; done|
         )
 
       {:ok, transport} =
@@ -301,9 +346,10 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
         )
 
       ErlexecTransport.subscribe(transport, self())
-      assert_receive {:transport_exit, _}, 5_000
+      assert_receive {:transport_stderr, _}, 5_000
       stderr = ErlexecTransport.stderr(transport)
       assert byte_size(stderr) <= 256
+      ErlexecTransport.close(transport)
     end
   end
 
@@ -360,6 +406,87 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
 
       send(subscriber, :stop)
       assert_receive {:DOWN, ^monitor, :process, ^transport, _}, 5_000
+    end
+  end
+
+  describe "concurrency stress" do
+    test "delivers full burst to multiple subscribers without loss or duplication" do
+      subscriber_count = 5
+      line_count = 300
+
+      script =
+        create_test_script("""
+        while read -r _line; do
+          for i in $(seq 1 #{line_count}); do
+            echo "line_$i"
+          done
+          break
+        done
+        """)
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      parent = self()
+
+      _subscriber_pids =
+        for idx <- 1..subscriber_count do
+          spawn(fn ->
+            :ok = ErlexecTransport.subscribe(transport, self())
+            send(parent, {:subscriber_ready, idx})
+            lines = collect_messages([], 10_000)
+            send(parent, {:subscriber_done, idx, lines})
+          end)
+        end
+
+      for idx <- 1..subscriber_count do
+        assert_receive {:subscriber_ready, ^idx}, 2_000
+      end
+
+      assert :ok = ErlexecTransport.send(transport, "go")
+
+      for idx <- 1..subscriber_count do
+        assert_receive {:subscriber_done, ^idx, lines}, 15_000
+        assert length(lines) == line_count
+        assert length(Enum.uniq(lines)) == line_count
+        assert "line_1" in lines
+        assert "line_#{line_count}" in lines
+      end
+    end
+  end
+
+  describe "finalize drain responsiveness" do
+    test "status call remains responsive while finalize drains a large queue" do
+      script = create_test_script("while read -r _line; do :; done")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      monitor = Process.monitor(transport)
+
+      try do
+        state = :sys.get_state(transport)
+        {pid, os_pid} = state.subprocess
+
+        pending_lines =
+          Enum.reduce(1..200_000, :queue.new(), fn _idx, queue ->
+            :queue.in("line", queue)
+          end)
+
+        :sys.replace_state(transport, fn current ->
+          %{current | pending_lines: pending_lines, stdout_buffer: "", drain_scheduled?: false}
+        end)
+
+        send(transport, {:finalize_exit, os_pid, pid, :normal})
+
+        assert :connected = GenServer.call(transport, :status, 20)
+        assert_receive {:DOWN, ^monitor, :process, ^transport, _reason}, 5_000
+      after
+        if Process.alive?(transport) do
+          _ = ErlexecTransport.force_close(transport)
+          assert_receive {:DOWN, ^monitor, :process, ^transport, _reason}, 2_000
+        end
+      end
     end
   end
 

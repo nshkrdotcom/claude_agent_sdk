@@ -28,6 +28,7 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
 
   @default_receive_timeout_ms 30_000
   @default_query_timeout_ms 4_500_000
+  @client_close_grace_ms 2_000
 
   @doc """
   Creates a Stream backed by a Client GenServer.
@@ -187,8 +188,7 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
     Logger.debug("Stopping control client for query", pid: inspect(client_pid))
 
     maybe_unsubscribe(client_pid, ref)
-
-    safe_stop(client_pid)
+    close_client_with_timeout(client_pid, @client_close_grace_ms)
   end
 
   defp cleanup_client(_), do: :ok
@@ -234,4 +234,32 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
   defp maybe_unsubscribe(_client_pid, _ref), do: :ok
 
   defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
+
+  defp close_client_with_timeout(client_pid, timeout_ms)
+       when is_pid(client_pid) and is_integer(timeout_ms) and timeout_ms >= 0 do
+    ref = Process.monitor(client_pid)
+
+    case await_client_down(ref, client_pid, timeout_ms) do
+      :down ->
+        :ok
+
+      :timeout ->
+        safe_stop(client_pid)
+        _ = await_client_down(ref, client_pid, 250)
+        Process.demonitor(ref, [:flush])
+        :ok
+    end
+  end
+
+  defp await_client_down(ref, client_pid, timeout_ms)
+       when is_reference(ref) and is_pid(client_pid) and is_integer(timeout_ms) and
+              timeout_ms >= 0 do
+    receive do
+      {:DOWN, ^ref, :process, ^client_pid, _reason} ->
+        :down
+    after
+      timeout_ms ->
+        :timeout
+    end
+  end
 end

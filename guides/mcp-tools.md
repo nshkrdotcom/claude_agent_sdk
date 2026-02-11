@@ -1,6 +1,6 @@
 # MCP Tools Guide
 
-**Version:** 0.11.0 | **Last Updated:** 2026-02-06
+**Version:** 0.12.0 | **Last Updated:** 2026-02-10
 
 ---
 

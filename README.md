@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.11.0"}
+    {:claude_agent_sdk, "~> 0.12.0"}
   ]
 end
 ```
@@ -575,6 +575,12 @@ cd examples/email_agent && mix deps.get && mix email.assistant "find emails from
 ## Upgrading
 
 For breaking changes and migration notes, see `CHANGELOG.md`.
+
+**0.12.0 breaking changes:**
+- `Transport.Port` removed. `Transport.Erlexec` is now the sole built-in transport. Users who explicitly passed `Transport.Port` must switch to `Transport.Erlexec` or omit the transport option.
+- `Transport.normalize_reason(:port_closed)` removed. Custom transports should return `:not_connected` directly.
+- Transport error tuple shape updated: low-level failures now use `{:error, {:transport, reason}}` instead of bare `{:error, reason}`.
+- String prompts now delivered via stdin (`--input-format stream-json`) instead of CLI arg (`-- prompt`).
 
 **0.11.0 breaking changes:**
 - `--print` flag removed from all modules. All queries now use `--output-format stream-json` exclusively.

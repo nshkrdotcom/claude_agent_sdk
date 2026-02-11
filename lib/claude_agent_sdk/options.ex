@@ -688,9 +688,9 @@ defmodule ClaudeAgentSDK.Options do
 
   defp deep_stringify_keys(value), do: value
 
-  # Python parity: always emit setting sources, defaulting to empty (load no filesystem settings).
-  defp add_setting_sources_args(args, %{setting_sources: nil}),
-    do: args ++ ["--setting-sources", ""]
+  # Do not emit --setting-sources by default. Passing an empty value can disable
+  # CLI-side persisted context (including resume session lookup).
+  defp add_setting_sources_args(args, %{setting_sources: nil}), do: args
 
   defp add_setting_sources_args(args, %{setting_sources: sources}) when is_list(sources) do
     value = Enum.map_join(sources, ",", &to_string/1)

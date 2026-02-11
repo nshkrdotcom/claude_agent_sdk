@@ -41,8 +41,8 @@ defmodule ClaudeAgentSDK.QueryResumePersistenceTest do
     assert "stream-json" in args
     assert is_list(input)
     assert length(input) == 1
-    assert hd(input)["session_id"] == "session-123"
     assert hd(input)["message"]["content"] == "turn 2"
+    refute Map.has_key?(hd(input), "session_id")
 
     # Regression guard:
     # Using --print with --resume is one-shot and loses intermediate turns in session history.

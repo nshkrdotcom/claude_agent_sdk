@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   Streams CLI-only query responses over a transport.
 
   This module is used for unidirectional, non-control queries. It supports:
-  - String prompts (passed as CLI args)
+  - String prompts (sent as stream-json user messages via stdin)
   - Enumerable prompts (streamed via stdin)
   - Optional transport injection
   """
@@ -68,7 +68,15 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp build_prompt_args(prompt, %Options{} = options) when is_binary(prompt) do
     base_args = base_stream_args(options)
-    {base_args ++ ["--", prompt], nil}
+
+    input = [
+      %{
+        "type" => "user",
+        "message" => %{"role" => "user", "content" => prompt}
+      }
+    ]
+
+    {["--input-format", "stream-json"] ++ base_args, input}
   end
 
   defp build_prompt_args(prompt, %Options{} = options) do
@@ -91,6 +99,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       |> Keyword.put_new(:options, options)
 
     transport_ref = make_ref()
+    transport_opts = maybe_put_bootstrap_subscriber(module, transport_opts, transport_ref)
 
     with {:ok, transport_opts} <- maybe_put_cli_command(module, transport_opts, options),
          {:ok, transport_pid} <- module.start_link(transport_opts),
@@ -362,8 +371,20 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp close_transport_with_timeout(module, transport, timeout_ms) when is_pid(transport) do
     ref = Process.monitor(transport)
-    _ = safe_force_close(module, transport)
-    await_down_or_shutdown(ref, transport, timeout_ms)
+
+    if module == ClaudeAgentSDK.Transport.Erlexec do
+      case ProcessSupport.await_down(ref, transport, timeout_ms) do
+        :down ->
+          :ok
+
+        :timeout ->
+          _ = safe_force_close(module, transport)
+          await_down_or_shutdown(ref, transport, 250)
+      end
+    else
+      _ = safe_force_close(module, transport)
+      await_down_or_shutdown(ref, transport, timeout_ms)
+    end
   end
 
   defp close_transport_with_timeout(_module, _transport, _timeout_ms), do: :ok
@@ -469,6 +490,14 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     end
   end
 
+  defp maybe_put_bootstrap_subscriber(module, transport_opts, transport_ref) do
+    if module == ClaudeAgentSDK.Transport.Erlexec do
+      Keyword.put_new(transport_opts, :subscriber, {self(), transport_ref})
+    else
+      transport_opts
+    end
+  end
+
   defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
   defp process_running?(_pid), do: false
 
@@ -476,7 +505,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     Runtime.use_mock?() and is_nil(transport) and not Runtime.force_real?(options)
   end
 
-  defp mock_prompt_from(prompt) when is_binary(prompt), do: nil
+  defp mock_prompt_from(prompt) when is_binary(prompt), do: prompt
 
   defp mock_prompt_from(prompt) do
     Enum.find_value(prompt, fn

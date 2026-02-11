@@ -33,11 +33,11 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
       refute "--settings" in args
     end
 
-    test "setting_sources default emits --setting-sources with empty string" do
+    test "setting_sources default omits --setting-sources" do
       options = %Options{setting_sources: nil}
       args = Options.to_args(options)
 
-      assert flag_with_value?(args, "--setting-sources", "")
+      refute "--setting-sources" in args
     end
 
     test "settings path maps to --settings" do

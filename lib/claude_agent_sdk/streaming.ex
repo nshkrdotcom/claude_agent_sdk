@@ -411,41 +411,7 @@ defmodule ClaudeAgentSDK.Streaming do
       # stop_reason is tracked so we can continue streaming for multi-turn tool conversations
       Stream.resource(
         fn -> {client_pid, ref, :active, "", nil} end,
-        fn state ->
-          case state do
-            {_client, _ref, :complete, _accumulated, _stop_reason} ->
-              {:halt, state}
-
-            {client, ref, :active, accumulated, stop_reason} ->
-              receive do
-                # Stream events from control client
-                {:stream_event, ^ref, event} ->
-                  {new_stop_reason, message_complete?} =
-                    Termination.step(event, stop_reason)
-
-                  new_status =
-                    if message_complete? do
-                      :complete
-                    else
-                      :active
-                    end
-
-                  new_accumulated = Map.get(event, :accumulated, accumulated)
-
-                  {[event], {client, ref, new_status, new_accumulated, new_stop_reason}}
-
-                # Regular messages (tool results, etc.) - convert to event format
-                {:claude_message, message} ->
-                  event = message_to_event(message, accumulated)
-                  {[event], state}
-              after
-                300_000 ->
-                  # 5 minutes timeout
-                  timeout_event = %{type: :error, error: :timeout}
-                  {[timeout_event], {client, ref, :complete, accumulated, stop_reason}}
-              end
-          end
-        end,
+        &next_control_client_stream_state/1,
         fn {client, ref, _, _, _} ->
           GenServer.cast(client, {:unsubscribe, ref})
         end
@@ -476,6 +442,43 @@ defmodule ClaudeAgentSDK.Streaming do
           GenServer.cast(client, {:unsubscribe, ref})
       end
     )
+  end
+
+  defp next_control_client_stream_state(
+         {_client, _ref, :complete, _accumulated, _stop_reason} =
+           state
+       ) do
+    {:halt, state}
+  end
+
+  defp next_control_client_stream_state({client, ref, :active, accumulated, stop_reason} = state) do
+    receive do
+      # Stream events from control client
+      {:stream_event, ^ref, event} ->
+        {new_stop_reason, message_complete?} =
+          Termination.step(event, stop_reason)
+
+        new_status =
+          if message_complete? do
+            :complete
+          else
+            :active
+          end
+
+        new_accumulated = Map.get(event, :accumulated, accumulated)
+
+        {[event], {client, ref, new_status, new_accumulated, new_stop_reason}}
+
+      # Regular messages (tool results, etc.) - convert to event format
+      {:claude_message, message} ->
+        event = message_to_event(message, accumulated)
+        {[event], state}
+    after
+      300_000 ->
+        # 5 minutes timeout
+        timeout_event = %{type: :error, error: :timeout}
+        {[timeout_event], {client, ref, :complete, accumulated, stop_reason}}
+    end
   end
 
   # Convert Message struct to streaming event format

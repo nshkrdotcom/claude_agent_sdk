@@ -109,7 +109,7 @@ For your WebSocket transport write a focused integration test that uses a local 
 - Always append a newline to outbound JSON to mirror the CLI protocol.
 - When broadcasting inbound messages, send them as raw binaries; the client handles decoding.
 - Make sure to handle `{:DOWN, _, :process, subscriber, _}` messages so dead subscribers are removed.
-- Return `{:error, {:transport_failed, reason}}` from `start_link/1` if you cannot initialise the connection. This bubbles up to `Client.start_link/2`.
+- Return `{:error, {:transport, reason}}` from `start_link/1` if you cannot initialise the connection. This keeps transport failures on the documented typed contract.
 - Use the new `ClaudeAgentSDK.SupertesterCase.eventually/2` helper in tests to avoid `Process.sleep/1`.
 
 ## 5. Reference Implementation

@@ -1758,7 +1758,11 @@ defmodule ClaudeAgentSDK.Client do
     agents_for_init = Options.agents_for_initialize(state.options.agents)
 
     # Pass Options to transport so it can build CLI command with streaming flags
-    transport_opts = Keyword.put(state.transport_opts || [], :options, state.options)
+    transport_opts =
+      state.transport_opts
+      |> Kernel.||([])
+      |> Keyword.put(:options, state.options)
+      |> maybe_put_bootstrap_subscriber(module)
 
     with {:ok, transport} <- module.start_link(transport_opts),
          :ok <- module.subscribe(transport, self()) do
@@ -1959,9 +1963,9 @@ defmodule ClaudeAgentSDK.Client do
     # Tests: {"type": "message_start", ...}
     {event_data, metadata} =
       if data["type"] == "stream_event" do
-        event = Map.fetch!(data, "event")
-        uuid = Map.fetch!(data, "uuid")
-        session_id = Map.fetch!(data, "session_id")
+        event = Map.get(data, "event", %{})
+        uuid = Map.get(data, "uuid")
+        session_id = Map.get(data, "session_id")
 
         metadata = %{
           parent_tool_use_id: data["parent_tool_use_id"],
@@ -3228,6 +3232,15 @@ defmodule ClaudeAgentSDK.Client do
   defp connected?(_), do: false
 
   defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
+
+  defp maybe_put_bootstrap_subscriber(transport_opts, module)
+       when is_list(transport_opts) and is_atom(module) do
+    if module == ClaudeAgentSDK.Transport.Erlexec do
+      Keyword.put_new(transport_opts, :subscriber, self())
+    else
+      transport_opts
+    end
+  end
 
   defp send_payload(%{transport: transport, transport_module: module}, payload)
        when is_pid(transport) do

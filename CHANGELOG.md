@@ -7,18 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-02-10
+
 ### Breaking Changes
+
+> **Practical impact**: These changes affect internal transport plumbing. Users of the public API (`Client`, `CLIStream`, `Query`) are unaffected unless they directly referenced Transport modules or wrote custom transports.
 
 - **`Transport.Port` removed**: The Erlang Port-based transport has been removed. `Transport.Erlexec` is now the sole built-in transport for all subprocess communication. All code paths already defaulted to Erlexec since 0.11.0. Users who explicitly passed `Transport.Port` must switch to `Transport.Erlexec` (or omit the transport option to use the default).
 - **`Transport.normalize_reason(:port_closed)` removed**: The `:port_closed` -> `:not_connected` normalization has been removed. Custom transports should return `:not_connected` directly.
 - **Transport error tuple shape updated**: low-level transport failures now use `{:error, {:transport, reason}}` instead of bare `{:error, reason}`.
+- **Stdin-based prompt delivery**: String prompts are now sent via stdin as `stream-json` user messages with `--input-format stream-json`, instead of the previous `-- prompt` CLI arg. This unifies the prompt delivery path for all query types.
+- **`--setting-sources ""` no longer emitted by default**: The empty value was disabling CLI-side persisted context including resume session lookup. Omitting it restores CLI defaults.
+- **`session_id` removed from `resume_input/2` payload**: The CLI manages session binding via `--resume` flag, not per-message metadata.
+- **`start/1` added as required Transport behaviour callback**: Custom transports using `@behaviour ClaudeAgentSDK.Transport` must now implement `start/1` (unlinked startup). Existing `start_link/1` remains required.
 
 ### Added
 
-- **`subscribe/3` tagged subscriptions**: transport consumers can subscribe with `:legacy | reference()` and receive namespaced events (`{:claude_agent_sdk_transport, ref, event}`).
-- **`force_close/1` transport callback**: immediate shutdown API for robust cleanup paths.
-- **`stderr/1` transport callback**: retrieves bounded stderr capture from transport.
-- **`ClaudeAgentSDK.ProcessSupport.await_down/3`**: monitor-based process shutdown helper used by stream cleanup cascade.
+#### Transport Hardening (Erlexec)
+
+- **`subscribe/3` tagged subscriptions**: Transport consumers can subscribe with `:legacy | reference()` and receive namespaced events (`{:claude_agent_sdk_transport, ref, event}`).
+- **`force_close/1` transport callback**: Immediate shutdown API with `:exec.stop` + `:exec.kill(pid, 9)` escalation and 500ms timeout via `safe_call`.
+- **`stderr/1` transport callback**: Retrieves bounded stderr capture from transport (returns `""` on error, matching amp_sdk).
+- **`safe_call/3` task isolation**: All public API functions route through `TaskSupervisor.async_nolink` with yield/shutdown, protecting callers against transport death, timeout, and noproc conditions.
+- **Queue-based stdout drain**: `pending_lines` `:queue` with `@max_lines_per_batch 200` and `:drain_stdout` self-message for backpressure control under burst output.
+- **Bounded stderr buffer**: `max_stderr_buffer_size` with tail-truncation. Stderr events dispatched to subscribers in addition to callback.
+- **Headless timeout auto-shutdown**: Configurable `headless_timeout_ms` auto-stops transport when no subscribers attach. Timer cancelled on first `subscribe` call.
+- **Async send/end_input via IO tasks**: Tracked in `pending_calls` map, preventing blocking GenServer on risky stdin writes.
+- **Deferred finalize exit**: 25ms delay timer allows late stdout to arrive before dispatching exit event. Drain loop flushes remaining queue before final exit dispatch.
+- **`await_down/3`** (in `ProcessSupport`): Monitor-based process shutdown helper used by stream cleanup cascade.
+- **`validate_command/1`**: Pre-launch command existence check returning `{:error, {:command_not_found, cmd}}`.
+
+#### Transport Lifecycle
+
+- **Split `start_link` into `start` + `Process.link`**: Cleaner error handling; catches `:badarg` from linking already-dead processes.
+- **Deterministic `safe_call` cleanup**: Replaced `Task.yield/Task.shutdown` with direct `receive` on task ref. Added `maybe_kill_task/1` helper.
+- **Bootstrap subscriber support**: `maybe_put_bootstrap_subscriber` in both Client and CLIStream pre-registers the caller before `start_link`, preventing message loss during subscribe race window.
+- **CLIStream graceful close**: Rewritten `close_transport_with_timeout` waits for natural exit before escalating to `force_close` for Erlexec, reducing unnecessary SIGKILL sends.
+- **ClientStream graceful close**: New `close_client_with_timeout` with monitor-based graceful shutdown replacing immediate `safe_stop`.
+
+#### Client Resilience
+
+- **Tolerant stream event parsing**: Replaced `Map.fetch!` with `Map.get` for `uuid` and `session_id` fields, preventing crashes on malformed events. Missing fields propagate as `nil`.
+
+#### Bug Fixes
+
+- **`mock_prompt_from/1` for string prompts**: Previously returned `nil` for binary prompts in mock mode, losing the prompt content. Now correctly returns the prompt string.
+
+### Changed
+
+- **Erlexec terminate rewrite**: Cancels finalize and headless timers with message flush, demonitors all subscribers, replies to pending callers with `{:error, {:transport, :transport_stopped}}`, force-stops subprocess, wrapped in try/catch.
+- **Transport error normalization**: All bare `{:error, :send_failed}` and `{:error, :not_connected}` replaced with `{:error, {:transport, reason}}` via `transport_error/1` wrapper.
+- **Subscriber storage**: Changed from `%{pid => ref}` to `%{pid => %{monitor_ref: ref, tag: tag}}` for tagged dispatch support.
+- **CLIStream tagged dispatch**: Migrated to `make_ref()` subscription and `{:claude_agent_sdk_transport, ref, event}` pattern matching.
+- **CLIStream cleanup cascade**: 4-stage monitor-based: `safe_force_close` -> `await_down(250ms)` -> `Process.exit(:shutdown)` -> `await_down(250ms)` -> `Process.exit(:kill)` -> `await_down(250ms)` -> `demonitor`. For Erlexec, waits for natural exit first before escalating.
+- **Streaming readability**: Extracted inline `Stream.resource` next-fn into named `next_control_client_stream_state/1`.
+
+### Removed
+
+- **`Transport.Port` module** (661 lines), its test file, and Port-related test cases from `env_parity_test.exs`, `process_env_test.exs`, and `user_option_test.exs`.
+- **`Transport.normalize_reason(:port_closed)` clause**.
+- **Port references** from `default_transport_module/1`, `needs_cli_command?/2`, `normalize_transport/3`, `graceful_close?/1` in `cli_stream.ex`.
+
+### Documentation
+
+- Updated CUSTOM_TRANSPORTS.md error contract from `{:error, {:transport_failed, reason}}` to `{:error, {:transport, reason}}`.
+- Updated CUSTOM_TRANSPORTS.md with new `subscribe/3`, `force_close/1`, `stderr/1` callbacks and Transport behaviour reference.
+- Updated RUNTIME_CONTROL.md with `{:error, {:transport, reason}}` shapes and removed Port references.
+- Updated README, getting-started, streaming, configuration, and error-handling guides to reference only Erlexec.
+- Added R1 collector and R2 red team review reports for erlexec consolidation.
+
+### Testing
+
+- Added `force_close` stop and error-after-exit tests.
+- Added `safe_call` transport-death isolation test.
+- Added tagged and legacy subscriber dispatch tests.
+- Added stderr event dispatch to tagged subscribers test.
+- Added burst output queue drain tests (500 lines, 5 subscribers × 300 lines).
+- Added `stderr/1` capture and buffer bounding tests.
+- Added headless timeout auto-stop and cancel-on-subscribe tests.
+- Added subscriber lifecycle auto-stop-on-last-down test.
+- Added CLIStream cleanup test with signal-trapping stubborn subprocess.
+- Added finalize drain responsiveness test via `:sys.replace_state`.
+- Added `validate_command/1` error path test (nonexistent command).
+- Added Erlexec buffer overflow test (`CLIJSONDecodeError` on `max_buffer_size` exceeded).
+- Added multiple concurrent subscriber broadcast test.
+- Added `start/1` callback to mock transports and test transport modules.
+- Migrated `stderr_callback_test.exs` from Port to Erlexec transport.
+- Converted crash-on-missing-uuid/session_id tests to resilience tests.
+- Updated tagged/legacy subscriber tests to use stdin-driven scripts.
+- Updated options test for `--setting-sources` default change.
+- Updated resume persistence test for `session_id` removal.
 
 ## [0.11.0] - 2026-02-06
 
@@ -1246,7 +1324,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.1...v0.9.2

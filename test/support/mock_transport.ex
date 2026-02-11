@@ -26,6 +26,11 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
   ## Transport behaviour callbacks
 
   @impl ClaudeAgentSDK.Transport
+  def start(opts) do
+    GenServer.start(__MODULE__, opts)
+  end
+
+  @impl ClaudeAgentSDK.Transport
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
