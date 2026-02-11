@@ -34,7 +34,7 @@ defmodule ClaudeAgentSDK.DebugMode do
          Prompt: "Hello, Claude!"
          Options: %ClaudeAgentSDK.Options{verbose: true, max_turns: 1}
          ✅ Auth: Authenticated as user@example.com
-         [0ms] system:init: session_id=abc123, model=claude-opus-4
+         [0ms] system:init: session_id=abc123, model=opus
          [1250ms] assistant: "Hello! How can I help you today?" (35 chars)
          [1680ms] result:success: cost=$0.003, turns=1
       🏁 Debug completed in 1680ms with 3 messages
@@ -89,7 +89,7 @@ defmodule ClaudeAgentSDK.DebugMode do
          Prompt: "Hello, Claude!"
          Options: %ClaudeAgentSDK.Options{verbose: true, max_turns: 1}
          ✅ Auth: Authenticated as user@example.com
-         [0ms] system:init: session_id=abc123, model=claude-opus-4
+         [0ms] system:init: session_id=abc123, model=opus
          [1250ms] assistant: "Hello! How can I help you today?" (35 chars)
          [1680ms] result:success: cost=$0.003, turns=1
       🏁 Debug completed in 1680ms with 3 messages

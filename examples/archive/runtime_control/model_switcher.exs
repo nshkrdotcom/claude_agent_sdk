@@ -47,7 +47,7 @@ defmodule Examples.RuntimeControl.ModelSwitcher do
 
     follow_up =
       message_frame("assistant", %{
-        "content" => "Model switched! Now responding as claude-opus-4-20250514.",
+        "content" => "Model switched! Now responding as opus.",
         "role" => "assistant"
       })
 

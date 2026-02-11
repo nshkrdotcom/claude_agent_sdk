@@ -1,6 +1,8 @@
 defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
   use ClaudeAgentSDK.SupertesterCase
 
+  import ClaudeAgentSDK.Test.ModelFixtures
+
   alias ClaudeAgentSDK.ControlProtocol.Protocol
 
   describe "encode_initialize_request/3" do
@@ -188,14 +190,14 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
 
   describe "encode_set_model_request/1" do
     test "creates control request with set_model subtype" do
-      {request_id, json} = Protocol.encode_set_model_request("claude-opus-4")
+      {request_id, json} = Protocol.encode_set_model_request(test_model())
 
       assert is_binary(request_id)
       decoded = Jason.decode!(json)
 
       assert decoded["type"] == "control_request"
       assert decoded["request"]["subtype"] == "set_model"
-      assert decoded["request"]["model"] == "claude-opus-4"
+      assert decoded["request"]["model"] == test_model()
       assert decoded["request_id"] == request_id
     end
 
@@ -239,11 +241,12 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
         "response" => %{
           "request_id" => "req_1",
           "subtype" => "success",
-          "result" => %{"model" => "claude-opus-4"}
+          "result" => %{"model" => test_model()}
         }
       }
 
-      assert {:ok, "claude-opus-4"} = Protocol.decode_set_model_response(response)
+      assert {:ok, model} = Protocol.decode_set_model_response(response)
+      assert model == test_model()
     end
 
     test "decodes success response nested under response key" do
@@ -252,11 +255,12 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
         "response" => %{
           "request_id" => "req_1",
           "subtype" => "success",
-          "response" => %{"model" => "claude-sonnet-4"}
+          "response" => %{"model" => test_model_alt()}
         }
       }
 
-      assert {:ok, "claude-sonnet-4"} = Protocol.decode_set_model_response(response)
+      assert {:ok, model} = Protocol.decode_set_model_response(response)
+      assert model == test_model_alt()
     end
 
     test "decodes error response" do

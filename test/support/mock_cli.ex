@@ -25,6 +25,8 @@ defmodule ClaudeAgentSDK.TestSupport.MockCLI do
   use GenServer
   require Logger
 
+  alias ClaudeAgentSDK.Test.ModelFixtures
+
   defstruct [
     :script,
     :script_index,
@@ -78,7 +80,7 @@ defmodule ClaudeAgentSDK.TestSupport.MockCLI do
     %{
       "type" => "message_start",
       "message" => %{
-        "model" => Keyword.get(opts, :model, "claude-sonnet-4-5"),
+        "model" => Keyword.get(opts, :model, ModelFixtures.test_model()),
         "role" => "assistant",
         "usage" => %{"input_tokens" => 10, "output_tokens" => 0}
       }

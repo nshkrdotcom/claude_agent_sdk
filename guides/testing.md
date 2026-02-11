@@ -167,7 +167,7 @@ Mock responses should match the Claude CLI JSON format. A complete response typi
     "type" => "system",
     "subtype" => "init",
     "session_id" => "mock-session-123",
-    "model" => "claude-opus-4-6",
+    "model" => "opus",
     "tools" => ["bash", "editor"],
     "cwd" => "/current/dir",
     "permissionMode" => "default",

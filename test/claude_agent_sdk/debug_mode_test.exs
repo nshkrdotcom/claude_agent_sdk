@@ -3,6 +3,8 @@ defmodule ClaudeAgentSDK.DebugModeTest do
 
   @moduletag :mock
 
+  import ClaudeAgentSDK.Test.ModelFixtures
+
   alias ClaudeAgentSDK.{DebugMode, Message, Mock}
 
   setup do
@@ -163,7 +165,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
       message = %Message{
         type: :system,
         subtype: :init,
-        data: %{session_id: "123", model: "claude-3"}
+        data: %{session_id: "123", model: test_model()}
       }
 
       result = DebugMode.inspect_message(message)
@@ -359,7 +361,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
       message = %Message{
         type: :system,
         subtype: :init,
-        data: %{session_id: "123", model: "claude-3"}
+        data: %{session_id: "123", model: test_model()}
       }
 
       result = DebugMode.inspect_message(message)
@@ -457,13 +459,13 @@ defmodule ClaudeAgentSDK.DebugModeTest do
       messages = [
         %Message{
           type: :system,
-          data: %{session_id: "abc123", model: "claude-3-opus"}
+          data: %{session_id: "abc123", model: test_model()}
         }
       ]
 
       stats = DebugMode.analyze_messages(messages)
       assert stats.session_id == "abc123"
-      assert stats.model_used == "claude-3-opus"
+      assert stats.model_used == test_model()
     end
 
     test "analyzes cost and duration from result messages" do

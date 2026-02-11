@@ -6,7 +6,7 @@ defmodule ClaudeAgentSDK.Agent do
   - Description: Human-readable description of the agent's purpose
   - Prompt: System prompt that defines the agent's behavior
   - Allowed Tools: Optional list of tools the agent can use
-  - Model: Optional model specification (e.g., "claude-sonnet-4", "opus")
+  - Model: Optional model specification (e.g., `"sonnet"`, `"opus"`)
 
   Agents enable switching between different Claude behaviors at runtime while
   maintaining conversation context.
@@ -19,7 +19,7 @@ defmodule ClaudeAgentSDK.Agent do
         description: "Expert code reviewer",
         prompt: "You are an expert code reviewer. Analyze code for bugs, performance, and best practices.",
         allowed_tools: ["Read", "Grep"],
-        model: "claude-sonnet-4"
+        model: "sonnet"
       )
 
       # Define a documentation agent
@@ -92,7 +92,7 @@ defmodule ClaudeAgentSDK.Agent do
 
   - `:name` - Agent identifier (atom)
   - `:allowed_tools` - List of tool names the agent can use (list of strings)
-  - `:model` - Model to use for this agent (string, e.g., "sonnet", "claude-opus-4")
+  - `:model` - Model to use for this agent (string, e.g., "sonnet", "opus")
 
   ## Returns
 
@@ -112,7 +112,7 @@ defmodule ClaudeAgentSDK.Agent do
         description: "Research specialist",
         prompt: "You excel at research and analysis",
         allowed_tools: ["WebSearch", "WebFetch"],
-        model: "claude-opus-4"
+        model: "opus"
       )
   """
   @spec new(keyword()) :: t()

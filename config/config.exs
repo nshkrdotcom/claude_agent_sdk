@@ -4,7 +4,22 @@ import Config
 config :claude_agent_sdk,
   use_mock: false,
   build_env: config_env(),
-  log_level: :warning
+  log_level: :warning,
+  models: %{
+    short_forms: %{
+      "opus" => "opus",
+      "sonnet" => "sonnet",
+      "haiku" => "haiku",
+      "sonnet[1m]" => "sonnet[1m]"
+    },
+    full_ids: %{
+      "claude-opus-4-6" => "claude-opus-4-6",
+      "claude-sonnet-4-5-20250929" => "claude-sonnet-4-5-20250929",
+      "claude-haiku-4-5-20251001" => "claude-haiku-4-5-20251001",
+      "claude-sonnet-4-5-20250929[1m]" => "claude-sonnet-4-5-20250929[1m]"
+    },
+    default: "haiku"
+  }
 
 # Logger metadata used throughout the SDK (Credo strict compliance).
 config :logger, :console,

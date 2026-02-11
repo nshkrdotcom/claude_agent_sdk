@@ -11,6 +11,8 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
   # Most tests spawn real CLI process (no MockTransport)
   @moduletag :live_cli
 
+  import ClaudeAgentSDK.Test.ModelFixtures
+
   alias ClaudeAgentSDK.{Agent, Client, Options}
 
   setup do
@@ -20,7 +22,7 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
         description: "Code expert",
         prompt: "You are an expert programmer",
         allowed_tools: ["Read", "Write", "Bash"],
-        model: "claude-sonnet-4"
+        model: test_model()
       )
 
     doc_agent =
@@ -28,7 +30,7 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
         description: "Documentation expert",
         prompt: "You excel at writing clear documentation",
         allowed_tools: ["Read", "Write"],
-        model: "claude-opus-4"
+        model: test_model_alt()
       )
 
     research_agent =
@@ -36,7 +38,7 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
         description: "Research specialist",
         prompt: "You are skilled at research and analysis",
         allowed_tools: ["WebSearch", "WebFetch"],
-        model: "claude-sonnet-4"
+        model: test_model()
       )
 
     %{
@@ -165,14 +167,14 @@ defmodule ClaudeAgentSDK.ClientAgentsTest do
 
       # Initial model
       initial_state = :sys.get_state(client)
-      assert initial_state.options.model == "claude-sonnet-4"
+      assert initial_state.options.model == test_model()
 
       # Switch agent
       :ok = Client.set_agent(client, :writer)
 
       # Verify model changed
       new_state = :sys.get_state(client)
-      assert new_state.options.model == "claude-opus-4"
+      assert new_state.options.model == test_model_alt()
 
       Client.stop(client)
     end

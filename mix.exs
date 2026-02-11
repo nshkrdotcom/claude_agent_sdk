@@ -80,6 +80,7 @@ defmodule ClaudeAgentSdk.MixProject do
         "guides/mcp-tools.md",
         "guides/permissions.md",
         "guides/configuration.md",
+        "guides/model-configuration.md",
         "guides/agents.md",
         "guides/sessions.md",
         "guides/testing.md",
@@ -107,6 +108,7 @@ defmodule ClaudeAgentSdk.MixProject do
         ],
         "Advanced Topics": [
           "guides/configuration.md",
+          "guides/model-configuration.md",
           "guides/agents.md",
           "guides/sessions.md"
         ],
@@ -156,7 +158,8 @@ defmodule ClaudeAgentSdk.MixProject do
         ],
         Configuration: [
           ClaudeAgentSDK.Options,
-          ClaudeAgentSDK.OptionBuilder
+          ClaudeAgentSDK.OptionBuilder,
+          ClaudeAgentSDK.Model
         ],
         Testing: [
           ClaudeAgentSDK.Mock,

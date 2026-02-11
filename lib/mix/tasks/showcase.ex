@@ -92,7 +92,7 @@ defmodule Mix.Tasks.Showcase do
         "type" => "system",
         "subtype" => "init",
         "session_id" => "showcase-123",
-        "model" => "claude-3-opus-20240229",
+        "model" => ClaudeAgentSDK.Model.default_model(),
         "tools" => ["Read", "Write"],
         "cwd" => "/showcase/project"
       },

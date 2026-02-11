@@ -7,6 +7,8 @@ defmodule ClaudeAgentSDK.AgentTest do
   """
   use ClaudeAgentSDK.SupertesterCase
 
+  import ClaudeAgentSDK.Test.ModelFixtures
+
   alias ClaudeAgentSDK.Agent
 
   describe "new/1" do
@@ -17,7 +19,7 @@ defmodule ClaudeAgentSDK.AgentTest do
           description: "Reviews code for best practices",
           prompt: "You are a code reviewer...",
           allowed_tools: ["Read", "Grep"],
-          model: "claude-sonnet-4"
+          model: test_model()
         )
 
       assert %Agent{} = agent
@@ -25,7 +27,7 @@ defmodule ClaudeAgentSDK.AgentTest do
       assert agent.description == "Reviews code for best practices"
       assert agent.prompt == "You are a code reviewer..."
       assert agent.allowed_tools == ["Read", "Grep"]
-      assert agent.model == "claude-sonnet-4"
+      assert agent.model == test_model()
     end
 
     test "creates an agent with minimal required fields" do
@@ -59,10 +61,10 @@ defmodule ClaudeAgentSDK.AgentTest do
         Agent.new(
           description: "Opus agent",
           prompt: "Use Opus model",
-          model: "claude-opus-4"
+          model: test_model_alt()
         )
 
-      assert agent.model == "claude-opus-4"
+      assert agent.model == test_model_alt()
     end
   end
 

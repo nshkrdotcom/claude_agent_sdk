@@ -85,7 +85,7 @@ turns = Session.count_turns(messages)
 
 # Extract the model used
 model = Session.extract_model(messages)
-# => "claude-sonnet-4-5-20250929"
+# => "sonnet"
 
 # Get a summary (first 200 chars of first assistant response)
 summary = Session.get_summary(messages)

@@ -84,7 +84,7 @@ code_reviewer = Agent.new(
   Provide concise, actionable feedback.
   """,
   allowed_tools: ["Read", "Grep", "Glob"],
-  model: "claude-sonnet-4"
+  model: "sonnet"
 )
 ```
 
@@ -97,7 +97,7 @@ code_reviewer = Agent.new(
 
 - `:name` - An atom identifier for the agent (useful for referencing in multi-agent setups)
 - `:allowed_tools` - A list of tool name strings the agent can use
-- `:model` - A string specifying which model to use (e.g., "haiku", "sonnet", "opus", "claude-sonnet-4")
+- `:model` - A string specifying which model to use (e.g., `"haiku"`, `"sonnet"`, `"opus"`) -- see [Model Configuration](model-configuration.md)
 
 Tip: MCP tool names are always strings (`mcp__<server>__<tool>`). Avoid atom tool names in agent configs to prevent atom leaks.
 
@@ -162,11 +162,9 @@ model: "haiku"
 
 # Balanced performance for most tasks
 model: "sonnet"
-model: "claude-sonnet-4"
 
 # Maximum capability for complex tasks
 model: "opus"
-model: "claude-opus-4-6"
 ```
 
 ### Tool Configuration

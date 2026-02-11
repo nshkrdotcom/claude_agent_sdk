@@ -68,7 +68,7 @@ defmodule ClaudeAgentSDK.Session do
 
       messages = ClaudeAgentSDK.query("Hello") |> Enum.to_list()
       model = ClaudeAgentSDK.Session.extract_model(messages)
-      # => "claude-sonnet-4-5-20250929"
+      # => "sonnet"
   """
   @spec extract_model([Message.t()]) :: String.t() | nil
   def extract_model(messages) do

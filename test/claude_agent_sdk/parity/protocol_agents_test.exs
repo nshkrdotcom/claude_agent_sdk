@@ -9,6 +9,8 @@ defmodule ClaudeAgentSDK.Parity.ProtocolAgentsTest do
 
   use ExUnit.Case, async: true
 
+  import ClaudeAgentSDK.Test.ModelFixtures
+
   alias ClaudeAgentSDK.ControlProtocol.Protocol
 
   describe "encode_initialize_request/4 agents parameter" do
@@ -38,7 +40,7 @@ defmodule ClaudeAgentSDK.Parity.ProtocolAgentsTest do
       agents = %{
         "research-agent" => %{
           "name" => "research-agent",
-          "model" => "claude-sonnet-4",
+          "model" => test_model(),
           "instructions" => "You are a research assistant."
         }
       }

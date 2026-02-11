@@ -47,7 +47,7 @@ IO.puts("")
 
 custom_options =
   OptionBuilder.build_development_options()
-  |> OptionBuilder.with_model("claude-sonnet-4-5-20250929", "sonnet")
+  |> OptionBuilder.with_model("sonnet", "haiku")
 
 IO.puts("   Model: #{custom_options.model}")
 IO.puts("   Fallback: #{custom_options.fallback_model}")
@@ -64,7 +64,7 @@ ClaudeAgentSDK.Mock.set_response("hello", [
     "subtype" => "init",
     "session_id" => "example-session",
     # Would be actual model used
-    "model" => "claude-opus-4-20250514"
+    "model" => "opus"
   },
   %{
     "type" => "assistant",

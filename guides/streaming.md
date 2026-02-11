@@ -258,7 +258,7 @@ Each event map also includes streaming metadata: `uuid`, `session_id`, `parent_t
 
 ```elixir
 # Message start - new response beginning
-%{type: :message_start, model: "claude-3-haiku", role: "assistant", usage: %{}}
+%{type: :message_start, model: "haiku", role: "assistant", usage: %{}}
 
 # Content block lifecycle
 %{type: :content_block_start}

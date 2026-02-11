@@ -62,8 +62,8 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
         EventParser.parse_event(%{"type" => "content_block_delta", "delta" => %{"type" => "text_delta", "text" => "Hello"}}, "")
 
       # Message start
-      {:ok, [%{type: :message_start, model: "claude-sonnet-4-5"}], ""} =
-        EventParser.parse_event(%{"type" => "message_start", "message" => %{"model" => "claude-sonnet-4-5"}}, "")
+      {:ok, [%{type: :message_start, model: "sonnet"}], ""} =
+        EventParser.parse_event(%{"type" => "message_start", "message" => %{"model" => "sonnet"}}, "")
 
       # Unknown event (ignored gracefully)
       {:ok, [], "existing text"} =

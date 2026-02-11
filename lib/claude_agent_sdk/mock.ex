@@ -148,7 +148,7 @@ defmodule ClaudeAgentSDK.Mock do
         "session_id" => "mock-session-#{:rand.uniform(10000)}",
         "cwd" => "/mock/dir",
         "tools" => ["bash", "editor"],
-        "model" => "claude-3-opus-20240229",
+        "model" => ClaudeAgentSDK.Model.default_model(),
         "permissionMode" => "default",
         "apiKeySource" => "mock"
       },

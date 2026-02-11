@@ -1,6 +1,8 @@
 defmodule ClaudeAgentSDK.Streaming.EventAdapterTest do
   use ExUnit.Case, async: true
 
+  import ClaudeAgentSDK.Test.ModelFixtures
+
   alias ClaudeAgentSDK.Message
   alias ClaudeAgentSDK.Streaming.EventAdapter
 
@@ -21,7 +23,7 @@ defmodule ClaudeAgentSDK.Streaming.EventAdapterTest do
 
     test "passes through message lifecycle events unchanged" do
       events = [
-        %{type: :message_start, model: "claude-sonnet-4-5"},
+        %{type: :message_start, model: test_model()},
         %{type: :message_stop, final_text: "Complete"}
       ]
 
@@ -95,7 +97,7 @@ defmodule ClaudeAgentSDK.Streaming.EventAdapterTest do
         subtype: :init,
         data: %{
           session_id: "session-123",
-          model: "claude-sonnet-4-5"
+          model: test_model()
         }
       }
 
@@ -363,7 +365,7 @@ defmodule ClaudeAgentSDK.Streaming.EventAdapterTest do
     test "real-world pattern: extract final text from streaming response" do
       # Simulating a real streaming response with mixed events
       stream = [
-        %{type: :message_start, model: "claude-sonnet-4-5", role: "assistant", usage: %{}},
+        %{type: :message_start, model: test_model(), role: "assistant", usage: %{}},
         %{type: :text_block_start},
         %{type: :text_delta, text: "I'll", accumulated: "I'll"},
         %{type: :text_delta, text: " help", accumulated: "I'll help"},

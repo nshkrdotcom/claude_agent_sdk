@@ -687,7 +687,7 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   ## Parameters
 
   - `options` - Existing options
-  - `model_name` - Model name ("opus", "sonnet", "haiku", or full name like "claude-sonnet-4-5-20250929")
+  - `model_name` - Model name (short form like `"opus"`, `"sonnet"`, `"haiku"`, or a full model ID)
   - `fallback` - Optional fallback model
 
   ## Examples

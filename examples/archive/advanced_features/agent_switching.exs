@@ -44,7 +44,7 @@ research_agent =
     Always cite your sources and provide evidence for claims.
     """,
     allowed_tools: ["WebSearch", "WebFetch", "Read"],
-    model: "claude-opus-4"
+    model: "opus"
   )
 
 documentation_agent =

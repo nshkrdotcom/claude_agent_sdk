@@ -250,6 +250,8 @@ options = %Options{
 ## Model Selection
 
 The SDK supports all Claude models with convenient shorthand names.
+For details on the config-driven model registry, adding custom models at
+runtime, and thinking tokens, see the [Model Configuration](model-configuration.md) guide.
 
 ### Available Models
 
@@ -265,7 +267,7 @@ The SDK supports all Claude models with convenient shorthand names.
 # Using shorthand
 options = %Options{model: "sonnet"}
 
-# Using full model name
+# Using full model name (see Model Configuration guide for all valid IDs)
 options = %Options{model: "claude-sonnet-4-5-20250929"}
 
 # With fallback model

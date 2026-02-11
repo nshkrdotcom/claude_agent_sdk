@@ -113,7 +113,7 @@ ClaudeAgentSDK.Mock.set_response("analyze", [
     "type" => "system",
     "subtype" => "init",
     "session_id" => "session-1",
-    "model" => "claude-sonnet-4"
+    "model" => "sonnet"
   },
   %{
     "type" => "assistant",

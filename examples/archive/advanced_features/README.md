@@ -169,12 +169,12 @@ Current agent: code_expert
 
 1. Switching to researcher agent
    Active agent: researcher
-   Model: claude-opus-4
+   Model: opus
    Allowed tools: ["WebSearch", "WebFetch", "Read"]
 
 2. Switching to technical_writer agent
    Active agent: technical_writer
-   Model: claude-sonnet-4
+   Model: sonnet
    Allowed tools: ["Read", "Write"]
 ```
 

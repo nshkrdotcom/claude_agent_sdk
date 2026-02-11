@@ -8,6 +8,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
   use ClaudeAgentSDK.SupertesterCase
 
   import ClaudeAgentSDK.SupertesterCase, only: [eventually: 2]
+  import ClaudeAgentSDK.Test.ModelFixtures
 
   alias ClaudeAgentSDK.{Client, Message, Options, Streaming}
   alias ClaudeAgentSDK.Hooks.Matcher
@@ -219,7 +220,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
       event = %{
         "type" => "message_start",
         "message" => %{
-          "model" => "claude-sonnet-4-5",
+          "model" => test_model(),
           "role" => "assistant",
           "usage" => %{"input_tokens" => 10, "output_tokens" => 0}
         }
@@ -768,7 +769,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
         "event" => %{
           "type" => "message_start",
           "message" => %{
-            "model" => "claude-haiku-4-5",
+            "model" => test_model_alt(),
             "role" => "assistant",
             "usage" => %{"input_tokens" => 10, "output_tokens" => 0}
           }
@@ -781,7 +782,7 @@ defmodule ClaudeAgentSDK.ClientStreamingTest do
 
       assert %Message{type: :stream_event, data: data} = message
       assert data.event["type"] == "message_start"
-      assert data.event["message"]["model"] == "claude-haiku-4-5"
+      assert data.event["message"]["model"] == test_model_alt()
       assert data.parent_tool_use_id == "toolu_02DEF456ABC"
       assert data.uuid == "evt_456"
       assert data.session_id == "sess_789"

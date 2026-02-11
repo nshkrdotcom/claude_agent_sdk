@@ -8,7 +8,7 @@ defmodule Integration.ModelSwitchingLiveTest do
 
   test "should preserve context when switching models" do
     {:ok, client} =
-      Client.start_link(%Options{model: "claude-sonnet-4"},
+      Client.start_link(%Options{model: "sonnet"},
         transport: MockTransport,
         transport_opts: [test_pid: self()]
       )

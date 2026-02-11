@@ -1,6 +1,8 @@
 defmodule ClaudeAgentSDK.Streaming.EventParserTest do
   use ExUnit.Case, async: true
 
+  import ClaudeAgentSDK.Test.ModelFixtures
+
   alias ClaudeAgentSDK.Streaming.EventParser
 
   # ===========================================================================
@@ -56,7 +58,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
     test "preserves parent_tool_use_id on message_start events" do
       buffer =
-        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_01XYZ","event":{"type":"message_start","message":{"model":"claude-haiku","role":"assistant"}}}\n)
+        ~s({"type":"stream_event","uuid":"evt_123","session_id":"sess_123","parent_tool_use_id":"toolu_01XYZ","event":{"type":"message_start","message":{"model":"#{test_model()}","role":"assistant"}}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -152,7 +154,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
     test "handles events without stream_event wrapper (non-streaming mode)" do
       # Direct event without wrapper (should still work, parent_tool_use_id nil)
       buffer =
-        ~s({"type":"message_start","message":{"model":"claude-haiku","role":"assistant"}}\n)
+        ~s({"type":"message_start","message":{"model":"#{test_model()}","role":"assistant"}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -181,7 +183,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
     test "raises when stream_event wrapper is missing uuid" do
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","event":{"type":"message_start","message":{"model":"claude-haiku","role":"assistant"}}}\n)
+        ~s({"type":"stream_event","session_id":"sess_123","event":{"type":"message_start","message":{"model":"#{test_model()}","role":"assistant"}}}\n)
 
       assert_raise KeyError, fn ->
         EventParser.parse_buffer(buffer, "")
@@ -190,7 +192,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
     test "sets raw_event with nil metadata for unwrapped events" do
       buffer =
-        ~s({"type":"message_start","message":{"model":"claude-haiku","role":"assistant"}}\n)
+        ~s({"type":"message_start","message":{"model":"#{test_model()}","role":"assistant"}}\n)
 
       {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
 
@@ -200,7 +202,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
 
       assert event.raw_event == %{
                "type" => "message_start",
-               "message" => %{"model" => "claude-haiku", "role" => "assistant"}
+               "message" => %{"model" => test_model(), "role" => "assistant"}
              }
     end
   end

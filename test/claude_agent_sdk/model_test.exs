@@ -1,100 +1,200 @@
 defmodule ClaudeAgentSDK.ModelTest do
   @moduledoc """
-  Tests for Model validation and normalization.
+  Tests for config-driven Model validation and normalization.
 
-  Following TDD approach - these tests are written before implementation
-  and should initially fail (RED phase).
+  Tests verify that the Model module reads its registry from application
+  config rather than compile-time module attributes, enabling runtime
+  model additions without recompilation.
   """
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Model
 
+  # ── validate/1 ──────────────────────────────────────────────────────
+
   describe "validate/1" do
-    test "should_return_short_form_when_given_short_form_opus" do
-      assert {:ok, "opus"} = Model.validate("opus")
+    test "accepts all configured short-form aliases" do
+      for alias_name <- Model.short_forms() do
+        assert {:ok, ^alias_name} = Model.validate(alias_name),
+               "expected short form #{inspect(alias_name)} to be valid"
+      end
     end
 
-    test "should_return_short_form_when_given_short_form_sonnet" do
-      assert {:ok, "sonnet"} = Model.validate("sonnet")
+    test "accepts all configured full model IDs" do
+      for id <- Model.full_ids() do
+        assert {:ok, ^id} = Model.validate(id),
+               "expected full ID #{inspect(id)} to be valid"
+      end
     end
 
-    test "should_return_short_form_when_given_short_form_haiku" do
-      assert {:ok, "haiku"} = Model.validate("haiku")
-    end
-
-    test "should_return_same_name_when_given_full_form" do
-      assert {:ok, "claude-opus-4-6"} = Model.validate("claude-opus-4-6")
-      assert {:ok, "claude-sonnet-4-5-20250929"} = Model.validate("claude-sonnet-4-5-20250929")
-      assert {:ok, "claude-haiku-4-5-20251001"} = Model.validate("claude-haiku-4-5-20251001")
-    end
-
-    test "should_return_error_when_given_invalid_model" do
+    test "rejects unrecognized model names" do
       assert {:error, :invalid_model} = Model.validate("invalid-model-name")
+      assert {:error, :invalid_model} = Model.validate("gpt-5")
     end
 
-    test "should_return_error_when_given_nil" do
+    test "rejects nil" do
       assert {:error, :invalid_model} = Model.validate(nil)
     end
 
-    test "should_return_error_when_given_empty_string" do
+    test "rejects empty string" do
       assert {:error, :invalid_model} = Model.validate("")
+    end
+
+    test "validates models added at runtime via config overlay" do
+      original = Application.get_env(:claude_agent_sdk, :models)
+
+      try do
+        # Add a custom model at runtime
+        custom =
+          Map.put(
+            original,
+            :full_ids,
+            Map.put(original.full_ids, "custom-model-1", "custom-model-1")
+          )
+
+        Application.put_env(:claude_agent_sdk, :models, custom)
+
+        assert {:ok, "custom-model-1"} = Model.validate("custom-model-1")
+      after
+        Application.put_env(:claude_agent_sdk, :models, original)
+      end
     end
   end
 
+  # ── default_model/0 ────────────────────────────────────────────────
+
+  describe "default_model/0" do
+    test "returns the configured default" do
+      config = Application.get_env(:claude_agent_sdk, :models)
+      assert Model.default_model() == config.default
+    end
+
+    test "default is a valid model" do
+      assert {:ok, _} = Model.validate(Model.default_model())
+    end
+  end
+
+  # ── short_forms/0 ──────────────────────────────────────────────────
+
+  describe "short_forms/0" do
+    test "returns a non-empty list of strings" do
+      forms = Model.short_forms()
+      assert is_list(forms)
+      assert forms != []
+      assert Enum.all?(forms, &is_binary/1)
+    end
+
+    test "includes the well-known aliases" do
+      forms = Model.short_forms()
+      assert "opus" in forms
+      assert "sonnet" in forms
+      assert "haiku" in forms
+    end
+  end
+
+  # ── full_ids/0 ─────────────────────────────────────────────────────
+
+  describe "full_ids/0" do
+    test "returns a non-empty list of strings" do
+      ids = Model.full_ids()
+      assert is_list(ids)
+      assert ids != []
+      assert Enum.all?(ids, &is_binary/1)
+    end
+
+    test "every full ID contains a version date or version number" do
+      for id <- Model.full_ids() do
+        assert String.contains?(id, "-"),
+               "expected full ID #{inspect(id)} to contain a hyphen"
+      end
+    end
+  end
+
+  # ── list_models/0 ──────────────────────────────────────────────────
+
   describe "list_models/0" do
-    test "should_return_list_of_all_known_models" do
+    test "returns a sorted list of all known models" do
       models = Model.list_models()
       assert is_list(models)
       assert models != []
-    end
-
-    test "should_include_both_short_and_full_forms" do
-      models = Model.list_models()
-
-      # Should include short forms
-      assert "opus" in models
-      assert "sonnet" in models
-      assert "haiku" in models
-
-      # Should include full forms
-      assert "claude-opus-4-6" in models
-      assert "claude-sonnet-4-5-20250929" in models
-      assert "claude-haiku-4-5-20251001" in models
-    end
-
-    test "should_return_sorted_list" do
-      models = Model.list_models()
       assert models == Enum.sort(models)
+    end
+
+    test "includes both short forms and full IDs" do
+      models = Model.list_models()
+
+      for alias_name <- Model.short_forms() do
+        assert alias_name in models
+      end
+
+      for id <- Model.full_ids() do
+        assert id in models
+      end
+    end
+
+    test "reflects runtime config changes" do
+      original = Application.get_env(:claude_agent_sdk, :models)
+
+      try do
+        custom =
+          Map.put(
+            original,
+            :full_ids,
+            Map.put(original.full_ids, "runtime-added", "runtime-added")
+          )
+
+        Application.put_env(:claude_agent_sdk, :models, custom)
+
+        assert "runtime-added" in Model.list_models()
+      after
+        Application.put_env(:claude_agent_sdk, :models, original)
+      end
     end
   end
 
+  # ── suggest/1 ──────────────────────────────────────────────────────
+
   describe "suggest/1" do
-    test "should_suggest_opus_when_given_opuss" do
+    test "suggests similar short forms" do
       suggestions = Model.suggest("opuss")
       assert is_list(suggestions)
-      assert "opus" in suggestions or "claude-opus-4-6" in suggestions
+      assert "opus" in suggestions
     end
 
-    test "should_suggest_sonnet_when_given_sonet" do
+    test "suggests similar full IDs" do
       suggestions = Model.suggest("sonet")
-      assert is_list(suggestions)
-      assert "sonnet" in suggestions or "claude-sonnet-4-5-20250929" in suggestions
+      assert "sonnet" in suggestions
     end
 
-    test "should_return_empty_when_no_similar_models" do
-      suggestions = Model.suggest("completely-unrelated-xyz123")
-      assert suggestions == []
+    test "returns empty list for completely unrelated input" do
+      assert Model.suggest("completely-unrelated-xyz123") == []
     end
 
-    test "should_return_top_3_suggestions_maximum" do
+    test "returns at most 3 suggestions" do
       suggestions = Model.suggest("claude")
-      assert is_list(suggestions)
       assert length(suggestions) <= 3
     end
 
-    test "should_return_empty_when_given_non_binary" do
+    test "returns empty list for non-binary input" do
       assert Model.suggest(nil) == []
       assert Model.suggest(123) == []
+    end
+  end
+
+  # ── known_models/0 (internal) ─────────────────────────────────────
+
+  describe "known_models/0" do
+    test "merges short forms and full IDs into a single map" do
+      km = Model.known_models()
+      assert is_map(km)
+
+      for alias_name <- Model.short_forms() do
+        assert Map.has_key?(km, alias_name)
+      end
+
+      for id <- Model.full_ids() do
+        assert Map.has_key?(km, id)
+      end
     end
   end
 end
