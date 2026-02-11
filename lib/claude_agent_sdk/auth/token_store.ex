@@ -18,9 +18,9 @@ defmodule ClaudeAgentSDK.Auth.TokenStore do
   @callback load() :: {:ok, token_data()} | {:error, :not_found | term()}
   @callback clear() :: :ok
 
-  ## Default File-Based Implementation
+  alias ClaudeAgentSDK.Config.Auth, as: AuthConfig
 
-  @default_path "~/.claude_sdk/token.json"
+  ## Default File-Based Implementation
 
   @doc """
   Saves token data to storage.
@@ -97,7 +97,7 @@ defmodule ClaudeAgentSDK.Auth.TokenStore do
   end
 
   defp storage_path do
-    Application.get_env(:claude_agent_sdk, :auth_file_path, @default_path)
+    Application.get_env(:claude_agent_sdk, :auth_file_path, AuthConfig.token_store_path())
     |> Path.expand()
   end
 

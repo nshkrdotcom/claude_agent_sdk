@@ -6,6 +6,8 @@ defmodule ClaudeAgentSDK.Auth.Providers.Vertex do
   Requires CLAUDE_AGENT_USE_VERTEX=1 environment variable.
   """
 
+  alias ClaudeAgentSDK.Config.{Auth, Env}
+
   @doc """
   Validates Google Vertex AI authentication.
 
@@ -34,8 +36,8 @@ defmodule ClaudeAgentSDK.Auth.Providers.Vertex do
   end
 
   defp gcp_credentials_available? do
-    System.get_env("GOOGLE_APPLICATION_CREDENTIALS") != nil ||
-      System.get_env("GOOGLE_CLOUD_PROJECT") != nil ||
-      File.exists?(Path.expand("~/.config/gcloud/application_default_credentials.json"))
+    System.get_env(Env.gcp_credentials()) != nil ||
+      System.get_env(Env.gcp_project()) != nil ||
+      File.exists?(Path.expand(Auth.gcp_credentials_path()))
   end
 end

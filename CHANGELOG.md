@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-02-11
+
+### Added
+
+#### Centralized Configuration System
+
+- **`Config.Timeouts`**: All timeout values (client init, streaming, query, transport, auth, hooks, session cleanup) consolidated into a single module with runtime-overridable accessors. Replaces `@default_*` module attributes and inline literals across `Client`, `Streaming.Session`, `CLIStream`, `ClientStream`, `AuthManager`, `AuthChecker`, `Tool.Registry`, `Orchestrator`, `Hooks.Matcher`, `Transport.Erlexec`, and `Process`.
+- **`Config.Buffers`**: Buffer sizes (`max_stdout_buffer_bytes`, `max_stderr_buffer_bytes`, `max_lines_per_batch`, `stream_buffer_limit`) and display truncation lengths (`error_preview_length`, `message_trim_length`, `error_truncation_length`, `summary_max_length`) centralized with runtime overrides.
+- **`Config.Auth`**: Auth file paths (`token_store_path`, `session_storage_dir`), TTLs (`token_ttl_days`, `session_max_age_days`), token prefixes (`oauth_token_prefix`, `api_key_prefix`), and cloud credential paths (`aws_credentials_path`, `gcp_credentials_path`).
+- **`Config.CLI`**: CLI version constraints (`minimum_version`, `recommended_version`), executable discovery (`executable_candidates`), install command, and shared streaming flag builders (`streaming_output_args`, `streaming_bidirectional_args`).
+- **`Config.Env`**: Canonical registry of all environment variable names the SDK reads (`ANTHROPIC_API_KEY`, `CLAUDE_AGENT_OAUTH_TOKEN`, `CLAUDE_AGENT_USE_BEDROCK`, `CLAUDE_CODE_ENTRYPOINT`, etc.) and `passthrough_vars/0`. Eliminates bare string literals across modules.
+- **`Config.Orchestration`**: Concurrency limits (`max_concurrent`), retry policies (`max_retries`, `backoff_ms`) with runtime overrides.
+
+#### Config-Driven Model Registry
+
+- **`Model` module rewritten**: Model validation, listing, and suggestion logic now reads from `Application.get_env(:claude_agent_sdk, :models)` at runtime instead of a compile-time `@known_models` module attribute. New models can be added via `Application.put_env` without recompilation.
+- **`Model.known_models/0`**: Returns the merged map of all configured short forms and full IDs.
+- **`Model.default_model/0`**: Returns the configured default model name.
+- **`Model.short_forms/0`** and **`Model.full_ids/0`**: Return the configured short-form aliases and full model identifiers respectively.
+- **Default model registry** in `config/config.exs`: Ships with `opus`, `sonnet`, `haiku`, `sonnet[1m]` short forms and their corresponding full IDs (`claude-opus-4-6`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-sonnet-4-5-20250929[1m]`). Default model: `"haiku"`.
+
+#### Streaming Timeout Configurability
+
+- **`Streaming.Session` respects `Options.timeout_ms`**: Session `send_message/2` stream timeout now uses the configured `timeout_ms` from options instead of a hardcoded 5-minute default. Added `:timeout_ms` GenServer call to expose the configured timeout.
+- **Control client stream respects `Options.timeout_ms`**: `Streaming.stream_response/3` queries the client for its configured timeout via a new `GenServer.call(client_pid, :stream_timeout_ms)` and uses it for the stream receive loop.
+
+#### Test Infrastructure
+
+- **`ClaudeAgentSDK.Test.ModelFixtures`**: Shared model constants for tests (`test_model/0`, `test_model_alt/0`, `real_default_model/0`), eliminating hardcoded model strings scattered across test files.
+
+### Changed
+
+- **`Config` module doc updated**: Top-level `Config` module now documents its role as a facade and lists all sub-modules with their domains.
+- **`Mock.default_response/0`**: Uses `Model.default_model()` instead of hardcoded `"claude-3-opus-20240229"`.
+- **`ContentExtractor.summarize/2`**: Default `max_length` reads from `Buffers.summary_max_length()` instead of hardcoded `100`.
+- **`Tool.Registry` timeout**: `execution_timeout_ms/0` reads from `Timeouts.tool_execution_ms()` instead of `Application.get_env(:claude_agent_sdk, :tool_execution_timeout_ms)`.
+- **`TokenStore` storage path**: Falls back to `Config.Auth.token_store_path()` instead of a local `@default_path` attribute.
+- **`SessionStore` defaults**: Storage dir and max age read from `Config.Auth` instead of local `@default_storage_dir` / `@max_age_days`.
+- **Model references in examples and guides**: Updated from full model IDs (e.g., `"claude-opus-4"`, `"claude-sonnet-4"`) to short forms (`"opus"`, `"sonnet"`) throughout agent definitions, guides, and example code.
+- **`ExDoc` groups updated**: Configuration group now lists all `Config.*` modules and `Model`.
+
+### Documentation
+
+- **New guide: Configuration Internals** (`guides/configuration-internals.md`): Complete reference for every tunable constant, its default, override examples, and design decisions (domain grouping, runtime functions vs module attributes).
+- **New guide: Model Configuration** (`guides/model-configuration.md`): Config-driven model registry, adding custom models at runtime, overriding the default model, thinking tokens, test fixtures, and architecture diagram.
+- Updated `configuration.md` with `Config.*` sub-module examples and link to Configuration Internals guide.
+- Updated `agents.md`, `sessions.md`, `streaming.md`, `testing.md`, `getting-started.md`, and `mcp-tools.md` to use short-form model names.
+- Updated `README.md` with `Config.*` override examples and version bump to `0.13.0`.
+
+### Testing
+
+- Added `Config.TimeoutsTest` — verifies all 30 timeout defaults and runtime override behavior.
+- Added `Config.BuffersTest` — verifies all 8 buffer defaults and selective override.
+- Added `Config.AuthTest` — verifies file paths, TTLs, prefixes, and runtime override.
+- Added `Config.CLITest` — verifies version strings, executable candidates, and streaming arg builders.
+- Added `Config.EnvTest` — verifies all environment variable name constants.
+- Added `Config.OrchestrationTest` — verifies concurrency limits and retry defaults.
+- Added `Streaming.SessionTimeoutTest` — verifies session timeout from `Options.timeout_ms` and fallback to default.
+- Added control client stream timeout test in `StreamingFacadeTest`.
+- Rewrote `ModelTest` to test config-driven behavior: runtime model additions, `short_forms/0`, `full_ids/0`, `known_models/0`, and `default_model/0`.
+- Migrated all test files to use `ModelFixtures` (`test_model()` / `test_model_alt()`) instead of hardcoded model strings.
+- Updated `Tool.RegistryTest` timeout test to override `Config.Timeouts` instead of flat `:tool_execution_timeout_ms` key.
+
 ## [0.12.0] - 2026-02-10
 
 ### Breaking Changes
@@ -1324,7 +1387,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.9.2...v0.10.0

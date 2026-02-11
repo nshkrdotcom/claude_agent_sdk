@@ -7,13 +7,9 @@ defmodule ClaudeAgentSDK.CLI do
   warning when the detected version is below the supported minimum.
   """
 
+  alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
+  alias ClaudeAgentSDK.Config.Env
   alias ClaudeAgentSDK.Log, as: Logger
-
-  @minimum_version "2.0.0"
-  @recommended_version "2.0.75"
-  @executable_candidates ["claude-code", "claude"]
-  @skip_version_check_env "CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK"
-
   alias ClaudeAgentSDK.Options
 
   @doc """
@@ -25,7 +21,7 @@ defmodule ClaudeAgentSDK.CLI do
   @spec find_executable() :: {:ok, String.t()} | {:error, :not_found}
   def find_executable do
     with nil <- find_bundled_executable(),
-         nil <- find_on_path(@executable_candidates),
+         nil <- find_on_path(CLIConfig.executable_candidates()),
          nil <- find_in_known_locations() do
       {:error, :not_found}
     else
@@ -62,8 +58,7 @@ defmodule ClaudeAgentSDK.CLI do
 
       {:error, :not_found} ->
         raise ClaudeAgentSDK.Errors.CLINotFoundError,
-          message:
-            "Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code"
+          message: "Claude CLI not found. Please install with: #{CLIConfig.install_command()}"
     end
   end
 
@@ -78,8 +73,7 @@ defmodule ClaudeAgentSDK.CLI do
 
       {:error, :not_found} ->
         raise ClaudeAgentSDK.Errors.CLINotFoundError,
-          message:
-            "Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code"
+          message: "Claude CLI not found. Please install with: #{CLIConfig.install_command()}"
     end
   end
 
@@ -117,7 +111,7 @@ defmodule ClaudeAgentSDK.CLI do
   Returns the minimum supported Claude CLI version.
   """
   @spec minimum_version() :: String.t()
-  def minimum_version, do: @minimum_version
+  def minimum_version, do: CLIConfig.minimum_version()
 
   @doc """
   Returns the recommended Claude CLI version for this SDK release.
@@ -126,7 +120,7 @@ defmodule ClaudeAgentSDK.CLI do
   file checkpointing, streaming control protocol, and partial messages.
   """
   @spec recommended_version() :: String.t()
-  def recommended_version, do: @recommended_version
+  def recommended_version, do: CLIConfig.recommended_version()
 
   @doc """
   True if the installed version meets or exceeds the minimum.
@@ -135,7 +129,7 @@ defmodule ClaudeAgentSDK.CLI do
   def version_supported? do
     with {:ok, installed} <- version(),
          {:ok, installed_version} <- Version.parse(installed),
-         {:ok, minimum_version} <- Version.parse(@minimum_version) do
+         {:ok, minimum_version} <- Version.parse(CLIConfig.minimum_version()) do
       Version.compare(installed_version, minimum_version) in [:eq, :gt]
     else
       _ -> false
@@ -147,7 +141,7 @@ defmodule ClaudeAgentSDK.CLI do
   """
   @spec warn_if_outdated() :: :ok
   def warn_if_outdated do
-    if System.get_env(@skip_version_check_env) do
+    if System.get_env(Env.skip_version_check()) do
       :ok
     else
       do_warn_if_outdated()
@@ -160,11 +154,13 @@ defmodule ClaudeAgentSDK.CLI do
         warn_for_installed_version(installed)
 
       {:error, :not_found} ->
-        Logger.warning("Claude CLI not found. Minimum supported version: #{@minimum_version}")
+        Logger.warning(
+          "Claude CLI not found. Minimum supported version: #{CLIConfig.minimum_version()}"
+        )
 
       {:error, reason} ->
         Logger.warning(
-          "Could not determine Claude CLI version (#{inspect(reason)}). Minimum supported: #{@minimum_version}"
+          "Could not determine Claude CLI version (#{inspect(reason)}). Minimum supported: #{CLIConfig.minimum_version()}"
         )
     end
 
@@ -234,17 +230,17 @@ defmodule ClaudeAgentSDK.CLI do
   end
 
   defp warn_for_installed_version(installed) do
-    case {Version.parse(installed), Version.parse(@minimum_version)} do
+    case {Version.parse(installed), Version.parse(CLIConfig.minimum_version())} do
       {{:ok, installed_version}, {:ok, minimum_version}} ->
         if Version.compare(installed_version, minimum_version) == :lt do
           Logger.warning(
-            "Claude CLI version #{installed} is below minimum #{@minimum_version}. Please upgrade."
+            "Claude CLI version #{installed} is below minimum #{CLIConfig.minimum_version()}. Please upgrade."
           )
         end
 
       _ ->
         Logger.warning(
-          "Could not parse Claude CLI version #{installed}. Minimum supported: #{@minimum_version}"
+          "Could not parse Claude CLI version #{installed}. Minimum supported: #{CLIConfig.minimum_version()}"
         )
     end
   end

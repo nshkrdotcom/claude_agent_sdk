@@ -14,12 +14,19 @@ These examples demonstrate real integration with the Claude Code CLI.
 Some examples that exercise in-process tools and query streaming are affected by runtime config:
 
 ```elixir
+# Timeouts and buffer sizes are centralized in Config.* modules:
+config :claude_agent_sdk, ClaudeAgentSDK.Config.Timeouts,
+  tool_execution_ms: 30_000
+
+# Legacy flat keys still work for non-migrated settings:
 config :claude_agent_sdk,
-  tool_execution_timeout_ms: 30_000,
   cli_stream_module: ClaudeAgentSDK.Query.CLIStream,
   task_supervisor_strict: false,
   agents_temp_file_max_age_seconds: 86_400
 ```
+
+See the [Configuration Internals](../guides/configuration-internals.md) guide for
+all tunable constants and their defaults.
 
 `process_module` is still accepted as a fallback key for query streaming, but it is deprecated.
 

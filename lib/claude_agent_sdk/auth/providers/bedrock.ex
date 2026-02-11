@@ -6,6 +6,8 @@ defmodule ClaudeAgentSDK.Auth.Providers.Bedrock do
   Requires CLAUDE_AGENT_USE_BEDROCK=1 environment variable.
   """
 
+  alias ClaudeAgentSDK.Config.{Auth, Env}
+
   @doc """
   Validates AWS Bedrock authentication.
 
@@ -35,8 +37,8 @@ defmodule ClaudeAgentSDK.Auth.Providers.Bedrock do
   end
 
   defp aws_credentials_available? do
-    System.get_env("AWS_ACCESS_KEY_ID") != nil ||
-      System.get_env("AWS_PROFILE") != nil ||
-      File.exists?(Path.expand("~/.aws/credentials"))
+    System.get_env(Env.aws_access_key_id()) != nil ||
+      System.get_env(Env.aws_profile()) != nil ||
+      File.exists?(Path.expand(Auth.aws_credentials_path()))
   end
 end

@@ -49,10 +49,8 @@ defmodule ClaudeAgentSDK.SessionStore do
   """
 
   use GenServer
+  alias ClaudeAgentSDK.Config.{Auth, Timeouts}
   alias ClaudeAgentSDK.Log, as: Logger
-
-  @default_storage_dir "~/.claude_sdk/sessions"
-  @max_age_days 30
 
   defstruct [
     :storage_dir,
@@ -220,7 +218,7 @@ defmodule ClaudeAgentSDK.SessionStore do
     opts
     |> Keyword.get(
       :storage_dir,
-      Application.get_env(:claude_agent_sdk, :session_storage_dir, @default_storage_dir)
+      Application.get_env(:claude_agent_sdk, :session_storage_dir, Auth.session_storage_dir())
     )
     |> Path.expand()
   end
@@ -303,14 +301,14 @@ defmodule ClaudeAgentSDK.SessionStore do
 
   @impl true
   def handle_call({:cleanup_old, opts}, _from, state) do
-    max_age_days = Keyword.get(opts, :max_age_days, @max_age_days)
+    max_age_days = Keyword.get(opts, :max_age_days, Auth.session_max_age_days())
     {deleted_count, new_state} = cleanup_old_internal(state, max_age_days)
     {:reply, deleted_count, new_state}
   end
 
   @impl true
   def handle_info(:cleanup_check, state) do
-    {_deleted_count, state} = cleanup_old_internal(state, @max_age_days)
+    {_deleted_count, state} = cleanup_old_internal(state, Auth.session_max_age_days())
 
     # Reschedule
     cleanup_timer = schedule_cleanup()
@@ -640,6 +638,6 @@ defmodule ClaudeAgentSDK.SessionStore do
 
   defp schedule_cleanup do
     # Check for old sessions every 24 hours
-    Process.send_after(self(), :cleanup_check, 24 * 60 * 60 * 1000)
+    Process.send_after(self(), :cleanup_check, Timeouts.session_cleanup_interval_ms())
   end
 end

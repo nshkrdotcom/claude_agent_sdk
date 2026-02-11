@@ -15,9 +15,8 @@ defmodule ClaudeAgentSDK.Process do
   alias ClaudeAgentSDK.Log, as: Logger
 
   alias ClaudeAgentSDK.{CLI, Message, Options, Runtime}
+  alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
   alias ClaudeAgentSDK.Shell
-
-  @default_max_buffer_size 1_048_576
 
   @doc """
   Streams messages from Claude Code CLI using erlexec.
@@ -151,7 +150,7 @@ defmodule ClaudeAgentSDK.Process do
         :exec.send(pid, :eof)
 
         # Get timeout from options (default: 75 minutes)
-        timeout_ms = options.timeout_ms || 4_500_000
+        timeout_ms = options.timeout_ms || Timeouts.query_total_ms()
 
         Logger.debug("Using timeout for CLI run", timeout_ms: timeout_ms)
 
@@ -359,7 +358,7 @@ defmodule ClaudeAgentSDK.Process do
 
   defp build_env_vars(%Options{} = options) do
     base_env =
-      ["CLAUDE_AGENT_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "PATH", "HOME"]
+      Env.passthrough_vars()
       |> Enum.reduce(%{}, fn var, acc ->
         case System.get_env(var) do
           nil -> acc
@@ -382,8 +381,8 @@ defmodule ClaudeAgentSDK.Process do
       end)
       |> maybe_put_user_env(options.user)
       |> maybe_put_pwd_env(options.cwd)
-      |> Map.put_new("CLAUDE_CODE_ENTRYPOINT", "sdk-elixir")
-      |> Map.put_new("CLAUDE_AGENT_SDK_VERSION", version_string())
+      |> Map.put_new(Env.entrypoint(), "sdk-elixir")
+      |> Map.put_new(Env.sdk_version(), version_string())
       |> maybe_put_file_checkpointing_env(options)
 
     Enum.map(merged, fn {k, v} -> {k, v} end)
@@ -397,7 +396,7 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp maybe_put_file_checkpointing_env(env_map, %Options{enable_file_checkpointing: true}) do
-    Map.put(env_map, "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING", "true")
+    Map.put(env_map, Env.file_checkpointing(), "true")
   end
 
   defp maybe_put_file_checkpointing_env(env_map, _options), do: env_map
@@ -608,7 +607,8 @@ defmodule ClaudeAgentSDK.Process do
   defp json_decode_error_message(line, original_error) do
     error =
       %ClaudeAgentSDK.Errors.CLIJSONDecodeError{
-        message: "Failed to decode JSON: #{String.slice(line, 0, 100)}...",
+        message:
+          "Failed to decode JSON: #{String.slice(line, 0, Buffers.error_preview_length())}...",
         line: line,
         original_error: original_error
       }
@@ -628,8 +628,8 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp truncate_line(line) when is_binary(line) do
-    if byte_size(line) > 100 do
-      binary_part(line, 0, 100) <> "..."
+    if byte_size(line) > Buffers.error_preview_length() do
+      binary_part(line, 0, Buffers.error_preview_length()) <> "..."
     else
       line
     end
@@ -638,7 +638,7 @@ defmodule ClaudeAgentSDK.Process do
   defp max_buffer_size(%Options{max_buffer_size: size}) when is_integer(size) and size > 0,
     do: size
 
-  defp max_buffer_size(_), do: @default_max_buffer_size
+  defp max_buffer_size(_), do: Buffers.max_stdout_buffer_bytes()
 
   defp process_error_message(formatted_error, reason) do
     {exit_code, stderr} = extract_process_error_details(reason)

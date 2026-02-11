@@ -25,11 +25,11 @@ defmodule ClaudeAgentSDK.Tool.Registry do
   """
 
   use GenServer
+  alias ClaudeAgentSDK.Config.Timeouts
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.TaskSupervisor
 
   @type tool_name :: String.t() | atom()
-  @default_execution_timeout_ms 30_000
 
   @type tool_metadata :: %{
           required(:name) => tool_name(),
@@ -340,16 +340,7 @@ defmodule ClaudeAgentSDK.Tool.Registry do
     :ok
   end
 
-  defp execution_timeout_ms do
-    case Application.get_env(
-           :claude_agent_sdk,
-           :tool_execution_timeout_ms,
-           @default_execution_timeout_ms
-         ) do
-      timeout when is_integer(timeout) and timeout > 0 -> timeout
-      _ -> @default_execution_timeout_ms
-    end
-  end
+  defp execution_timeout_ms, do: Timeouts.tool_execution_ms()
 
   defp tool_error(message) when is_binary(message) do
     {:error,

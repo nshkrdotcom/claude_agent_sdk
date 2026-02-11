@@ -32,6 +32,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
   """
 
   alias ClaudeAgentSDK.{CLI, Runtime}
+  alias ClaudeAgentSDK.Config.{Auth, Env, Timeouts}
 
   @type auth_status ::
           :ready | :cli_not_found | :not_authenticated | :invalid_credentials | :unknown
@@ -315,17 +316,17 @@ defmodule ClaudeAgentSDK.AuthChecker do
   @spec get_api_key_source() :: {:ok, String.t()} | {:error, String.t()}
   def get_api_key_source do
     cond do
-      System.get_env("ANTHROPIC_API_KEY") ->
+      System.get_env(Env.anthropic_api_key()) ->
         {:ok, "environment variable ANTHROPIC_API_KEY"}
 
-      System.get_env("CLAUDE_AGENT_USE_BEDROCK") == "1" ->
+      System.get_env(Env.use_bedrock()) == "1" ->
         if check_aws_credentials() do
           {:ok, "AWS credentials for Bedrock"}
         else
           {:error, "CLAUDE_AGENT_USE_BEDROCK set but AWS credentials not found"}
         end
 
-      System.get_env("CLAUDE_AGENT_USE_VERTEX") == "1" ->
+      System.get_env(Env.use_vertex()) == "1" ->
         if check_gcp_credentials() do
           {:ok, "Google Cloud credentials for Vertex AI"}
         else
@@ -372,7 +373,10 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp execute_auth_test do
-    case execute_with_timeout("claude --print test --output-format json", 30_000) do
+    case execute_with_timeout(
+           "claude --print test --output-format json",
+           Timeouts.auth_cli_test_ms()
+         ) do
       {:ok, output} -> validate_cli_output(output)
       {:error, :timeout} -> {:error, :timeout}
       {:error, error} -> parse_cli_error(error)
@@ -406,7 +410,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
     # Check different auth methods in order of preference
     cond do
       check_anthropic_auth() ->
-        source = if System.get_env("ANTHROPIC_API_KEY"), do: "env", else: "session"
+        source = if System.get_env(Env.anthropic_api_key()), do: "env", else: "session"
         {true, %{method: "Anthropic API", source: source}}
 
       check_bedrock_auth() ->
@@ -422,7 +426,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp check_anthropic_auth do
     # Check environment variable first
-    if System.get_env("ANTHROPIC_API_KEY") do
+    if System.get_env(Env.anthropic_api_key()) do
       true
     else
       # Check CLI session
@@ -431,19 +435,22 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp check_bedrock_auth do
-    System.get_env("CLAUDE_AGENT_USE_BEDROCK") == "1" and check_aws_credentials()
+    System.get_env(Env.use_bedrock()) == "1" and check_aws_credentials()
   end
 
   defp check_vertex_auth do
-    System.get_env("CLAUDE_AGENT_USE_VERTEX") == "1" and check_gcp_credentials()
+    System.get_env(Env.use_vertex()) == "1" and check_gcp_credentials()
   end
 
   defp check_cli_session do
     # Try a simple test command to see if CLI is authenticated
-    case execute_with_timeout("claude --version", 10_000) do
+    case execute_with_timeout("claude --version", Timeouts.auth_cli_version_ms()) do
       {:ok, _output} ->
         # CLI works, now test auth with a minimal query
-        case execute_with_timeout("claude --print hello --max-turns 1", 30_000) do
+        case execute_with_timeout(
+               "claude --print hello --max-turns 1",
+               Timeouts.auth_cli_test_ms()
+             ) do
           {:ok, _output} -> true
           {:error, _} -> false
         end
@@ -455,16 +462,16 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp check_aws_credentials do
     # Check for AWS credentials in common locations
-    System.get_env("AWS_ACCESS_KEY_ID") != nil or
-      System.get_env("AWS_PROFILE") != nil or
-      File.exists?(Path.expand("~/.aws/credentials"))
+    System.get_env(Env.aws_access_key_id()) != nil or
+      System.get_env(Env.aws_profile()) != nil or
+      File.exists?(Path.expand(Auth.aws_credentials_path()))
   end
 
   defp check_gcp_credentials do
     # Check for GCP credentials
-    System.get_env("GOOGLE_APPLICATION_CREDENTIALS") != nil or
-      System.get_env("GOOGLE_CLOUD_PROJECT") != nil or
-      File.exists?(Path.expand("~/.config/gcloud/application_default_credentials.json"))
+    System.get_env(Env.gcp_credentials()) != nil or
+      System.get_env(Env.gcp_project()) != nil or
+      File.exists?(Path.expand(Auth.gcp_credentials_path()))
   end
 
   defp determine_status(cli_installed, authenticated, auth_info) do
@@ -522,10 +529,10 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp get_provider_specific_recommendations do
     cond do
-      System.get_env("CLAUDE_AGENT_USE_BEDROCK") == "1" ->
+      System.get_env(Env.use_bedrock()) == "1" ->
         ["Ensure AWS credentials are configured", "Check AWS_PROFILE or AWS_ACCESS_KEY_ID"]
 
-      System.get_env("CLAUDE_AGENT_USE_VERTEX") == "1" ->
+      System.get_env(Env.use_vertex()) == "1" ->
         ["Ensure GCP credentials are configured", "Check GOOGLE_APPLICATION_CREDENTIALS"]
 
       true ->

@@ -62,19 +62,14 @@ defmodule ClaudeAgentSDK.Client do
   """
 
   use GenServer
-  alias ClaudeAgentSDK.Log, as: Logger
 
   alias ClaudeAgentSDK.{AbortSignal, CLI, Hooks, Message, Model, Options, TaskSupervisor}
+  alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
   alias ClaudeAgentSDK.ControlProtocol.Protocol
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
+  alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Permission.{Context, Result}
   alias ClaudeAgentSDK.Streaming.{EventParser, Termination}
-  @default_hook_timeout_ms 60_000
-  @default_init_timeout_ms 60_000
-  @default_control_request_timeout_ms 60_000
-  @default_stream_timeout_ms 300_000
-  @default_stream_buffer_limit 1_000
-  @init_timeout_env_var "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT"
   @edit_tools ["Write", "Edit", "MultiEdit"]
 
   # Client state intentionally mirrors the control-protocol lifecycle and streaming buffers.
@@ -95,7 +90,7 @@ defmodule ClaudeAgentSDK.Client do
             session_id: nil,
             sdk_mcp_servers: %{},
             pending_permission_change: nil,
-            control_request_timeout_ms: @default_control_request_timeout_ms,
+            control_request_timeout_ms: Timeouts.client_control_request_ms(),
             permission_bridge: nil,
             accumulated_text: "",
             stream_stop_reason: nil,
@@ -106,7 +101,7 @@ defmodule ClaudeAgentSDK.Client do
             pending_inbound: :queue.new(),
             pending_inbound_size: 0,
             pending_inbound_dropped: 0,
-            stream_buffer_limit: @default_stream_buffer_limit,
+            stream_buffer_limit: Buffers.stream_buffer_limit(),
             server_info: nil,
             init_request_id: nil,
             init_timeout: nil
@@ -364,7 +359,7 @@ defmodule ClaudeAgentSDK.Client do
 
               {[msg], {client_pid, ref, :active}}
           after
-            30_000 ->
+            Timeouts.stream_receive_ms() ->
               if Process.alive?(client_pid) do
                 {[], {client_pid, ref, :active}}
               else
@@ -412,7 +407,7 @@ defmodule ClaudeAgentSDK.Client do
   """
   @spec stop(pid()) :: :ok
   def stop(client) when is_pid(client) do
-    GenServer.stop(client, :normal, 5000)
+    GenServer.stop(client, :normal, Timeouts.client_stop_ms())
   catch
     :exit, {:noproc, _} -> :ok
   end
@@ -489,7 +484,7 @@ defmodule ClaudeAgentSDK.Client do
       if is_integer(timeout_ms) and timeout_ms > 0 do
         timeout_ms
       else
-        @default_init_timeout_ms
+        Timeouts.client_init_ms()
       end
 
     try do
@@ -1353,8 +1348,8 @@ defmodule ClaudeAgentSDK.Client do
           Logger.debug("CLI exited cleanly with status #{status}")
           :ok
       after
-        200 ->
-          # If CLI doesn't exit within 200ms, force close
+        Timeouts.client_exit_wait_ms() ->
+          # If CLI doesn't exit within timeout, force close
           Logger.debug("CLI didn't exit within timeout, forcing close")
           :ok
       end
@@ -1450,14 +1445,14 @@ defmodule ClaudeAgentSDK.Client do
     limit
   end
 
-  defp stream_buffer_limit(_options), do: @default_stream_buffer_limit
+  defp stream_buffer_limit(_options), do: Buffers.stream_buffer_limit()
 
   defp stream_timeout_ms(%Options{timeout_ms: timeout_ms})
        when is_integer(timeout_ms) and timeout_ms > 0 do
     timeout_ms
   end
 
-  defp stream_timeout_ms(_options), do: @default_stream_timeout_ms
+  defp stream_timeout_ms(_options), do: Timeouts.streaming_session_ms()
 
   defp maybe_attach_permission_hook(%Options{can_use_tool: nil} = options) do
     {:ok, options, nil}
@@ -1604,12 +1599,15 @@ defmodule ClaudeAgentSDK.Client do
   defp apply_client_entrypoint_env(%Options{} = options) do
     env = options.env || %{}
 
+    entrypoint_key = Env.entrypoint()
+    entrypoint_atom = String.to_atom(entrypoint_key)
+
     env =
-      if Map.has_key?(env, "CLAUDE_CODE_ENTRYPOINT") or
-           Map.has_key?(env, :CLAUDE_CODE_ENTRYPOINT) do
+      if Map.has_key?(env, entrypoint_key) or
+           Map.has_key?(env, entrypoint_atom) do
         env
       else
-        Map.put(env, "CLAUDE_CODE_ENTRYPOINT", "sdk-elixir-client")
+        Map.put(env, entrypoint_key, "sdk-elixir-client")
       end
 
     %{options | env: env}
@@ -1618,21 +1616,21 @@ defmodule ClaudeAgentSDK.Client do
   @doc false
   @spec init_timeout_seconds_from_env() :: number()
   def init_timeout_seconds_from_env do
-    env_value = System.get_env(@init_timeout_env_var)
+    env_value = System.get_env(Env.stream_close_timeout())
 
     parsed_ms =
       case env_value do
         value when is_binary(value) ->
           case Integer.parse(value) do
             {int, _} when int > 0 -> int
-            _ -> @default_init_timeout_ms
+            _ -> Timeouts.client_init_ms()
           end
 
         _ ->
-          @default_init_timeout_ms
+          Timeouts.client_init_ms()
       end
 
-    timeout_ms = max(parsed_ms, @default_init_timeout_ms)
+    timeout_ms = max(parsed_ms, Timeouts.client_init_ms())
     timeout_ms / 1_000
   end
 
@@ -1659,13 +1657,13 @@ defmodule ClaudeAgentSDK.Client do
     case Application.get_env(
            :claude_agent_sdk,
            :control_request_timeout_ms,
-           @default_control_request_timeout_ms
+           Timeouts.client_control_request_ms()
          ) do
       timeout_ms when is_integer(timeout_ms) and timeout_ms > 0 ->
         timeout_ms
 
       _ ->
-        @default_control_request_timeout_ms
+        Timeouts.client_control_request_ms()
     end
   end
 
@@ -1890,7 +1888,7 @@ defmodule ClaudeAgentSDK.Client do
     matcher.timeout_ms
     |> Matcher.sanitize_timeout_ms()
     |> case do
-      nil -> @default_hook_timeout_ms
+      nil -> Timeouts.client_hook_ms()
       value -> value
     end
   end
@@ -2299,7 +2297,7 @@ defmodule ClaudeAgentSDK.Client do
   defp hook_timeout_ms(state, callback_id) do
     state
     |> Map.get(:hook_callback_timeouts, %{})
-    |> Map.get(callback_id, @default_hook_timeout_ms)
+    |> Map.get(callback_id, Timeouts.client_hook_ms())
   end
 
   defp hook_timeout_error_message(timeout_ms) do
@@ -2450,7 +2448,9 @@ defmodule ClaudeAgentSDK.Client do
         end
       end)
 
-    case Task.yield(task, 60_000) || Task.shutdown(task) do
+    timeout = Timeouts.client_permission_yield_ms()
+
+    case Task.yield(task, timeout) || Task.shutdown(task) do
       {:ok, {:ok, permission_result}} ->
         {:ok, permission_result}
 
@@ -2458,7 +2458,7 @@ defmodule ClaudeAgentSDK.Client do
         {:error, reason}
 
       nil ->
-        {:error, "Permission callback timeout after 60s"}
+        {:error, "Permission callback timeout after #{div(timeout, 1_000)}s"}
 
       {:exit, reason} ->
         {:error, "Permission callback failed: #{inspect(reason)}"}
@@ -2842,8 +2842,8 @@ defmodule ClaudeAgentSDK.Client do
         {[%Message{type: :stream_event, subtype: nil, data: stream_event_data(event), raw: %{}}],
          {client, ref}}
     after
-      30_000 ->
-        # No message for 30 seconds, check if client still alive
+      Timeouts.stream_receive_ms() ->
+        # No message for timeout period, check if client still alive
         if process_running?(client) do
           receive_next_message({client, ref})
         else

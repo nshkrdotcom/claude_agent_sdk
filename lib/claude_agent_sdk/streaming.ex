@@ -224,9 +224,9 @@ defmodule ClaudeAgentSDK.Streaming do
   """
 
   alias ClaudeAgentSDK.{Client, Options}
+  alias ClaudeAgentSDK.Config.Timeouts
   alias ClaudeAgentSDK.Streaming.{Session, Termination}
   alias ClaudeAgentSDK.Transport.StreamingRouter
-  @default_stream_timeout_ms 300_000
 
   @doc """
   Starts a new streaming session.
@@ -486,12 +486,12 @@ defmodule ClaudeAgentSDK.Streaming do
   end
 
   defp control_client_timeout_ms(client_pid) when is_pid(client_pid) do
-    case GenServer.call(client_pid, :stream_timeout_ms, @default_stream_timeout_ms) do
+    case GenServer.call(client_pid, :stream_timeout_ms, Timeouts.streaming_session_ms()) do
       timeout_ms when is_integer(timeout_ms) and timeout_ms > 0 -> timeout_ms
-      _ -> @default_stream_timeout_ms
+      _ -> Timeouts.streaming_session_ms()
     end
   catch
-    :exit, _ -> @default_stream_timeout_ms
+    :exit, _ -> Timeouts.streaming_session_ms()
   end
 
   # Convert Message struct to streaming event format

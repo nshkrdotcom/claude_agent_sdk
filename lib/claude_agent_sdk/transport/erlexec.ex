@@ -13,18 +13,12 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   @behaviour ClaudeAgentSDK.Transport
 
   alias ClaudeAgentSDK.{CLI, Options, Runtime, TaskSupervisor}
+  alias ClaudeAgentSDK.Config.{Buffers, Timeouts}
+  alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Errors.CLIJSONDecodeError
   alias ClaudeAgentSDK.Process, as: SDKProcess
   alias ClaudeAgentSDK.Transport.ExecOptions
   alias ClaudeAgentSDK.Transport.Setup
-
-  @default_max_buffer_size 1_048_576
-  @default_max_stderr_buffer_size 262_144
-  @default_call_timeout 5_000
-  @force_close_timeout 500
-  @default_headless_timeout_ms 5_000
-  @finalize_delay_ms 25
-  @max_lines_per_batch 200
 
   defstruct subprocess: nil,
             subscribers: %{},
@@ -34,12 +28,12 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
             status: :disconnected,
             stderr_callback: nil,
             stderr_buffer: "",
-            max_buffer_size: @default_max_buffer_size,
-            max_stderr_buffer_size: @default_max_stderr_buffer_size,
+            max_buffer_size: Buffers.max_stdout_buffer_bytes(),
+            max_stderr_buffer_size: Buffers.max_stderr_buffer_bytes(),
             overflowed?: false,
             pending_calls: %{},
             finalize_timer_ref: nil,
-            headless_timeout_ms: @default_headless_timeout_ms,
+            headless_timeout_ms: Timeouts.transport_headless_ms(),
             headless_timer_ref: nil,
             task_supervisor: TaskSupervisor,
             startup_opts: nil
@@ -118,7 +112,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   @impl ClaudeAgentSDK.Transport
   def force_close(transport) when is_pid(transport) do
-    case safe_call(transport, :force_close, @force_close_timeout) do
+    case safe_call(transport, :force_close, Timeouts.transport_force_close_ms()) do
       {:ok, :ok} ->
         :ok
 
@@ -171,7 +165,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
       task_supervisor: Keyword.get(opts, :task_supervisor, TaskSupervisor),
       headless_timeout_ms:
         normalize_headless_timeout_ms(
-          Keyword.get(opts, :headless_timeout_ms, @default_headless_timeout_ms)
+          Keyword.get(opts, :headless_timeout_ms, Timeouts.transport_headless_ms())
         )
     }
 
@@ -274,7 +268,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     state =
       state
       |> append_stdout_data(data)
-      |> drain_stdout_lines(@max_lines_per_batch)
+      |> drain_stdout_lines(Buffers.max_lines_per_batch())
       |> maybe_schedule_drain()
 
     {:noreply, state}
@@ -307,7 +301,11 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     state = cancel_finalize_timer(state)
 
     timer_ref =
-      Process.send_after(self(), {:finalize_exit, os_pid, pid, reason}, @finalize_delay_ms)
+      Process.send_after(
+        self(),
+        {:finalize_exit, os_pid, pid, reason},
+        Timeouts.transport_finalize_ms()
+      )
 
     {:noreply, %{state | finalize_timer_ref: timer_ref}}
   end
@@ -317,7 +315,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
       state
       |> Map.put(:finalize_timer_ref, nil)
       |> Map.put(:drain_scheduled?, false)
-      |> drain_stdout_lines(@max_lines_per_batch)
+      |> drain_stdout_lines(Buffers.max_lines_per_batch())
 
     if :queue.is_empty(state.pending_lines) do
       state = flush_stdout_fragment(state)
@@ -345,7 +343,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     state =
       state
       |> Map.put(:drain_scheduled?, false)
-      |> drain_stdout_lines(@max_lines_per_batch)
+      |> drain_stdout_lines(Buffers.max_lines_per_batch())
       |> maybe_schedule_drain()
 
     {:noreply, state}
@@ -378,7 +376,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     _, _ -> :ok
   end
 
-  defp safe_call(transport, message, timeout \\ @default_call_timeout)
+  defp safe_call(transport, message, timeout \\ Timeouts.transport_call_ms())
 
   defp safe_call(transport, message, timeout)
        when is_pid(transport) and is_integer(timeout) and timeout >= 0 do
@@ -886,25 +884,19 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   defp normalize_max_buffer_size(size) when is_integer(size) and size > 0, do: size
-  defp normalize_max_buffer_size(_), do: @default_max_buffer_size
+  defp normalize_max_buffer_size(_), do: Buffers.max_stdout_buffer_bytes()
 
   defp normalize_max_stderr_buffer_size(size) when is_integer(size) and size > 0, do: size
-  defp normalize_max_stderr_buffer_size(_), do: @default_max_stderr_buffer_size
+  defp normalize_max_stderr_buffer_size(_), do: Buffers.max_stderr_buffer_bytes()
 
   defp normalize_headless_timeout_ms(:infinity), do: :infinity
   defp normalize_headless_timeout_ms(size) when is_integer(size) and size > 0, do: size
-  defp normalize_headless_timeout_ms(_), do: @default_headless_timeout_ms
+  defp normalize_headless_timeout_ms(_), do: Timeouts.transport_headless_ms()
 
   defp build_command_from_options(%Options{} = options) do
     case CLI.resolve_executable(options) do
       {:ok, executable} ->
-        args = [
-          "--output-format",
-          "stream-json",
-          "--input-format",
-          "stream-json",
-          "--verbose"
-        ]
+        args = CLIConfig.streaming_bidirectional_args()
 
         args = args ++ ClaudeAgentSDK.Options.to_stream_json_args(options)
         {:ok, {executable, args}}
@@ -923,8 +915,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   defp truncate_line(data) when is_binary(data) do
-    if byte_size(data) > 100 do
-      binary_part(data, 0, 100) <> "..."
+    if byte_size(data) > Buffers.error_preview_length() do
+      binary_part(data, 0, Buffers.error_preview_length()) <> "..."
     else
       data
     end

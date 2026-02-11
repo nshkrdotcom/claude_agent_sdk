@@ -17,6 +17,7 @@ defmodule ClaudeAgentSDK.Query do
   """
 
   alias ClaudeAgentSDK.Config
+  alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Query.ClientStream
   alias ClaudeAgentSDK.Transport.StreamingRouter
@@ -162,7 +163,7 @@ defmodule ClaudeAgentSDK.Query do
   end
 
   defp stream_json_args(%Options{} = options) do
-    ["--output-format", "stream-json", "--verbose"] ++ Options.to_stream_json_args(options)
+    CLIConfig.streaming_output_args() ++ Options.to_stream_json_args(options)
   end
 
   defp validate_permission_settings!(_prompt, %Options{} = options) do

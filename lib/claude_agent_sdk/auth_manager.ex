@@ -38,6 +38,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   alias ClaudeAgentSDK.Log, as: Logger
 
   alias ClaudeAgentSDK.Auth.{Provider, TokenStore}
+  alias ClaudeAgentSDK.Config.{Env, Timeouts}
 
   # State structure
   defstruct [
@@ -76,8 +77,6 @@ defmodule ClaudeAgentSDK.AuthManager do
           setup_waiters: [{GenServer.from(), :ensure | :setup | :refresh}]
         }
 
-  @refresh_retry_ms 3_600_000
-
   ## Public API
 
   @doc """
@@ -111,7 +110,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   """
   @spec ensure_authenticated() :: :ok | {:error, term()}
   def ensure_authenticated do
-    GenServer.call(__MODULE__, :ensure_authenticated, 30_000)
+    GenServer.call(__MODULE__, :ensure_authenticated, Timeouts.auth_ensure_ms())
   end
 
   @doc """
@@ -133,7 +132,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   @spec setup_token() :: {:ok, String.t()} | {:error, term()}
   def setup_token do
     # 2 min timeout for OAuth
-    GenServer.call(__MODULE__, :setup_token, 120_000)
+    GenServer.call(__MODULE__, :setup_token, Timeouts.auth_setup_token_ms())
   end
 
   @doc """
@@ -166,7 +165,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   """
   @spec refresh_token() :: {:ok, String.t()} | {:error, term()}
   def refresh_token do
-    GenServer.call(__MODULE__, :refresh_token, 120_000)
+    GenServer.call(__MODULE__, :refresh_token, Timeouts.auth_refresh_token_ms())
   end
 
   @doc """
@@ -274,7 +273,7 @@ defmodule ClaudeAgentSDK.AuthManager do
     cond do
       env_key_present?() ->
         # Prefer CLAUDE_AGENT_OAUTH_TOKEN, fallback to ANTHROPIC_API_KEY
-        token = System.get_env("CLAUDE_AGENT_OAUTH_TOKEN") || System.get_env("ANTHROPIC_API_KEY")
+        token = System.get_env(Env.oauth_token()) || System.get_env(Env.anthropic_api_key())
         {:reply, {:ok, token}, state}
 
       valid_token?(state) ->
@@ -367,7 +366,7 @@ defmodule ClaudeAgentSDK.AuthManager do
 
   defp env_key_present? do
     # Check both ANTHROPIC_API_KEY and CLAUDE_AGENT_OAUTH_TOKEN
-    case {System.get_env("ANTHROPIC_API_KEY"), System.get_env("CLAUDE_AGENT_OAUTH_TOKEN")} do
+    case {System.get_env(Env.anthropic_api_key()), System.get_env(Env.oauth_token())} do
       {nil, nil} -> false
       {"", ""} -> false
       {nil, ""} -> false
@@ -390,7 +389,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   defp can_setup_interactively? do
     # Check if we're in an interactive environment
     # (has terminal, not in CI, etc.)
-    System.get_env("CI") != "true"
+    System.get_env(Env.ci()) != "true"
   end
 
   defp perform_token_setup_work(state) do
@@ -414,8 +413,8 @@ defmodule ClaudeAgentSDK.AuthManager do
 
   defp detect_provider do
     cond do
-      System.get_env("CLAUDE_AGENT_USE_BEDROCK") == "1" -> :bedrock
-      System.get_env("CLAUDE_AGENT_USE_VERTEX") == "1" -> :vertex
+      System.get_env(Env.use_bedrock()) == "1" -> :bedrock
+      System.get_env(Env.use_vertex()) == "1" -> :vertex
       true -> :anthropic
     end
   end
@@ -424,13 +423,7 @@ defmodule ClaudeAgentSDK.AuthManager do
     state = cancel_refresh_timer(state)
 
     # Get refresh interval from config
-    refresh_before_ms =
-      Application.get_env(
-        :claude_agent_sdk,
-        :refresh_before_expiry,
-        # 1 day default
-        86_400_000
-      )
+    refresh_before_ms = Timeouts.auth_refresh_before_expiry_ms()
 
     # Calculate time until refresh
     time_until_refresh =
@@ -438,7 +431,7 @@ defmodule ClaudeAgentSDK.AuthManager do
         expiry_ms = DateTime.to_unix(state.expiry, :millisecond)
         now_ms = DateTime.to_unix(DateTime.utc_now(), :millisecond)
         # At least 1 min
-        max(expiry_ms - now_ms - refresh_before_ms, 60_000)
+        max(expiry_ms - now_ms - refresh_before_ms, Timeouts.auth_min_refresh_delay_ms())
       else
         # No expiry = never refresh
         nil
@@ -469,7 +462,7 @@ defmodule ClaudeAgentSDK.AuthManager do
 
   defp calculate_expiry_hours(expiry) do
     diff_ms = DateTime.diff(expiry, DateTime.utc_now(), :millisecond)
-    Float.round(diff_ms / 3_600_000, 1)
+    Float.round(diff_ms / Timeouts.ms_per_hour(), 1)
   end
 
   defp enqueue_setup_request(state, from, operation) do
@@ -523,7 +516,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   defp maybe_schedule_retry_on_failure(state, _operation), do: state
 
   defp schedule_refresh_retry(state) do
-    timer = Process.send_after(self(), :refresh_token, @refresh_retry_ms)
+    timer = Process.send_after(self(), :refresh_token, Timeouts.auth_refresh_retry_ms())
     %{state | refresh_timer: timer}
   end
 

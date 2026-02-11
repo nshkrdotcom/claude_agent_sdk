@@ -186,14 +186,15 @@ defmodule ClaudeAgentSDK.Tool.RegistryTest do
     end
 
     test "tool execution timeout returns structured error", %{registry: registry} do
-      previous = Application.get_env(:claude_agent_sdk, :tool_execution_timeout_ms)
-      Application.put_env(:claude_agent_sdk, :tool_execution_timeout_ms, 50)
+      config_mod = ClaudeAgentSDK.Config.Timeouts
+      previous = Application.get_env(:claude_agent_sdk, config_mod)
+      Application.put_env(:claude_agent_sdk, config_mod, tool_execution_ms: 50)
 
       on_exit(fn ->
         if is_nil(previous) do
-          Application.delete_env(:claude_agent_sdk, :tool_execution_timeout_ms)
+          Application.delete_env(:claude_agent_sdk, config_mod)
         else
-          Application.put_env(:claude_agent_sdk, :tool_execution_timeout_ms, previous)
+          Application.put_env(:claude_agent_sdk, config_mod, previous)
         end
       end)
 

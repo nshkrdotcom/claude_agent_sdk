@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.12.0"}
+    {:claude_agent_sdk, "~> 0.13.0"}
   ]
 end
 ```
@@ -438,15 +438,31 @@ CLI path override: set `path_to_claude_code_executable` or `executable` in `Opti
 
 ### Runtime Application Config
 
+All tunable constants (timeouts, buffer sizes, auth paths, CLI flags, env var
+names, concurrency limits) are centralized in `Config.*` sub-modules and can
+be overridden per-environment:
+
 ```elixir
+# config/config.exs
+config :claude_agent_sdk, ClaudeAgentSDK.Config.Timeouts,
+  query_total_ms: 5_400_000,           # total query timeout (default: 75 min)
+  tool_execution_ms: 60_000            # per-tool timeout (default: 30 s)
+
+config :claude_agent_sdk, ClaudeAgentSDK.Config.Buffers,
+  max_stdout_buffer_bytes: 2_097_152   # stdout buffer (default: 1 MB)
+
+config :claude_agent_sdk, ClaudeAgentSDK.Config.Orchestration,
+  max_concurrent: 10,                  # parallel query limit (default: 5)
+  max_retries: 5                       # retry attempts (default: 3)
+
+# Legacy flat keys still work:
 config :claude_agent_sdk,
-  # Timeout for in-process tool execution tasks in Tool.Registry
-  tool_execution_timeout_ms: 30_000,
-  # Query CLI stream backend module
   cli_stream_module: ClaudeAgentSDK.Query.CLIStream,
-  # Fail fast when configured task supervisor is unavailable
   task_supervisor_strict: false
 ```
+
+See the [Configuration Internals](guides/configuration-internals.md) guide for
+the complete reference of every tunable, its default, and override examples.
 
 `config :claude_agent_sdk, :process_module` is still read as a fallback for query streaming,
 but it is deprecated and logs a warning once per legacy module.

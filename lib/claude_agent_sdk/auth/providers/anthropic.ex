@@ -3,10 +3,8 @@ defmodule ClaudeAgentSDK.Auth.Providers.Anthropic do
   Anthropic-specific authentication via `claude setup-token`.
   """
 
+  alias ClaudeAgentSDK.Config.{Auth, Env, Timeouts}
   alias ClaudeAgentSDK.Log, as: Logger
-
-  # OAuth tokens valid for 1 year
-  @token_ttl_days 365
 
   @doc """
   Guides user through obtaining an OAuth token via `claude setup-token`.
@@ -61,18 +59,33 @@ defmodule ClaudeAgentSDK.Auth.Providers.Anthropic do
 
   defp validate_and_return_token(token) do
     cond do
-      String.starts_with?(token, "sk-ant-oat01-") ->
-        expiry = DateTime.add(DateTime.utc_now(), @token_ttl_days * 86_400, :second)
+      String.starts_with?(token, Auth.oauth_token_prefix()) ->
+        expiry =
+          DateTime.add(
+            DateTime.utc_now(),
+            Auth.token_ttl_days() * Timeouts.seconds_per_day(),
+            :second
+          )
+
         Logger.info("Token stored (valid until #{Calendar.strftime(expiry, "%Y-%m-%d")})")
         {:ok, token, expiry}
 
-      String.starts_with?(token, "sk-ant-") ->
-        expiry = DateTime.add(DateTime.utc_now(), @token_ttl_days * 86_400, :second)
+      String.starts_with?(token, Auth.api_key_prefix()) ->
+        expiry =
+          DateTime.add(
+            DateTime.utc_now(),
+            Auth.token_ttl_days() * Timeouts.seconds_per_day(),
+            :second
+          )
+
         Logger.info("Token stored")
         {:ok, token, expiry}
 
       true ->
-        IO.puts("Invalid format. Token should start with 'sk-ant-'. Please try again.\n")
+        IO.puts(
+          "Invalid format. Token should start with '#{Auth.api_key_prefix()}'. Please try again.\n"
+        )
+
         prompt_for_token()
     end
   end
@@ -86,5 +99,5 @@ defmodule ClaudeAgentSDK.Auth.Providers.Anthropic do
       "CLAUDE_AGENT_OAUTH_TOKEN"
   """
   @spec oauth_env_var() :: String.t()
-  def oauth_env_var, do: "CLAUDE_AGENT_OAUTH_TOKEN"
+  def oauth_env_var, do: Env.oauth_token()
 end

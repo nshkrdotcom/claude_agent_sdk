@@ -38,14 +38,9 @@ defmodule ClaudeAgentSDK.Orchestrator do
       )
   """
 
-  alias ClaudeAgentSDK.Log, as: Logger
-
+  alias ClaudeAgentSDK.Config.{Buffers, Orchestration, Timeouts}
   alias ClaudeAgentSDK.{ContentExtractor, Message}
-
-  # Configuration defaults
-  @default_max_concurrent 5
-  @default_max_retries 3
-  @default_backoff_ms 1000
+  alias ClaudeAgentSDK.Log, as: Logger
 
   @doc """
   Executes multiple queries in parallel.
@@ -81,8 +76,8 @@ defmodule ClaudeAgentSDK.Orchestrator do
   @spec query_parallel([{String.t(), ClaudeAgentSDK.Options.t()}], keyword()) ::
           {:ok, [map()]} | {:error, term()}
   def query_parallel(queries, opts \\ []) do
-    max_concurrent = Keyword.get(opts, :max_concurrent, @default_max_concurrent)
-    timeout = Keyword.get(opts, :timeout, 300_000)
+    max_concurrent = Keyword.get(opts, :max_concurrent, Orchestration.max_concurrent())
+    timeout = Keyword.get(opts, :timeout, Timeouts.query_parallel_ms())
 
     Logger.info(
       "Orchestrator: Starting parallel execution of #{length(queries)} queries (max_concurrent: #{max_concurrent})"
@@ -201,8 +196,8 @@ defmodule ClaudeAgentSDK.Orchestrator do
   @spec query_with_retry(String.t(), ClaudeAgentSDK.Options.t(), keyword()) ::
           {:ok, [Message.t()]} | {:error, term()}
   def query_with_retry(prompt, options, opts \\ []) do
-    max_retries = Keyword.get(opts, :max_retries, @default_max_retries)
-    backoff_ms = Keyword.get(opts, :backoff_ms, @default_backoff_ms)
+    max_retries = Keyword.get(opts, :max_retries, Orchestration.max_retries())
+    backoff_ms = Keyword.get(opts, :backoff_ms, Orchestration.backoff_ms())
     exponential = Keyword.get(opts, :exponential, true)
 
     Enum.reduce_while(1..max_retries, nil, fn attempt, _acc ->
@@ -281,7 +276,7 @@ defmodule ClaudeAgentSDK.Orchestrator do
       previous_messages
       |> ContentExtractor.extract_all_text()
       # Limit context size
-      |> String.slice(0, 1000)
+      |> String.slice(0, Buffers.error_truncation_length())
 
     """
     Context from previous step:

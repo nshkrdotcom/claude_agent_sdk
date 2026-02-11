@@ -1,9 +1,31 @@
 defmodule ClaudeAgentSDK.Config do
   @moduledoc """
-  Centralizes application environment reads for the SDK.
+  Top-level configuration facade for the SDK.
 
-  Provides accessor functions for configuration values such as mock mode
-  and the CLI stream module, with deprecation handling for legacy keys.
+  Provides accessor functions for mock mode and CLI stream module
+  selection, with deprecation handling for legacy keys.
+
+  Domain-specific configuration is delegated to sub-modules:
+
+  - `ClaudeAgentSDK.Config.Timeouts`      — all timeout values
+  - `ClaudeAgentSDK.Config.Buffers`        — buffer sizes, truncation
+  - `ClaudeAgentSDK.Config.Auth`           — auth paths, TTLs, prefixes
+  - `ClaudeAgentSDK.Config.CLI`            — CLI versions, flags, paths
+  - `ClaudeAgentSDK.Config.Env`            — environment variable names
+  - `ClaudeAgentSDK.Config.Orchestration`  — concurrency, retries
+
+  ## Runtime Configuration
+
+  Every value can be overridden via `config :claude_agent_sdk`:
+
+      config :claude_agent_sdk, ClaudeAgentSDK.Config.Timeouts,
+        client_init_ms: 90_000,
+        query_total_ms: 5_400_000
+
+      config :claude_agent_sdk, ClaudeAgentSDK.Config.Buffers,
+        max_stdout_buffer_bytes: 2_097_152
+
+  See the **Configuration Internals** guide for the complete reference.
   """
 
   alias ClaudeAgentSDK.Log, as: Logger

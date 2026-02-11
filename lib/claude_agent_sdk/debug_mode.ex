@@ -57,6 +57,8 @@ defmodule ClaudeAgentSDK.DebugMode do
   """
 
   alias ClaudeAgentSDK.{AuthChecker, BuildEnv, ContentExtractor, Message, Options, Runtime}
+  alias ClaudeAgentSDK.Config.Buffers
+  alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
 
   @doc """
   Executes a query in debug mode with detailed logging and timing.
@@ -351,8 +353,11 @@ defmodule ClaudeAgentSDK.DebugMode do
 
     content_preview =
       if content do
-        truncated = String.slice(content, 0, 100)
-        if String.length(content) > 100, do: truncated <> "...", else: truncated
+        truncated = String.slice(content, 0, Buffers.error_preview_length())
+
+        if String.length(content) > Buffers.error_preview_length(),
+          do: truncated <> "...",
+          else: truncated
       else
         "no text content"
       end
@@ -538,7 +543,7 @@ defmodule ClaudeAgentSDK.DebugMode do
     suggestions =
       case exception do
         %ErlangError{original: :enoent} ->
-          ["Ensure Claude CLI is installed: npm install -g @anthropic-ai/claude-code"]
+          ["Ensure Claude CLI is installed: #{CLIConfig.install_command()}"]
 
         %ErlangError{original: :timeout} ->
           ["Query timed out - try reducing complexity or increasing timeout"]

@@ -19,8 +19,10 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     Transport
   }
 
+  alias ClaudeAgentSDK.Config.{Buffers, Timeouts}
+  alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
+
   @type transport_spec :: module() | {module(), keyword()} | nil
-  @transport_close_grace_ms 2_000
 
   @doc """
   Streams messages for a single query prompt.
@@ -85,7 +87,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp base_stream_args(%Options{} = options) do
-    ["--output-format", "stream-json", "--verbose"] ++ Options.to_stream_json_args(options)
+    CLIConfig.streaming_output_args() ++ Options.to_stream_json_args(options)
   end
 
   defp start_transport(args, %Options{} = options, transport, input) do
@@ -263,7 +265,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
           {:halt, %{state | done?: true}}
         end
     after
-      30_000 ->
+      Timeouts.stream_receive_ms() ->
         if process_running?(state.transport) do
           receive_next(state)
         else
@@ -302,7 +304,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp json_decode_error_message(line, original_error) do
     error =
       %Errors.CLIJSONDecodeError{
-        message: "Failed to decode JSON: #{String.slice(line, 0, 100)}...",
+        message:
+          "Failed to decode JSON: #{String.slice(line, 0, Buffers.error_preview_length())}...",
         line: line,
         original_error: original_error
       }
@@ -353,7 +356,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
          input_task: task
        }) do
     cleanup_input_task(task)
-    close_transport_with_timeout(module, transport, @transport_close_grace_ms)
+    close_transport_with_timeout(module, transport, Timeouts.transport_close_grace_ms())
     flush_transport_messages(transport_ref)
 
     :ok

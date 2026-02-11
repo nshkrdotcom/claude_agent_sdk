@@ -45,6 +45,7 @@ defmodule ClaudeAgentSDK.ContentExtractor do
 
   """
 
+  alias ClaudeAgentSDK.Config.Buffers
   alias ClaudeAgentSDK.Message
 
   @doc """
@@ -306,7 +307,7 @@ defmodule ClaudeAgentSDK.ContentExtractor do
 
   """
   @spec summarize(Message.t() | map(), pos_integer()) :: String.t()
-  def summarize(message, max_length \\ 100) do
+  def summarize(message, max_length \\ Buffers.summary_max_length()) do
     case extract_text(message) do
       nil ->
         "[No text content]"

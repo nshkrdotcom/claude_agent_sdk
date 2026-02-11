@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
-  @version "0.12.0"
+  @version "0.13.0"
 
   def project do
     [
@@ -80,6 +80,7 @@ defmodule ClaudeAgentSdk.MixProject do
         "guides/mcp-tools.md",
         "guides/permissions.md",
         "guides/configuration.md",
+        "guides/configuration-internals.md",
         "guides/model-configuration.md",
         "guides/agents.md",
         "guides/sessions.md",
@@ -108,6 +109,7 @@ defmodule ClaudeAgentSdk.MixProject do
         ],
         "Advanced Topics": [
           "guides/configuration.md",
+          "guides/configuration-internals.md",
           "guides/model-configuration.md",
           "guides/agents.md",
           "guides/sessions.md"
@@ -157,6 +159,13 @@ defmodule ClaudeAgentSdk.MixProject do
           ClaudeAgentSDK.ContentExtractor
         ],
         Configuration: [
+          ClaudeAgentSDK.Config,
+          ClaudeAgentSDK.Config.Timeouts,
+          ClaudeAgentSDK.Config.Buffers,
+          ClaudeAgentSDK.Config.Auth,
+          ClaudeAgentSDK.Config.CLI,
+          ClaudeAgentSDK.Config.Env,
+          ClaudeAgentSDK.Config.Orchestration,
           ClaudeAgentSDK.Options,
           ClaudeAgentSDK.OptionBuilder,
           ClaudeAgentSDK.Model

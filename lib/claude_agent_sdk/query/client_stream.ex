@@ -24,11 +24,8 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
   """
 
   alias ClaudeAgentSDK.{Client, Message, Options}
+  alias ClaudeAgentSDK.Config.Timeouts
   alias ClaudeAgentSDK.Log, as: Logger
-
-  @default_receive_timeout_ms 30_000
-  @default_query_timeout_ms 4_500_000
-  @client_close_grace_ms 2_000
 
   @doc """
   Creates a Stream backed by a Client GenServer.
@@ -128,7 +125,7 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
 
         {[msg], {:ok, state}}
     after
-      @default_receive_timeout_ms ->
+      Timeouts.stream_receive_ms() ->
         cond do
           query_timed_out?(state) ->
             safe_stop(client_pid)
@@ -164,7 +161,7 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
        when is_integer(timeout_ms) and timeout_ms > 0,
        do: timeout_ms
 
-  defp query_timeout_ms(_), do: @default_query_timeout_ms
+  defp query_timeout_ms(_), do: Timeouts.query_total_ms()
 
   defp query_timed_out?(%{deadline_ms: deadline_ms})
        when is_integer(deadline_ms) do
@@ -188,7 +185,7 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
     Logger.debug("Stopping control client for query", pid: inspect(client_pid))
 
     maybe_unsubscribe(client_pid, ref)
-    close_client_with_timeout(client_pid, @client_close_grace_ms)
+    close_client_with_timeout(client_pid, Timeouts.client_close_grace_ms())
   end
 
   defp cleanup_client(_), do: :ok

@@ -2,10 +2,11 @@ defmodule ClaudeAgentSDK.Runtime do
   @moduledoc false
 
   alias ClaudeAgentSDK.{Config, Options}
+  alias ClaudeAgentSDK.Config.Env
 
   @spec use_mock?() :: boolean()
   def use_mock? do
-    case {System.get_env("LIVE_MODE"), System.get_env("LIVE_TESTS")} do
+    case {System.get_env(Env.live_mode()), System.get_env(Env.live_tests())} do
       {"true", _} -> false
       {_, "true"} -> false
       _ -> Config.use_mock?()

@@ -26,8 +26,8 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
       Matcher.new("Bash", [&security_check/3, &audit_log/3])
   """
 
+  alias ClaudeAgentSDK.Config.Timeouts
   alias ClaudeAgentSDK.Hooks
-  @min_timeout_ms 1_000
 
   @typedoc """
   Hook matcher struct.
@@ -126,16 +126,16 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
   def sanitize_timeout_ms(nil), do: nil
 
   def sanitize_timeout_ms(timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
-    max(timeout_ms, @min_timeout_ms)
+    max(timeout_ms, Timeouts.hook_min_ms())
   end
 
   def sanitize_timeout_ms(timeout_ms) when is_float(timeout_ms) and timeout_ms > 0 do
     timeout_ms
     |> round()
-    |> max(@min_timeout_ms)
+    |> max(Timeouts.hook_min_ms())
   end
 
-  def sanitize_timeout_ms(_), do: @min_timeout_ms
+  def sanitize_timeout_ms(_), do: Timeouts.hook_min_ms()
 
   defp maybe_put_timeout(map, nil), do: map
 

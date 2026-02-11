@@ -799,25 +799,48 @@ Public calls still return the same result tuples, but the `AuthManager` process 
 
 ### Application Configuration
 
+All tunable constants — timeouts, buffer sizes, auth paths, CLI flags — are
+centralized in `Config.*` sub-modules. See the
+[Configuration Internals](configuration-internals.md) guide for the full
+reference.
+
 ```elixir
 # config/config.exs
+
+# Timeouts
+config :claude_agent_sdk, ClaudeAgentSDK.Config.Timeouts,
+  query_total_ms: 5_400_000,           # total query timeout (default: 75 min)
+  tool_execution_ms: 60_000            # per-tool timeout (default: 30 s)
+
+# Buffer sizes
+config :claude_agent_sdk, ClaudeAgentSDK.Config.Buffers,
+  max_stdout_buffer_bytes: 2_097_152   # stdout buffer (default: 1 MB)
+
+# Auth paths and TTLs
+config :claude_agent_sdk, ClaudeAgentSDK.Config.Auth,
+  token_store_path: "~/.claude_sdk/token.json",
+  session_max_age_days: 60
+
+# Concurrency and retries
+config :claude_agent_sdk, ClaudeAgentSDK.Config.Orchestration,
+  max_concurrent: 10,
+  max_retries: 5
+
+# Legacy flat keys (still supported)
 config :claude_agent_sdk,
-  auth_storage: :file,                    # :file | :application_env | :custom
-  auth_file_path: "~/.claude_sdk/token.json",
+  auth_storage: :file,
   auto_refresh: true,
-  refresh_before_expiry: 86_400_000,      # 1 day in ms
-  tool_execution_timeout_ms: 30_000,      # Tool.Registry execution timeout
   cli_stream_module: ClaudeAgentSDK.Query.CLIStream,
   task_supervisor: ClaudeAgentSDK.TaskSupervisor,
-  task_supervisor_strict: false,          # true => return {:error, {:task_supervisor_unavailable, sup}}
+  task_supervisor_strict: false,
   check_inbound_size_invariant: false,
-  log_level: :warning                     # :debug | :info | :warning | :error
+  log_level: :warning
 ```
 
 `process_module` is still read as a fallback for query streaming but is deprecated.
 Prefer `cli_stream_module`.
 
-Path defaults like `auth_file_path` and `session_storage_dir` are expanded at runtime.
+Path defaults like `token_store_path` and `session_storage_dir` are expanded at runtime.
 Using `~` stays portable across build/runtime users.
 
 ### Authentication by Provider
@@ -1146,5 +1169,6 @@ options = %ClaudeAgentSDK.Options{
 
 ## Further Reading
 
+- [Configuration Internals](configuration-internals.md) - Complete reference for all tunable constants
 - [Hooks Guide](hooks.md) - Comprehensive guide to lifecycle hooks
 - [MCP Tools Guide](mcp-tools.md) - MCP server design and tool creation

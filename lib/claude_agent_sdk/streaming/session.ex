@@ -43,6 +43,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   alias ClaudeAgentSDK.Log, as: Logger
 
   alias ClaudeAgentSDK.{CLI, Options, Runtime}
+  alias ClaudeAgentSDK.Config.Timeouts
   alias ClaudeAgentSDK.Shell
   alias ClaudeAgentSDK.Streaming.EventParser
   alias ClaudeAgentSDK.Streaming.Termination
@@ -77,9 +78,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     # Monitor reference for subprocess
     :monitor_ref
   ]
-
-  # 5 minutes
-  @default_timeout 300_000
 
   ## Public API
 
@@ -143,7 +141,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     timeout_ms = timeout_ms_for_session(session)
 
     # Subscribe to receive events
-    :ok = GenServer.call(session, {:subscribe, ref, self()}, @default_timeout)
+    :ok = GenServer.call(session, {:subscribe, ref, self()}, Timeouts.streaming_session_ms())
 
     # Send the message to Claude
     :ok = GenServer.cast(session, {:send_message, message, ref})
@@ -214,7 +212,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   """
   @spec close(pid()) :: :ok
   def close(session) do
-    GenServer.stop(session, :normal, @default_timeout)
+    GenServer.stop(session, :normal, Timeouts.streaming_session_ms())
   catch
     :exit, {:noproc, _} -> :ok
   end
@@ -235,7 +233,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   """
   @spec get_session_id(pid()) :: {:ok, String.t()} | {:error, :no_session_id}
   def get_session_id(session) do
-    GenServer.call(session, :get_session_id, @default_timeout)
+    GenServer.call(session, :get_session_id, Timeouts.streaming_session_ms())
   end
 
   ## GenServer Callbacks
@@ -446,18 +444,18 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   defp timeout_ms_for_session(session) when is_pid(session) do
-    GenServer.call(session, :timeout_ms, @default_timeout)
+    GenServer.call(session, :timeout_ms, Timeouts.streaming_session_ms())
   catch
-    :exit, _ -> @default_timeout
+    :exit, _ -> Timeouts.streaming_session_ms()
   end
 
-  defp timeout_ms_for_session(_session), do: @default_timeout
+  defp timeout_ms_for_session(_session), do: Timeouts.streaming_session_ms()
 
   defp timeout_ms_for_options(%Options{timeout_ms: timeout_ms})
        when is_integer(timeout_ms) and timeout_ms > 0,
        do: timeout_ms
 
-  defp timeout_ms_for_options(_options), do: @default_timeout
+  defp timeout_ms_for_options(_options), do: Timeouts.streaming_session_ms()
 
   defp start_subprocess(state) do
     args = build_streaming_args(state.options)
