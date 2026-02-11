@@ -72,6 +72,7 @@ defmodule ClaudeAgentSDK.Client do
   @default_hook_timeout_ms 60_000
   @default_init_timeout_ms 60_000
   @default_control_request_timeout_ms 60_000
+  @default_stream_timeout_ms 300_000
   @default_stream_buffer_limit 1_000
   @init_timeout_env_var "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT"
   @edit_tools ["Write", "Edit", "MultiEdit"]
@@ -802,6 +803,10 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
+  def handle_call(:stream_timeout_ms, _from, state) do
+    {:reply, stream_timeout_ms(state.options), state}
+  end
+
   # Legacy subscribe (backwards compatibility) - generate a ref for the pid
   def handle_call({:subscribe}, from, state) do
     {pid, _ref} = from
@@ -1446,6 +1451,13 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp stream_buffer_limit(_options), do: @default_stream_buffer_limit
+
+  defp stream_timeout_ms(%Options{timeout_ms: timeout_ms})
+       when is_integer(timeout_ms) and timeout_ms > 0 do
+    timeout_ms
+  end
+
+  defp stream_timeout_ms(_options), do: @default_stream_timeout_ms
 
   defp maybe_attach_permission_hook(%Options{can_use_tool: nil} = options) do
     {:ok, options, nil}

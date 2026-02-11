@@ -140,6 +140,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   @spec send_message(pid(), String.t()) :: Enumerable.t()
   def send_message(session, message) do
     ref = make_ref()
+    timeout_ms = timeout_ms_for_session(session)
 
     # Subscribe to receive events
     :ok = GenServer.call(session, {:subscribe, ref, self()}, @default_timeout)
@@ -149,9 +150,9 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
     # Return stream that receives events
     Stream.resource(
-      fn -> {session, ref, :active, nil} end,
+      fn -> {session, ref, :active, nil, timeout_ms} end,
       fn state ->
-        {session, ref, status, stop_reason} = state
+        {session, ref, status, stop_reason, timeout_ms} = state
 
         if status == :complete do
           {:halt, state}
@@ -167,23 +168,23 @@ defmodule ClaudeAgentSDK.Streaming.Session do
                   :active
                 end
 
-              {[event], {session, ref, new_status, new_stop_reason}}
+              {[event], {session, ref, new_status, new_stop_reason, timeout_ms}}
 
             {:stream_error, ^ref, reason} ->
               error_event = %{type: :error, error: reason}
-              {[error_event], {session, ref, :complete, stop_reason}}
+              {[error_event], {session, ref, :complete, stop_reason, timeout_ms}}
 
             {:stream_complete, ^ref} ->
-              {:halt, {session, ref, :complete, stop_reason}}
+              {:halt, {session, ref, :complete, stop_reason, timeout_ms}}
           after
-            @default_timeout ->
-              Logger.warning("Streaming timeout after #{@default_timeout}ms")
+            timeout_ms ->
+              Logger.warning("Streaming timeout after #{timeout_ms}ms")
               timeout_event = %{type: :error, error: :timeout}
-              {[timeout_event], {session, ref, :complete, stop_reason}}
+              {[timeout_event], {session, ref, :complete, stop_reason, timeout_ms}}
           end
         end
       end,
-      fn {session, ref, _status, _stop_reason} ->
+      fn {session, ref, _status, _stop_reason, _timeout_ms} ->
         # Unsubscribe on stream completion
         GenServer.cast(session, {:unsubscribe, ref})
       end
@@ -302,6 +303,11 @@ defmodule ClaudeAgentSDK.Streaming.Session do
       nil -> {:reply, {:error, :no_session_id}, state}
       id -> {:reply, {:ok, id}, state}
     end
+  end
+
+  @impl true
+  def handle_call(:timeout_ms, _from, state) do
+    {:reply, timeout_ms_for_options(state.options), state}
   end
 
   @impl true
@@ -438,6 +444,20 @@ defmodule ClaudeAgentSDK.Streaming.Session do
       monitor_ref: nil
     }
   end
+
+  defp timeout_ms_for_session(session) when is_pid(session) do
+    GenServer.call(session, :timeout_ms, @default_timeout)
+  catch
+    :exit, _ -> @default_timeout
+  end
+
+  defp timeout_ms_for_session(_session), do: @default_timeout
+
+  defp timeout_ms_for_options(%Options{timeout_ms: timeout_ms})
+       when is_integer(timeout_ms) and timeout_ms > 0,
+       do: timeout_ms
+
+  defp timeout_ms_for_options(_options), do: @default_timeout
 
   defp start_subprocess(state) do
     args = build_streaming_args(state.options)

@@ -133,6 +133,25 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
 
       close_session_safe(session)
     end
+
+    test "control client stream timeout follows options.timeout_ms" do
+      hook = TestFixtures.allow_all_hook()
+      options = %Options{hooks: %{pre_tool_use: [hook]}, timeout_ms: 75}
+
+      {:ok, session} = start_session_with_mock(options)
+      assert match?({:control_client, _}, session)
+
+      started_ms = System.monotonic_time(:millisecond)
+      task = Task.async(fn -> session |> Streaming.send_message("Hello") |> Enum.take(1) end)
+      events = Task.await(task, 1_000)
+      elapsed_ms = System.monotonic_time(:millisecond) - started_ms
+
+      assert [%{type: :error, error: :timeout}] = events
+      assert elapsed_ms >= 50
+      assert elapsed_ms < 1_000
+
+      close_session_safe(session)
+    end
   end
 
   describe "close_session/1 polymorphism" do
