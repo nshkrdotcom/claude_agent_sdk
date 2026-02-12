@@ -360,6 +360,7 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
     test "stderr/1 returns captured stderr" do
       script =
         create_test_script("""
+        read -r _line
         echo err >&2
         while read -r _line; do
           :
@@ -370,6 +371,7 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
         ErlexecTransport.start_link(command: script, args: [], options: %Options{})
 
       ErlexecTransport.subscribe(transport, self())
+      assert :ok = ErlexecTransport.send(transport, "go")
       assert_receive {:transport_stderr, stderr_data}, 2_000
       assert stderr_data =~ "err"
       stderr = ErlexecTransport.stderr(transport)
