@@ -265,4 +265,32 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
       assert parsed.error == :authentication_failed
     end
   end
+
+  describe "parse_buffer/2 binary framing" do
+    test "retains incomplete UTF-8 bytes across chunk boundaries" do
+      prefix = ~s({"type":"content_block_delta","delta":{"type":"text_delta","text":"hello )
+      suffix = ~s("}}\n)
+      chunk1 = prefix <> <<226>>
+      chunk2 = <<128, 148>> <> suffix
+
+      {:ok, events1, remaining1, acc1} = EventParser.parse_buffer(chunk1, "")
+      assert events1 == []
+      assert remaining1 == chunk1
+      assert acc1 == ""
+
+      {:ok, events2, remaining2, acc2} = EventParser.parse_buffer(remaining1 <> chunk2, acc1)
+
+      assert [
+               %{
+                 type: :text_delta,
+                 text: "hello " <> <<226, 128, 148>>,
+                 accumulated: "hello " <> <<226, 128, 148>>
+               }
+             ] =
+               events2
+
+      assert remaining2 == ""
+      assert acc2 == "hello " <> <<226, 128, 148>>
+    end
+  end
 end

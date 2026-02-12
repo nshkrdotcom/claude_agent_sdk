@@ -252,15 +252,10 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
       # remaining will be "partial" (incomplete JSON line)
       # accumulated will be "Hi" (from text_delta)
   """
-  @spec parse_buffer(String.t(), accumulated_text()) ::
-          {:ok, [event()], String.t(), accumulated_text()}
+  @spec parse_buffer(binary(), accumulated_text()) ::
+          {:ok, [event()], binary(), accumulated_text()}
   def parse_buffer(buffer, accumulated_text) do
-    # Split on newlines
-    lines = String.split(buffer, "\n")
-
-    # Last element might be incomplete
-    {complete_lines, incomplete_lines} = Enum.split(lines, -1)
-    remaining_buffer = List.first(incomplete_lines) || ""
+    {complete_lines, remaining_buffer} = split_complete_lines(buffer)
 
     # Parse each complete line
     {events, new_accumulated} =
@@ -271,8 +266,21 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     {:ok, events, remaining_buffer, new_accumulated}
   end
 
+  defp split_complete_lines(""), do: {[], ""}
+
+  defp split_complete_lines(buffer) when is_binary(buffer) do
+    case :binary.split(buffer, "\n", [:global]) do
+      [single] ->
+        {[], single}
+
+      parts ->
+        {complete, [rest]} = Enum.split(parts, length(parts) - 1)
+        {Enum.map(complete, &strip_trailing_cr/1), rest}
+    end
+  end
+
   defp parse_line(line, events_acc, text_acc) do
-    trimmed = String.trim(line)
+    trimmed = trim_ascii(line)
 
     if trimmed == "" do
       {events_acc, text_acc}
@@ -291,6 +299,41 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
 
       {:error, _reason} ->
         {events_acc, text_acc}
+    end
+  end
+
+  defp strip_trailing_cr(line) do
+    size = byte_size(line)
+
+    if size > 0 and :binary.at(line, size - 1) == 13 do
+      :binary.part(line, 0, size - 1)
+    else
+      line
+    end
+  end
+
+  defp trim_ascii(binary) when is_binary(binary) do
+    binary
+    |> trim_ascii_leading()
+    |> trim_ascii_trailing()
+  end
+
+  defp trim_ascii_leading(<<char, rest::binary>>) when char in [9, 10, 13, 32],
+    do: trim_ascii_leading(rest)
+
+  defp trim_ascii_leading(binary), do: binary
+
+  defp trim_ascii_trailing(binary), do: do_trim_ascii_trailing(binary, byte_size(binary))
+
+  defp do_trim_ascii_trailing(_binary, 0), do: ""
+
+  defp do_trim_ascii_trailing(binary, size) when size > 0 do
+    last = :binary.at(binary, size - 1)
+
+    if last in [9, 10, 13, 32] do
+      do_trim_ascii_trailing(binary, size - 1)
+    else
+      :binary.part(binary, 0, size)
     end
   end
 

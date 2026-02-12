@@ -232,6 +232,52 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
     end
   end
 
+  describe "binary-safe stdout framing" do
+    test "handles UTF-8 codepoint split across stdout chunks" do
+      script = create_test_script("sleep 5")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      ref = make_ref()
+      :ok = ErlexecTransport.subscribe(transport, self(), ref)
+
+      try do
+        state = :sys.get_state(transport)
+        {_exec_pid, os_pid} = state.subprocess
+
+        line = "hello " <> <<226, 128, 148>> <> " world\n"
+        {idx, _len} = :binary.match(line, <<226, 128, 148>>)
+        chunk1 = :binary.part(line, 0, idx + 1)
+        chunk2 = :binary.part(line, idx + 1, byte_size(line) - idx - 1)
+
+        send(transport, {:stdout, os_pid, chunk1})
+        send(transport, {:stdout, os_pid, chunk2})
+
+        assert_receive {:claude_agent_sdk_transport, ^ref,
+                        {:message, "hello " <> <<226, 128, 148>> <> " world"}},
+                       2_000
+      after
+        _ = ErlexecTransport.force_close(transport)
+      end
+    end
+  end
+
+  describe "interrupt/1" do
+    test "supports interrupting in-flight subprocesses" do
+      script = create_test_script("while read -r _line; do :; done")
+
+      {:ok, transport} =
+        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+      try do
+        assert :ok = ErlexecTransport.interrupt(transport)
+      after
+        _ = ErlexecTransport.force_close(transport)
+      end
+    end
+  end
+
   describe "tagged subscriber dispatch" do
     test "dispatches events with tagged ref" do
       ref = make_ref()

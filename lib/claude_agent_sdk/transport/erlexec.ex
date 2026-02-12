@@ -125,6 +125,20 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   @impl ClaudeAgentSDK.Transport
+  def interrupt(transport) when is_pid(transport) do
+    case safe_call(transport, :interrupt) do
+      {:ok, :ok} ->
+        :ok
+
+      {:error, reason} when reason == :not_connected ->
+        :ok
+
+      {:error, reason} ->
+        transport_error(reason)
+    end
+  end
+
+  @impl ClaudeAgentSDK.Transport
   def end_input(transport) when is_pid(transport) do
     case safe_call(transport, :end_input) do
       {:ok, result} -> result
@@ -249,6 +263,21 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   def handle_call(:end_input, _from, %{subprocess: nil} = state) do
+    {:reply, transport_error(:not_connected), state}
+  end
+
+  def handle_call(:interrupt, from, %{subprocess: {pid, _}} = state) do
+    case start_io_task(state, fn -> interrupt_subprocess(pid) end) do
+      {:ok, task} ->
+        pending_calls = Map.put(state.pending_calls, task.ref, from)
+        {:noreply, %{state | pending_calls: pending_calls}}
+
+      {:error, reason} ->
+        {:reply, transport_error(reason), state}
+    end
+  end
+
+  def handle_call(:interrupt, _from, %{subprocess: nil} = state) do
     {:reply, transport_error(:not_connected), state}
   end
 
@@ -658,6 +687,14 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
       transport_error({:send_failed, {kind, reason}})
   end
 
+  defp interrupt_subprocess(pid) when is_pid(pid) do
+    _ = :exec.kill(pid, 2)
+    :ok
+  catch
+    _, _ ->
+      transport_error(:not_connected)
+  end
+
   defp send_event(subscribers, event) do
     Enum.each(subscribers, fn {pid, info} ->
       dispatch_event(pid, info, event)
@@ -692,11 +729,11 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     do: Kernel.send(pid, {:transport_exit, reason})
 
   defp append_stdout_data(%{overflowed?: true} = state, data) do
-    case String.split(data, "\n", parts: 2) do
-      [_single] ->
+    case drop_until_next_newline(data) do
+      :none ->
         state
 
-      [_dropped, rest] ->
+      {:rest, rest} ->
         state
         |> Map.put(:overflowed?, false)
         |> Map.put(:stdout_buffer, "")
@@ -757,17 +794,18 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   defp split_complete_lines(""), do: {[], ""}
 
   defp split_complete_lines(data) do
-    lines = String.split(data, "\n")
+    case :binary.split(data, "\n", [:global]) do
+      [single] ->
+        {[], single}
 
-    case List.pop_at(lines, -1) do
-      {nil, _} -> {[], ""}
-      {"", rest} -> {rest, ""}
-      {last, rest} -> {rest, last}
+      parts ->
+        {complete, [rest]} = Enum.split(parts, length(parts) - 1)
+        {Enum.map(complete, &strip_trailing_cr/1), rest}
     end
   end
 
   defp flush_stdout_fragment(state) do
-    line = String.trim(state.stdout_buffer)
+    line = trim_ascii(state.stdout_buffer)
 
     cond do
       line == "" ->
@@ -801,6 +839,62 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   defp flush_finalize_message(_), do: :ok
 
+  defp drop_until_next_newline(data) do
+    case :binary.match(data, "\n") do
+      :nomatch ->
+        :none
+
+      {idx, 1} ->
+        rest_start = idx + 1
+        rest_size = byte_size(data) - rest_start
+
+        rest =
+          if rest_size > 0 do
+            :binary.part(data, rest_start, rest_size)
+          else
+            ""
+          end
+
+        {:rest, rest}
+    end
+  end
+
+  defp strip_trailing_cr(line) do
+    size = byte_size(line)
+
+    if size > 0 and :binary.at(line, size - 1) == 13 do
+      :binary.part(line, 0, size - 1)
+    else
+      line
+    end
+  end
+
+  # Fast ASCII-only trim for framing whitespace and CRLF handling.
+  defp trim_ascii(binary) when is_binary(binary) do
+    binary
+    |> trim_ascii_leading()
+    |> trim_ascii_trailing()
+  end
+
+  defp trim_ascii_leading(<<char, rest::binary>>) when char in [9, 10, 13, 32],
+    do: trim_ascii_leading(rest)
+
+  defp trim_ascii_leading(binary), do: binary
+
+  defp trim_ascii_trailing(binary), do: do_trim_ascii_trailing(binary, byte_size(binary))
+
+  defp do_trim_ascii_trailing(_binary, 0), do: ""
+
+  defp do_trim_ascii_trailing(binary, size) when size > 0 do
+    last = :binary.at(binary, size - 1)
+
+    if last in [9, 10, 13, 32] do
+      do_trim_ascii_trailing(binary, size - 1)
+    else
+      :binary.part(binary, 0, size)
+    end
+  end
+
   defp append_stderr_data(_existing, _data, max_size)
        when not is_integer(max_size) or max_size <= 0,
        do: ""
@@ -817,9 +911,10 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   defp dispatch_stderr_callback(callback, data) when is_function(callback, 1) do
-    data
-    |> String.split("\n")
-    |> Enum.map(&String.trim/1)
+    {lines, _tail} = split_complete_lines(data)
+
+    lines
+    |> Enum.map(&trim_ascii/1)
     |> Enum.reject(&(&1 == ""))
     |> Enum.each(callback)
   end

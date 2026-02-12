@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-02-11
+
+### Added
+
+- `c:ClaudeAgentSDK.Transport.interrupt/1` callback implementation in the Erlexec transport for cooperative interruption of active subprocess execution.
+
+### Fixed
+
+- Erlexec transport framing now handles UTF-8 text split across chunk boundaries without data loss or mojibake.
+- Streaming parser now preserves incomplete multibyte UTF-8 suffix bytes between chunks until completion.
+- Streaming session stderr processing now treats chunk boundaries in a binary-safe way.
+- Added regression coverage for UTF-8 boundary handling and interrupt behavior in transport and streaming tests.
+
 ## [0.13.0] - 2026-02-11
 
 ### Added
@@ -1387,7 +1400,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.10.0...v0.11.0

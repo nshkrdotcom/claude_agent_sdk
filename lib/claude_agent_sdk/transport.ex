@@ -46,6 +46,7 @@ defmodule ClaudeAgentSDK.Transport do
   """
   @callback close(t()) :: :ok
   @callback force_close(t()) :: :ok | {:error, term()}
+  @callback interrupt(t()) :: :ok | {:error, term()}
 
   @doc """
   Returns the current connection status for observability/health checks.
@@ -68,7 +69,7 @@ defmodule ClaudeAgentSDK.Transport do
   @callback end_input(t()) :: :ok | {:error, term()}
   @callback stderr(t()) :: binary()
 
-  @optional_callbacks [end_input: 1, subscribe: 3, force_close: 1, stderr: 1]
+  @optional_callbacks [end_input: 1, subscribe: 3, force_close: 1, interrupt: 1, stderr: 1]
 
   @doc false
   @spec normalize_reason(term()) :: term()

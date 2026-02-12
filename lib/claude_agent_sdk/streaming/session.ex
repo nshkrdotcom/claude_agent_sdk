@@ -472,14 +472,63 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   defp handle_stderr_data(data, stderr_callback) when is_function(stderr_callback, 1) do
     data
     |> IO.iodata_to_binary()
-    |> String.split("\n")
-    |> Enum.map(&String.trim/1)
+    |> split_complete_lines()
+    |> elem(0)
+    |> Enum.map(&trim_ascii/1)
     |> Enum.reject(&(&1 == ""))
     |> Enum.each(stderr_callback)
   end
 
   defp handle_stderr_data(data, _stderr_callback) do
     Logger.warning("Claude stderr: #{data}")
+  end
+
+  defp split_complete_lines(""), do: {[], ""}
+
+  defp split_complete_lines(buffer) when is_binary(buffer) do
+    case :binary.split(buffer, "\n", [:global]) do
+      [single] ->
+        {[], single}
+
+      parts ->
+        {complete, [rest]} = Enum.split(parts, length(parts) - 1)
+        {Enum.map(complete, &strip_trailing_cr/1), rest}
+    end
+  end
+
+  defp strip_trailing_cr(line) do
+    size = byte_size(line)
+
+    if size > 0 and :binary.at(line, size - 1) == 13 do
+      :binary.part(line, 0, size - 1)
+    else
+      line
+    end
+  end
+
+  defp trim_ascii(binary) when is_binary(binary) do
+    binary
+    |> trim_ascii_leading()
+    |> trim_ascii_trailing()
+  end
+
+  defp trim_ascii_leading(<<char, rest::binary>>) when char in [9, 10, 13, 32],
+    do: trim_ascii_leading(rest)
+
+  defp trim_ascii_leading(binary), do: binary
+
+  defp trim_ascii_trailing(binary), do: do_trim_ascii_trailing(binary, byte_size(binary))
+
+  defp do_trim_ascii_trailing(_binary, 0), do: ""
+
+  defp do_trim_ascii_trailing(binary, size) when size > 0 do
+    last = :binary.at(binary, size - 1)
+
+    if last in [9, 10, 13, 32] do
+      do_trim_ascii_trailing(binary, size - 1)
+    else
+      :binary.part(binary, 0, size)
+    end
   end
 
   defp handle_stdout_data(state, data) do
