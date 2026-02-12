@@ -120,7 +120,7 @@ Add `claude_agent_sdk` to your Mix dependencies in `mix.exs`:
 ```elixir
 defp deps do
   [
-    {:claude_agent_sdk, "~> 0.13.1"}
+    {:claude_agent_sdk, "~> 0.14.0"}
   ]
 end
 ```

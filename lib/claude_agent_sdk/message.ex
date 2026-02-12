@@ -153,6 +153,8 @@ defmodule ClaudeAgentSDK.Message do
   @spec error_result(String.t(), keyword()) :: t()
   def error_result(error_message, opts \\ []) when is_binary(error_message) and is_list(opts) do
     session_id = Keyword.get(opts, :session_id, "error")
+    error_struct = Keyword.get(opts, :error_struct)
+    error_details = Keyword.get(opts, :error_details)
 
     data =
       %{
@@ -160,7 +162,8 @@ defmodule ClaudeAgentSDK.Message do
         session_id: session_id,
         is_error: true
       }
-      |> maybe_put_error_struct(Keyword.get(opts, :error_struct))
+      |> maybe_put_error_struct(error_struct)
+      |> maybe_put_error_details(error_details, error_struct)
 
     %__MODULE__{
       type: :result,
@@ -172,6 +175,20 @@ defmodule ClaudeAgentSDK.Message do
 
   defp maybe_put_error_struct(data, nil), do: data
   defp maybe_put_error_struct(data, error_struct), do: Map.put(data, :error_struct, error_struct)
+
+  defp maybe_put_error_details(data, error_details, _error_struct) when is_map(error_details) do
+    Map.put(data, :error_details, error_details)
+  end
+
+  defp maybe_put_error_details(data, nil, %ClaudeAgentSDK.Errors.ProcessError{} = error_struct) do
+    Map.put(data, :error_details, %{
+      kind: :process_error,
+      exit_code: error_struct.exit_code,
+      stderr: error_struct.stderr
+    })
+  end
+
+  defp maybe_put_error_details(data, nil, _error_struct), do: data
 
   # Manual JSON parsing for our specific message formats
   defp parse_json_manual(str) do
