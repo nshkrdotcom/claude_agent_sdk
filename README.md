@@ -423,7 +423,7 @@ Key options for `ClaudeAgentSDK.Options`:
 | Option | Type | Description |
 |--------|------|-------------|
 | `model` | string | `"sonnet"`, `"opus"`, `"haiku"` |
-| `effort` | atom | `:low`, `:medium`, `:high` — controls reasoning effort (not supported for Haiku) |
+| `effort` | atom | `:low`, `:medium`, `:high` — controls reasoning effort; invalid values raise `ArgumentError` (not supported for Haiku) |
 | `thinking` | map | `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}` |
 | `max_turns` | integer | Maximum conversation turns |
 | `system_prompt` | string | Custom system instructions |

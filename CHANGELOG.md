@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Effort Level and Thinking Configuration
 
-- **`Options.effort`**: New field supporting `:low`, `:medium`, and `:high` effort levels. Emits `--effort <level>` to the CLI. Not supported for Haiku models (silently ignored with a warning log). Parity with Python SDK `effort` parameter.
+- **`Options.effort`**: New field supporting `:low`, `:medium`, and `:high` effort levels. Emits `--effort <level>` to the CLI. Haiku models silently omit effort with an SDK-filtered warning log, and invalid values now raise `ArgumentError` instead of crashing later during argument generation. Parity with Python SDK `effort` parameter.
 - **`Options.thinking`**: Structured thinking configuration via `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, or `%{type: :disabled}`. Takes precedence over `max_thinking_tokens` with clear resolution rules: adaptive defaults to 32000, enabled uses explicit budget, disabled emits 0.
 - **`OptionBuilder.with_effort/2`**: Pipeline-friendly builder for setting effort level on existing options.
 - **`OptionBuilder.with_thinking/2`**: Pipeline-friendly builder for setting thinking configuration.
@@ -46,12 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Model registry updated**: Sonnet updated from `claude-sonnet-4-5-20250929` to `claude-sonnet-4-6` (Sonnet 4.6). Added `opus[1m]` short form and `claude-opus-4-6[1m]`, `claude-sonnet-4-6[1m]` full IDs for 1M context variants. Default model changed from `"haiku"` to `"sonnet"`.
+- **Model registry updated**: Sonnet updated from `claude-sonnet-4-5-20250929` to `claude-sonnet-4-6` (Sonnet 4.6). Added `opus[1m]` short form and `claude-opus-4-6[1m]`, `claude-sonnet-4-6[1m]` full IDs for 1M context variants. Default model changed from `"sonnet"` to `"opus"`.
 - **`max_thinking_tokens` pipeline replaced**: The `add_max_thinking_tokens_args/2` function is replaced by `add_thinking_args/2` which respects the new `thinking` config with proper fallback to `max_thinking_tokens`.
 
 ### Fixed
 
-- **Subagent tool name**: Updated all examples, guides, and prompts to use `"Agent"` (the actual CLI tool name for subagent spawning) instead of `"Task"` (which is for background tasks like TaskCreate/TaskStop). Fixes `subagent_spawning_live.exs` failing assertion.
+- **Subagent tool name**: Updated current examples, guides, prompts, and research-agent example docs/code to use `"Agent"` (the actual CLI tool name for subagent spawning) instead of `"Task"` (which is for background tasks like TaskCreate/TaskStop). Subagent tracking examples now use Agent-specific matchers and naming consistently.
 
 ## [0.14.0] - 2026-02-11
 

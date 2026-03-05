@@ -53,13 +53,15 @@ defmodule ResearchAgent.HookCoordinator do
   def build_hooks(tracker) do
     %{
       pre_tool_use: [
+        Matcher.new("Agent", [
+          create_spawn_tracker(tracker)
+        ]),
         Matcher.new("*", [
-          create_spawn_tracker(tracker),
           create_audit_hook()
         ])
       ],
       post_tool_use: [
-        Matcher.new("*", [
+        Matcher.new("Agent", [
           create_completion_tracker(tracker)
         ])
       ]

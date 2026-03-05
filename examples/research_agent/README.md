@@ -50,7 +50,7 @@ This example showcases advanced Claude Agent SDK patterns:
 +-------------------------------------------------------------------------+
 |                                                                         |
 |  +------------------+  +------------------+  +------------------+       |
-|  |   Lead Agent     |  |   Task Tool      |  |   WebSearch      |       |
+|  |   Lead Agent     |  |   Agent Tool     |  |   WebSearch      |       |
 |  |   (Coordinator)  |->|   (Subagents)    |->|   (Research)     |       |
 |  +------------------+  +------------------+  +------------------+       |
 |                               |                                         |
@@ -67,7 +67,7 @@ This example showcases advanced Claude Agent SDK patterns:
 
 | Agent | Role | Tools Used |
 |-------|------|------------|
-| **Lead Agent** | Coordinates research, spawns subagents | Task |
+| **Lead Agent** | Coordinates research, spawns subagents | Agent |
 | **Researcher** | Gathers information from web sources | WebSearch, Read |
 | **Data Analyst** | Extracts metrics and insights | - |
 | **Report Writer** | Produces final reports | Write |
@@ -156,10 +156,10 @@ The `SubagentTracker` uses ETS for concurrent tracking of subagent state:
 # Hooks track Agent tool usage (subagent spawning)
 hooks = %{
   pre_tool_use: [
-    Matcher.new("*", [&track_spawn/3])
+    Matcher.new("Agent", [&track_spawn/3])
   ],
   post_tool_use: [
-    Matcher.new("*", [&track_complete/3])
+    Matcher.new("Agent", [&track_complete/3])
   ]
 }
 
@@ -236,7 +236,8 @@ mix quality
 # Pre-tool hooks for tracking and validation
 hooks = %{
   pre_tool_use: [
-    Matcher.new("Task", [&track_spawn/3, &audit_log/3])
+    Matcher.new("Agent", [&track_spawn/3]),
+    Matcher.new("*", [&audit_log/3])
   ]
 }
 ```

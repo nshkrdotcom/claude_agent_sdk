@@ -83,7 +83,7 @@ defmodule ResearchAgent.Commands.Research do
 
   Sets up:
   - Model selection
-  - Allowed tools (Task, WebSearch, Read, etc.)
+  - Allowed tools (Agent, WebSearch, Read, etc.)
   - Hooks for subagent tracking
   - System prompt
 

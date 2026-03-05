@@ -60,6 +60,7 @@ defmodule ResearchAgent.Commands.FactCheckTest do
       options = FactCheck.build_options(parsed, @output_dir)
 
       assert "Agent" in options.allowed_tools
+      assert Enum.any?(options.hooks.pre_tool_use, &(&1.matcher == "Agent"))
     end
   end
 

@@ -71,6 +71,10 @@ defmodule ClaudeAgentSDK.Options do
 
   """
 
+  alias ClaudeAgentSDK.Log, as: Logger
+
+  @valid_efforts [:low, :medium, :high]
+
   # This struct intentionally has many fields as it mirrors the Claude Code CLI options.
   # The struct is created once per request and is short-lived, so memory overhead is minimal.
   # credo:disable-for-next-line Credo.Check.Warning.StructFieldAmount
@@ -325,6 +329,7 @@ defmodule ClaudeAgentSDK.Options do
   """
   @spec new(keyword()) :: t()
   def new(attrs \\ []) do
+    validate_effort!(Keyword.get(attrs, :effort))
     struct(__MODULE__, attrs)
   end
 
@@ -348,6 +353,8 @@ defmodule ClaudeAgentSDK.Options do
   """
   @spec to_args(t()) :: [String.t()]
   def to_args(%__MODULE__{} = options) do
+    validate_effort!(options.effort)
+
     []
     |> add_output_format_args(options)
     |> add_max_turns_args(options)
@@ -907,9 +914,8 @@ defmodule ClaudeAgentSDK.Options do
   defp add_effort_args(args, %{effort: nil}), do: args
 
   defp add_effort_args(args, %{effort: effort, model: model})
-       when effort in [:low, :medium, :high] do
+       when effort in @valid_efforts do
     if haiku_model?(model) do
-      require Logger
       Logger.warning("Effort level is not supported for Haiku models; ignoring effort: #{effort}")
       args
     else
@@ -918,8 +924,12 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   defp add_effort_args(args, %{effort: effort})
-       when effort in [:low, :medium, :high] do
+       when effort in @valid_efforts do
     args ++ ["--effort", to_string(effort)]
+  end
+
+  defp add_effort_args(_args, %{effort: effort}) do
+    raise ArgumentError, invalid_effort_message(effort)
   end
 
   @haiku_patterns ["haiku", "claude-haiku"]
@@ -991,6 +1001,22 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   defp add_extra_args(args, _), do: args
+
+  @doc false
+  @spec validate_effort!(atom() | nil) :: :ok
+  def validate_effort!(nil), do: :ok
+
+  def validate_effort!(effort) when effort in @valid_efforts do
+    :ok
+  end
+
+  def validate_effort!(effort) do
+    raise ArgumentError, invalid_effort_message(effort)
+  end
+
+  defp invalid_effort_message(effort) do
+    "effort must be one of :low, :medium, :high, or nil, got: #{inspect(effort)}"
+  end
 
   defp normalize_plugin(%{type: type, path: path}) do
     case normalize_plugin_type(type) do

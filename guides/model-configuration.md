@@ -130,6 +130,9 @@ This emits `--effort high` to the CLI.
 
 > **Note:** Effort is not supported for Haiku models. If effort is set with a
 > Haiku model, the SDK logs a warning and silently omits the `--effort` flag.
+> Invalid effort values raise `ArgumentError` when options are built or converted
+> to CLI arguments.
+> See `examples/effort_gating_live.exs` for a runnable example.
 
 ## Thinking Configuration
 

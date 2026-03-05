@@ -83,7 +83,7 @@ defmodule ParentToolUseIdVerification do
 
     try do
       IO.puts("=" |> String.duplicate(72))
-      IO.puts("PHASE 1: Triggering Task Tool (Subagent Spawn)")
+      IO.puts("PHASE 1: Triggering Agent Tool (Subagent Spawn)")
       IO.puts("=" |> String.duplicate(72))
       IO.puts("")
 

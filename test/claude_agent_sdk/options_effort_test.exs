@@ -39,6 +39,19 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       args = Options.to_args(opts)
       refute "--effort" in args
     end
+
+    test "rejects deprecated :max effort at construction time" do
+      assert_raise ArgumentError, ~r/effort must be one of/, fn ->
+        Options.new(effort: :max)
+      end
+    end
+
+    test "rejects invalid effort when converting a struct literal to args" do
+      assert_raise ArgumentError, ~r/effort must be one of/, fn ->
+        %Options{effort: :max}
+        |> Options.to_args()
+      end
+    end
   end
 
   describe "effort + haiku gating" do
@@ -64,6 +77,25 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
         end)
 
       assert log =~ "not supported for Haiku"
+    end
+
+    test "respects SDK log_level filter when warning is emitted" do
+      previous_level = Application.get_env(:claude_agent_sdk, :log_level, :warning)
+      Application.put_env(:claude_agent_sdk, :log_level, :off)
+
+      on_exit(fn ->
+        Application.put_env(:claude_agent_sdk, :log_level, previous_level)
+      end)
+
+      opts = Options.new(effort: :high, model: "haiku")
+
+      log =
+        capture_log(fn ->
+          args = Options.to_args(opts)
+          refute "--effort" in args
+        end)
+
+      assert log == ""
     end
 
     test "allows effort on opus" do

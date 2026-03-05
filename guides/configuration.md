@@ -78,7 +78,7 @@ ClaudeAgentSDK.query("Refactor this code for better performance", options)
 |-------|------|---------|-------------|
 | `model` | `String.t()` | `nil` | Model selection ("opus", "sonnet", "haiku", or full model name) |
 | `fallback_model` | `String.t()` | `nil` | Fallback model when primary is busy |
-| `effort` | `atom()` | `nil` | Reasoning effort level (`:low`, `:medium`, `:high`). Not supported for Haiku. |
+| `effort` | `atom()` | `nil` | Reasoning effort level (`:low`, `:medium`, `:high`). Invalid values raise `ArgumentError`. Not supported for Haiku. |
 | `thinking` | `map()` | `nil` | Thinking config (`%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}`) |
 | `max_thinking_tokens` | `pos_integer()` | `nil` | Maximum tokens for model thinking (fallback when `thinking` is nil) |
 
@@ -288,7 +288,7 @@ options = ClaudeAgentSDK.OptionBuilder.with_opus()
 # Balanced performance
 options = ClaudeAgentSDK.OptionBuilder.with_sonnet()
 
-# Fast responses (default)
+# Fast responses
 options = ClaudeAgentSDK.OptionBuilder.with_haiku()
 
 # Add model to existing options

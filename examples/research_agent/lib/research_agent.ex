@@ -31,7 +31,7 @@ defmodule ResearchAgent do
       |
       +-- HookCoordinator
       |       |
-      |       +-- Pre-tool hooks (track Task spawns)
+      |       +-- Pre-tool hooks (track Agent spawns)
       |       |
       |       +-- Post-tool hooks (track completions)
       |

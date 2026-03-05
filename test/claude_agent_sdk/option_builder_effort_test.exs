@@ -21,6 +21,13 @@ defmodule ClaudeAgentSDK.OptionBuilder.EffortThinkingTest do
       assert opts.effort == :high
       assert opts.max_turns == 10
     end
+
+    test "raises a clear error for invalid effort values" do
+      assert_raise ArgumentError, ~r/effort must be one of/, fn ->
+        OptionBuilder.with_opus()
+        |> OptionBuilder.with_effort(:max)
+      end
+    end
   end
 
   describe "with_thinking/2" do

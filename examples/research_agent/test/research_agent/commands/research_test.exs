@@ -70,6 +70,7 @@ defmodule ResearchAgent.Commands.ResearchTest do
 
       assert options.hooks != nil
       assert Map.has_key?(options.hooks, :pre_tool_use)
+      assert Enum.any?(options.hooks.pre_tool_use, &(&1.matcher == "Agent"))
     end
   end
 

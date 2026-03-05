@@ -90,6 +90,7 @@ mix run examples/basic_example.exs
 | Example | Description |
 |---------|-------------|
 | `basic_example.exs` | Minimal `ClaudeAgentSDK.query/2` with message extraction |
+| `effort_gating_live.exs` | Live effort demo showing supported models, Haiku gating, and invalid-value validation |
 | `session_features_example.exs` | SessionStore save/search, resume, session CLI flags |
 | `resume_persistence_repro_live.exs` | Known-failing repro for `--print --resume` dropping intermediate turns |
 | `structured_output_live.exs` | Structured JSON via `--json-schema` |

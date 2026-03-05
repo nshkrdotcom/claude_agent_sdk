@@ -658,14 +658,13 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   end
 
   @doc """
-  Builds options for fast responses using Haiku model (default).
+  Builds options for fast responses using the Haiku model preset.
 
   Best for:
   - Simple queries
   - Quick responses needed
   - High-volume use cases
   - Lowest cost option
-  - Default for most SDK operations
 
   ## Examples
 
@@ -687,12 +686,16 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   ## Parameters
 
   - `options` - Existing options
-  - `effort` - Effort level (`:low`, `:medium`, or `:high`). Not supported for Haiku.
+  - `effort` - Effort level (`:low`, `:medium`, or `:high`). Invalid values raise `ArgumentError`. Not supported for Haiku.
   """
   @spec with_effort(Options.t(), :low | :medium | :high) :: Options.t()
   def with_effort(%Options{} = options, effort)
       when effort in [:low, :medium, :high] do
     %{options | effort: effort}
+  end
+
+  def with_effort(%Options{}, effort) do
+    raise ArgumentError, "effort must be one of :low, :medium, or :high, got: #{inspect(effort)}"
   end
 
   @doc """

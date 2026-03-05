@@ -13,6 +13,9 @@ defmodule ResearchAgent.HookCoordinatorTest do
       assert is_map(hooks)
       assert Map.has_key?(hooks, :pre_tool_use)
       assert Map.has_key?(hooks, :post_tool_use)
+      assert Enum.any?(hooks.pre_tool_use, &(&1.matcher == "Agent"))
+      assert Enum.any?(hooks.pre_tool_use, &(&1.matcher == "*"))
+      assert Enum.any?(hooks.post_tool_use, &(&1.matcher == "Agent"))
     end
 
     test "pre_tool_use hooks track Agent tool spawns" do
@@ -21,9 +24,8 @@ defmodule ResearchAgent.HookCoordinatorTest do
 
       hooks = HookCoordinator.build_hooks(tracker)
 
-      # Extract the pre_tool_use callbacks
-      [matcher] = hooks.pre_tool_use
-      [callback | _] = matcher.hooks
+      matcher = Enum.find(hooks.pre_tool_use, &(&1.matcher == "Agent"))
+      [callback] = matcher.hooks
 
       # Simulate an Agent tool call
       input = %{
@@ -53,8 +55,8 @@ defmodule ResearchAgent.HookCoordinatorTest do
       hooks = HookCoordinator.build_hooks(tracker)
 
       # First spawn an agent
-      [pre_matcher] = hooks.pre_tool_use
-      [pre_callback | _] = pre_matcher.hooks
+      pre_matcher = Enum.find(hooks.pre_tool_use, &(&1.matcher == "Agent"))
+      [pre_callback] = pre_matcher.hooks
 
       spawn_input = %{
         "tool_name" => "Agent",
@@ -67,8 +69,8 @@ defmodule ResearchAgent.HookCoordinatorTest do
       pre_callback.(spawn_input, "toolu_456", %{})
 
       # Now complete it
-      [post_matcher] = hooks.post_tool_use
-      [post_callback | _] = post_matcher.hooks
+      post_matcher = Enum.find(hooks.post_tool_use, &(&1.matcher == "Agent"))
+      [post_callback] = post_matcher.hooks
 
       complete_input = %{
         "tool_name" => "Agent",
@@ -88,8 +90,8 @@ defmodule ResearchAgent.HookCoordinatorTest do
       on_exit(fn -> if Process.alive?(tracker), do: GenServer.stop(tracker) end)
 
       hooks = HookCoordinator.build_hooks(tracker)
-      [matcher] = hooks.pre_tool_use
-      [callback | _] = matcher.hooks
+      matcher = Enum.find(hooks.pre_tool_use, &(&1.matcher == "Agent"))
+      [callback] = matcher.hooks
 
       # Bash tool should be ignored
       input = %{

@@ -65,6 +65,7 @@ export CLAUDE_EXAMPLES_FORCE_HALT="true"
 
 examples=(
   "examples/basic_example.exs"
+  "examples/effort_gating_live.exs"
   "examples/session_features_example.exs"
   "examples/resume_persistence_repro_live.exs"
   "examples/structured_output_live.exs"

@@ -37,7 +37,7 @@ end
 # Pre-tool hook to track Agent tool usage (subagent spawning)
 # Note: The CLI uses "Agent" as the tool name for subagent spawning,
 # not "Task" (which is for background tasks like TaskCreate/TaskStop).
-track_task = fn input, _tool_use_id, _context ->
+track_agent_tool = fn input, _tool_use_id, _context ->
   case input do
     %{"tool_name" => "Agent", "tool_input" => tool_input} ->
       description = tool_input["description"] || "unknown"
@@ -46,7 +46,7 @@ track_task = fn input, _tool_use_id, _context ->
       # Insert into bag table - each insert adds a new entry (no race condition)
       :ets.insert(
         :subagent_tracker,
-        {:task_call,
+        {:agent_tool_call,
          %{
            description: description,
            subagent_type: subagent_type,
@@ -65,10 +65,10 @@ track_task = fn input, _tool_use_id, _context ->
 end
 
 # Post-tool hook to track completion
-track_completion = fn result, _tool_use_id, _context ->
+track_agent_completion = fn result, _tool_use_id, _context ->
   case result do
     %{"tool_name" => "Agent"} ->
-      :ets.insert(:subagent_tracker, {:task_complete, DateTime.utc_now()})
+      :ets.insert(:subagent_tracker, {:agent_tool_complete, DateTime.utc_now()})
       log_output.("  [hook] Subagent completed")
 
     _ ->
@@ -87,8 +87,8 @@ options =
     allowed_tools: ["Agent", "Read", "Glob", "Grep"],
     permission_mode: :bypass_permissions,
     hooks: %{
-      pre_tool_use: [Matcher.new("*", [track_task])],
-      post_tool_use: [Matcher.new("*", [track_completion])]
+      pre_tool_use: [Matcher.new("Agent", [track_agent_tool])],
+      post_tool_use: [Matcher.new("Agent", [track_agent_completion])]
     }
   )
 
@@ -156,28 +156,28 @@ case Enum.find(messages, &(&1.type == :result)) do
 end
 
 # Display subagent tracking summary
-# Retrieve all :task_call entries from the bag table
-task_calls =
-  :ets.lookup(:subagent_tracker, :task_call)
-  |> Enum.map(fn {:task_call, data} -> data end)
+# Retrieve all :agent_tool_call entries from the bag table
+agent_tool_calls =
+  :ets.lookup(:subagent_tracker, :agent_tool_call)
+  |> Enum.map(fn {:agent_tool_call, data} -> data end)
 
-task_completions = :ets.lookup(:subagent_tracker, :task_complete) |> length()
+agent_tool_completions = :ets.lookup(:subagent_tracker, :agent_tool_complete) |> length()
 
 IO.puts("\nSubagent Spawning Summary:")
 IO.puts(String.duplicate("-", 60))
 
-if length(task_calls) < 2 do
-  raise "Expected at least 2 Agent tool calls, observed #{length(task_calls)}."
+if length(agent_tool_calls) < 2 do
+  raise "Expected at least 2 Agent tool calls, observed #{length(agent_tool_calls)}."
 end
 
-if task_completions < 2 do
-  raise "Expected at least 2 Agent completions, observed #{task_completions}."
+if agent_tool_completions < 2 do
+  raise "Expected at least 2 Agent completions, observed #{agent_tool_completions}."
 end
 
-IO.puts("Total Agent tool calls: #{length(task_calls)}")
-IO.puts("Agent completions: #{task_completions}")
+IO.puts("Total Agent tool calls: #{length(agent_tool_calls)}")
+IO.puts("Agent completions: #{agent_tool_completions}")
 
-Enum.each(task_calls, fn call ->
+Enum.each(agent_tool_calls, fn call ->
   IO.puts("  - #{call.description} (#{call.subagent_type})")
 end)
 
