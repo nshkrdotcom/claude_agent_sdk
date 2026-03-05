@@ -806,6 +806,55 @@ end
 
 ---
 
+## Reading CLI Session History (v0.15.0)
+
+The `Session.History` module reads Claude Code's on-disk JSONL session files
+stored at `~/.claude/projects/<sanitized-cwd>/<uuid>.jsonl`. This is separate
+from `SessionStore` — it reads the CLI's own history rather than SDK-managed state.
+
+### Listing Sessions
+
+```elixir
+alias ClaudeAgentSDK.Session.History
+
+# List all sessions (most recent first)
+sessions = History.list_sessions()
+
+Enum.each(sessions, fn session ->
+  IO.puts("#{session.session_id}: #{session.summary}")
+  IO.puts("  Size: #{session.file_size} bytes, Modified: #{session.last_modified}")
+end)
+
+# Limit results
+recent = History.list_sessions(limit: 5)
+```
+
+### Reading Session Messages
+
+```elixir
+alias ClaudeAgentSDK.Session.History
+
+messages = History.get_session_messages("550e8400-e29b-41d4-a716-446655440000")
+
+Enum.each(messages, fn msg ->
+  IO.puts("[#{msg.type}] #{get_in(msg.message, ["content"])}")
+end)
+
+# With pagination
+page = History.get_session_messages(session_id, limit: 10, offset: 20)
+```
+
+Messages with `isMeta` or `isSidechain` flags are automatically filtered out.
+
+### Custom Projects Directory
+
+```elixir
+# Point to a non-default location
+History.list_sessions(projects_dir: "/custom/path/to/projects")
+```
+
+---
+
 ## Summary
 
 The Claude Agent SDK provides comprehensive session management through:
@@ -820,5 +869,7 @@ The Claude Agent SDK provides comprehensive session management through:
 | Tagging | `SessionStore.save_session/3` | Organize with tags |
 | Search | `SessionStore.search/1` | Find sessions by criteria |
 | Cleanup | `SessionStore.cleanup_old_sessions/1` | Remove old sessions |
+| CLI history | `Session.History.list_sessions/1` | Read CLI's JSONL files |
+| CLI messages | `Session.History.get_session_messages/2` | Read messages from CLI history |
 
 Sessions enable building sophisticated conversational applications with context persistence, multi-step workflows, and proper conversation management.

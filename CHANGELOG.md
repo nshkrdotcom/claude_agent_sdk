@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-03-05
+
+### Added
+
+#### Effort Level and Thinking Configuration
+
+- **`Options.effort`**: New field supporting `:low`, `:medium`, `:high`, and `:max` effort levels. Emits `--effort <level>` to the CLI. Parity with Python SDK `effort` parameter.
+- **`Options.thinking`**: Structured thinking configuration via `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, or `%{type: :disabled}`. Takes precedence over `max_thinking_tokens` with clear resolution rules: adaptive defaults to 32000, enabled uses explicit budget, disabled emits 0.
+- **`OptionBuilder.with_effort/2`**: Pipeline-friendly builder for setting effort level on existing options.
+- **`OptionBuilder.with_thinking/2`**: Pipeline-friendly builder for setting thinking configuration.
+
+#### Task System Message Parsing
+
+- **Task system subtypes**: `Message.from_json/1` now parses `task_started`, `task_progress`, and `task_notification` system message subtypes into structured data maps with typed fields (`task_id`, `description`, `status`, `usage`, `output_file`, `summary`, etc.).
+
+#### Result Stop Reason
+
+- **`stop_reason` field**: Result messages (both `:success` and error subtypes) now include a `stop_reason` field extracted from the CLI response (e.g., `"end_turn"`, `"max_turns"`).
+
+#### MCP Control Protocol Extensions
+
+- **`ClaudeAgentSDK.ControlProtocol.Protocol.encode_mcp_reconnect_request/2`**: Reconnect a disconnected MCP server by name.
+- **`ClaudeAgentSDK.ControlProtocol.Protocol.encode_mcp_toggle_request/3`**: Enable or disable an MCP server by name.
+- **`ClaudeAgentSDK.ControlProtocol.Protocol.encode_stop_task_request/2`**: Stop a running background task by ID.
+
+#### Session History
+
+- **`Session.History`**: New module for reading Claude Code's on-disk JSONL session files (`~/.claude/projects/<sanitized>/<uuid>.jsonl`).
+  - `list_sessions/1`: Lists sessions across project directories with metadata (first prompt, custom title, file size, last modified), sorted by recency.
+  - `get_session_messages/2`: Reads and parses messages from a session file with pagination and filtering (excludes `isMeta` and `isSidechain` entries).
+  - `sanitize_path/1` and `simple_hash/1`: Path sanitization utilities matching the Claude CLI's directory naming scheme.
+- **`Session.SessionInfo`**: Struct for session metadata returned by `list_sessions/1`.
+
+#### Agent Definition Extensions
+
+- **`Agent` struct extended**: Added `disallowed_tools`, `skills`, `mcp_servers`, and `max_turns` fields to match the full CLI `--agents` JSON specification. `to_cli_map/1` emits `disallowedTools`, `skills`, `mcpServers`, and `maxTurns` keys when present.
+
+### Changed
+
+- **Model registry updated**: Sonnet updated from `claude-sonnet-4-5-20250929` to `claude-sonnet-4-6` (Sonnet 4.6). Added `opus[1m]` short form and `claude-opus-4-6[1m]`, `claude-sonnet-4-6[1m]` full IDs for 1M context variants. Default model changed from `"haiku"` to `"sonnet"`.
+- **`max_thinking_tokens` pipeline replaced**: The `add_max_thinking_tokens_args/2` function is replaced by `add_thinking_args/2` which respects the new `thinking` config with proper fallback to `max_thinking_tokens`.
+
 ## [0.14.0] - 2026-02-11
 
 ### Added
@@ -1404,7 +1446,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.11.0...v0.12.0

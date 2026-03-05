@@ -349,7 +349,16 @@ defmodule ClaudeAgentSDK.Message do
 
   defp parse_by_type(message, :system, raw) do
     subtype = safe_subtype(:system, raw["subtype"])
-    data = if subtype == :init, do: build_system_data(:init, raw), else: raw
+
+    data =
+      case subtype do
+        :init -> build_system_data(:init, raw)
+        :task_started -> build_task_started_data(raw)
+        :task_progress -> build_task_progress_data(raw)
+        :task_notification -> build_task_notification_data(raw)
+        _ -> raw
+      end
+
     %{message | subtype: subtype, data: data}
   end
 
@@ -393,6 +402,9 @@ defmodule ClaudeAgentSDK.Message do
   defp safe_subtype(:system, subtype) when is_binary(subtype) do
     case subtype do
       "init" -> :init
+      "task_started" -> :task_started
+      "task_progress" -> :task_progress
+      "task_notification" -> :task_notification
       other -> other
     end
   end
@@ -467,7 +479,8 @@ defmodule ClaudeAgentSDK.Message do
       duration_ms: raw["duration_ms"],
       duration_api_ms: raw["duration_api_ms"],
       num_turns: raw["num_turns"],
-      is_error: raw["is_error"]
+      is_error: raw["is_error"],
+      stop_reason: raw["stop_reason"]
     }
   end
 
@@ -484,7 +497,8 @@ defmodule ClaudeAgentSDK.Message do
       duration_api_ms: raw["duration_api_ms"] || 0,
       num_turns: raw["num_turns"] || 0,
       is_error: raw["is_error"] || true,
-      error: error_message
+      error: error_message,
+      stop_reason: raw["stop_reason"]
     }
   end
 
@@ -521,6 +535,40 @@ defmodule ClaudeAgentSDK.Message do
       mcp_servers: raw["mcp_servers"] || [],
       model: raw["model"],
       permission_mode: raw["permissionMode"]
+    }
+  end
+
+  defp build_task_started_data(raw) do
+    %{
+      task_id: raw["task_id"],
+      description: raw["description"],
+      uuid: raw["uuid"],
+      session_id: raw["session_id"],
+      tool_use_id: raw["tool_use_id"],
+      task_type: raw["task_type"]
+    }
+  end
+
+  defp build_task_progress_data(raw) do
+    %{
+      task_id: raw["task_id"],
+      description: raw["description"],
+      uuid: raw["uuid"],
+      session_id: raw["session_id"],
+      usage: raw["usage"],
+      last_tool_name: raw["last_tool_name"]
+    }
+  end
+
+  defp build_task_notification_data(raw) do
+    %{
+      task_id: raw["task_id"],
+      status: raw["status"],
+      output_file: raw["output_file"],
+      summary: raw["summary"],
+      uuid: raw["uuid"],
+      session_id: raw["session_id"],
+      usage: raw["usage"]
     }
   end
 

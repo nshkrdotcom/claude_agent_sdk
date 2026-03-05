@@ -14,15 +14,17 @@ config :claude_agent_sdk, :models, %{
     "opus"       => "opus",
     "sonnet"     => "sonnet",
     "haiku"      => "haiku",
+    "opus[1m]"   => "opus[1m]",
     "sonnet[1m]" => "sonnet[1m]"
   },
   full_ids: %{
     "claude-opus-4-6"                => "claude-opus-4-6",
-    "claude-sonnet-4-5-20250929"     => "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-6"              => "claude-sonnet-4-6",
     "claude-haiku-4-5-20251001"      => "claude-haiku-4-5-20251001",
-    "claude-sonnet-4-5-20250929[1m]" => "claude-sonnet-4-5-20250929[1m]"
+    "claude-opus-4-6[1m]"            => "claude-opus-4-6[1m]",
+    "claude-sonnet-4-6[1m]"          => "claude-sonnet-4-6[1m]"
   },
-  default: "haiku"
+  default: "sonnet"
 }
 ```
 
@@ -113,10 +115,42 @@ config = Application.get_env(:claude_agent_sdk, :models)
 Application.put_env(:claude_agent_sdk, :models, %{config | default: "opus"})
 ```
 
-## Thinking Tokens
+## Effort Level
 
-Extended thinking is controlled by the `max_thinking_tokens` option, which
-accepts any positive integer:
+Control how much reasoning effort Claude applies:
+
+```elixir
+options = %ClaudeAgentSDK.Options{
+  model: "sonnet",
+  effort: :high  # :low | :medium | :high | :max
+}
+```
+
+This emits `--effort high` to the CLI.
+
+## Thinking Configuration
+
+The `thinking` option provides structured control over extended thinking:
+
+```elixir
+# Adaptive (default budget 32000 tokens)
+options = %ClaudeAgentSDK.Options{thinking: %{type: :adaptive}}
+
+# Explicit budget
+options = %ClaudeAgentSDK.Options{thinking: %{type: :enabled, budget_tokens: 16_000}}
+
+# Disabled
+options = %ClaudeAgentSDK.Options{thinking: %{type: :disabled}}
+```
+
+Resolution rules:
+- `thinking` takes precedence over `max_thinking_tokens`
+- `:adaptive` uses `max_thinking_tokens` as fallback, or 32000 if nil
+- `:enabled` uses `budget_tokens` directly
+- `:disabled` emits `--max-thinking-tokens 0`
+- `nil` falls back to raw `max_thinking_tokens`
+
+The `max_thinking_tokens` field is still supported for backward compatibility:
 
 ```elixir
 options = %ClaudeAgentSDK.Options{
@@ -124,9 +158,6 @@ options = %ClaudeAgentSDK.Options{
   max_thinking_tokens: 8192
 }
 ```
-
-There are no hardcoded budget values or reasoning-level strings in the SDK.
-The value is passed directly to the Claude CLI as `--max-thinking-tokens <N>`.
 
 ## Testing
 

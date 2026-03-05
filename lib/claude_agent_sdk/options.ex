@@ -139,6 +139,10 @@ defmodule ClaudeAgentSDK.Options do
     :preferred_transport,
     :user,
     :max_thinking_tokens,
+    # Effort level (:low, :medium, :high, :max)
+    :effort,
+    # Thinking config (%{type: :adaptive | :enabled | :disabled, budget_tokens: integer()})
+    :thinking,
     :max_buffer_size,
     betas: [],
     plugins: [],
@@ -291,7 +295,9 @@ defmodule ClaudeAgentSDK.Options do
           env: %{optional(String.t()) => String.t()},
           stderr: (String.t() -> any()) | nil,
           user: String.t() | nil,
-          max_thinking_tokens: pos_integer() | nil
+          max_thinking_tokens: pos_integer() | nil,
+          effort: :low | :medium | :high | :max | nil,
+          thinking: map() | nil
         }
 
   @doc """
@@ -369,7 +375,8 @@ defmodule ClaudeAgentSDK.Options do
     |> add_plugins_args(options)
     |> add_strict_mcp_args(options)
     |> add_partial_messages_args(options)
-    |> add_max_thinking_tokens_args(options)
+    |> add_effort_args(options)
+    |> add_thinking_args(options)
     |> add_extra_args(options)
   end
 
@@ -897,11 +904,42 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_plugins_args(args, _), do: args
 
-  defp add_max_thinking_tokens_args(args, %{max_thinking_tokens: nil}), do: args
+  defp add_effort_args(args, %{effort: nil}), do: args
 
-  defp add_max_thinking_tokens_args(args, %{max_thinking_tokens: tokens}) do
+  defp add_effort_args(args, %{effort: effort})
+       when effort in [:low, :medium, :high, :max] do
+    args ++ ["--effort", to_string(effort)]
+  end
+
+  # Thinking config takes precedence over raw max_thinking_tokens.
+  # Resolution: thinking.type :enabled -> budget_tokens, :adaptive -> fallback or 32000,
+  #             :disabled -> 0, nil -> fall back to max_thinking_tokens.
+  defp add_thinking_args(args, %{thinking: %{type: :enabled, budget_tokens: tokens}})
+       when is_integer(tokens) do
     args ++ ["--max-thinking-tokens", to_string(tokens)]
   end
+
+  defp add_thinking_args(args, %{thinking: %{type: :adaptive}, max_thinking_tokens: tokens})
+       when is_integer(tokens) do
+    args ++ ["--max-thinking-tokens", to_string(tokens)]
+  end
+
+  defp add_thinking_args(args, %{thinking: %{type: :adaptive}}) do
+    args ++ ["--max-thinking-tokens", "32000"]
+  end
+
+  defp add_thinking_args(args, %{thinking: %{type: :disabled}}) do
+    args ++ ["--max-thinking-tokens", "0"]
+  end
+
+  defp add_thinking_args(args, %{thinking: nil, max_thinking_tokens: nil}), do: args
+
+  defp add_thinking_args(args, %{thinking: nil, max_thinking_tokens: tokens})
+       when is_integer(tokens) do
+    args ++ ["--max-thinking-tokens", to_string(tokens)]
+  end
+
+  defp add_thinking_args(args, _), do: args
 
   defp add_betas_args(args, %{betas: betas}) when is_list(betas) and betas != [] do
     args ++ ["--betas", Enum.join(betas, ",")]

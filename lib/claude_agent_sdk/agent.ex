@@ -64,7 +64,11 @@ defmodule ClaudeAgentSDK.Agent do
           description: String.t(),
           prompt: String.t(),
           allowed_tools: [String.t()] | nil,
-          model: String.t() | nil
+          disallowed_tools: [String.t()] | nil,
+          model: String.t() | nil,
+          skills: [String.t()] | nil,
+          mcp_servers: [String.t() | map()] | nil,
+          max_turns: pos_integer() | nil
         }
 
   @enforce_keys [:description, :prompt]
@@ -73,7 +77,11 @@ defmodule ClaudeAgentSDK.Agent do
     :description,
     :prompt,
     :allowed_tools,
-    :model
+    :disallowed_tools,
+    :model,
+    :skills,
+    :mcp_servers,
+    :max_turns
   ]
 
   @doc """
@@ -210,7 +218,11 @@ defmodule ClaudeAgentSDK.Agent do
     |> put_if_present("description", agent.description)
     |> put_if_present("prompt", agent.prompt)
     |> put_if_present("tools", agent.allowed_tools)
+    |> put_if_present("disallowedTools", agent.disallowed_tools)
     |> put_if_present("model", agent.model)
+    |> put_if_present("skills", agent.skills)
+    |> put_if_present("mcpServers", agent.mcp_servers)
+    |> put_if_present("maxTurns", agent.max_turns)
   end
 
   ## Private Functions

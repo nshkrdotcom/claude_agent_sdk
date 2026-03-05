@@ -23,7 +23,11 @@ Agents are custom personas or roles that you can define for Claude. Each agent h
 - **Description**: A human-readable description of what the agent does
 - **Prompt**: A system prompt that defines the agent's behavior and expertise
 - **Allowed Tools**: An optional list of tools the agent can use
+- **Disallowed Tools**: An optional list of tools the agent cannot use
 - **Model**: An optional model specification (e.g., "haiku", "sonnet", "opus")
+- **Skills**: An optional list of skill names the agent has access to
+- **MCP Servers**: An optional list of MCP server names or configurations
+- **Max Turns**: An optional turn limit for the agent
 
 Agents enable you to:
 
@@ -50,11 +54,15 @@ The `ClaudeAgentSDK.Agent` module provides the `Agent` struct and functions for 
 
 ```elixir
 %ClaudeAgentSDK.Agent{
-  name: atom() | nil,           # Optional identifier
-  description: String.t(),       # Required: What the agent does
-  prompt: String.t(),            # Required: System prompt
-  allowed_tools: [String.t()],   # Optional: List of tool names
-  model: String.t() | nil        # Optional: Model to use
+  name: atom() | nil,                      # Optional identifier
+  description: String.t(),                  # Required: What the agent does
+  prompt: String.t(),                       # Required: System prompt
+  allowed_tools: [String.t()] | nil,        # Optional: List of allowed tool names
+  disallowed_tools: [String.t()] | nil,     # Optional: List of disallowed tool names
+  model: String.t() | nil,                  # Optional: Model to use
+  skills: [String.t()] | nil,               # Optional: Skill names
+  mcp_servers: [String.t() | map()] | nil,  # Optional: MCP server names/configs
+  max_turns: pos_integer() | nil            # Optional: Turn limit
 }
 ```
 
@@ -97,7 +105,11 @@ code_reviewer = Agent.new(
 
 - `:name` - An atom identifier for the agent (useful for referencing in multi-agent setups)
 - `:allowed_tools` - A list of tool name strings the agent can use
+- `:disallowed_tools` - A list of tool name strings the agent cannot use
 - `:model` - A string specifying which model to use (e.g., `"haiku"`, `"sonnet"`, `"opus"`) -- see [Model Configuration](model-configuration.md)
+- `:skills` - A list of skill name strings (e.g., `["code-review", "testing"]`)
+- `:mcp_servers` - A list of MCP server names or configuration maps
+- `:max_turns` - Maximum number of conversation turns for this agent
 
 Tip: MCP tool names are always strings (`mcp__<server>__<tool>`). Avoid atom tool names in agent configs to prevent atom leaks.
 
@@ -185,6 +197,35 @@ allowed_tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
 allowed_tools: []
 ```
 
+You can also block specific tools with `disallowed_tools`:
+
+```elixir
+# Allow everything except Bash execution
+disallowed_tools: ["Bash"]
+
+# Block write operations
+disallowed_tools: ["Write", "Edit"]
+```
+
+### Extended Fields (v0.15.0)
+
+Agents support additional fields that map to CLI capabilities:
+
+```elixir
+# Agent with skills, MCP servers, and turn limit
+Agent.new(
+  name: :research_agent,
+  description: "Research specialist with MCP tools",
+  prompt: "You are a research specialist.",
+  allowed_tools: ["Read", "WebSearch"],
+  disallowed_tools: ["Bash"],
+  model: "sonnet",
+  skills: ["code-review", "testing"],
+  mcp_servers: ["math-server", "db-server"],
+  max_turns: 10
+)
+```
+
 ---
 
 ## How Agents Are Sent to the CLI
@@ -198,6 +239,23 @@ The SDK handles this automatically:
 - `Query.continue/2` and `Query.resume/3` automatically route through the control client when agents are configured
 
 You do not need to change your agent definitions — just upgrade to v0.11.0 and the new transport mechanism is used transparently.
+
+### CLI JSON Field Mapping
+
+`Agent.to_cli_map/1` converts struct fields to the camelCase JSON keys expected by the CLI:
+
+| Elixir Field | CLI JSON Key |
+|-------------|-------------|
+| `description` | `"description"` |
+| `prompt` | `"prompt"` |
+| `allowed_tools` | `"tools"` |
+| `disallowed_tools` | `"disallowedTools"` |
+| `model` | `"model"` |
+| `skills` | `"skills"` |
+| `mcp_servers` | `"mcpServers"` |
+| `max_turns` | `"maxTurns"` |
+
+Fields set to `nil` are omitted from the JSON output.
 
 ---
 

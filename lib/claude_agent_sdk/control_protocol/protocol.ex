@@ -217,6 +217,72 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   end
 
   @doc """
+  Encodes an MCP reconnect control request.
+
+  Returns `{request_id, json}`.
+  """
+  @spec encode_mcp_reconnect_request(String.t(), request_id() | nil) :: {request_id(), String.t()}
+  def encode_mcp_reconnect_request(server_name, request_id \\ nil) when is_binary(server_name) do
+    req_id = request_id || generate_request_id()
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => req_id,
+      "request" => %{
+        "subtype" => "mcp_reconnect",
+        "serverName" => server_name
+      }
+    }
+
+    {req_id, Jason.encode!(request)}
+  end
+
+  @doc """
+  Encodes an MCP toggle control request.
+
+  Returns `{request_id, json}`.
+  """
+  @spec encode_mcp_toggle_request(String.t(), boolean(), request_id() | nil) ::
+          {request_id(), String.t()}
+  def encode_mcp_toggle_request(server_name, enabled, request_id \\ nil)
+      when is_binary(server_name) and is_boolean(enabled) do
+    req_id = request_id || generate_request_id()
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => req_id,
+      "request" => %{
+        "subtype" => "mcp_toggle",
+        "serverName" => server_name,
+        "enabled" => enabled
+      }
+    }
+
+    {req_id, Jason.encode!(request)}
+  end
+
+  @doc """
+  Encodes a stop_task control request.
+
+  Returns `{request_id, json}`.
+  """
+  @spec encode_stop_task_request(String.t(), request_id() | nil) :: {request_id(), String.t()}
+  def encode_stop_task_request(task_id, request_id \\ nil) when is_binary(task_id) do
+    req_id = request_id || generate_request_id()
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => req_id,
+      "request" => %{
+        "subtype" => "stop_task",
+        "task_id" => task_id
+      }
+    }
+
+    {req_id, Jason.encode!(request)}
+  end
+
+  @doc """
   Encodes a hook callback response.
 
   Sends the result of a hook callback execution back to CLI.

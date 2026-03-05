@@ -10,15 +10,17 @@ config :claude_agent_sdk,
       "opus" => "opus",
       "sonnet" => "sonnet",
       "haiku" => "haiku",
+      "opus[1m]" => "opus[1m]",
       "sonnet[1m]" => "sonnet[1m]"
     },
     full_ids: %{
       "claude-opus-4-6" => "claude-opus-4-6",
-      "claude-sonnet-4-5-20250929" => "claude-sonnet-4-5-20250929",
+      "claude-sonnet-4-6" => "claude-sonnet-4-6",
       "claude-haiku-4-5-20251001" => "claude-haiku-4-5-20251001",
-      "claude-sonnet-4-5-20250929[1m]" => "claude-sonnet-4-5-20250929[1m]"
+      "claude-opus-4-6[1m]" => "claude-opus-4-6[1m]",
+      "claude-sonnet-4-6[1m]" => "claude-sonnet-4-6[1m]"
     },
-    default: "haiku"
+    default: "sonnet"
   }
 
 # Logger metadata used throughout the SDK (Credo strict compliance).

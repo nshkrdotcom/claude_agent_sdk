@@ -682,6 +682,33 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   end
 
   @doc """
+  Sets effort level on options.
+
+  ## Parameters
+
+  - `options` - Existing options
+  - `effort` - Effort level (`:low`, `:medium`, `:high`, or `:max`)
+  """
+  @spec with_effort(Options.t(), :low | :medium | :high | :max) :: Options.t()
+  def with_effort(%Options{} = options, effort)
+      when effort in [:low, :medium, :high, :max] do
+    %{options | effort: effort}
+  end
+
+  @doc """
+  Sets thinking configuration on options.
+
+  ## Parameters
+
+  - `options` - Existing options
+  - `config` - Thinking config map (e.g. `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: 16000}`)
+  """
+  @spec with_thinking(Options.t(), map()) :: Options.t()
+  def with_thinking(%Options{} = options, config) when is_map(config) do
+    %{options | thinking: config}
+  end
+
+  @doc """
   Adds specific model to any options.
 
   ## Parameters

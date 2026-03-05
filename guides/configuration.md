@@ -78,7 +78,9 @@ ClaudeAgentSDK.query("Refactor this code for better performance", options)
 |-------|------|---------|-------------|
 | `model` | `String.t()` | `nil` | Model selection ("opus", "sonnet", "haiku", or full model name) |
 | `fallback_model` | `String.t()` | `nil` | Fallback model when primary is busy |
-| `max_thinking_tokens` | `pos_integer()` | `nil` | Maximum tokens for model thinking |
+| `effort` | `atom()` | `nil` | Reasoning effort level (`:low`, `:medium`, `:high`, `:max`) |
+| `thinking` | `map()` | `nil` | Thinking config (`%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}`) |
+| `max_thinking_tokens` | `pos_integer()` | `nil` | Maximum tokens for model thinking (fallback when `thinking` is nil) |
 
 ### Tool Options
 
@@ -268,7 +270,7 @@ runtime, and thinking tokens, see the [Model Configuration](model-configuration.
 options = %Options{model: "sonnet"}
 
 # Using full model name (see Model Configuration guide for all valid IDs)
-options = %Options{model: "claude-sonnet-4-5-20250929"}
+options = %Options{model: "claude-sonnet-4-6"}
 
 # With fallback model
 options = %Options{

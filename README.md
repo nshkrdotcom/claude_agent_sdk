@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.14.0"}
+    {:claude_agent_sdk, "~> 0.15.0"}
   ]
 end
 ```
@@ -423,6 +423,8 @@ Key options for `ClaudeAgentSDK.Options`:
 | Option | Type | Description |
 |--------|------|-------------|
 | `model` | string | `"sonnet"`, `"opus"`, `"haiku"` |
+| `effort` | atom | `:low`, `:medium`, `:high`, `:max` — controls reasoning effort |
+| `thinking` | map | `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}` |
 | `max_turns` | integer | Maximum conversation turns |
 | `system_prompt` | string | Custom system instructions |
 | `output_format` | atom/map | `:text`, `:json`, `:stream_json`, or JSON schema (SDK enforces stream-json for transport; JSON schema still passed) |
@@ -499,6 +501,11 @@ OptionBuilder.for_environment()            # Auto-detect from Mix.env()
 OptionBuilder.build_analysis_options()     # Read-only code analysis
 OptionBuilder.build_chat_options()         # Simple chat, no tools
 OptionBuilder.quick()                      # Fast one-off queries
+
+# Effort and thinking helpers
+OptionBuilder.with_opus()
+|> OptionBuilder.with_effort(:high)
+|> OptionBuilder.with_thinking(%{type: :adaptive})
 ```
 
 ---
