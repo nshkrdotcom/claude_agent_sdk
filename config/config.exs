@@ -20,7 +20,7 @@ config :claude_agent_sdk,
       "claude-opus-4-6[1m]" => "claude-opus-4-6[1m]",
       "claude-sonnet-4-6[1m]" => "claude-sonnet-4-6[1m]"
     },
-    default: "sonnet"
+    default: "opus"
   }
 
 # Logger metadata used throughout the SDK (Credo strict compliance).

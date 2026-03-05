@@ -9,7 +9,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
   # parent_tool_use_id tests - Subagent streaming support
   # ===========================================================================
   #
-  # When Claude uses the Task tool to spawn a subagent, streaming events from
+  # When Claude uses the Agent tool to spawn a subagent, streaming events from
   # that subagent include a `parent_tool_use_id` field that identifies which
   # tool call the streaming output belongs to.
   #

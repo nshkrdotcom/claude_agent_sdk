@@ -309,13 +309,13 @@ If the CLI emits a JSON frame larger than `max_buffer_size` (default 1MB), the s
 
 ### Subagent Events (parent_tool_use_id)
 
-When Claude uses the Task tool to spawn subagents, streaming events include a `parent_tool_use_id` field that identifies which Task tool call produced the event. This is critical for building hierarchical UIs that route subagent output to the correct panel.
+When Claude uses the Agent tool to spawn subagents, streaming events include a `parent_tool_use_id` field that identifies which Agent tool call produced the event. This is critical for building hierarchical UIs that route subagent output to the correct panel.
 
 ```elixir
 # Main agent events have parent_tool_use_id: nil
 %{type: :text_delta, text: "Let me search...", parent_tool_use_id: nil}
 
-# Subagent events have parent_tool_use_id set to the Task tool call ID
+# Subagent events have parent_tool_use_id set to the Agent tool call ID
 %{type: :text_delta, text: "Found 3 files", parent_tool_use_id: "toolu_01ABC123"}
 %{type: :message_stop, parent_tool_use_id: "toolu_01ABC123"}
 ```
@@ -329,7 +329,7 @@ When Claude uses the Task tool to spawn subagents, streaming events include a `p
 **Example: Routing by source**
 
 ```elixir
-Streaming.send_message(session, "Use the Task tool to find .ex files")
+Streaming.send_message(session, "Use the Agent tool to find .ex files")
 |> Enum.each(fn event ->
   label = case event.parent_tool_use_id do
     nil -> "[MAIN]"

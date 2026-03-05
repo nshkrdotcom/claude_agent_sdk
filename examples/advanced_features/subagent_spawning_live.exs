@@ -1,11 +1,11 @@
 #!/usr/bin/env elixir
 # Subagent Spawning Example (LIVE)
-# Demonstrates using the Task tool to spawn parallel subagents.
+# Demonstrates using the Agent tool to spawn parallel subagents.
 # This mirrors the research-agent pattern from the official SDK demos.
 #
 # Run: mix run examples/advanced_features/subagent_spawning_live.exs
 #
-# The Task tool enables multi-agent coordination where a lead agent
+# The Agent tool enables multi-agent coordination where a lead agent
 # can spawn specialized subagents to work on different aspects of a problem.
 
 Code.require_file(Path.expand("../support/example_helper.exs", __DIR__))
@@ -19,7 +19,7 @@ Support.ensure_live!()
 Support.header!("Subagent Spawning Example (live)")
 
 IO.puts("""
-This example demonstrates multi-agent coordination using the Task tool.
+This example demonstrates multi-agent coordination using the Agent tool.
 A lead agent will spawn subagents to handle different aspects of a research task.
 """)
 
@@ -34,10 +34,12 @@ log_output = fn message ->
   Agent.update(output_agent, fn logs -> logs ++ [message] end)
 end
 
-# Pre-tool hook to track Task tool usage
+# Pre-tool hook to track Agent tool usage (subagent spawning)
+# Note: The CLI uses "Agent" as the tool name for subagent spawning,
+# not "Task" (which is for background tasks like TaskCreate/TaskStop).
 track_task = fn input, _tool_use_id, _context ->
   case input do
-    %{"tool_name" => "Task", "tool_input" => tool_input} ->
+    %{"tool_name" => "Agent", "tool_input" => tool_input} ->
       description = tool_input["description"] || "unknown"
       subagent_type = tool_input["subagent_type"] || "general-purpose"
 
@@ -53,7 +55,7 @@ track_task = fn input, _tool_use_id, _context ->
       )
 
       # Buffer output to avoid interleaving
-      log_output.("  [hook] Task spawned: #{description} (#{subagent_type})")
+      log_output.("  [hook] Subagent spawned: #{description} (#{subagent_type})")
 
     _ ->
       :ok
@@ -65,9 +67,9 @@ end
 # Post-tool hook to track completion
 track_completion = fn result, _tool_use_id, _context ->
   case result do
-    %{"tool_name" => "Task"} ->
+    %{"tool_name" => "Agent"} ->
       :ets.insert(:subagent_tracker, {:task_complete, DateTime.utc_now()})
-      log_output.("  [hook] Task subagent completed")
+      log_output.("  [hook] Subagent completed")
 
     _ ->
       :ok
@@ -80,8 +82,9 @@ options =
   Options.new(
     model: "haiku",
     max_turns: 8,
-    # Enable Task tool for subagent spawning
-    allowed_tools: ["Task", "Read", "Glob", "Grep"],
+    # Agent tool is always available for subagent spawning;
+    # include Read/Glob/Grep for the subagents to use
+    allowed_tools: ["Agent", "Read", "Glob", "Grep"],
     permission_mode: :bypass_permissions,
     hooks: %{
       pre_tool_use: [Matcher.new("*", [track_task])],
@@ -89,11 +92,11 @@ options =
     }
   )
 
-# The prompt asks Claude to use the Task tool to spawn subagents
+# The prompt asks Claude to use the Agent tool to spawn subagents
 # This demonstrates the multi-agent coordination pattern
 prompt = """
-I need you to demonstrate subagent spawning. Use the Task tool to spawn
-TWO subagents in parallel:
+I need you to demonstrate subagent spawning. Use the Agent tool to spawn
+TWO subagents:
 
 1. First subagent: Use subagent_type="Explore" with a quick task to find
    any .exs files in the examples directory
@@ -101,10 +104,9 @@ TWO subagents in parallel:
 2. Second subagent: Use subagent_type="Explore" with a quick task to
    count how many test files exist
 
-For each Task call, set run_in_background=false so we see the results.
 After spawning both, summarize what each subagent found.
 
-Keep responses brief - this is a demonstration of the Task tool.
+Keep responses brief - this is a demonstration of subagent spawning.
 """
 
 IO.puts("Prompt: #{String.slice(prompt, 0..200)}...\n")
@@ -165,15 +167,15 @@ IO.puts("\nSubagent Spawning Summary:")
 IO.puts(String.duplicate("-", 60))
 
 if length(task_calls) < 2 do
-  raise "Expected at least 2 Task tool calls, observed #{length(task_calls)}."
+  raise "Expected at least 2 Agent tool calls, observed #{length(task_calls)}."
 end
 
 if task_completions < 2 do
-  raise "Expected at least 2 Task completions, observed #{task_completions}."
+  raise "Expected at least 2 Agent completions, observed #{task_completions}."
 end
 
-IO.puts("Total Task tool calls: #{length(task_calls)}")
-IO.puts("Task completions: #{task_completions}")
+IO.puts("Total Agent tool calls: #{length(task_calls)}")
+IO.puts("Agent completions: #{task_completions}")
 
 Enum.each(task_calls, fn call ->
   IO.puts("  - #{call.description} (#{call.subagent_type})")
@@ -184,8 +186,8 @@ IO.puts("\n[ok] Successfully demonstrated subagent spawning!")
 IO.puts(String.duplicate("-", 60))
 
 IO.puts("\nWhat happened:")
-IO.puts("  1. Configured allowed_tools to include Task")
-IO.puts("  2. Set up hooks to track Task tool usage")
+IO.puts("  1. Configured allowed_tools to include Agent")
+IO.puts("  2. Set up hooks to track Agent tool usage")
 IO.puts("  3. Asked Claude to spawn subagents for parallel work")
 IO.puts("  4. Tracked subagent spawning via pre_tool_use hooks")
 IO.puts("  5. Summarized the multi-agent coordination")

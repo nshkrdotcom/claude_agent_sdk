@@ -24,7 +24,7 @@ config :claude_agent_sdk, :models, %{
     "claude-opus-4-6[1m]"            => "claude-opus-4-6[1m]",
     "claude-sonnet-4-6[1m]"          => "claude-sonnet-4-6[1m]"
   },
-  default: "sonnet"
+  default: "opus"
 }
 ```
 
@@ -122,11 +122,14 @@ Control how much reasoning effort Claude applies:
 ```elixir
 options = %ClaudeAgentSDK.Options{
   model: "sonnet",
-  effort: :high  # :low | :medium | :high | :max
+  effort: :high  # :low | :medium | :high
 }
 ```
 
 This emits `--effort high` to the CLI.
+
+> **Note:** Effort is not supported for Haiku models. If effort is set with a
+> Haiku model, the SDK logs a warning and silently omits the `--effort` flag.
 
 ## Thinking Configuration
 

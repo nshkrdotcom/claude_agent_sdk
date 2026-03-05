@@ -33,7 +33,7 @@ defmodule ResearchAgent.PromptLoader do
 
     Your role is to:
     1. Break down the research topic into specific sub-questions
-    2. Spawn researcher subagents using the Task tool for parallel research
+    2. Spawn researcher subagents using the Agent tool for parallel research
     3. Coordinate data collection and analysis
     4. Synthesize findings into a coherent narrative
 
@@ -88,7 +88,7 @@ defmodule ResearchAgent.PromptLoader do
     research: """
     You are a sophisticated multi-agent research system. Your capabilities include:
 
-    - Spawning specialized subagents using the Task tool for parallel research
+    - Spawning specialized subagents using the Agent tool for parallel research
     - Web searching using the WebSearch tool
     - Analyzing and synthesizing information from multiple sources
     - Producing comprehensive research reports

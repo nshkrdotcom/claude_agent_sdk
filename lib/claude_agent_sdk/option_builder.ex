@@ -687,11 +687,11 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   ## Parameters
 
   - `options` - Existing options
-  - `effort` - Effort level (`:low`, `:medium`, `:high`, or `:max`)
+  - `effort` - Effort level (`:low`, `:medium`, or `:high`). Not supported for Haiku.
   """
-  @spec with_effort(Options.t(), :low | :medium | :high | :max) :: Options.t()
+  @spec with_effort(Options.t(), :low | :medium | :high) :: Options.t()
   def with_effort(%Options{} = options, effort)
-      when effort in [:low, :medium, :high, :max] do
+      when effort in [:low, :medium, :high] do
     %{options | effort: effort}
   end
 

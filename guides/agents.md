@@ -242,7 +242,7 @@ You do not need to change your agent definitions — just upgrade to v0.11.0 and
 
 ### CLI JSON Field Mapping
 
-`Agent.to_cli_map/1` converts struct fields to the camelCase JSON keys expected by the CLI:
+`ClaudeAgentSDK.Agent.to_cli_map/1` converts struct fields to the camelCase JSON keys expected by the CLI:
 
 | Elixir Field | CLI JSON Key |
 |-------------|-------------|
@@ -1012,18 +1012,18 @@ Key modules:
 
 For more examples, see:
 - `examples/advanced_features/agents_live.exs` - Multi-agent workflow demo
-- `examples/advanced_features/subagent_spawning_live.exs` - Task tool for parallel subagent spawning
+- `examples/advanced_features/subagent_spawning_live.exs` - Agent tool for parallel subagent spawning
 - `examples/filesystem_agents_live.exs` - Filesystem agents demo
 
 ---
 
-## Subagent Spawning with Task Tool
+## Subagent Spawning with Agent Tool
 
-The Task tool enables a lead agent to spawn subagents that work in parallel on different aspects of a problem. This pattern is similar to the research-agent demo in the official SDK demos.
+The Agent tool enables a lead agent to spawn subagents that work in parallel on different aspects of a problem. This pattern is similar to the research-agent demo in the official SDK demos.
 
 ### How It Works
 
-When Claude has access to the Task tool, it can spawn specialized subagents:
+When Claude has access to the Agent tool, it can spawn specialized subagents:
 
 1. **Lead Agent**: Orchestrates the overall task and spawns subagents
 2. **Subagents**: Work on specific subtasks independently
@@ -1037,7 +1037,7 @@ alias ClaudeAgentSDK.Options
 options = Options.new(
   model: "sonnet",
   max_turns: 10,
-  allowed_tools: ["Task", "Read", "Write"],  # Task enables subagent spawning
+  allowed_tools: ["Agent", "Read", "Write"],  # Agent enables subagent spawning
   permission_mode: :bypass_permissions
 )
 
@@ -1059,10 +1059,10 @@ Use hooks to monitor subagent spawning:
 ```elixir
 alias ClaudeAgentSDK.Hooks.{Matcher, Output}
 
-# Track Task tool usage
+# Track Agent tool usage (subagent spawning)
 track_subagents = fn input, _tool_use_id, _context ->
   case input do
-    %{"tool_name" => "Task", "tool_input" => tool_input} ->
+    %{"tool_name" => "Agent", "tool_input" => tool_input} ->
       description = tool_input["description"] || "unknown"
       subagent_type = tool_input["subagent_type"] || "general-purpose"
       IO.puts("Spawning subagent: #{description} (#{subagent_type})")
@@ -1072,9 +1072,9 @@ track_subagents = fn input, _tool_use_id, _context ->
 end
 
 options = Options.new(
-  allowed_tools: ["Task", "Read", "Glob", "Grep"],
+  allowed_tools: ["Agent", "Read", "Glob", "Grep"],
   hooks: %{
-    pre_tool_use: [Matcher.new("Task", [track_subagents])]
+    pre_tool_use: [Matcher.new("Agent", [track_subagents])]
   }
 )
 ```
@@ -1084,7 +1084,7 @@ options = Options.new(
 When using the Streaming API, events include a `parent_tool_use_id` field to identify which subagent produced each event:
 
 ```elixir
-Streaming.send_message(session, "Use Task to research Elixir frameworks")
+Streaming.send_message(session, "Research Elixir frameworks using subagents")
 |> Enum.each(fn event ->
   case event.parent_tool_use_id do
     nil ->
@@ -1102,7 +1102,7 @@ See the [Streaming Guide](streaming.md#subagent-events-parent_tool_use_id) and `
 
 ### Subagent Types
 
-The Task tool supports different subagent types:
+The Agent tool supports different subagent types:
 
 | Type | Description |
 |------|-------------|

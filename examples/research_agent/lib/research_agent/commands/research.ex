@@ -103,7 +103,7 @@ defmodule ResearchAgent.Commands.Research do
       max_turns: max_turns_for_depth(parsed.depth),
       system_prompt: PromptLoader.get_system_prompt(:research),
       allowed_tools: [
-        "Task",
+        "Agent",
         "WebSearch",
         "Read",
         "Glob",
@@ -132,7 +132,7 @@ defmodule ResearchAgent.Commands.Research do
 
     Please begin by:
     1. Analyzing the topic and identifying 3-5 key sub-questions to investigate
-    2. Spawning researcher subagents (using the Task tool) to gather information on each sub-question
+    2. Spawning researcher subagents (using the Agent tool) to gather information on each sub-question
     3. Once research is complete, use an analyst subagent to extract key metrics and data
     4. Finally, use a writer subagent to produce a comprehensive report
 

@@ -15,7 +15,7 @@ defmodule ResearchAgent.HookCoordinatorTest do
       assert Map.has_key?(hooks, :post_tool_use)
     end
 
-    test "pre_tool_use hooks track Task tool spawns" do
+    test "pre_tool_use hooks track Agent tool spawns" do
       {:ok, tracker} = SubagentTracker.start_link(name: :pre_hook_tracker)
       on_exit(fn -> if Process.alive?(tracker), do: GenServer.stop(tracker) end)
 
@@ -25,9 +25,9 @@ defmodule ResearchAgent.HookCoordinatorTest do
       [matcher] = hooks.pre_tool_use
       [callback | _] = matcher.hooks
 
-      # Simulate a Task tool call
+      # Simulate an Agent tool call
       input = %{
-        "tool_name" => "Task",
+        "tool_name" => "Agent",
         "tool_input" => %{
           "description" => "Research quantum computing",
           "subagent_type" => "researcher"
@@ -57,7 +57,7 @@ defmodule ResearchAgent.HookCoordinatorTest do
       [pre_callback | _] = pre_matcher.hooks
 
       spawn_input = %{
-        "tool_name" => "Task",
+        "tool_name" => "Agent",
         "tool_input" => %{
           "description" => "Analyze data",
           "subagent_type" => "analyst"
@@ -71,7 +71,7 @@ defmodule ResearchAgent.HookCoordinatorTest do
       [post_callback | _] = post_matcher.hooks
 
       complete_input = %{
-        "tool_name" => "Task",
+        "tool_name" => "Agent",
         "tool_response" => %{"content" => "Analysis complete"}
       }
 
@@ -83,7 +83,7 @@ defmodule ResearchAgent.HookCoordinatorTest do
       assert hd(agents).status == :completed
     end
 
-    test "ignores non-Task tools" do
+    test "ignores non-Agent tools" do
       {:ok, tracker} = SubagentTracker.start_link(name: :ignore_tracker)
       on_exit(fn -> if Process.alive?(tracker), do: GenServer.stop(tracker) end)
 

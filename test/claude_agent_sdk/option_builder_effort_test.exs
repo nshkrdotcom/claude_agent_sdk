@@ -15,10 +15,10 @@ defmodule ClaudeAgentSDK.OptionBuilder.EffortThinkingTest do
     test "works in pipeline" do
       opts =
         OptionBuilder.with_opus()
-        |> OptionBuilder.with_effort(:max)
+        |> OptionBuilder.with_effort(:high)
         |> OptionBuilder.with_turn_limit(10)
 
-      assert opts.effort == :max
+      assert opts.effort == :high
       assert opts.max_turns == 10
     end
   end

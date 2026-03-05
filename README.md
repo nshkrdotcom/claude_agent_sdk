@@ -250,7 +250,7 @@ Streaming.send_message(session, "Now write one about Phoenix")
 Streaming.close_session(session)
 ```
 
-**Subagent Streaming:** When Claude spawns subagents via the Task tool, events include a `parent_tool_use_id` field to identify the source. Main agent events have `nil`, subagent events have the Task tool call ID. Streaming events also include `uuid`, `session_id`, and `raw_event` metadata for parity with the Python SDK. Stream event wrappers require `uuid` and `session_id` (missing keys raise). See the [Streaming Guide](guides/streaming.md#subagent-events-parent_tool_use_id) for details.
+**Subagent Streaming:** When Claude spawns subagents via the Agent tool, events include a `parent_tool_use_id` field to identify the source. Main agent events have `nil`, subagent events have the Agent tool call ID. Streaming events also include `uuid`, `session_id`, and `raw_event` metadata for parity with the Python SDK. Stream event wrappers require `uuid` and `session_id` (missing keys raise). See the [Streaming Guide](guides/streaming.md#subagent-events-parent_tool_use_id) for details.
 
 ### Hooks System
 
@@ -423,7 +423,7 @@ Key options for `ClaudeAgentSDK.Options`:
 | Option | Type | Description |
 |--------|------|-------------|
 | `model` | string | `"sonnet"`, `"opus"`, `"haiku"` |
-| `effort` | atom | `:low`, `:medium`, `:high`, `:max` — controls reasoning effort |
+| `effort` | atom | `:low`, `:medium`, `:high` — controls reasoning effort (not supported for Haiku) |
 | `thinking` | map | `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}` |
 | `max_turns` | integer | Maximum conversation turns |
 | `system_prompt` | string | Custom system instructions |
@@ -556,7 +556,7 @@ Complete Mix applications demonstrating production-ready SDK integration pattern
 |---------|-------------|--------------|
 | [`phoenix_chat/`](examples/phoenix_chat/README.md) | Real-time chat with Phoenix LiveView | LiveView, Channels, streaming responses, session management |
 | [`document_generation/`](examples/document_generation/README.md) | AI-powered Excel document generation | elixlsx, natural language parsing, Mix tasks |
-| [`research_agent/`](examples/research_agent/README.md) | Multi-agent research coordination | Task tool, subagent tracking via hooks, parallel execution |
+| [`research_agent/`](examples/research_agent/README.md) | Multi-agent research coordination | Agent tool, subagent tracking via hooks, parallel execution |
 | [`skill_invocation/`](examples/skill_invocation/README.md) | Skill tool usage and tracking | Skill definitions, hook-based tracking, GenServer state |
 | [`email_agent/`](examples/email_agent/README.md) | AI-powered email assistant | SQLite storage, rule-based processing, natural language queries |
 

@@ -55,11 +55,11 @@ defmodule ResearchAgent.Commands.FactCheckTest do
       assert "WebSearch" in options.allowed_tools
     end
 
-    test "enables Task tool for parallel verification" do
+    test "enables Agent tool for parallel verification" do
       parsed = %{claim: "Test claim", thoroughness: :high}
       options = FactCheck.build_options(parsed, @output_dir)
 
-      assert "Task" in options.allowed_tools
+      assert "Agent" in options.allowed_tools
     end
   end
 

@@ -2,14 +2,14 @@
 # Subagent Streaming Example (LIVE)
 #
 # Demonstrates the parent_tool_use_id field for identifying subagent output.
-# The field identifies which Task tool call produced each message,
+# The field identifies which Agent tool call produced each message,
 # enabling UIs to route output to the correct panel.
 #
 # Run: mix run examples/streaming_tools/subagent_streaming.exs
 #
 # Key concepts:
 #   - Main agent events have parent_tool_use_id: nil
-#   - Subagent messages have parent_tool_use_id: "toolu_XXX" (the Task tool call ID)
+#   - Subagent messages have parent_tool_use_id: "toolu_XXX" (the Agent tool call ID)
 #   - parent_tool_use_id appears on complete messages, not streaming deltas
 #   - This test runs through ALL turns to capture subagent messages
 
@@ -28,24 +28,24 @@ defmodule SubagentStreamingDemo do
   def run do
     print_header()
 
-    # Configure streaming with Task tool enabled
+    # Configure streaming with Agent tool enabled for subagent spawning
     # Use control client transport to exercise that code path
     options = %Options{
       model: "haiku",
       max_turns: 3,
-      allowed_tools: ["Task", "Glob"],
+      allowed_tools: ["Agent", "Glob"],
       permission_mode: :bypass_permissions,
       preferred_transport: :control
     }
 
-    IO.puts("[CONFIG] Model: haiku, Max turns: 3, Tools: [Task, Glob]\n")
+    IO.puts("[CONFIG] Model: haiku, Max turns: 3, Tools: [Agent, Glob]\n")
 
     {:ok, session} = Streaming.start_session(options)
 
     try do
-      # This prompt triggers Task tool to spawn a subagent
+      # This prompt triggers Agent tool to spawn a subagent
       prompt = """
-      Use the Task tool with subagent_type="Explore" to find any .exs files
+      Use the Agent tool with subagent_type="Explore" to find any .exs files
       in the current directory. Keep it brief - just list up to 3 files found.
       """
 
@@ -64,7 +64,7 @@ defmodule SubagentStreamingDemo do
 
       # Process ALL events through all turns - don't halt on message_stop!
       # The parent_tool_use_id appears on complete messages from subagents,
-      # which arrive in turns 2+ after the main agent calls the Task tool.
+      # which arrive in turns 2+ after the main agent calls the Agent tool.
       result =
         Streaming.send_message(session, prompt)
         |> Enum.reduce(stats, fn event, acc ->
@@ -126,7 +126,7 @@ defmodule SubagentStreamingDemo do
     IO.puts(String.duplicate("=", 60))
     IO.puts("")
     IO.puts("This example demonstrates parent_tool_use_id for routing")
-    IO.puts("output from subagents spawned via the Task tool.")
+    IO.puts("output from subagents spawned via the Agent tool.")
     IO.puts("")
     IO.puts("Note: parent_tool_use_id appears on complete messages from")
     IO.puts("subagents, not on streaming deltas. Runs through ALL turns.")
@@ -157,7 +157,7 @@ defmodule SubagentStreamingDemo do
       IO.puts("This confirms parent_tool_use_id is correctly preserved!")
     else
       IO.puts("[INFO] No subagent events detected (all parent_tool_use_id: nil)")
-      IO.puts("       The Task tool may not have spawned a subagent, or")
+      IO.puts("       The Agent tool may not have spawned a subagent, or")
       IO.puts("       the subagent completed without streaming messages.")
     end
 

@@ -85,7 +85,7 @@ defmodule ResearchAgent.Commands.FactCheck do
 
     tools =
       case parsed.thoroughness do
-        :high -> ["Task", "WebSearch", "Read"]
+        :high -> ["Agent", "WebSearch", "Read"]
         _ -> ["WebSearch", "Read"]
       end
 

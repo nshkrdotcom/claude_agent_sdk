@@ -60,7 +60,7 @@ defmodule ResearchAgent.Commands.ResearchTest do
 
       assert is_binary(options.model)
       assert is_list(options.allowed_tools)
-      assert "Task" in options.allowed_tools
+      assert "Agent" in options.allowed_tools
       assert "WebSearch" in options.allowed_tools
     end
 

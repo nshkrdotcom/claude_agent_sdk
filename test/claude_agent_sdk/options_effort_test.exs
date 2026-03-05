@@ -1,6 +1,8 @@
 defmodule ClaudeAgentSDK.Options.EffortTest do
   use ClaudeAgentSDK.SupertesterCase
 
+  import ExUnit.CaptureLog
+
   alias ClaudeAgentSDK.Options
 
   describe "effort option" do
@@ -24,11 +26,6 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert opts.effort == :high
     end
 
-    test "accepts :max" do
-      opts = Options.new(effort: :max)
-      assert opts.effort == :max
-    end
-
     test "emits --effort flag when set" do
       opts = Options.new(effort: :high)
       args = Options.to_args(opts)
@@ -42,12 +39,49 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       args = Options.to_args(opts)
       refute "--effort" in args
     end
+  end
 
-    test "emits --effort max" do
-      opts = Options.new(effort: :max)
+  describe "effort + haiku gating" do
+    test "strips effort when model is haiku short form" do
+      opts = Options.new(effort: :high, model: "haiku")
+
+      log =
+        capture_log(fn ->
+          args = Options.to_args(opts)
+          refute "--effort" in args
+        end)
+
+      assert log =~ "not supported for Haiku"
+    end
+
+    test "strips effort when model is haiku full ID" do
+      opts = Options.new(effort: :medium, model: "claude-haiku-4-5-20251001")
+
+      log =
+        capture_log(fn ->
+          args = Options.to_args(opts)
+          refute "--effort" in args
+        end)
+
+      assert log =~ "not supported for Haiku"
+    end
+
+    test "allows effort on opus" do
+      opts = Options.new(effort: :high, model: "opus")
       args = Options.to_args(opts)
-      idx = Enum.find_index(args, &(&1 == "--effort"))
-      assert Enum.at(args, idx + 1) == "max"
+      assert "--effort" in args
+    end
+
+    test "allows effort on sonnet" do
+      opts = Options.new(effort: :low, model: "sonnet")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+    end
+
+    test "allows effort when model is nil" do
+      opts = Options.new(effort: :high, model: nil)
+      args = Options.to_args(opts)
+      assert "--effort" in args
     end
   end
 end

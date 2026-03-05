@@ -24,7 +24,7 @@ defmodule ClaudeAgentSDK.Model do
           "claude-opus-4-6[1m]"        => "claude-opus-4-6[1m]",
           "claude-sonnet-4-6[1m]"      => "claude-sonnet-4-6[1m]"
         },
-        default: "sonnet"
+        default: "opus"
       }
 
   SDK consumers can add custom models at runtime:
@@ -69,7 +69,7 @@ defmodule ClaudeAgentSDK.Model do
   @spec default_model() :: String.t()
   def default_model do
     config = Application.get_env(:claude_agent_sdk, :models, %{})
-    Map.get(config, :default, "haiku")
+    Map.get(config, :default, "opus")
   end
 
   @doc """

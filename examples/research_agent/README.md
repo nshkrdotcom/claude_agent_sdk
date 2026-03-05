@@ -153,7 +153,7 @@ research_output/
 The `SubagentTracker` uses ETS for concurrent tracking of subagent state:
 
 ```elixir
-# Hooks track Task tool usage
+# Hooks track Agent tool usage (subagent spawning)
 hooks = %{
   pre_tool_use: [
     Matcher.new("*", [&track_spawn/3])
@@ -163,20 +163,20 @@ hooks = %{
   ]
 }
 
-# When Task tool is called, the hook records the spawn
+# When Agent tool is called, the hook records the spawn
 def track_spawn(input, tool_use_id, _context) do
   case input do
-    %{"tool_name" => "Task", "tool_input" => %{"subagent_type" => type}} ->
+    %{"tool_name" => "Agent", "tool_input" => %{"subagent_type" => type}} ->
       SubagentTracker.track_spawn(tracker, tool_use_id, type, metadata)
       Output.allow()
     _ -> %{}
   end
 end
 
-# When Task completes, the hook records completion
+# When Agent completes, the hook records completion
 def track_complete(input, tool_use_id, _context) do
   case input do
-    %{"tool_name" => "Task", "tool_response" => result} ->
+    %{"tool_name" => "Agent", "tool_response" => result} ->
       SubagentTracker.track_complete(tracker, tool_use_id, result)
     _ -> :ok
   end
@@ -241,11 +241,11 @@ hooks = %{
 }
 ```
 
-### 2. Task Tool for Subagents
+### 2. Agent Tool for Subagents
 
 ```elixir
-# The Task tool enables parallel subagent execution
-allowed_tools: ["Task", "WebSearch", "Read", "Write"]
+# The Agent tool enables parallel subagent execution
+allowed_tools: ["Agent", "WebSearch", "Read", "Write"]
 ```
 
 ### 3. Structured Output

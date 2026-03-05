@@ -42,9 +42,9 @@ defmodule ClaudeAgentSDK.Config.ModelRegistryTest do
       assert Map.has_key?(models.full_ids, "claude-haiku-4-5-20251001")
     end
 
-    test "default model is sonnet" do
+    test "default model is opus" do
       models = Application.get_env(:claude_agent_sdk, :models)
-      assert models.default == "sonnet"
+      assert models.default == "opus"
     end
   end
 end

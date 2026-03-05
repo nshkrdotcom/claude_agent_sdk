@@ -139,7 +139,7 @@ defmodule ClaudeAgentSDK.Options do
     :preferred_transport,
     :user,
     :max_thinking_tokens,
-    # Effort level (:low, :medium, :high, :max)
+    # Effort level (:low, :medium, :high)
     :effort,
     # Thinking config (%{type: :adaptive | :enabled | :disabled, budget_tokens: integer()})
     :thinking,
@@ -296,7 +296,7 @@ defmodule ClaudeAgentSDK.Options do
           stderr: (String.t() -> any()) | nil,
           user: String.t() | nil,
           max_thinking_tokens: pos_integer() | nil,
-          effort: :low | :medium | :high | :max | nil,
+          effort: :low | :medium | :high | nil,
           thinking: map() | nil
         }
 
@@ -906,10 +906,31 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_effort_args(args, %{effort: nil}), do: args
 
+  defp add_effort_args(args, %{effort: effort, model: model})
+       when effort in [:low, :medium, :high] do
+    if haiku_model?(model) do
+      require Logger
+      Logger.warning("Effort level is not supported for Haiku models; ignoring effort: #{effort}")
+      args
+    else
+      args ++ ["--effort", to_string(effort)]
+    end
+  end
+
   defp add_effort_args(args, %{effort: effort})
-       when effort in [:low, :medium, :high, :max] do
+       when effort in [:low, :medium, :high] do
     args ++ ["--effort", to_string(effort)]
   end
+
+  @haiku_patterns ["haiku", "claude-haiku"]
+  defp haiku_model?(nil), do: false
+
+  defp haiku_model?(model) when is_binary(model) do
+    downcased = String.downcase(model)
+    Enum.any?(@haiku_patterns, &String.contains?(downcased, &1))
+  end
+
+  defp haiku_model?(_), do: false
 
   # Thinking config takes precedence over raw max_thinking_tokens.
   # Resolution: thinking.type :enabled -> budget_tokens, :adaptive -> fallback or 32000,

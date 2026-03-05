@@ -6,7 +6,7 @@
 #
 # ## Background
 #
-# When Claude uses the Task tool to spawn a subagent, messages include a
+# When Claude uses the Agent tool to spawn a subagent, messages include a
 # `parent_tool_use_id` field that identifies which tool call produced them.
 # This is CRITICAL for:
 #
@@ -17,7 +17,7 @@
 # ## Expected Behavior
 #
 # - Main agent events: parent_tool_use_id = nil
-# - Subagent events: parent_tool_use_id = "toolu_xxx" (the Task tool call ID)
+# - Subagent events: parent_tool_use_id = "toolu_xxx" (the Agent tool call ID)
 #
 # ## Important: Where parent_tool_use_id Appears
 #
@@ -31,7 +31,7 @@
 # 2. The uuid/session_id metadata fields EXISTS on all events
 # 3. The raw_event payload is preserved on all events
 # 4. Main agent events correctly have nil parent_tool_use_id
-# 5. Subagent messages have the Task tool ID (non-nil)
+# 5. Subagent messages have the Agent tool ID (non-nil)
 #
 # Run with: mix run examples/streaming_tools/parent_tool_use_id_gap.exs
 # ============================================================================
@@ -46,7 +46,7 @@ defmodule ParentToolUseIdVerification do
   Verifies that stream_event metadata is preserved on all events.
 
   This example:
-  1. Sends a prompt that triggers Task tool usage (spawns subagent)
+  1. Sends a prompt that triggers Agent tool usage (spawns subagent)
   2. Runs through ALL turns (not just the first message_stop)
   3. Checks that parent_tool_use_id field EXISTS on all events
   4. Checks that uuid/session_id/raw_event fields exist on all events
@@ -61,19 +61,19 @@ defmodule ParentToolUseIdVerification do
 
     print_header()
 
-    # Configure streaming with Task tool enabled
+    # Configure streaming with Agent tool enabled
     options = %Options{
       # Fast model for demo
       model: "haiku",
       # Allow subagent execution
       max_turns: 3,
-      # Enable Task tool for subagents
-      tools: ["Task"],
+      # Enable Agent tool for subagents
+      tools: ["Agent"],
       preferred_transport: :control
     }
 
-    IO.puts("\n[CONFIG] Starting streaming session with Task tool enabled...")
-    IO.puts("[CONFIG] Model: haiku, Max turns: 3, Tools: [Task]\n")
+    IO.puts("\n[CONFIG] Starting streaming session with Agent tool enabled...")
+    IO.puts("[CONFIG] Model: haiku, Max turns: 3, Tools: [Agent]\n")
 
     {:ok, session} = Streaming.start_session(options)
 
@@ -87,9 +87,9 @@ defmodule ParentToolUseIdVerification do
       IO.puts("=" |> String.duplicate(72))
       IO.puts("")
 
-      # This prompt should trigger the Task tool to spawn a subagent
+      # This prompt should trigger the Agent tool to spawn a subagent
       prompt = """
-      Use the Task tool to delegate this to a subagent:
+      Use the Agent tool to delegate this to a subagent:
       Have the subagent count from 1 to 5, saying each number on a new line.
       The subagent should respond with ONLY the numbers, nothing else.
       """
@@ -118,7 +118,7 @@ defmodule ParentToolUseIdVerification do
 
       # Process ALL events through all turns - don't halt on message_stop!
       # The parent_tool_use_id appears on complete messages from subagents,
-      # which arrive in turns 2+ after the main agent calls the Task tool.
+      # which arrive in turns 2+ after the main agent calls the Agent tool.
       result =
         Streaming.send_message(session, prompt)
         |> Enum.reduce(events_received, fn event, acc ->
@@ -319,7 +319,7 @@ defmodule ParentToolUseIdVerification do
           IO.puts("This confirms parent_tool_use_id is correctly preserved!")
         else
           IO.puts("[INFO] All events are from main agent (parent_tool_use_id: nil)")
-          IO.puts("       The Task tool may not have spawned a subagent, or")
+          IO.puts("       The Agent tool may not have spawned a subagent, or")
           IO.puts("       the subagent completed without streaming messages.")
         end
 

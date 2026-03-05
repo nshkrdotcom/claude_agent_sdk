@@ -5,13 +5,13 @@ defmodule ResearchAgent.HookCoordinator do
   The HookCoordinator creates Claude SDK hook callbacks that automatically
   track subagent spawn and completion events. This enables:
 
-  - Automatic tracking of Task tool usage
+  - Automatic tracking of Agent tool usage (subagent spawning)
   - Coordination between multiple parallel research agents
   - Audit logging of all tool calls
 
   ## Hook Types
 
-  - `pre_tool_use` - Tracks Task tool spawns, records metadata
+  - `pre_tool_use` - Tracks Agent tool spawns, records metadata
   - `post_tool_use` - Marks agents as completed, captures results
 
   ## Example
@@ -90,7 +90,7 @@ defmodule ResearchAgent.HookCoordinator do
   defp create_spawn_tracker(tracker) do
     fn input, tool_use_id, _context ->
       case input do
-        %{"tool_name" => "Task", "tool_input" => tool_input} ->
+        %{"tool_name" => "Agent", "tool_input" => tool_input} ->
           description = Map.get(tool_input, "description", "unknown task")
           subagent_type = Map.get(tool_input, "subagent_type", "general")
 
@@ -100,13 +100,13 @@ defmodule ResearchAgent.HookCoordinator do
             spawned_at_iso: DateTime.utc_now() |> DateTime.to_iso8601()
           })
 
-          Logger.info("[HookCoordinator] Task spawned: #{description} (#{subagent_type})")
+          Logger.info("[HookCoordinator] Agent spawned: #{description} (#{subagent_type})")
 
           # Allow the tool to proceed
           Output.allow("Subagent tracked: #{tool_use_id}")
 
         _ ->
-          # Not a Task tool, pass through
+          # Not an Agent tool, pass through
           %{}
       end
     end
@@ -121,12 +121,12 @@ defmodule ResearchAgent.HookCoordinator do
 
   defp handle_completion(
          tracker,
-         %{"tool_name" => "Task", "tool_response" => response},
+         %{"tool_name" => "Agent", "tool_response" => response},
          tool_use_id
        ) do
     result = extract_task_result(response)
     SubagentTracker.track_complete(tracker, tool_use_id, result)
-    Logger.info("[HookCoordinator] Task completed: #{tool_use_id}")
+    Logger.info("[HookCoordinator] Agent completed: #{tool_use_id}")
     %{}
   end
 
