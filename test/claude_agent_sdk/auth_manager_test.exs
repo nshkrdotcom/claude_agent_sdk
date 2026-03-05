@@ -2,6 +2,7 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
   use ExUnit.Case, async: false
 
   alias ClaudeAgentSDK.AuthManager
+  alias ClaudeAgentSDK.TestEnvHelpers
 
   # Mock storage backend for testing using ETS
   defmodule MockStorage do
@@ -443,6 +444,23 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
       assert {:ok, "aws-bedrock"} = Task.await(task_one, 1_000)
       assert {:ok, "aws-bedrock"} = Task.await(task_two, 1_000)
       assert InstrumentedStorage.save_calls() == 1
+    end
+
+    test "setup_token returns strict task supervisor error without crashing manager" do
+      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
+      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
+      System.put_env("AWS_PROFILE", "test-profile")
+
+      TestEnvHelpers.with_task_supervisor_env(
+        :missing_auth_manager_task_supervisor,
+        true,
+        fn ->
+          assert {:error, {:task_supervisor_unavailable, :missing_auth_manager_task_supervisor}} =
+                   AuthManager.setup_token()
+
+          assert Process.alive?(Process.whereis(AuthManager))
+        end
+      )
     end
 
     test "stale refresh messages are ignored after auth is cleared" do

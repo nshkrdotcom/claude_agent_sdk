@@ -83,6 +83,72 @@ defmodule ClaudeAgentSDK.SessionStoreTest do
     end)
   end
 
+  test "save_session rejects traversal session IDs", %{storage_dir: storage_dir} do
+    escaped_name = escaped_sibling_name(storage_dir)
+    escaped_session_id = "../#{escaped_name}"
+    escaped_path = sibling_session_path(storage_dir, escaped_name)
+
+    refute File.exists?(escaped_path)
+
+    assert {:error, :invalid_session_id} =
+             SessionStore.save_session(escaped_session_id, sample_messages())
+
+    refute File.exists?(escaped_path)
+  end
+
+  test "load_session rejects traversal session IDs", %{storage_dir: storage_dir} do
+    escaped_name = escaped_sibling_name(storage_dir)
+    escaped_session_id = "../#{escaped_name}"
+    escaped_path = sibling_session_path(storage_dir, escaped_name)
+
+    File.write!(
+      escaped_path,
+      Jason.encode!(%{
+        session_id: escaped_session_id,
+        messages: [],
+        metadata: %{}
+      })
+    )
+
+    assert {:error, :invalid_session_id} = SessionStore.load_session(escaped_session_id)
+    assert File.exists?(escaped_path)
+  end
+
+  test "delete_session rejects traversal session IDs", %{storage_dir: storage_dir} do
+    escaped_name = escaped_sibling_name(storage_dir)
+    escaped_session_id = "../#{escaped_name}"
+    escaped_path = sibling_session_path(storage_dir, escaped_name)
+    File.write!(escaped_path, "{}")
+
+    assert {:error, :invalid_session_id} = SessionStore.delete_session(escaped_session_id)
+    assert File.exists?(escaped_path)
+  end
+
+  test "save_session preserves created_at for existing sessions" do
+    session_id = "created-at-session"
+
+    assert :ok = SessionStore.save_session(session_id, sample_messages(), tags: ["first"])
+    assert {:ok, first_save} = SessionStore.load_session(session_id)
+
+    Process.sleep(5)
+
+    assert :ok =
+             SessionStore.save_session(session_id, sample_messages(),
+               tags: ["second"],
+               description: "updated"
+             )
+
+    assert {:ok, second_save} = SessionStore.load_session(session_id)
+
+    assert second_save.metadata.created_at == first_save.metadata.created_at
+
+    assert DateTime.compare(second_save.metadata.updated_at, first_save.metadata.updated_at) ==
+             :gt
+
+    assert second_save.metadata.tags == ["second"]
+    assert second_save.metadata.description == "updated"
+  end
+
   defp insert_old_session(session_id, storage_dir) do
     write_legacy_session_file(storage_dir, session_id,
       created_at: DateTime.add(DateTime.utc_now(), -7_200, :second),
@@ -140,6 +206,16 @@ defmodule ClaudeAgentSDK.SessionStoreTest do
         raw: %{}
       }
     ]
+  end
+
+  defp sibling_session_path(storage_dir, session_id) do
+    storage_dir
+    |> Path.dirname()
+    |> Path.join("#{session_id}.json")
+  end
+
+  defp escaped_sibling_name(storage_dir) do
+    Path.basename(storage_dir) <> "_escaped"
   end
 
   defp assert_eventually(fun, attempts \\ 20)

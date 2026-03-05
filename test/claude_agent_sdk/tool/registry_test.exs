@@ -3,8 +3,9 @@ defmodule ClaudeAgentSDK.Tool.RegistryTest do
   Tests for Tool.Registry GenServer that manages tool registration and lookup.
   """
 
-  use ClaudeAgentSDK.SupertesterCase, isolation: :basic
+  use ExUnit.Case, async: false
 
+  alias ClaudeAgentSDK.TestEnvHelpers
   alias ClaudeAgentSDK.Tool.Registry
 
   setup do
@@ -212,6 +213,29 @@ defmodule ClaudeAgentSDK.Tool.RegistryTest do
 
       assert message =~ "timed out"
       assert {:ok, _tools} = Registry.list_tools(registry)
+    end
+
+    test "returns structured error instead of crashing in strict task supervisor mode", %{
+      registry: registry
+    } do
+      missing_supervisor = :missing_tool_registry_task_supervisor
+
+      TestEnvHelpers.with_task_supervisor_env(missing_supervisor, true, fn ->
+        tool = %{
+          name: "strict_tool",
+          description: "Strict",
+          input_schema: %{},
+          module: MockExecutor
+        }
+
+        Registry.register_tool(registry, tool)
+
+        assert {:error, %{"is_error" => true, "content" => [%{"text" => message}]}} =
+                 Registry.execute_tool(registry, "strict_tool", %{"a" => 1, "b" => 2})
+
+        assert message =~ "task supervisor"
+        assert Process.alive?(registry)
+      end)
     end
   end
 

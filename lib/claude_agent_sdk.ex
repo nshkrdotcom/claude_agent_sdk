@@ -32,7 +32,7 @@ defmodule ClaudeAgentSDK do
   The SDK will use the stored authentication from your interactive Claude session.
   """
 
-  alias ClaudeAgentSDK.{Options, Query}
+  alias ClaudeAgentSDK.{Options, Query, SDKMCP}
 
   @doc """
   Runs a query against Claude Code and returns a stream of messages.
@@ -154,6 +154,9 @@ defmodule ClaudeAgentSDK do
   - `:version` - Server version (defaults to "1.0.0")
   - `:registry_pid` - PID of the tool registry GenServer
 
+  When `:supervisor` is omitted, the registry runs under the SDK's internal
+  SDK MCP supervisor, so it stays alive independently of the creating process.
+
   ## Examples
 
       defmodule MyTools do
@@ -223,28 +226,10 @@ defmodule ClaudeAgentSDK do
   end
 
   defp start_sdk_registry(nil) do
-    {:ok, registry_pid} = ClaudeAgentSDK.Tool.Registry.start_link([])
-    registry_pid
+    SDKMCP.Supervisor.start_registry()
   end
 
   defp start_sdk_registry(supervisor) do
-    child_spec = %{
-      id: {ClaudeAgentSDK.Tool.Registry, make_ref()},
-      start: {ClaudeAgentSDK.Tool.Registry, :start_link, [[]]},
-      restart: :temporary,
-      type: :worker
-    }
-
-    case DynamicSupervisor.start_child(supervisor, child_spec) do
-      {:ok, registry_pid} ->
-        registry_pid
-
-      {:error, {:already_started, registry_pid}} ->
-        registry_pid
-
-      {:error, reason} ->
-        raise ArgumentError,
-              "failed to start SDK MCP Tool.Registry under supervisor #{inspect(supervisor)}: #{inspect(reason)}"
-    end
+    SDKMCP.Supervisor.start_registry(supervisor)
   end
 end

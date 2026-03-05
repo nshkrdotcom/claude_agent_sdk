@@ -56,11 +56,12 @@ defmodule ClaudeAgentSDK.Session.History do
   @spec list_sessions(keyword()) :: [SessionInfo.t()]
   def list_sessions(opts \\ []) do
     projects_dir = Keyword.get(opts, :projects_dir, default_projects_dir())
+    directory = Keyword.get(opts, :directory)
     limit = Keyword.get(opts, :limit)
 
     sessions =
       projects_dir
-      |> find_jsonl_files()
+      |> find_jsonl_files(directory)
       |> Enum.map(&parse_session_file/1)
       |> Enum.reject(&is_nil/1)
       |> Enum.sort_by(& &1.last_modified, :desc)
@@ -111,11 +112,19 @@ defmodule ClaudeAgentSDK.Session.History do
     Path.join([System.user_home!(), ".claude", "projects"])
   end
 
-  defp find_jsonl_files(projects_dir) do
+  defp find_jsonl_files(projects_dir, directory) do
     projects_dir
-    |> list_dir()
+    |> project_directories(directory)
     |> Enum.flat_map(&list_jsonl_in_dir(projects_dir, &1))
   end
+
+  defp project_directories(projects_dir, nil), do: list_dir(projects_dir)
+
+  defp project_directories(projects_dir, directory) when is_binary(directory) do
+    if File.dir?(Path.join(projects_dir, directory)), do: [directory], else: []
+  end
+
+  defp project_directories(_projects_dir, _directory), do: []
 
   defp list_jsonl_in_dir(base, entry) do
     dir = Path.join(base, entry)

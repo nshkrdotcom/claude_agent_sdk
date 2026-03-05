@@ -203,6 +203,43 @@ defmodule ClaudeAgentSDK.Session.HistoryTest do
       assert session.custom_title == "My Custom Title"
       assert session.summary == "My Custom Title"
     end
+
+    test "filters sessions to a specific project directory", %{tmp_dir: tmp_dir} do
+      selected_dir = Path.join(tmp_dir, "-selected-project")
+      ignored_dir = Path.join(tmp_dir, "-ignored-project")
+
+      File.mkdir_p!(selected_dir)
+      File.mkdir_p!(ignored_dir)
+
+      selected_uuid = "00000000-0000-0000-0000-000000000010"
+      ignored_uuid = "00000000-0000-0000-0000-000000000011"
+
+      File.write!(
+        Path.join(selected_dir, "#{selected_uuid}.jsonl"),
+        Jason.encode!(%{
+          "type" => "user",
+          "uuid" => "selected",
+          "sessionId" => selected_uuid,
+          "message" => %{"role" => "user", "content" => "Selected session"}
+        })
+      )
+
+      File.write!(
+        Path.join(ignored_dir, "#{ignored_uuid}.jsonl"),
+        Jason.encode!(%{
+          "type" => "user",
+          "uuid" => "ignored",
+          "sessionId" => ignored_uuid,
+          "message" => %{"role" => "user", "content" => "Ignored session"}
+        })
+      )
+
+      sessions =
+        History.list_sessions(projects_dir: tmp_dir, directory: Path.basename(selected_dir))
+
+      assert Enum.map(sessions, & &1.session_id) == [selected_uuid]
+      assert Enum.all?(sessions, &(&1.project_path == selected_dir))
+    end
   end
 
   describe "get_session_messages/2" do

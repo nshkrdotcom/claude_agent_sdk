@@ -281,30 +281,33 @@ defmodule ClaudeAgentSDK.Tool.Registry do
     execution_ref = make_ref()
     server = self()
 
-    {:ok, pid} =
-      TaskSupervisor.start_child(fn ->
-        result = execute_tool_safely(tool, input)
-        send(server, {:tool_execution_result, execution_ref, result})
-      end)
+    case TaskSupervisor.start_child(fn ->
+           result = execute_tool_safely(tool, input)
+           send(server, {:tool_execution_result, execution_ref, result})
+         end) do
+      {:ok, pid} ->
+        monitor_ref = Process.monitor(pid)
 
-    monitor_ref = Process.monitor(pid)
+        timeout_ref =
+          Process.send_after(
+            self(),
+            {:tool_execution_timeout, execution_ref},
+            execution_timeout_ms()
+          )
 
-    timeout_ref =
-      Process.send_after(
-        self(),
-        {:tool_execution_timeout, execution_ref},
-        execution_timeout_ms()
-      )
+        pending_executions =
+          Map.put(state.pending_executions, execution_ref, %{
+            from: from,
+            pid: pid,
+            monitor_ref: monitor_ref,
+            timeout_ref: timeout_ref
+          })
 
-    pending_executions =
-      Map.put(state.pending_executions, execution_ref, %{
-        from: from,
-        pid: pid,
-        monitor_ref: monitor_ref,
-        timeout_ref: timeout_ref
-      })
+        {:noreply, %{state | pending_executions: pending_executions}}
 
-    {:noreply, %{state | pending_executions: pending_executions}}
+      {:error, reason} ->
+        {:reply, tool_error(task_start_error_message(reason)), state}
+    end
   end
 
   defp pop_execution(state, execution_ref) do
@@ -353,6 +356,10 @@ defmodule ClaudeAgentSDK.Tool.Registry do
        ],
        "is_error" => true
      }}
+  end
+
+  defp task_start_error_message({:task_supervisor_unavailable, supervisor}) do
+    "Tool execution unavailable: task supervisor #{inspect(supervisor)} is not running"
   end
 
   defp execute_tool_safely(tool, input) do

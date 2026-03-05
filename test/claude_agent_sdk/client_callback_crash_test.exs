@@ -9,11 +9,13 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
   4. Continues operating normally
   """
 
-  use ClaudeAgentSDK.SupertesterCase
+  use ExUnit.Case, async: false
   @moduletag capture_log: true
 
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.Hooks.{Matcher, Registry}
+  alias ClaudeAgentSDK.SupertesterCase
+  alias ClaudeAgentSDK.TestEnvHelpers
   alias ClaudeAgentSDK.TestSupport.MockTransport
 
   @hook_input %{
@@ -256,6 +258,86 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
 
       state = :sys.get_state(client)
       assert state.pending_callbacks == %{}
+    end
+  end
+
+  describe "strict task supervisor errors" do
+    test "hook callbacks return protocol error instead of crashing client" do
+      TestEnvHelpers.with_task_supervisor_env(:missing_client_task_supervisor, true, fn ->
+        callback = fn _input, _tool_use_id, _context -> %{} end
+
+        options = %Options{
+          hooks: %{
+            pre_tool_use: [
+              Matcher.new("Bash", [callback])
+            ]
+          }
+        }
+
+        {:ok, client} =
+          Client.start_link(options,
+            transport: MockTransport,
+            transport_opts: [test_pid: self()]
+          )
+
+        on_exit(fn -> safe_stop(client) end)
+
+        assert_receive {:mock_transport_started, transport}, 1_000
+        assert_receive {:mock_transport_send, _}, 1_000
+
+        state = :sys.get_state(client)
+        callback_id = Registry.get_id(state.registry, callback)
+        request_id = "req_hook_strict_mode"
+
+        send_hook_request(transport, callback_id, request_id)
+
+        response =
+          SupertesterCase.eventually(
+            fn -> find_response(transport, request_id) end,
+            timeout: 2_000
+          )
+
+        assert response["response"]["subtype"] == "error"
+        assert response["response"]["error"] =~ "task supervisor"
+        assert Process.alive?(client)
+        assert :sys.get_state(client).pending_callbacks == %{}
+      end)
+    end
+
+    test "permission callbacks return protocol error instead of crashing client" do
+      TestEnvHelpers.with_task_supervisor_env(:missing_client_task_supervisor, true, fn ->
+        callback = fn _context -> :allow end
+
+        options = %Options{
+          can_use_tool: callback,
+          permission_mode: :default
+        }
+
+        {:ok, client} =
+          Client.start_link(options,
+            transport: MockTransport,
+            transport_opts: [test_pid: self()]
+          )
+
+        on_exit(fn -> safe_stop(client) end)
+
+        assert_receive {:mock_transport_started, transport}, 1_000
+        assert_receive {:mock_transport_send, _}, 1_000
+
+        request_id = "req_permission_strict_mode"
+        send_permission_request(transport, request_id)
+
+        response =
+          SupertesterCase.eventually(
+            fn -> find_permission_response(transport, request_id) end,
+            timeout: 2_000
+          )
+
+        assert response["response"]["subtype"] == "error"
+        assert response["response"]["error"] =~ "task supervisor"
+        assert Process.alive?(client)
+        assert :sys.get_state(client).pending_callbacks == %{}
+      end)
     end
   end
 

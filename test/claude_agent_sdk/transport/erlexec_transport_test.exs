@@ -14,6 +14,33 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
              )
   end
 
+  test "start_link preserves OTP ancestor metadata" do
+    script =
+      create_test_script("""
+      while read -r line; do
+        echo "$line"
+      done
+      """)
+
+    {:ok, transport} = ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+
+    try do
+      assert {:dictionary, dictionary} = Process.info(transport, :dictionary)
+      assert {:"$ancestors", ancestors} = List.keyfind(dictionary, :"$ancestors", 0)
+      assert self() in ancestors
+    after
+      ErlexecTransport.close(transport)
+    end
+  end
+
+  test "start_link delegates directly to GenServer.start_link without manual linking" do
+    start_link_form = function_form!(ErlexecTransport, :start_link, 1)
+
+    assert contains_remote_call?(start_link_form, GenServer, :start_link)
+    refute contains_local_call?(start_link_form, :start)
+    refute contains_remote_call?(start_link_form, Process, :link)
+  end
+
   test "streams stdout lines to subscribers and routes stderr to callback" do
     test_pid = self()
 
@@ -564,4 +591,53 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
       timeout -> Enum.reverse(acc)
     end
   end
+
+  defp function_form!(module, name, arity) do
+    beam_path = :code.which(module)
+
+    {:ok, {_, [abstract_code: {:raw_abstract_v1, forms}]}} =
+      :beam_lib.chunks(beam_path, [:abstract_code])
+
+    Enum.find(forms, fn
+      {:function, _, ^name, ^arity, _clauses} -> true
+      _other -> false
+    end) || raise "function #{inspect(module)}.#{name}/#{arity} not found in abstract code"
+  end
+
+  defp contains_remote_call?(term, module, function)
+
+  defp contains_remote_call?(
+         {:call, _, {:remote, _, {:atom, _, module}, {:atom, _, function}}, _},
+         module,
+         function
+       ),
+       do: true
+
+  defp contains_remote_call?(term, module, function) when is_tuple(term) do
+    term
+    |> Tuple.to_list()
+    |> Enum.any?(&contains_remote_call?(&1, module, function))
+  end
+
+  defp contains_remote_call?(term, module, function) when is_list(term) do
+    Enum.any?(term, &contains_remote_call?(&1, module, function))
+  end
+
+  defp contains_remote_call?(_term, _module, _function), do: false
+
+  defp contains_local_call?(term, function)
+
+  defp contains_local_call?({:call, _, {:atom, _, function}, _}, function), do: true
+
+  defp contains_local_call?(term, function) when is_tuple(term) do
+    term
+    |> Tuple.to_list()
+    |> Enum.any?(&contains_local_call?(&1, function))
+  end
+
+  defp contains_local_call?(term, function) when is_list(term) do
+    Enum.any?(term, &contains_local_call?(&1, function))
+  end
+
+  defp contains_local_call?(_term, _function), do: false
 end

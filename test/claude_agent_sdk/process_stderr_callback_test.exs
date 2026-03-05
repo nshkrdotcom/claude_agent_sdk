@@ -17,9 +17,33 @@ defmodule ClaudeAgentSDK.ProcessStderrCallbackTest do
       stderr: fn line -> send(test_pid, {:stderr_line, line}) end
     }
 
+    messages = Process.stream(["--print"], options, "") |> Enum.to_list()
+
+    assert_receive {:stderr_line, "ERR_LINE"}, 1_000
+    assert Enum.any?(messages, &(&1.type == :system))
+  end
+
+  test "buffers split stderr chunks until a full line is available" do
+    test_pid = self()
+
+    script =
+      create_test_script("""
+      printf "ERR" 1>&2
+      sleep 0.1
+      printf "_LINE\\n" 1>&2
+      echo '{"type":"system","subtype":"init","session_id":"s"}'
+      """)
+
+    options = %Options{
+      executable: script,
+      stderr: fn line -> send(test_pid, {:stderr_line, line}) end
+    }
+
     messages = Process.stream(["--print"], options, nil) |> Enum.to_list()
 
     assert_receive {:stderr_line, "ERR_LINE"}, 1_000
+    refute_receive {:stderr_line, "ERR"}, 100
+    refute_receive {:stderr_line, "_LINE"}, 100
     assert Enum.any?(messages, &(&1.type == :system))
   end
 

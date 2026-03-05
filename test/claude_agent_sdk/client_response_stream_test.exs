@@ -67,4 +67,26 @@ defmodule ClaudeAgentSDK.ClientResponseStreamTest do
 
     assert env["CLAUDE_CODE_ENTRYPOINT"] == "sdk-elixir-client"
   end
+
+  test "client preserves explicit atom-key entrypoint env overrides" do
+    {:ok, client} =
+      Client.start_link(%Options{env: %{:CLAUDE_CODE_ENTRYPOINT => "custom-entrypoint"}},
+        transport: MockTransport,
+        transport_opts: [test_pid: self()]
+      )
+
+    try do
+      state = :sys.get_state(client)
+      env = state.options.env || %{}
+
+      assert env[:CLAUDE_CODE_ENTRYPOINT] == "custom-entrypoint"
+      refute Map.has_key?(env, "CLAUDE_CODE_ENTRYPOINT")
+    after
+      try do
+        Client.stop(client)
+      catch
+        :exit, _ -> :ok
+      end
+    end
+  end
 end

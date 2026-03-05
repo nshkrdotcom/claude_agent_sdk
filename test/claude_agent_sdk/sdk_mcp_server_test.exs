@@ -264,6 +264,31 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
       assert active >= 1
     end
 
+    test "unsupervised registry survives creator process crashes" do
+      parent = self()
+
+      {creator_pid, monitor_ref} =
+        spawn_monitor(fn ->
+          server =
+            ClaudeAgentSDK.create_sdk_mcp_server(
+              name: "creator-owned-server",
+              version: "1.0.0",
+              tools: [CalculatorTools.Add]
+            )
+
+          send(parent, {:server_created, server})
+          exit(:boom)
+        end)
+
+      assert_receive {:server_created, server}
+      assert_receive {:DOWN, ^monitor_ref, :process, ^creator_pid, :boom}
+
+      assert Process.alive?(server.registry_pid)
+
+      assert {:ok, [%{name: "add"}]} =
+               Tool.Registry.list_tools(server.registry_pid)
+    end
+
     test "can create multiple SDK MCP servers under the same supervisor" do
       {:ok, supervisor} = DynamicSupervisor.start_link(strategy: :one_for_one)
 

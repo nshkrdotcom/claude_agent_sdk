@@ -31,7 +31,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
   This module detects and validates all supported authentication methods.
   """
 
-  alias ClaudeAgentSDK.{CLI, Runtime}
+  alias ClaudeAgentSDK.{CLI, Runtime, Shell}
   alias ClaudeAgentSDK.Config.{Auth, Env, Timeouts}
 
   @type auth_status ::
@@ -113,50 +113,43 @@ defmodule ClaudeAgentSDK.AuthChecker do
   def diagnose do
     timestamp = DateTime.utc_now()
 
-    # Check CLI installation
-    {cli_installed, cli_version} = check_cli_installation_private()
+    case check_cli_installation_private() do
+      {:ok, %{path: cli_path, version: cli_version}} ->
+        {authenticated, auth_info} = check_detailed_auth(cli_path)
 
-    if cli_installed do
-      # Check authentication
-      {authenticated, auth_info} = check_detailed_auth()
+        status = determine_status(true, authenticated, auth_info)
+        recommendations = generate_recommendations(status, auth_info)
 
-      status = determine_status(cli_installed, authenticated, auth_info)
-      recommendations = generate_recommendations(status, auth_info)
+        %{
+          cli_installed: true,
+          cli_version: cli_version,
+          cli_path: cli_path,
+          cli_error: nil,
+          authenticated: authenticated,
+          auth_method: auth_info[:method],
+          auth_info: if(authenticated, do: "Authenticated", else: nil),
+          auth_error: if(authenticated, do: nil, else: "Not authenticated"),
+          api_key_source: auth_info[:source],
+          status: status,
+          recommendations: recommendations,
+          last_checked: timestamp
+        }
 
-      %{
-        cli_installed: cli_installed,
-        cli_version: cli_version,
-        # Placeholder, could be improved
-        cli_path: "/usr/bin/claude",
-        cli_error: nil,
-        authenticated: authenticated,
-        auth_method: auth_info[:method],
-        auth_info: if(authenticated, do: "Authenticated", else: nil),
-        auth_error: if(authenticated, do: nil, else: "Not authenticated"),
-        api_key_source: auth_info[:source],
-        status: status,
-        recommendations: recommendations,
-        last_checked: timestamp
-      }
-    else
-      %{
-        cli_installed: false,
-        cli_version: nil,
-        cli_path: nil,
-        cli_error: "Claude CLI not found",
-        authenticated: false,
-        auth_method: nil,
-        auth_info: nil,
-        auth_error: nil,
-        api_key_source: nil,
-        status: :cli_not_found,
-        recommendations: [
-          "Install Claude CLI: npm install -g @anthropic-ai/claude-code",
-          "Verify installation: claude --version",
-          "Authenticate: claude login"
-        ],
-        last_checked: timestamp
-      }
+      {:error, :not_found} ->
+        %{
+          cli_installed: false,
+          cli_version: nil,
+          cli_path: nil,
+          cli_error: "Claude CLI not found",
+          authenticated: false,
+          auth_method: nil,
+          auth_info: nil,
+          auth_error: nil,
+          api_key_source: nil,
+          status: :cli_not_found,
+          recommendations: generate_recommendations(:cli_not_found, %{}),
+          last_checked: timestamp
+        }
     end
   end
 
@@ -254,12 +247,12 @@ defmodule ClaudeAgentSDK.AuthChecker do
   """
   @spec check_cli_installation() :: {:ok, map()} | {:error, String.t()}
   def check_cli_installation do
-    {installed, version} = check_cli_installation_private()
+    case check_cli_installation_private() do
+      {:ok, cli_info} ->
+        {:ok, cli_info}
 
-    if installed do
-      {:ok, %{path: "/usr/bin/claude", version: version}}
-    else
-      {:error, "Claude CLI not found"}
+      {:error, :not_found} ->
+        {:error, "Claude CLI not found"}
     end
   end
 
@@ -352,29 +345,35 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp check_cli_installation_private do
     case CLI.find_executable() do
-      {:ok, _path} ->
-        case CLI.version() do
-          {:ok, version} -> {true, version}
-          {:error, _} -> {true, nil}
+      {:ok, path} ->
+        case cli_version(path) do
+          {:ok, version} -> {:ok, %{path: path, version: version}}
+          {:error, _} -> {:ok, %{path: path, version: nil}}
         end
 
       {:error, :not_found} ->
-        {false, nil}
+        {:error, :not_found}
     end
   end
 
   defp check_cli_auth_status do
-    # Check if mocking is enabled
     if Runtime.use_mock?() do
       {:ok, :authenticated}
     else
-      execute_auth_test()
+      case CLI.find_executable() do
+        {:ok, executable} ->
+          execute_auth_test(executable)
+
+        {:error, :not_found} ->
+          {:error, :cli_not_found}
+      end
     end
   end
 
-  defp execute_auth_test do
-    case execute_with_timeout(
-           "claude --print test --output-format json",
+  defp execute_auth_test(executable) when is_binary(executable) do
+    case execute_cli_command(
+           executable,
+           ["--print", "test", "--output-format", "json"],
            Timeouts.auth_cli_test_ms()
          ) do
       {:ok, output} -> validate_cli_output(output)
@@ -406,10 +405,10 @@ defmodule ClaudeAgentSDK.AuthChecker do
     end
   end
 
-  defp check_detailed_auth do
+  defp check_detailed_auth(executable) do
     # Check different auth methods in order of preference
     cond do
-      check_anthropic_auth() ->
+      check_anthropic_auth(executable) ->
         source = if System.get_env(Env.anthropic_api_key()), do: "env", else: "session"
         {true, %{method: "Anthropic API", source: source}}
 
@@ -425,12 +424,19 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp check_anthropic_auth do
+    if System.get_env(Env.anthropic_api_key()) do
+      true
+    else
+      check_cli_session()
+    end
+  end
+
+  defp check_anthropic_auth(executable) do
     # Check environment variable first
     if System.get_env(Env.anthropic_api_key()) do
       true
     else
-      # Check CLI session
-      check_cli_session()
+      check_cli_session(executable)
     end
   end
 
@@ -443,12 +449,18 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp check_cli_session do
-    # Try a simple test command to see if CLI is authenticated
-    case execute_with_timeout("claude --version", Timeouts.auth_cli_version_ms()) do
+    case CLI.find_executable() do
+      {:ok, executable} -> check_cli_session(executable)
+      {:error, :not_found} -> false
+    end
+  end
+
+  defp check_cli_session(executable) when is_binary(executable) do
+    case execute_cli_command(executable, ["--version"], Timeouts.auth_cli_version_ms()) do
       {:ok, _output} ->
-        # CLI works, now test auth with a minimal query
-        case execute_with_timeout(
-               "claude --print hello --max-turns 1",
+        case execute_cli_command(
+               executable,
+               ["--print", "hello", "--max-turns", "1"],
                Timeouts.auth_cli_test_ms()
              ) do
           {:ok, _output} -> true
@@ -503,7 +515,8 @@ defmodule ClaudeAgentSDK.AuthChecker do
       :cli_not_found ->
         [
           "Install Claude CLI: npm install -g @anthropic-ai/claude-code",
-          "Verify installation: claude --version"
+          "Verify installation: claude --version",
+          "Authenticate: claude login"
         ]
 
       :not_authenticated ->
@@ -545,6 +558,12 @@ defmodule ClaudeAgentSDK.AuthChecker do
     run_command_with_timeout(command, timeout_ms)
   end
 
+  defp execute_cli_command(executable, args, timeout_ms)
+       when is_binary(executable) and is_list(args) do
+    command = build_cli_command(executable, args)
+    execute_with_timeout(command, timeout_ms)
+  end
+
   defp run_command_with_timeout(command, timeout_ms) do
     case :exec.run(command, [:sync, :stdout, :stderr], timeout_ms) do
       {:ok, result} ->
@@ -575,5 +594,26 @@ defmodule ClaudeAgentSDK.AuthChecker do
     stderr_text = if is_list(stderr_data), do: Enum.join(stderr_data, ""), else: ""
 
     if stderr_text != "", do: stderr_text, else: stdout_text
+  end
+
+  defp build_cli_command(executable, args) do
+    quoted_args = Enum.map(args, &Shell.escape_arg/1)
+    Enum.join([Shell.escape_arg(executable) | quoted_args], " ")
+  end
+
+  defp cli_version(path) when is_binary(path) do
+    case System.cmd(path, ["--version"], stderr_to_stdout: true) do
+      {output, 0} ->
+        case Regex.run(~r/(\d+\.\d+\.\d+)/, output) do
+          [_, version] -> {:ok, version}
+          _ -> {:error, :parse_failed}
+        end
+
+      {_output, status} when is_integer(status) ->
+        {:error, {:exit_status, status}}
+    end
+  rescue
+    error ->
+      {:error, error}
   end
 end

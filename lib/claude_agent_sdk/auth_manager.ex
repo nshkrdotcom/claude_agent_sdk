@@ -479,20 +479,31 @@ defmodule ClaudeAgentSDK.AuthManager do
     server = self()
     setup_state = state
 
-    {:ok, pid} =
-      ClaudeAgentSDK.TaskSupervisor.start_child(fn ->
-        result = perform_token_setup_work(setup_state)
-        send(server, {:setup_complete, operation, result})
-      end)
+    case ClaudeAgentSDK.TaskSupervisor.start_child(fn ->
+           result = perform_token_setup_work(setup_state)
+           send(server, {:setup_complete, operation, result})
+         end) do
+      {:ok, pid} ->
+        ref = Process.monitor(pid)
 
-    ref = Process.monitor(pid)
+        %{
+          state
+          | setup_task_pid: pid,
+            setup_task_ref: ref,
+            setup_operation: operation
+        }
 
-    %{
-      state
-      | setup_task_pid: pid,
-        setup_task_ref: ref,
-        setup_operation: operation
-    }
+      {:error, reason} ->
+        Logger.error(
+          "AuthManager: failed to start setup task for #{operation}",
+          reason: inspect(reason)
+        )
+
+        state
+        |> reply_setup_waiters({:error, reason})
+        |> maybe_schedule_retry_on_failure(operation)
+        |> clear_setup_task_state()
+    end
   end
 
   defp setup_in_progress?(state) do

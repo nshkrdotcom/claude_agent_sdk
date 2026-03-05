@@ -41,5 +41,12 @@ defmodule ClaudeAgentSDK.MessageErrorTest do
       assert message.type == :assistant
       assert is_nil(Map.get(message.data, :error))
     end
+
+    test "rejects malformed JSON instead of falling back to partial regex parsing" do
+      malformed_json =
+        ~s({"type":"assistant","message":{"role":"assistant","content":"oops"},"session_id":"s1")
+
+      assert {:error, {:parse_error, _reason}} = Message.from_json(malformed_json)
+    end
   end
 end

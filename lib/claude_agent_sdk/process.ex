@@ -14,9 +14,10 @@ defmodule ClaudeAgentSDK.Process do
 
   alias ClaudeAgentSDK.Log, as: Logger
 
-  alias ClaudeAgentSDK.{CLI, Message, Options, Runtime}
+  alias ClaudeAgentSDK.{CLI, LineFraming, Message, Options, Runtime}
   alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
   alias ClaudeAgentSDK.Shell
+  alias ClaudeAgentSDK.Transport.{ExecOptions, Setup}
 
   @doc """
   Streams messages from Claude Code CLI using erlexec.
@@ -69,10 +70,12 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp validate_cwd(cwd) when is_binary(cwd) do
-    if File.dir?(cwd) do
-      :ok
-    else
-      {:error, cwd_not_found_state(cwd)}
+    case Setup.validate_cwd(cwd) do
+      :ok ->
+        :ok
+
+      {:error, {:cwd_not_found, missing_cwd}} ->
+        {:error, cwd_not_found_state(missing_cwd)}
     end
   end
 
@@ -133,15 +136,7 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp run_with_stdin_erlexec(cmd, input, _exec_options, options) do
-    # Add stdin to the exec options and use async execution
-    # Build fresh options with env vars for async mode
-    env_vars = build_env_vars(options)
-
-    stdin_exec_options =
-      [:stdin, :stdout, :stderr, :monitor]
-      |> maybe_put_env_option(env_vars)
-      |> maybe_put_user_option(options.user)
-      |> maybe_put_cd_option(options.cwd)
+    stdin_exec_options = ExecOptions.erlexec(options)
 
     case :exec.run(cmd, stdin_exec_options) do
       {:ok, pid, os_pid} ->
@@ -155,7 +150,7 @@ defmodule ClaudeAgentSDK.Process do
         Logger.debug("Using timeout for CLI run", timeout_ms: timeout_ms)
 
         # Collect output until process exits
-        receive_exec_output(pid, os_pid, [], [], timeout_ms, options)
+        receive_exec_output(pid, os_pid, [], [], "", timeout_ms, options)
 
       {:error, reason} ->
         Logger.error("Failed to start Claude CLI (stdin run)",
@@ -176,7 +171,15 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp receive_exec_output(pid, os_pid, stdout_acc, stderr_acc, timeout_ms, options) do
+  defp receive_exec_output(
+         pid,
+         os_pid,
+         stdout_acc,
+         stderr_acc,
+         stderr_callback_buffer,
+         timeout_ms,
+         options
+       ) do
     receive do
       {:stdout, ^os_pid, data} ->
         # Check for challenge URL in the output
@@ -215,13 +218,14 @@ defmodule ClaudeAgentSDK.Process do
             os_pid,
             [data | stdout_acc],
             stderr_acc,
+            stderr_callback_buffer,
             timeout_ms,
             options
           )
         end
 
       {:stderr, ^os_pid, data} ->
-        _ = dispatch_stderr_chunk(data, options)
+        stderr_callback_buffer = dispatch_stderr_chunk(data, stderr_callback_buffer, options)
 
         # Also check stderr for challenge URL
         combined_output = [data | stderr_acc] |> Enum.reverse() |> Enum.join()
@@ -259,12 +263,15 @@ defmodule ClaudeAgentSDK.Process do
             os_pid,
             stdout_acc,
             [data | stderr_acc],
+            stderr_callback_buffer,
             timeout_ms,
             options
           )
         end
 
       {:DOWN, ^os_pid, :process, ^pid, _exit_status} ->
+        _ = flush_stderr_buffer(stderr_callback_buffer, options)
+
         # Process completed, parse the accumulated output
         stdout_output = stdout_acc |> Enum.reverse() |> Enum.join()
         stderr_output = stderr_acc |> Enum.reverse() |> Enum.join()
@@ -313,24 +320,33 @@ defmodule ClaudeAgentSDK.Process do
 
     stderr_data
     |> Enum.join("")
-    |> String.split("\n")
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.each(fn line -> callback.(line) end)
+    |> LineFraming.finalize_trimmed_lines()
+    |> dispatch_stderr_lines(callback)
   end
 
   defp dispatch_stderr_from_result(_result, _options), do: :ok
 
-  defp dispatch_stderr_chunk(data, %Options{stderr: callback}) when is_function(callback, 1) do
-    data
-    |> IO.iodata_to_binary()
-    |> String.split("\n")
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.each(fn line -> callback.(line) end)
+  defp dispatch_stderr_chunk(data, stderr_buffer, %Options{stderr: callback})
+       when is_function(callback, 1) do
+    {lines, stderr_buffer} = LineFraming.consume_trimmed_lines(stderr_buffer, data)
+    dispatch_stderr_lines(lines, callback)
+    stderr_buffer
   end
 
-  defp dispatch_stderr_chunk(_data, _options), do: :ok
+  defp dispatch_stderr_chunk(_data, stderr_buffer, _options), do: stderr_buffer
+
+  defp flush_stderr_buffer(stderr_buffer, %Options{stderr: callback})
+       when is_function(callback, 1) do
+    stderr_buffer
+    |> LineFraming.finalize_trimmed_lines()
+    |> dispatch_stderr_lines(callback)
+  end
+
+  defp flush_stderr_buffer(_stderr_buffer, _options), do: :ok
+
+  defp dispatch_stderr_lines(lines, callback) when is_function(callback, 1) do
+    Enum.each(lines, callback)
+  end
 
   defp build_claude_command(args, %Options{} = options, _stdin_input) do
     executable = CLI.resolve_executable!(options)
@@ -345,15 +361,7 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp build_exec_options(options) do
-    base_options = [:sync, :stdout, :stderr]
-
-    # Add environment variables (critical for authentication!)
-    env_options = build_env_vars(options)
-
-    base_options
-    |> maybe_put_env_option(env_options)
-    |> maybe_put_user_option(options.user)
-    |> maybe_put_cd_option(options.cwd)
+    ExecOptions.erlexec(options, [:sync, :stdout, :stderr])
   end
 
   defp build_env_vars(%Options{} = options) do
@@ -436,23 +444,6 @@ defmodule ClaudeAgentSDK.Process do
   @spec __parse_output__(String.t(), Options.t()) :: [Message.t()]
   def __parse_output__(output, %Options{} = options \\ %Options{}) when is_binary(output) do
     parse_sync_result(%{stdout: [output], stderr: []}, options)
-  end
-
-  defp maybe_put_env_option(opts, []), do: opts
-  defp maybe_put_env_option(opts, env) when is_list(env), do: [{:env, env} | opts]
-
-  defp maybe_put_cd_option(opts, nil), do: opts
-
-  defp maybe_put_cd_option(opts, cwd) when is_binary(cwd) do
-    [{:cd, cwd} | opts]
-  end
-
-  defp maybe_put_cd_option(opts, _), do: opts
-
-  defp maybe_put_user_option(opts, nil), do: opts
-
-  defp maybe_put_user_option(opts, user) when is_binary(user) do
-    [{:user, String.to_charlist(user)} | opts]
   end
 
   defp env_keys(opts) do

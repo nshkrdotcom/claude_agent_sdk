@@ -395,6 +395,9 @@ server = ClaudeAgentSDK.create_sdk_mcp_server(
   tools: [MyTools.Calculate]
 )
 
+# Without :supervisor, the SDK keeps the registry under its internal
+# SDK MCP supervisor so the server survives creator process exits.
+
 # Optional: start tool registry under your DynamicSupervisor
 {:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
 

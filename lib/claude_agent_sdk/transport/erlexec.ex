@@ -12,7 +12,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   @behaviour ClaudeAgentSDK.Transport
 
-  alias ClaudeAgentSDK.{CLI, Options, Runtime, TaskSupervisor}
+  alias ClaudeAgentSDK.{CLI, LineFraming, Options, Runtime, TaskSupervisor}
   alias ClaudeAgentSDK.Config.{Buffers, Timeouts}
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Errors.CLIJSONDecodeError
@@ -28,6 +28,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
             status: :disconnected,
             stderr_callback: nil,
             stderr_buffer: "",
+            stderr_callback_buffer: "",
             max_buffer_size: Buffers.max_stdout_buffer_bytes(),
             max_stderr_buffer_size: Buffers.max_stderr_buffer_bytes(),
             overflowed?: false,
@@ -56,20 +57,25 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   @impl ClaudeAgentSDK.Transport
   def start_link(opts) when is_list(opts) do
-    case start(opts) do
-      {:ok, pid} ->
-        Process.link(pid)
-        {:ok, pid}
+    trap_exit? = Process.flag(:trap_exit, true)
 
-      {:error, _reason} = error ->
-        error
+    try do
+      case GenServer.start_link(__MODULE__, opts) do
+        {:ok, pid} ->
+          case receive_startup_exit(pid) do
+            nil -> {:ok, pid}
+            reason -> transport_error(reason)
+          end
+
+        {:error, reason} ->
+          transport_error(reason)
+      end
+    catch
+      :exit, reason ->
+        transport_error(reason)
+    after
+      Process.flag(:trap_exit, trap_exit?)
     end
-  catch
-    :error, :badarg ->
-      transport_error(:not_connected)
-
-    :exit, reason ->
-      transport_error(reason)
   end
 
   @impl ClaudeAgentSDK.Transport
@@ -307,10 +313,14 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     data = IO.iodata_to_binary(data)
     stderr_buffer = append_stderr_data(state.stderr_buffer, data, state.max_stderr_buffer_size)
 
-    dispatch_stderr_callback(state.stderr_callback, data)
+    {stderr_lines, stderr_callback_buffer} =
+      LineFraming.consume_trimmed_lines(state.stderr_callback_buffer, data)
+
+    dispatch_stderr_callback(state.stderr_callback, stderr_lines)
     send_event(state.subscribers, {:stderr, data})
 
-    {:noreply, %{state | stderr_buffer: stderr_buffer}}
+    {:noreply,
+     %{state | stderr_buffer: stderr_buffer, stderr_callback_buffer: stderr_callback_buffer}}
   end
 
   def handle_info({ref, result}, %{pending_calls: pending_calls} = state)
@@ -348,6 +358,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
     if :queue.is_empty(state.pending_lines) do
       state = flush_stdout_fragment(state)
+      state = flush_stderr_callback_buffer(state)
       send_event(state.subscribers, {:exit, reason})
       {:stop, :normal, %{state | status: :disconnected, subprocess: nil}}
     else
@@ -470,6 +481,14 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   defp normalize_call_result({:error, {:transport, _reason}} = error), do: error
   defp normalize_call_result({:error, reason}), do: transport_error(reason)
   defp normalize_call_result(other), do: transport_error({:unexpected_task_result, other})
+
+  defp receive_startup_exit(pid) when is_pid(pid) do
+    receive do
+      {:EXIT, ^pid, reason} -> reason
+    after
+      0 -> nil
+    end
+  end
 
   defp start_call_task(fun) do
     supervisor = configured_task_supervisor()
@@ -743,7 +762,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   defp append_stdout_data(state, data) do
     full = state.stdout_buffer <> data
-    {complete_lines, remaining} = split_complete_lines(full)
+    {complete_lines, remaining} = LineFraming.split_complete_lines(full)
 
     pending_lines =
       Enum.reduce(complete_lines, state.pending_lines, fn line, queue ->
@@ -791,21 +810,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     end
   end
 
-  defp split_complete_lines(""), do: {[], ""}
-
-  defp split_complete_lines(data) do
-    case :binary.split(data, "\n", [:global]) do
-      [single] ->
-        {[], single}
-
-      parts ->
-        {complete, [rest]} = Enum.split(parts, length(parts) - 1)
-        {Enum.map(complete, &strip_trailing_cr/1), rest}
-    end
-  end
-
   defp flush_stdout_fragment(state) do
-    line = trim_ascii(state.stdout_buffer)
+    line = LineFraming.trim_ascii(state.stdout_buffer)
 
     cond do
       line == "" ->
@@ -859,42 +865,6 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     end
   end
 
-  defp strip_trailing_cr(line) do
-    size = byte_size(line)
-
-    if size > 0 and :binary.at(line, size - 1) == 13 do
-      :binary.part(line, 0, size - 1)
-    else
-      line
-    end
-  end
-
-  # Fast ASCII-only trim for framing whitespace and CRLF handling.
-  defp trim_ascii(binary) when is_binary(binary) do
-    binary
-    |> trim_ascii_leading()
-    |> trim_ascii_trailing()
-  end
-
-  defp trim_ascii_leading(<<char, rest::binary>>) when char in [9, 10, 13, 32],
-    do: trim_ascii_leading(rest)
-
-  defp trim_ascii_leading(binary), do: binary
-
-  defp trim_ascii_trailing(binary), do: do_trim_ascii_trailing(binary, byte_size(binary))
-
-  defp do_trim_ascii_trailing(_binary, 0), do: ""
-
-  defp do_trim_ascii_trailing(binary, size) when size > 0 do
-    last = :binary.at(binary, size - 1)
-
-    if last in [9, 10, 13, 32] do
-      do_trim_ascii_trailing(binary, size - 1)
-    else
-      :binary.part(binary, 0, size)
-    end
-  end
-
   defp append_stderr_data(_existing, _data, max_size)
        when not is_integer(max_size) or max_size <= 0,
        do: ""
@@ -910,16 +880,22 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     end
   end
 
-  defp dispatch_stderr_callback(callback, data) when is_function(callback, 1) do
-    {lines, _tail} = split_complete_lines(data)
-
-    lines
-    |> Enum.map(&trim_ascii/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.each(callback)
+  defp dispatch_stderr_callback(callback, lines)
+       when is_function(callback, 1) and is_list(lines) do
+    Enum.each(lines, callback)
   end
 
-  defp dispatch_stderr_callback(_callback, _data), do: :ok
+  defp dispatch_stderr_callback(_callback, _lines), do: :ok
+
+  defp flush_stderr_callback_buffer(%{stderr_callback_buffer: ""} = state), do: state
+
+  defp flush_stderr_callback_buffer(state) do
+    state.stderr_callback_buffer
+    |> LineFraming.finalize_trimmed_lines()
+    |> dispatch_stderr_callback(state.stderr_callback)
+
+    %{state | stderr_callback_buffer: ""}
+  end
 
   defp cleanup_pending_calls(pending_calls) do
     Enum.each(pending_calls, fn {ref, from} ->

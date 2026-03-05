@@ -563,7 +563,7 @@ server = ClaudeAgentSDK.create_sdk_mcp_server(
 | `name` | String | Yes | Unique server identifier |
 | `version` | String | No | Server version (defaults to `1.0.0`) |
 | `tools` | List | Yes | List of tool modules |
-| `supervisor` | pid/name | No | DynamicSupervisor to start the registry under |
+| `supervisor` | pid/name | No | DynamicSupervisor to start the registry under; omitted uses the SDK's internal SDK MCP supervisor |
 
 ### Server Structure
 
@@ -577,6 +577,9 @@ The returned server map contains:
   registry_pid: #PID<0.123.0>    # Tool registry process
 }
 ```
+
+Without `:supervisor`, the returned `registry_pid` runs under the SDK's internal
+SDK MCP supervisor and stays alive independently of the creating process.
 
 Direct registry calls use string tool names:
 

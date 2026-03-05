@@ -42,12 +42,12 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   use GenServer
   alias ClaudeAgentSDK.Log, as: Logger
 
-  alias ClaudeAgentSDK.{CLI, Options, Runtime}
+  alias ClaudeAgentSDK.{CLI, LineFraming, Options, Runtime}
   alias ClaudeAgentSDK.Config.Timeouts
   alias ClaudeAgentSDK.Shell
   alias ClaudeAgentSDK.Streaming.EventParser
   alias ClaudeAgentSDK.Streaming.Termination
-  alias ClaudeAgentSDK.Transport.ExecOptions
+  alias ClaudeAgentSDK.Transport.{ExecOptions, Setup}
 
   @type subscriber_ref :: reference()
   @type subscriber_pid :: pid()
@@ -75,6 +75,8 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     :accumulated_text,
     # Current stop reason for message termination
     :stop_reason,
+    # Incomplete stderr line buffer for callback framing
+    :stderr_buffer,
     # Monitor reference for subprocess
     :monitor_ref
   ]
@@ -362,10 +364,10 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   @impl true
   def handle_info({:stderr, os_pid, data}, %{subprocess: {_, subprocess_os_pid}} = state) do
     if os_pid == subprocess_os_pid do
-      handle_stderr_data(data, state.options.stderr)
+      {:noreply, handle_stderr_data(data, state)}
+    else
+      {:noreply, state}
     end
-
-    {:noreply, state}
   end
 
   def handle_info({:stderr, _os_pid, _data}, state), do: {:noreply, state}
@@ -393,6 +395,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
     if os_pid == subprocess_os_pid do
       Logger.info("Claude subprocess terminated: #{inspect(reason)}")
+      state = flush_stderr_buffer(state)
       broadcast_complete(state.subscribers)
       {:stop, :normal, state}
     else
@@ -439,6 +442,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
       message_buffer: "",
       accumulated_text: "",
       stop_reason: nil,
+      stderr_buffer: "",
       monitor_ref: nil
     }
   end
@@ -469,67 +473,28 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     end
   end
 
-  defp handle_stderr_data(data, stderr_callback) when is_function(stderr_callback, 1) do
-    data
-    |> IO.iodata_to_binary()
-    |> split_complete_lines()
-    |> elem(0)
-    |> Enum.map(&trim_ascii/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.each(stderr_callback)
+  defp handle_stderr_data(data, %{options: %Options{stderr: callback}} = state)
+       when is_function(callback, 1) do
+    {lines, stderr_buffer} = LineFraming.consume_trimmed_lines(state.stderr_buffer, data)
+    Enum.each(lines, callback)
+    %{state | stderr_buffer: stderr_buffer}
   end
 
-  defp handle_stderr_data(data, _stderr_callback) do
+  defp handle_stderr_data(data, state) do
     Logger.warning("Claude stderr: #{data}")
+    state
   end
 
-  defp split_complete_lines(""), do: {[], ""}
+  defp flush_stderr_buffer(%{options: %Options{stderr: callback}} = state)
+       when is_function(callback, 1) do
+    state.stderr_buffer
+    |> LineFraming.finalize_trimmed_lines()
+    |> Enum.each(callback)
 
-  defp split_complete_lines(buffer) when is_binary(buffer) do
-    case :binary.split(buffer, "\n", [:global]) do
-      [single] ->
-        {[], single}
-
-      parts ->
-        {complete, [rest]} = Enum.split(parts, length(parts) - 1)
-        {Enum.map(complete, &strip_trailing_cr/1), rest}
-    end
+    %{state | stderr_buffer: ""}
   end
 
-  defp strip_trailing_cr(line) do
-    size = byte_size(line)
-
-    if size > 0 and :binary.at(line, size - 1) == 13 do
-      :binary.part(line, 0, size - 1)
-    else
-      line
-    end
-  end
-
-  defp trim_ascii(binary) when is_binary(binary) do
-    binary
-    |> trim_ascii_leading()
-    |> trim_ascii_trailing()
-  end
-
-  defp trim_ascii_leading(<<char, rest::binary>>) when char in [9, 10, 13, 32],
-    do: trim_ascii_leading(rest)
-
-  defp trim_ascii_leading(binary), do: binary
-
-  defp trim_ascii_trailing(binary), do: do_trim_ascii_trailing(binary, byte_size(binary))
-
-  defp do_trim_ascii_trailing(_binary, 0), do: ""
-
-  defp do_trim_ascii_trailing(binary, size) when size > 0 do
-    last = :binary.at(binary, size - 1)
-
-    if last in [9, 10, 13, 32] do
-      do_trim_ascii_trailing(binary, size - 1)
-    else
-      :binary.part(binary, 0, size)
-    end
-  end
+  defp flush_stderr_buffer(state), do: state
 
   defp handle_stdout_data(state, data) do
     new_buffer = state.message_buffer <> data
@@ -621,35 +586,29 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   defp spawn_subprocess(args, %Options{} = options) do
     Runtime.ensure_erlexec_started!()
 
-    if is_binary(options.cwd) and not File.dir?(options.cwd) do
-      {:error, {:cwd_not_found, options.cwd}}
-    else
-      # Find claude executable
-      executable = CLI.resolve_executable!(options)
+    case Setup.validate_cwd(options.cwd) do
+      :ok ->
+        executable = CLI.resolve_executable!(options)
+        quoted_args = Enum.map(args, &shell_escape/1)
+        cmd = Enum.join([executable | quoted_args], " ")
+        exec_opts = build_exec_opts(options)
 
-      # Build command string
-      quoted_args = Enum.map(args, &shell_escape/1)
-      cmd = Enum.join([executable | quoted_args], " ")
+        case :exec.run(cmd, exec_opts) do
+          {:ok, pid, os_pid} ->
+            {:ok, {pid, os_pid}, :monitor_via_erlexec}
 
-      # Build exec options with environment variables
-      exec_opts = build_exec_opts(options)
+          {:error, reason} ->
+            Logger.error("Failed to start Claude CLI subprocess",
+              cmd: cmd,
+              reason: reason,
+              env_keys: env_keys(exec_opts)
+            )
 
-      # Spawn subprocess
-      case :exec.run(cmd, exec_opts) do
-        {:ok, pid, os_pid} ->
-          # Monitor the process using erlexec's monitor option
-          # The :monitor flag in exec_opts already sets this up
-          {:ok, {pid, os_pid}, :monitor_via_erlexec}
+            {:error, reason}
+        end
 
-        {:error, reason} ->
-          Logger.error("Failed to start Claude CLI subprocess",
-            cmd: cmd,
-            reason: reason,
-            env_keys: env_keys(exec_opts)
-          )
-
-          {:error, reason}
-      end
+      {:error, {:cwd_not_found, cwd}} ->
+        {:error, {:cwd_not_found, cwd}}
     end
   end
 

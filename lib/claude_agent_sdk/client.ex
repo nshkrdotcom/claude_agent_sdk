@@ -1600,11 +1600,11 @@ defmodule ClaudeAgentSDK.Client do
     env = options.env || %{}
 
     entrypoint_key = Env.entrypoint()
-    entrypoint_atom = String.to_atom(entrypoint_key)
+    entrypoint_atom = env_atom_key(entrypoint_key)
 
     env =
       if Map.has_key?(env, entrypoint_key) or
-           Map.has_key?(env, entrypoint_atom) do
+           map_has_optional_key?(env, entrypoint_atom) do
         env
       else
         Map.put(env, entrypoint_key, "sdk-elixir-client")
@@ -1612,6 +1612,12 @@ defmodule ClaudeAgentSDK.Client do
 
     %{options | env: env}
   end
+
+  defp env_atom_key("CLAUDE_CODE_ENTRYPOINT"), do: :CLAUDE_CODE_ENTRYPOINT
+  defp env_atom_key(_key), do: nil
+
+  defp map_has_optional_key?(_map, nil), do: false
+  defp map_has_optional_key?(map, key), do: Map.has_key?(map, key)
 
   @doc false
   @spec init_timeout_seconds_from_env() :: number()
@@ -2270,20 +2276,7 @@ defmodule ClaudeAgentSDK.Client do
     case Registry.get_callback(state.registry, callback_id) do
       {:ok, callback_fn} ->
         timeout_ms = hook_timeout_ms(state, callback_id)
-        signal = AbortSignal.new()
-        server = self()
-
-        {:ok, pid} =
-          TaskSupervisor.start_child(fn ->
-            result =
-              execute_hook_callback(callback_fn, input, tool_use_id, signal, timeout_ms)
-
-            send(server, {:callback_result, request_id, :hook, signal, result})
-          end)
-
-        # Monitor the callback task to detect crashes
-        monitor_ref = Process.monitor(pid)
-        put_pending_callback(state, request_id, pid, monitor_ref, signal, :hook)
+        start_hook_callback_task(state, request_id, callback_fn, input, tool_use_id, timeout_ms)
 
       :error ->
         error_msg = "Callback not found: #{callback_id}"
@@ -2342,28 +2335,69 @@ defmodule ClaudeAgentSDK.Client do
         state
 
       callback when is_function(callback, 1) ->
-        signal = AbortSignal.new()
-        server = self()
+        start_permission_callback_task(
+          state,
+          request_id,
+          callback,
+          tool_name,
+          tool_input,
+          suggestions,
+          blocked_path,
+          session_id
+        )
+    end
+  end
 
-        {:ok, pid} =
-          TaskSupervisor.start_child(fn ->
-            result =
-              execute_permission_callback(
-                callback,
-                tool_name,
-                tool_input,
-                suggestions,
-                blocked_path,
-                session_id,
-                signal
-              )
+  defp start_hook_callback_task(state, request_id, callback_fn, input, tool_use_id, timeout_ms) do
+    start_callback_task(state, request_id, :hook, fn signal, server ->
+      result =
+        execute_hook_callback(callback_fn, input, tool_use_id, signal, timeout_ms)
 
-            send(server, {:callback_result, request_id, :permission, signal, tool_input, result})
-          end)
+      send(server, {:callback_result, request_id, :hook, signal, result})
+    end)
+  end
 
-        # Monitor the callback task to detect crashes
+  defp start_permission_callback_task(
+         state,
+         request_id,
+         callback,
+         tool_name,
+         tool_input,
+         suggestions,
+         blocked_path,
+         session_id
+       ) do
+    start_callback_task(state, request_id, :permission, fn signal, server ->
+      result =
+        execute_permission_callback(
+          callback,
+          tool_name,
+          tool_input,
+          suggestions,
+          blocked_path,
+          session_id,
+          signal
+        )
+
+      send(
+        server,
+        {:callback_result, request_id, :permission, signal, tool_input, result}
+      )
+    end)
+  end
+
+  defp start_callback_task(state, request_id, type, callback_runner)
+       when is_function(callback_runner, 2) do
+    signal = AbortSignal.new()
+    server = self()
+
+    case TaskSupervisor.start_child(fn -> callback_runner.(signal, server) end) do
+      {:ok, pid} ->
         monitor_ref = Process.monitor(pid)
-        put_pending_callback(state, request_id, pid, monitor_ref, signal, :permission)
+        put_pending_callback(state, request_id, pid, monitor_ref, signal, type)
+
+      {:error, reason} ->
+        send_callback_start_error(state, request_id, type, reason)
     end
   end
 
@@ -2670,6 +2704,36 @@ defmodule ClaudeAgentSDK.Client do
 
   defp callback_crash_message(reason) do
     "Callback crashed: #{format_exit_reason(reason)}"
+  end
+
+  defp callback_start_error_message({:task_supervisor_unavailable, supervisor}) do
+    "Callback unavailable: task supervisor #{inspect(supervisor)} is not running"
+  end
+
+  defp send_callback_start_error(state, request_id, :hook, reason) do
+    error_message = callback_start_error_message(reason)
+    json = Protocol.encode_hook_response(request_id, error_message, :error)
+    _ = send_payload(state, json)
+
+    Logger.error("Failed to start hook callback task",
+      request_id: request_id,
+      reason: inspect(reason)
+    )
+
+    state
+  end
+
+  defp send_callback_start_error(state, request_id, :permission, reason) do
+    error_message = callback_start_error_message(reason)
+    json = encode_permission_error_response(request_id, error_message)
+    _ = send_payload(state, json)
+
+    Logger.error("Failed to start permission callback task",
+      request_id: request_id,
+      reason: inspect(reason)
+    )
+
+    state
   end
 
   defp format_exit_reason(reason) do

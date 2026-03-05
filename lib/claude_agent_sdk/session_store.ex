@@ -170,7 +170,7 @@ defmodule ClaudeAgentSDK.SessionStore do
 
       :ok = SessionStore.delete_session(session_id)
   """
-  @spec delete_session(String.t()) :: :ok
+  @spec delete_session(String.t()) :: :ok | {:error, :invalid_session_id}
   def delete_session(session_id) do
     GenServer.call(__MODULE__, {:delete_session, session_id})
   end
@@ -231,20 +231,25 @@ defmodule ClaudeAgentSDK.SessionStore do
 
   @impl true
   def handle_call({:save_session, session_id, messages, opts}, _from, state) do
-    metadata = build_metadata(session_id, messages, opts)
+    case existing_created_at(state, session_id) do
+      {:ok, created_at} ->
+        metadata = build_metadata(session_id, messages, opts, created_at)
 
-    session_data = %{
-      session_id: session_id,
-      messages: serialize_messages(messages),
-      metadata: metadata
-    }
+        session_data = %{
+          session_id: session_id,
+          messages: serialize_messages(messages),
+          metadata: metadata
+        }
 
-    # Save to disk
-    case write_session_file(state.storage_dir, session_id, session_data) do
-      :ok ->
-        # Update cache
-        :ets.insert(state.cache, {session_id, metadata})
-        {:reply, :ok, state}
+        case write_session_file(state.storage_dir, session_id, session_data) do
+          :ok ->
+            :ets.insert(state.cache, {session_id, metadata})
+            {:reply, :ok, state}
+
+          {:error, reason} = error ->
+            Logger.error("Failed to save session #{session_id}: #{inspect(reason)}")
+            {:reply, error, state}
+        end
 
       {:error, reason} = error ->
         Logger.error("Failed to save session #{session_id}: #{inspect(reason)}")
@@ -296,7 +301,13 @@ defmodule ClaudeAgentSDK.SessionStore do
 
   @impl true
   def handle_call({:delete_session, session_id}, _from, state) do
-    {:reply, :ok, delete_session_internal(state, session_id)}
+    case delete_session_internal(state, session_id) do
+      {:ok, new_state} ->
+        {:reply, :ok, new_state}
+
+      {:error, _reason} = error ->
+        {:reply, error, state}
+    end
   end
 
   @impl true
@@ -318,11 +329,13 @@ defmodule ClaudeAgentSDK.SessionStore do
 
   ## Private Helpers
 
-  defp build_metadata(session_id, messages, opts) do
+  defp build_metadata(session_id, messages, opts, created_at) do
+    now = DateTime.utc_now()
+
     %{
       session_id: session_id,
-      created_at: DateTime.utc_now(),
-      updated_at: DateTime.utc_now(),
+      created_at: created_at || now,
+      updated_at: now,
       message_count: length(messages),
       total_cost: ClaudeAgentSDK.Session.calculate_cost(messages),
       tags: Keyword.get(opts, :tags, []),
@@ -366,38 +379,48 @@ defmodule ClaudeAgentSDK.SessionStore do
   end
 
   defp write_session_file(storage_dir, session_id, session_data) do
-    path = session_path(storage_dir, session_id)
+    with {:ok, path} <- session_path(storage_dir, session_id) do
+      json = Jason.encode!(session_data, pretty: true)
 
-    json = Jason.encode!(session_data, pretty: true)
+      case File.write(path, json) do
+        :ok ->
+          # User read/write only
+          File.chmod!(path, 0o600)
+          :ok
 
-    case File.write(path, json) do
-      :ok ->
-        # User read/write only
-        File.chmod!(path, 0o600)
-        :ok
-
-      error ->
-        error
+        error ->
+          error
+      end
     end
   end
 
   defp read_session_file(storage_dir, session_id) do
-    path = session_path(storage_dir, session_id)
+    with {:ok, path} <- session_path(storage_dir, session_id) do
+      case File.read(path) do
+        {:ok, json} ->
+          Jason.decode(json)
 
-    case File.read(path) do
-      {:ok, json} ->
-        Jason.decode(json)
+        {:error, :enoent} ->
+          {:error, :not_found}
 
-      {:error, :enoent} ->
-        {:error, :not_found}
-
-      {:error, reason} ->
-        {:error, reason}
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
   defp session_path(storage_dir, session_id) do
-    Path.join(storage_dir, "#{session_id}.json")
+    storage_dir = Path.expand(storage_dir)
+
+    with :ok <- validate_session_id(session_id) do
+      path = Path.expand("#{session_id}.json", storage_dir)
+
+      if Path.relative_to(path, storage_dir) == "#{session_id}.json" do
+        {:ok, path}
+      else
+        {:error, :invalid_session_id}
+      end
+    end
   end
 
   defp load_sessions_into_cache(state) do
@@ -523,18 +546,74 @@ defmodule ClaudeAgentSDK.SessionStore do
 
     new_state =
       Enum.reduce(old_sessions, state, fn {session_id, _metadata}, acc ->
-        delete_session_internal(acc, session_id)
+        case delete_session_internal(acc, session_id) do
+          {:ok, new_acc} -> new_acc
+          {:error, _reason} -> acc
+        end
       end)
 
     {length(old_sessions), new_state}
   end
 
   defp delete_session_internal(state, session_id) do
-    path = session_path(state.storage_dir, session_id)
-    _ = File.rm(path)
-    :ets.delete(state.cache, session_id)
-    state
+    with {:ok, path} <- session_path(state.storage_dir, session_id) do
+      _ = File.rm(path)
+      :ets.delete(state.cache, session_id)
+      {:ok, state}
+    end
   end
+
+  defp existing_created_at(state, session_id) do
+    case :ets.lookup(state.cache, session_id) do
+      [{^session_id, metadata}] ->
+        {:ok, metadata_datetime(metadata, :created_at, DateTime.utc_now())}
+
+      [] ->
+        existing_created_at_from_storage(state.storage_dir, session_id)
+    end
+  end
+
+  defp existing_created_at_from_storage(storage_dir, session_id) do
+    case read_session_file(storage_dir, session_id) do
+      {:ok, %{"metadata" => metadata}} ->
+        {:ok, metadata_datetime(metadata, :created_at, nil)}
+
+      {:ok, %{metadata: metadata}} ->
+        {:ok, metadata_datetime(metadata, :created_at, nil)}
+
+      {:error, :not_found} ->
+        {:ok, nil}
+
+      {:error, :invalid_session_id} = error ->
+        error
+
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to read existing session metadata for #{session_id}",
+          reason: reason
+        )
+
+        {:ok, nil}
+    end
+  end
+
+  defp validate_session_id(session_id) when is_binary(session_id) do
+    cond do
+      String.trim(session_id) == "" ->
+        {:error, :invalid_session_id}
+
+      session_id in [".", ".."] ->
+        {:error, :invalid_session_id}
+
+      String.contains?(session_id, ["/", "\\", <<0>>]) ->
+        {:error, :invalid_session_id}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_session_id(_session_id), do: {:error, :invalid_session_id}
 
   defp normalize_metadata(metadata) when is_map(metadata) do
     now = DateTime.utc_now()

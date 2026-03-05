@@ -32,6 +32,13 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
 
       assert match?({:ok, %{path: _, version: _}}, result) or match?({:error, _}, result)
     end
+
+    test "returns the resolved executable path when CLI is discovered outside PATH" do
+      with_fake_cli(fn cli_path ->
+        assert {:ok, %{path: ^cli_path, version: "1.2.3"}} =
+                 AuthChecker.check_cli_installation()
+      end)
+    end
   end
 
   describe "diagnose/0" do
@@ -70,6 +77,26 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
       else
         assert Map.has_key?(diagnosis, :auth_error) or not diagnosis.cli_installed
       end
+    end
+
+    test "reports the resolved executable path and authenticates through it" do
+      with_fake_cli(fn cli_path ->
+        diagnosis = AuthChecker.diagnose()
+
+        assert diagnosis.cli_installed == true
+        assert diagnosis.cli_path == cli_path
+        assert diagnosis.cli_version == "1.2.3"
+        assert diagnosis.authenticated == true
+        assert diagnosis.status == :ready
+      end)
+    end
+  end
+
+  describe "resolved executable probes" do
+    test "check_auth succeeds when the discovered CLI is not on PATH" do
+      with_fake_cli(fn _cli_path ->
+        assert {:ok, "Authenticated"} = AuthChecker.check_auth()
+      end)
     end
   end
 
@@ -329,4 +356,73 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
       end
     end
   end
+
+  defp with_fake_cli(fun) do
+    dir = Path.join(System.tmp_dir!(), "auth_checker_cli_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    cli_path = Path.join(dir, "custom-claude")
+
+    File.write!(cli_path, fake_cli_script())
+    File.chmod!(cli_path, 0o755)
+
+    previous_cli_bundled = Application.get_env(:claude_agent_sdk, :cli_bundled_path)
+    previous_known_locations = Application.get_env(:claude_agent_sdk, :cli_known_locations)
+    previous_use_mock = Application.get_env(:claude_agent_sdk, :use_mock)
+    previous_api_key = System.get_env("ANTHROPIC_API_KEY")
+    previous_oauth = System.get_env("CLAUDE_AGENT_OAUTH_TOKEN")
+    previous_bedrock = System.get_env("CLAUDE_AGENT_USE_BEDROCK")
+    previous_vertex = System.get_env("CLAUDE_AGENT_USE_VERTEX")
+
+    Application.put_env(:claude_agent_sdk, :cli_bundled_path, cli_path)
+    Application.put_env(:claude_agent_sdk, :cli_known_locations, [])
+    Application.put_env(:claude_agent_sdk, :use_mock, false)
+    System.delete_env("ANTHROPIC_API_KEY")
+    System.delete_env("CLAUDE_AGENT_OAUTH_TOKEN")
+    System.delete_env("CLAUDE_AGENT_USE_BEDROCK")
+    System.delete_env("CLAUDE_AGENT_USE_VERTEX")
+
+    try do
+      fun.(cli_path)
+    after
+      restore_app_env(:cli_bundled_path, previous_cli_bundled)
+      restore_app_env(:cli_known_locations, previous_known_locations)
+      restore_app_env(:use_mock, previous_use_mock)
+      restore_env("ANTHROPIC_API_KEY", previous_api_key)
+      restore_env("CLAUDE_AGENT_OAUTH_TOKEN", previous_oauth)
+      restore_env("CLAUDE_AGENT_USE_BEDROCK", previous_bedrock)
+      restore_env("CLAUDE_AGENT_USE_VERTEX", previous_vertex)
+      File.rm_rf!(dir)
+    end
+  end
+
+  defp fake_cli_script do
+    """
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if [[ "${1:-}" == "--version" ]]; then
+      echo "claude 1.2.3"
+      exit 0
+    fi
+
+    if [[ "${1:-}" == "--print" && "${2:-}" == "test" && "${3:-}" == "--output-format" && "${4:-}" == "json" ]]; then
+      echo '{"type":"result","subtype":"success","session_id":"fake-session","result":"ok","duration_ms":1,"duration_api_ms":1,"num_turns":1,"is_error":false}'
+      exit 0
+    fi
+
+    if [[ "${1:-}" == "--print" && "${2:-}" == "hello" && "${3:-}" == "--max-turns" && "${4:-}" == "1" ]]; then
+      echo "hello"
+      exit 0
+    fi
+
+    echo "unexpected args: $*" >&2
+    exit 1
+    """
+  end
+
+  defp restore_app_env(key, nil), do: Application.delete_env(:claude_agent_sdk, key)
+  defp restore_app_env(key, value), do: Application.put_env(:claude_agent_sdk, key, value)
+
+  defp restore_env(key, nil), do: System.delete_env(key)
+  defp restore_env(key, value), do: System.put_env(key, value)
 end

@@ -48,10 +48,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Model registry updated**: Sonnet updated from `claude-sonnet-4-5-20250929` to `claude-sonnet-4-6` (Sonnet 4.6). Added `opus[1m]` short form and `claude-opus-4-6[1m]`, `claude-sonnet-4-6[1m]` full IDs for 1M context variants. Default model changed from `"sonnet"` to `"opus"`.
 - **`max_thinking_tokens` pipeline replaced**: The `add_max_thinking_tokens_args/2` function is replaced by `add_thinking_args/2` which respects the new `thinking` config with proper fallback to `max_thinking_tokens`.
+- **JSON decoding simplified**: `ClaudeAgentSDK.JSON` now prefers OTP `:json` and falls back to `Jason`, and `Message.from_json/1` no longer accepts malformed JSON through a secondary regex parser.
+- **SDK MCP default lifecycle hardened**: `create_sdk_mcp_server/1` now starts unsupervised registries under an internal SDK MCP supervisor instead of linking them to the creating process.
+- **Shared subprocess framing/setup helpers reused**: stderr line framing and erlexec option/cwd validation paths are now shared across `Process`, `Streaming.Session`, and `Transport.Erlexec` where the audited drift existed.
 
 ### Fixed
 
 - **Subagent tool name**: Updated current examples, guides, prompts, and research-agent example docs/code to use `"Agent"` (the actual CLI tool name for subagent spawning) instead of `"Task"` (which is for background tasks like TaskCreate/TaskStop). Subagent tracking examples now use Agent-specific matchers and naming consistently.
+- **SessionStore path safety and metadata preservation**: session save/load/delete now reject traversal-style IDs outside the storage root while preserving safe legacy IDs, and resaves keep the original `created_at`.
+- **Strict task supervisor failures no longer crash callers**: `Tool.Registry`, `AuthManager`, and `Client` now handle strict `TaskSupervisor` unavailability with structured errors/protocol replies instead of GenServer crashes.
+- **AuthChecker uses the resolved CLI executable everywhere**: diagnostics report the discovered path and auth probes execute through that resolved binary rather than hardcoded `/usr/bin/claude` or shell strings.
+- **Erlexec startup is OTP-correct**: `Transport.Erlexec.start_link/1` now uses `GenServer.start_link/3` while preserving typed startup errors for plain callers.
+- **Stderr callbacks now preserve split lines across chunk boundaries**: `Process`, `Streaming.Session`, and `Transport.Erlexec` buffer incomplete stderr fragments until a full trimmed line is available.
+- **Session history directory filtering works as documented**: `Session.History.list_sessions/1` now honors the documented `:directory` option.
+- **Client entrypoint env no longer creates atoms at runtime**: the fixed `CLAUDE_CODE_ENTRYPOINT` key check keeps atom-key compatibility without `String.to_atom/1`.
 
 ## [0.14.0] - 2026-02-11
 

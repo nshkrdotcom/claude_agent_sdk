@@ -113,18 +113,18 @@ defmodule ClaudeAgentSDK.Message do
   @spec from_json(String.t()) :: {:ok, t()} | {:error, term()}
   def from_json(json_string) when is_binary(json_string) do
     case ClaudeAgentSDK.JSON.decode(json_string) do
-      {:ok, raw} ->
+      {:ok, raw} when is_map(raw) ->
         {:ok, parse_message(raw)}
 
-      {:error, _} ->
-        # Fallback to manual parsing for our known message types
-        try do
-          raw = parse_json_manual(String.trim(json_string))
-          {:ok, parse_message(raw)}
-        rescue
-          e -> {:error, {:parse_error, Exception.message(e)}}
-        end
+      {:ok, raw} ->
+        {:error, {:parse_error, "expected JSON object, got: #{inspect(raw)}"}}
+
+      {:error, reason} ->
+        {:error, {:parse_error, format_parse_error(reason)}}
     end
+  rescue
+    error ->
+      {:error, {:parse_error, Exception.message(error)}}
   end
 
   @doc """
@@ -189,121 +189,6 @@ defmodule ClaudeAgentSDK.Message do
   end
 
   defp maybe_put_error_details(data, nil, _error_struct), do: data
-
-  # Manual JSON parsing for our specific message formats
-  defp parse_json_manual(str) do
-    cond do
-      String.contains?(str, ~s("type":"system")) ->
-        %{
-          "type" => "system",
-          "subtype" => extract_string_field(str, "subtype"),
-          "session_id" => extract_string_field(str, "session_id"),
-          "cwd" => extract_string_field(str, "cwd"),
-          "tools" => extract_array_field(str, "tools"),
-          "mcp_servers" => [],
-          "model" => extract_string_field(str, "model"),
-          "permissionMode" => extract_string_field(str, "permissionMode"),
-          "apiKeySource" => extract_string_field(str, "apiKeySource")
-        }
-
-      String.contains?(str, ~s("type":"assistant")) ->
-        content = extract_nested_field(str, ["message", "content"], "text")
-
-        %{
-          "type" => "assistant",
-          "message" => %{
-            "role" => "assistant",
-            "content" => content
-          },
-          "session_id" => extract_string_field(str, "session_id"),
-          "error" => extract_string_field(str, "error")
-        }
-
-      String.contains?(str, ~s("type":"result")) ->
-        %{
-          "type" => "result",
-          "subtype" => extract_string_field(str, "subtype"),
-          "session_id" => extract_string_field(str, "session_id"),
-          "result" => extract_string_field(str, "result"),
-          "total_cost_usd" => extract_number_field(str, "total_cost_usd"),
-          "duration_ms" => extract_integer_field(str, "duration_ms"),
-          "duration_api_ms" => extract_integer_field(str, "duration_api_ms"),
-          "num_turns" => extract_integer_field(str, "num_turns"),
-          "is_error" => extract_boolean_field(str, "is_error"),
-          "error" => extract_string_field(str, "error")
-        }
-
-      true ->
-        %{"type" => "unknown", "content" => str}
-    end
-  end
-
-  defp extract_string_field(str, field) do
-    case Regex.run(~r/"#{field}":"([^"]*)"/, str) do
-      [_, value] -> value
-      _ -> nil
-    end
-  end
-
-  defp extract_number_field(str, field) do
-    case Regex.run(~r/"#{field}":([\d.]+)/, str) do
-      [_, value] ->
-        if String.contains?(value, ".") do
-          String.to_float(value)
-        else
-          String.to_integer(value) * 1.0
-        end
-
-      _ ->
-        0.0
-    end
-  end
-
-  defp extract_integer_field(str, field) do
-    case Regex.run(~r/"#{field}":(\d+)/, str) do
-      [_, value] -> String.to_integer(value)
-      _ -> 0
-    end
-  end
-
-  defp extract_boolean_field(str, field) do
-    case Regex.run(~r/"#{field}":(true|false)/, str) do
-      [_, "true"] -> true
-      [_, "false"] -> false
-      _ -> false
-    end
-  end
-
-  defp extract_array_field(str, field) do
-    case Regex.run(~r/"#{field}":\[([^\]]*)\]/, str) do
-      [_, content] ->
-        content
-        |> String.split(",")
-        |> Enum.map(fn item ->
-          item
-          |> String.trim()
-          |> String.trim("\"")
-        end)
-        |> Enum.filter(&(&1 != ""))
-
-      _ ->
-        []
-    end
-  end
-
-  defp extract_nested_field(str, path, final_field) do
-    # Extract nested content like message.content[0].text
-    case path do
-      ["message", "content"] ->
-        case Regex.run(~r/"content":\[.*?"#{final_field}":"([^"]*)"/, str) do
-          [_, value] -> value
-          _ -> ""
-        end
-
-      _ ->
-        ""
-    end
-  end
 
   defp parse_message(raw) do
     type = safe_type(raw["type"])
@@ -389,6 +274,8 @@ defmodule ClaudeAgentSDK.Message do
   end
 
   defp safe_type(_), do: :unknown
+
+  defp format_parse_error(:invalid_json), do: "invalid JSON"
 
   defp safe_subtype(:result, subtype) when is_binary(subtype) do
     case subtype do
