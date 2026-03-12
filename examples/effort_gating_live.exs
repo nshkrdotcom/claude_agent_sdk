@@ -39,10 +39,20 @@ defmodule EffortGatingLive do
       )
     )
 
+    run_case(
+      "Opus with :max effort",
+      Options.new(
+        model: "opus",
+        effort: :max,
+        max_turns: 1,
+        setting_sources: ["user"]
+      )
+    )
+
     IO.puts("\nInvalid effort values fail fast:")
 
     try do
-      Options.new(model: "opus", effort: :max)
+      Options.new(model: "opus", effort: :invalid_effort_level)
     rescue
       error in ArgumentError ->
         IO.puts("  #{Exception.message(error)}")

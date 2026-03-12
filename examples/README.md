@@ -91,6 +91,7 @@ mix run examples/basic_example.exs
 |---------|-------------|
 | `basic_example.exs` | Minimal `ClaudeAgentSDK.query/2` with message extraction |
 | `effort_gating_live.exs` | Live effort demo showing supported models, Haiku gating, and invalid-value validation |
+| `max_effort_opus_live.exs` | Opus `:max` effort — request/response and streaming for both `opus` and `opus[1m]` (**not in `run_all.sh`** — expensive) |
 | `session_features_example.exs` | SessionStore save/search, resume, session CLI flags |
 | `resume_persistence_repro_live.exs` | Known-failing repro for `--print --resume` dropping intermediate turns |
 | `structured_output_live.exs` | Structured JSON via `--json-schema` |

@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.15.0"}
+    {:claude_agent_sdk, "~> 0.15.1"}
   ]
 end
 ```
@@ -426,7 +426,7 @@ Key options for `ClaudeAgentSDK.Options`:
 | Option | Type | Description |
 |--------|------|-------------|
 | `model` | string | `"sonnet"`, `"opus"`, `"haiku"` |
-| `effort` | atom | `:low`, `:medium`, `:high` — controls reasoning effort; invalid values raise `ArgumentError` (not supported for Haiku) |
+| `effort` | atom | `:low`, `:medium`, `:high`, `:max` — controls reasoning effort; `:max` is Opus-only; invalid values raise `ArgumentError` (not supported for Haiku) |
 | `thinking` | map | `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}` |
 | `max_turns` | integer | Maximum conversation turns |
 | `system_prompt` | string | Custom system instructions |
@@ -507,7 +507,7 @@ OptionBuilder.quick()                      # Fast one-off queries
 
 # Effort and thinking helpers
 OptionBuilder.with_opus()
-|> OptionBuilder.with_effort(:high)
+|> OptionBuilder.with_effort(:max)
 |> OptionBuilder.with_thinking(%{type: :adaptive})
 ```
 
@@ -547,6 +547,7 @@ mix run examples/hooks/basic_bash_blocking.exs
 - `streaming_tools/quick_demo.exs` - Real-time streaming
 - `hooks/complete_workflow.exs` - Full hooks integration
 - `sdk_mcp_tools_live.exs` - Custom MCP tools
+- `max_effort_opus_live.exs` - Opus `:max` effort (not in `run_all.sh`)
 - `advanced_features/agents_live.exs` - Multi-agent workflows
 - `advanced_features/subagent_spawning_live.exs` - Parallel subagent coordination
 - `advanced_features/web_tools_live.exs` - WebSearch and WebFetch

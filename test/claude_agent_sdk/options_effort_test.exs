@@ -40,15 +40,28 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       refute "--effort" in args
     end
 
-    test "rejects deprecated :max effort at construction time" do
+    test "accepts :max" do
+      opts = Options.new(effort: :max)
+      assert opts.effort == :max
+    end
+
+    test "emits --effort max" do
+      opts = Options.new(effort: :max)
+      args = Options.to_args(opts)
+      assert "--effort" in args
+      idx = Enum.find_index(args, &(&1 == "--effort"))
+      assert Enum.at(args, idx + 1) == "max"
+    end
+
+    test "rejects invalid effort at construction time" do
       assert_raise ArgumentError, ~r/effort must be one of/, fn ->
-        Options.new(effort: :max)
+        Options.new(effort: :turbo)
       end
     end
 
     test "rejects invalid effort when converting a struct literal to args" do
       assert_raise ArgumentError, ~r/effort must be one of/, fn ->
-        %Options{effort: :max}
+        %Options{effort: :turbo}
         |> Options.to_args()
       end
     end
@@ -104,16 +117,92 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert "--effort" in args
     end
 
+    test "allows :max effort on opus" do
+      opts = Options.new(effort: :max, model: "opus")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+      idx = Enum.find_index(args, &(&1 == "--effort"))
+      assert Enum.at(args, idx + 1) == "max"
+    end
+
+    test "allows :max effort on claude-opus-4-6" do
+      opts = Options.new(effort: :max, model: "claude-opus-4-6")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+    end
+
+    test "allows :max effort on opus[1m]" do
+      opts = Options.new(effort: :max, model: "opus[1m]")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+    end
+
+    test "warns and strips :max effort on sonnet" do
+      opts = Options.new(effort: :max, model: "sonnet")
+
+      log =
+        capture_log(fn ->
+          args = Options.to_args(opts)
+          refute "--effort" in args
+        end)
+
+      assert log =~ "only supported on Opus"
+    end
+
     test "allows effort on sonnet" do
       opts = Options.new(effort: :low, model: "sonnet")
       args = Options.to_args(opts)
       assert "--effort" in args
     end
 
-    test "allows effort when model is nil" do
+    test "allows effort when model is nil and the default model supports it" do
       opts = Options.new(effort: :high, model: nil)
       args = Options.to_args(opts)
       assert "--effort" in args
+    end
+
+    test "allows :max effort when model is nil and the default model is opus" do
+      opts = Options.new(effort: :max, model: nil)
+      args = Options.to_args(opts)
+      assert "--effort" in args
+    end
+
+    test "resolves the configured default model when gating :max" do
+      original = Application.get_env(:claude_agent_sdk, :models)
+      Application.put_env(:claude_agent_sdk, :models, %{original | default: "sonnet"})
+
+      on_exit(fn ->
+        Application.put_env(:claude_agent_sdk, :models, original)
+      end)
+
+      opts = Options.new(effort: :max, model: nil)
+
+      log =
+        capture_log(fn ->
+          args = Options.to_args(opts)
+          refute "--effort" in args
+        end)
+
+      assert log =~ "only supported on Opus"
+    end
+
+    test "resolves the configured default model when gating Haiku effort" do
+      original = Application.get_env(:claude_agent_sdk, :models)
+      Application.put_env(:claude_agent_sdk, :models, %{original | default: "haiku"})
+
+      on_exit(fn ->
+        Application.put_env(:claude_agent_sdk, :models, original)
+      end)
+
+      opts = Options.new(effort: :high, model: nil)
+
+      log =
+        capture_log(fn ->
+          args = Options.to_args(opts)
+          refute "--effort" in args
+        end)
+
+      assert log =~ "not supported for Haiku"
     end
   end
 end

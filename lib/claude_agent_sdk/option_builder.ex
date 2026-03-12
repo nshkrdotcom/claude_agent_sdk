@@ -686,16 +686,17 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   ## Parameters
 
   - `options` - Existing options
-  - `effort` - Effort level (`:low`, `:medium`, or `:high`). Invalid values raise `ArgumentError`. Not supported for Haiku.
+  - `effort` - Effort level (`:low`, `:medium`, `:high`, or `:max`). Invalid values raise `ArgumentError`. `:max` is Opus-only. Not supported for Haiku.
   """
-  @spec with_effort(Options.t(), :low | :medium | :high) :: Options.t()
+  @spec with_effort(Options.t(), :low | :medium | :high | :max) :: Options.t()
   def with_effort(%Options{} = options, effort)
-      when effort in [:low, :medium, :high] do
+      when effort in [:low, :medium, :high, :max] do
     %{options | effort: effort}
   end
 
   def with_effort(%Options{}, effort) do
-    raise ArgumentError, "effort must be one of :low, :medium, or :high, got: #{inspect(effort)}"
+    raise ArgumentError,
+          "effort must be one of :low, :medium, :high, or :max, got: #{inspect(effort)}"
   end
 
   @doc """
