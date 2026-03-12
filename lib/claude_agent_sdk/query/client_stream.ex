@@ -115,6 +115,9 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
           {[message], {:ok, state}}
         end
 
+      {:claude_error, error} ->
+        raise error
+
       {:stream_event, ^ref, event} ->
         msg = %Message{
           type: :stream_event,

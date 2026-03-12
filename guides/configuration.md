@@ -149,6 +149,7 @@ SessionStore lifecycle note: persisted session cache is hydrated in a deferred s
 |-------|------|---------|-------------|
 | `include_partial_messages` | `boolean()` | `nil` | Enable character-level streaming |
 | `preferred_transport` | `atom()` | `nil` | Transport selection (`:auto`, `:cli`, `:control`) |
+| `transport_error_mode` | `atom()` | `nil` | `:result` (default surface) or `:raise` for strict transport/decode failures |
 
 ### Internal/Advanced Options
 
@@ -946,18 +947,15 @@ Control how tool permissions are handled.
 | Mode | Description |
 |------|-------------|
 | `:default` | CLI default permission flow |
-| `:delegate` | Delegate tool execution to SDK |
 | `:accept_edits` | Edit operations auto-allowed |
 | `:plan` | Creates plan, shows to user, executes after approval |
 | `:bypass_permissions` | All tools allowed without callback |
+| `:auto` | Match the current Claude CLI auto mode |
 | `:dont_ask` | No permission prompts; tools proceed |
 
 ```elixir
 # Default - CLI handles permissions
 %Options{permission_mode: :default}
-
-# Delegate - SDK callback controls permissions
-%Options{permission_mode: :delegate}
 
 # Accept edits - auto-approve file modifications
 %Options{permission_mode: :accept_edits}
@@ -967,6 +965,9 @@ Control how tool permissions are handled.
 
 # Bypass - no permissions (use with caution)
 %Options{permission_mode: :bypass_permissions}
+
+# Auto - let the CLI decide the current prompt behavior
+%Options{permission_mode: :auto}
 
 # Dont ask - no permission prompts
 %Options{permission_mode: :dont_ask}
@@ -1004,7 +1005,7 @@ options = %Options{
 }
 ```
 
-Note: `can_use_tool` enables `include_partial_messages` and sets `permission_prompt_tool` to `"stdio"` internally. Hook fallback only applies in non-`:delegate` modes and ignores `updated_permissions`.
+Note: `can_use_tool` enables `include_partial_messages` and sets `permission_prompt_tool` to `"stdio"` internally. Hook fallback only applies when the CLI does not emit `can_use_tool`, and that fallback ignores `updated_permissions`. `:delegate` is not forwarded because current Claude CLI builds reject it.
 
 ---
 

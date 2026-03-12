@@ -7,7 +7,7 @@ defmodule ClaudeAgentSDK.PermissionTest do
   - Permission result types (allow/deny)
   - Permission context building
   - Input modification via permissions
-  - Permission mode behavior (default, accept_edits, plan, bypass_permissions, delegate, dont_ask)
+  - Permission mode behavior (default, accept_edits, plan, bypass_permissions, auto, dont_ask)
   - Runtime mode switching
   - Error handling in permission callbacks
   """
@@ -295,7 +295,7 @@ defmodule ClaudeAgentSDK.PermissionTest do
                :accept_edits,
                :plan,
                :bypass_permissions,
-               :delegate,
+               :auto,
                :dont_ask
              ]
     end
@@ -308,7 +308,7 @@ defmodule ClaudeAgentSDK.PermissionTest do
                :accept_edits,
                :plan,
                :bypass_permissions,
-               :delegate,
+               :auto,
                :dont_ask
              ]
     end
@@ -321,13 +321,24 @@ defmodule ClaudeAgentSDK.PermissionTest do
                :accept_edits,
                :plan,
                :bypass_permissions,
-               :delegate,
+               :auto,
+               :dont_ask
+             ]
+    end
+
+    test "auto mode is treated as a valid CLI permission mode" do
+      assert :auto in [
+               :default,
+               :accept_edits,
+               :plan,
+               :bypass_permissions,
+               :auto,
                :dont_ask
              ]
     end
 
     test "mode values are valid atoms" do
-      valid_modes = [:default, :accept_edits, :plan, :bypass_permissions, :delegate, :dont_ask]
+      valid_modes = [:default, :accept_edits, :plan, :bypass_permissions, :auto, :dont_ask]
 
       # Test mode validation function (to be implemented)
       assert Enum.all?(valid_modes, &is_atom/1)
@@ -583,12 +594,17 @@ defmodule ClaudeAgentSDK.PermissionTest do
     end
 
     test "Options validates permission mode values" do
-      valid_modes = [:default, :accept_edits, :plan, :bypass_permissions, :delegate, :dont_ask]
+      valid_modes = [:default, :accept_edits, :plan, :bypass_permissions, :auto, :dont_ask]
 
       Enum.each(valid_modes, fn mode ->
         options = %ClaudeAgentSDK.Options{permission_mode: mode}
         assert options.permission_mode == mode
       end)
+    end
+
+    test "delegate is no longer accepted as a CLI permission mode" do
+      refute ClaudeAgentSDK.Permission.valid_mode?(:delegate)
+      assert ClaudeAgentSDK.Permission.string_to_mode("delegate") == nil
     end
   end
 end

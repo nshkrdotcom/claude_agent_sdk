@@ -160,8 +160,9 @@ defmodule SDKMCPStreamingExample do
       Use tools for each calculation and show the results.
       """
 
-      # Track tool usage - SDK MCP tools emit tool_use_start but results come via
-      # control protocol, not as streaming tool_complete events
+      # Track tool usage - SDK MCP tools emit tool_use_start and tool_input_delta.
+      # The tool-use block ends with content_block_stop; results themselves come
+      # back through the normal message stream, not a separate tool_complete event.
       summary =
         Streaming.send_message(session, prompt)
         |> Enum.reduce_while(
@@ -214,10 +215,6 @@ defmodule SDKMCPStreamingExample do
                   end
 
                 {:cont, next_state}
-
-              %{type: :tool_complete, tool_name: name} ->
-                IO.puts("\n✅ Tool #{name} completed\n")
-                {:cont, state}
 
               %{type: :message_stop} ->
                 final_state = %{

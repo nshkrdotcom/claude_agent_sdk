@@ -113,6 +113,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         transport_ref: transport_ref,
         input_task: input_task,
         done?: false,
+        transport_error_mode: transport_error_mode(options),
         # Track if we've received at least one message for better error diagnostics
         received_first_message?: false,
         # Track if we've received the result for stream completion detection
@@ -240,7 +241,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         handle_line(line, state)
 
       {:claude_agent_sdk_transport, ref, {:error, error}} when ref == state.transport_ref ->
-        {[transport_error_message(error)], %{state | done?: true}}
+        handle_transport_error(error, state)
 
       {:claude_agent_sdk_transport, ref, {:stderr, _data}} when ref == state.transport_ref ->
         receive_next(state)
@@ -256,7 +257,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         handle_line(line, state)
 
       {:transport_error, error} ->
-        {[transport_error_message(error)], %{state | done?: true}}
+        handle_transport_error(error, state)
 
       {:transport_exit, _reason} ->
         if process_running?(state.transport) do
@@ -286,8 +287,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
         {[message], state}
 
-      {:error, message} ->
-        {[message], %{state | done?: true}}
+      {:error, error} ->
+        handle_transport_error(error, state)
     end
   end
 
@@ -297,28 +298,30 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         {:ok, message}
 
       {:error, reason} ->
-        {:error, json_decode_error_message(line, reason)}
+        {:error, json_decode_error(line, reason)}
     end
   end
 
-  defp json_decode_error_message(line, original_error) do
-    error =
-      %Errors.CLIJSONDecodeError{
-        message:
-          "Failed to decode JSON: #{String.slice(line, 0, Buffers.error_preview_length())}...",
-        line: line,
-        original_error: original_error
-      }
-
-    Message.error_result(Exception.message(error), error_struct: error)
+  defp json_decode_error(line, original_error) do
+    %Errors.CLIJSONDecodeError{
+      message:
+        "Failed to decode JSON: #{String.slice(line, 0, Buffers.error_preview_length())}...",
+      line: line,
+      original_error: original_error
+    }
   end
 
-  defp transport_error_message(%Errors.CLIJSONDecodeError{} = error) do
-    Message.error_result(Exception.message(error), error_struct: error)
+  defp handle_transport_error(error, %{transport_error_mode: :raise}) do
+    raise transport_error_struct(error)
+  end
+
+  defp handle_transport_error(error, state) do
+    {[transport_error_message(error)], %{state | done?: true}}
   end
 
   defp transport_error_message(error) do
-    Message.error_result("Transport error: #{inspect(error)}", error_struct: error)
+    error_struct = transport_error_struct(error)
+    Message.error_result(Exception.message(error_struct), error_struct: error_struct)
   end
 
   defp input_task_error_message(reason) do
@@ -503,6 +506,22 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
   defp process_running?(_pid), do: false
+
+  defp transport_error_struct(%Errors.CLIJSONDecodeError{} = error), do: error
+  defp transport_error_struct(%Errors.CLIConnectionError{} = error), do: error
+  defp transport_error_struct(%Errors.CLINotFoundError{} = error), do: error
+  defp transport_error_struct(%Errors.ProcessError{} = error), do: error
+  defp transport_error_struct(%Errors.ClaudeSDKError{} = error), do: error
+
+  defp transport_error_struct(error) do
+    %Errors.ClaudeSDKError{
+      message: "Transport error: #{inspect(error)}",
+      cause: error
+    }
+  end
+
+  defp transport_error_mode(%Options{transport_error_mode: :raise}), do: :raise
+  defp transport_error_mode(_options), do: :result
 
   defp should_use_mock?(transport, %Options{} = options) do
     Runtime.use_mock?() and is_nil(transport) and not Runtime.force_real?(options)

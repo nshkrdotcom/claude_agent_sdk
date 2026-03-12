@@ -83,6 +83,8 @@ defmodule ClaudeAgentSDK.Query do
   """
   @spec continue(String.t() | nil, Options.t()) :: Enumerable.t(ClaudeAgentSDK.Message.t())
   def continue(prompt, %Options{} = options) do
+    options = validate_permission_settings!(prompt, options)
+
     if control_client_required?(options) do
       opts = %{options | continue_conversation: true}
       client_stream_module().stream(prompt, opts)
@@ -121,6 +123,8 @@ defmodule ClaudeAgentSDK.Query do
   @spec resume(String.t(), String.t() | nil, Options.t()) ::
           Enumerable.t(ClaudeAgentSDK.Message.t())
   def resume(session_id, prompt, %Options{} = options) do
+    options = validate_permission_settings!(prompt, options)
+
     if control_client_required?(options) do
       opts = %{options | resume: session_id}
       client_stream_module().stream(prompt, opts)
@@ -167,6 +171,9 @@ defmodule ClaudeAgentSDK.Query do
   end
 
   defp validate_permission_settings!(_prompt, %Options{} = options) do
+    validate_permission_mode!(options)
+    validate_transport_error_mode!(options)
+
     if options.can_use_tool do
       if options.permission_prompt_tool do
         raise ArgumentError,
@@ -179,6 +186,26 @@ defmodule ClaudeAgentSDK.Query do
     else
       options
     end
+  end
+
+  defp validate_permission_mode!(%Options{permission_mode: nil}), do: :ok
+
+  defp validate_permission_mode!(%Options{permission_mode: mode}) do
+    unless ClaudeAgentSDK.Permission.valid_mode?(mode) do
+      raise ArgumentError,
+            "invalid permission_mode #{inspect(mode)}. Expected one of: #{inspect(ClaudeAgentSDK.Permission.valid_modes())}"
+    end
+  end
+
+  defp validate_transport_error_mode!(%Options{transport_error_mode: nil}), do: :ok
+
+  defp validate_transport_error_mode!(%Options{transport_error_mode: mode})
+       when mode in [:result, :raise],
+       do: :ok
+
+  defp validate_transport_error_mode!(%Options{transport_error_mode: mode}) do
+    raise ArgumentError,
+          "invalid transport_error_mode #{inspect(mode)}. Expected :result or :raise"
   end
 
   defp maybe_enable_partial_messages(%Options{include_partial_messages: nil} = options) do

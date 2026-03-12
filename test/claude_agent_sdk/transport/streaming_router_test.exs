@@ -183,8 +183,8 @@ defmodule ClaudeAgentSDK.Transport.StreamingRouterTest do
       assert :control_client = StreamingRouter.select_transport(opts)
     end
 
-    test "delegate mode → control client" do
-      opts = %Options{permission_mode: :delegate}
+    test "auto mode → control client" do
+      opts = %Options{permission_mode: :auto}
       assert :control_client = StreamingRouter.select_transport(opts)
     end
 

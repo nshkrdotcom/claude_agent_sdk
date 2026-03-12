@@ -27,6 +27,7 @@ defmodule ClaudeAgentSDK.MessageRateLimitEventTest do
       assert data.rate_limit_info.resets_at == 1_700_000_000
       assert data.rate_limit_info.rate_limit_type == "five_hour"
       assert data.rate_limit_info.utilization == 0.85
+      assert data.rate_limit_info.is_using_overage == false
       assert data.rate_limit_info.raw["isUsingOverage"] == false
     end
 

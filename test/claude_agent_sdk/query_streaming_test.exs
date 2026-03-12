@@ -1,7 +1,9 @@
 defmodule ClaudeAgentSDK.QueryStreamingTest do
   use ClaudeAgentSDK.SupertesterCase
 
+  alias ClaudeAgentSDK.Errors.CLIJSONDecodeError
   alias ClaudeAgentSDK.{Message, Options, Query}
+  alias ClaudeAgentSDK.Permission.Result
   alias ClaudeAgentSDK.TestSupport.MockTransport
 
   defmodule FailingInputTransport do
@@ -151,5 +153,93 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
 
     assert data.is_error == true
     assert data.error =~ "end_input_failed"
+  end
+
+  test "transport_error_mode :raise raises on malformed CLI stream frames" do
+    test_pid = self()
+
+    controller =
+      spawn(fn ->
+        receive do
+          {:mock_transport_started, transport} ->
+            send(test_pid, {:transport_started, transport})
+
+            assert_receive_transport(:mock_transport_subscribed)
+            assert_receive_transport(:mock_transport_send)
+
+            receive do
+              {:mock_transport_end_input, ^transport} ->
+                MockTransport.push_message(transport, "not json")
+            end
+        end
+      end)
+
+    stream =
+      Query.run(
+        "hi",
+        %Options{transport_error_mode: :raise},
+        {MockTransport, [test_pid: controller]}
+      )
+
+    assert_raise CLIJSONDecodeError, fn ->
+      Enum.to_list(stream)
+    end
+
+    assert_receive {:transport_started, _transport}, 1_000
+  end
+
+  test "transport_error_mode :raise raises on malformed control-client frames" do
+    callback = fn _context -> Result.allow() end
+    test_pid = self()
+
+    controller =
+      spawn(fn ->
+        receive do
+          {:mock_transport_started, transport} ->
+            send(test_pid, {:transport_started, transport})
+            assert_receive_transport(:mock_transport_subscribed)
+
+            receive do
+              {:mock_transport_send, init_json} ->
+                init_request_id = Jason.decode!(String.trim(init_json))["request_id"]
+
+                MockTransport.push_message(
+                  transport,
+                  Jason.encode!(%{
+                    "type" => "control_response",
+                    "response" => %{
+                      "subtype" => "success",
+                      "request_id" => init_request_id,
+                      "response" => %{}
+                    }
+                  })
+                )
+            end
+
+            assert_receive_transport(:mock_transport_send)
+            MockTransport.push_message(transport, "not json")
+        end
+      end)
+
+    stream =
+      Query.run(
+        "hi",
+        %Options{can_use_tool: callback, transport_error_mode: :raise},
+        {MockTransport, [test_pid: controller]}
+      )
+
+    assert_raise CLIJSONDecodeError, fn ->
+      Enum.to_list(stream)
+    end
+
+    assert_receive {:transport_started, _transport}, 1_000
+  end
+
+  defp assert_receive_transport(tag) do
+    receive do
+      {^tag, _payload} -> :ok
+    after
+      1_000 -> flunk("expected #{inspect(tag)}")
+    end
   end
 end

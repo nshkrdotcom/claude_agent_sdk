@@ -1,362 +1,577 @@
 defmodule ClaudeAgentSDK.Session.HistoryTest do
   use ClaudeAgentSDK.SupertesterCase
 
+  alias ClaudeAgentSDK
   alias ClaudeAgentSDK.Session.History
   alias ClaudeAgentSDK.Session.SessionInfo
+  alias ClaudeAgentSDK.Session.SessionMessage
 
   @session_uuid "550e8400-e29b-41d4-a716-446655440000"
 
   setup do
-    # Create a temp directory structure mimicking ~/.claude/projects/<sanitized>/
-    tmp_dir = System.tmp_dir!() |> Path.join("claude_test_#{:rand.uniform(1_000_000)}")
-    File.mkdir_p!(tmp_dir)
+    root = Path.join(System.tmp_dir!(), "claude_history_#{System.unique_integer([:positive])}")
+    config_dir = Path.join(root, ".claude")
+    projects_dir = Path.join(config_dir, "projects")
+    File.mkdir_p!(projects_dir)
 
-    on_exit(fn -> File.rm_rf!(tmp_dir) end)
+    original_config_dir = System.get_env("CLAUDE_CONFIG_DIR")
+    System.put_env("CLAUDE_CONFIG_DIR", config_dir)
 
-    {:ok, tmp_dir: tmp_dir}
+    on_exit(fn ->
+      restore_env("CLAUDE_CONFIG_DIR", original_config_dir)
+      File.rm_rf!(root)
+    end)
+
+    {:ok, config_dir: config_dir, projects_dir: projects_dir, root: root}
   end
 
   describe "sanitize_path/1" do
-    test "replaces non-alphanumeric chars with hyphens" do
-      assert History.sanitize_path("/home/user/project") == "-home-user-project"
+    test "replaces non-alphanumeric characters with hyphens" do
+      assert History.sanitize_path("/Users/foo/my-project") == "-Users-foo-my-project"
+      assert History.sanitize_path("plugin:name:server") == "plugin-name-server"
     end
 
-    test "truncates long paths and appends hash" do
-      long_path = String.duplicate("a", 250)
+    test "truncates long paths and appends a hash suffix" do
+      long_path = String.duplicate("/x", 150)
       sanitized = History.sanitize_path(long_path)
-      assert String.length(sanitized) <= 210
-      assert sanitized =~ ~r/-[a-z0-9]+$/
-    end
 
-    test "short paths are not truncated" do
-      assert History.sanitize_path("short") == "short"
+      assert String.length(sanitized) > 200
+      assert String.starts_with?(sanitized, "-x-x")
+      assert String.contains?(String.slice(sanitized, 200..-1//1), "-")
     end
   end
 
   describe "simple_hash/1" do
-    test "produces consistent hash" do
-      assert History.simple_hash("test") == History.simple_hash("test")
-    end
-
-    test "produces different hashes for different inputs" do
-      refute History.simple_hash("foo") == History.simple_hash("bar")
-    end
-
-    test "returns base36 string" do
-      hash = History.simple_hash("/home/user/my-project")
-      assert hash =~ ~r/^[0-9a-z]+$/
+    test "matches the JS-compatible hash used by upstream session storage" do
+      assert History.simple_hash("") == "0"
+      assert History.simple_hash("hello") == "1n1e4y"
+      assert History.simple_hash("hello") != History.simple_hash("world")
     end
   end
 
   describe "list_sessions/1" do
-    test "returns empty list when no sessions exist", %{tmp_dir: tmp_dir} do
-      project_dir = Path.join(tmp_dir, "-nonexistent-project")
-      File.mkdir_p!(project_dir)
-
-      assert History.list_sessions(directory: nil, projects_dir: tmp_dir) == []
+    test "returns empty list when the config dir has no sessions" do
+      assert History.list_sessions() == []
     end
 
-    test "reads session metadata from JSONL files", %{tmp_dir: tmp_dir} do
-      project_dir = Path.join(tmp_dir, "-home-user-project")
-      File.mkdir_p!(project_dir)
+    test "reads sessions for a real project path from CLAUDE_CONFIG_DIR", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "my-project") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
 
-      session_file = Path.join(project_dir, "#{@session_uuid}.jsonl")
-
-      content =
-        [
-          Jason.encode!(%{
-            "type" => "user",
-            "uuid" => "uuid-1",
-            "sessionId" => @session_uuid,
-            "message" => %{"role" => "user", "content" => "Hello world"}
-          }),
-          Jason.encode!(%{
-            "type" => "assistant",
-            "uuid" => "uuid-2",
-            "parentUuid" => "uuid-1",
-            "sessionId" => @session_uuid,
-            "message" => %{"role" => "assistant", "content" => "Hi there"}
-          })
-        ]
-        |> Enum.join("\n")
-
-      File.write!(session_file, content)
-
-      sessions = History.list_sessions(directory: nil, projects_dir: tmp_dir)
-      assert length(sessions) == 1
-
-      session = hd(sessions)
-      assert %SessionInfo{} = session
-      assert session.session_id == @session_uuid
-      assert session.first_prompt == "Hello world"
-      assert session.file_size > 0
-      assert session.last_modified > 0
-    end
-
-    test "skips sidechain sessions", %{tmp_dir: tmp_dir} do
-      project_dir = Path.join(tmp_dir, "-home-user-project2")
-      File.mkdir_p!(project_dir)
-
-      session_file = Path.join(project_dir, "#{@session_uuid}.jsonl")
-
-      content =
-        Jason.encode!(%{
-          "type" => "user",
-          "uuid" => "uuid-1",
-          "sessionId" => @session_uuid,
-          "isSidechain" => true,
-          "message" => %{"role" => "user", "content" => "sidechain"}
-        })
-
-      File.write!(session_file, content)
-
-      sessions = History.list_sessions(directory: nil, projects_dir: tmp_dir)
-      assert sessions == []
-    end
-
-    test "sorts by last_modified descending", %{tmp_dir: tmp_dir} do
-      project_dir = Path.join(tmp_dir, "-sorted-test")
-      File.mkdir_p!(project_dir)
-
-      uuid1 = "00000000-0000-0000-0000-000000000001"
-      uuid2 = "00000000-0000-0000-0000-000000000002"
-
-      File.write!(
-        Path.join(project_dir, "#{uuid1}.jsonl"),
-        Jason.encode!(%{
-          "type" => "user",
-          "uuid" => "u1",
-          "sessionId" => uuid1,
-          "message" => %{"role" => "user", "content" => "First session"}
-        })
-      )
-
-      # File.stat mtime has 1-second resolution; ensure different mtime
-      Process.sleep(1100)
-
-      File.write!(
-        Path.join(project_dir, "#{uuid2}.jsonl"),
-        Jason.encode!(%{
-          "type" => "user",
-          "uuid" => "u2",
-          "sessionId" => uuid2,
-          "message" => %{"role" => "user", "content" => "Second session"}
-        })
-      )
-
-      sessions = History.list_sessions(directory: nil, projects_dir: tmp_dir)
-      assert length(sessions) == 2
-      assert hd(sessions).session_id == uuid2
-    end
-
-    test "respects limit option", %{tmp_dir: tmp_dir} do
-      project_dir = Path.join(tmp_dir, "-limit-test")
-      File.mkdir_p!(project_dir)
-
-      for i <- 1..3 do
-        uuid = "00000000-0000-0000-0000-00000000000#{i}"
-
-        File.write!(
-          Path.join(project_dir, "#{uuid}.jsonl"),
-          Jason.encode!(%{
-            "type" => "user",
-            "uuid" => "u#{i}",
-            "sessionId" => uuid,
-            "message" => %{"role" => "user", "content" => "Session #{i}"}
-          })
+      {session_id, _path} =
+        make_session_file(project_dir,
+          first_prompt: "What is 2+2?",
+          git_branch: "main",
+          cwd: project_path
         )
+
+      sessions = History.list_sessions(directory: project_path, include_worktrees: false)
+
+      assert [
+               %SessionInfo{
+                 session_id: ^session_id,
+                 first_prompt: "What is 2+2?",
+                 summary: "What is 2+2?",
+                 git_branch: "main",
+                 cwd: ^project_path,
+                 project_path: ^project_path,
+                 custom_title: nil,
+                 file_size: file_size,
+                 last_modified: last_modified
+               }
+             ] = sessions
+
+      assert file_size > 0
+      assert last_modified > 0
+    end
+
+    test "custom_title wins summary and first_prompt", %{config_dir: config_dir, root: root} do
+      project_path = Path.join(root, "custom-title") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      make_session_file(project_dir,
+        first_prompt: "original question",
+        summary: "auto summary",
+        custom_title: "My Custom Title"
+      )
+
+      assert [%SessionInfo{} = session] =
+               History.list_sessions(directory: project_path, include_worktrees: false)
+
+      assert session.summary == "My Custom Title"
+      assert session.custom_title == "My Custom Title"
+      assert session.first_prompt == "original question"
+    end
+
+    test "summary wins first_prompt when no custom title", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "summary") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      make_session_file(project_dir, first_prompt: "question", summary: "better summary")
+
+      assert [%SessionInfo{} = session] =
+               History.list_sessions(directory: project_path, include_worktrees: false)
+
+      assert session.summary == "better summary"
+      assert session.custom_title == nil
+    end
+
+    test "sorts by last_modified descending and returns millisecond timestamps", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "mtime") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      {old_id, old_path} = make_session_file(project_dir, first_prompt: "old")
+      {new_id, new_path} = make_session_file(project_dir, first_prompt: "new")
+      {mid_id, mid_path} = make_session_file(project_dir, first_prompt: "mid")
+
+      set_mtime!(old_path, 1_000)
+      set_mtime!(new_path, 3_000)
+      set_mtime!(mid_path, 2_000)
+
+      sessions = History.list_sessions(directory: project_path, include_worktrees: false)
+
+      assert Enum.map(sessions, & &1.session_id) == [new_id, mid_id, old_id]
+      assert Enum.map(sessions, & &1.last_modified) == [3_000_000, 2_000_000, 1_000_000]
+    end
+
+    test "respects limit", %{config_dir: config_dir, root: root} do
+      project_path = Path.join(root, "limit") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      for prompt <- ~w[prompt0 prompt1 prompt2 prompt3 prompt4] do
+        make_session_file(project_dir, first_prompt: prompt)
       end
 
-      sessions = History.list_sessions(directory: nil, projects_dir: tmp_dir, limit: 2)
-      assert length(sessions) == 2
+      assert 2 ==
+               History.list_sessions(directory: project_path, limit: 2, include_worktrees: false)
+               |> length()
     end
 
-    test "extracts custom_title from tail", %{tmp_dir: tmp_dir} do
-      project_dir = Path.join(tmp_dir, "-title-test")
-      File.mkdir_p!(project_dir)
+    test "filters sidechain and metadata-only sessions", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "filtered") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
 
-      session_file = Path.join(project_dir, "#{@session_uuid}.jsonl")
+      make_session_file(project_dir, first_prompt: "normal")
+      make_session_file(project_dir, first_prompt: "sidechain", is_sidechain: true)
+      make_session_file(project_dir, first_prompt: "meta only", is_meta_only: true)
 
-      content =
-        [
-          Jason.encode!(%{
-            "type" => "user",
-            "uuid" => "u1",
-            "sessionId" => @session_uuid,
-            "message" => %{"role" => "user", "content" => "Initial prompt"}
-          }),
-          Jason.encode!(%{
-            "type" => "assistant",
-            "uuid" => "u2",
-            "parentUuid" => "u1",
-            "sessionId" => @session_uuid,
-            "message" => %{"role" => "assistant", "content" => "Response"},
-            "customTitle" => "My Custom Title"
-          })
-        ]
-        |> Enum.join("\n")
-
-      File.write!(session_file, content)
-
-      sessions = History.list_sessions(directory: nil, projects_dir: tmp_dir)
-      session = hd(sessions)
-      assert session.custom_title == "My Custom Title"
-      assert session.summary == "My Custom Title"
+      assert [%SessionInfo{first_prompt: "normal"}] =
+               History.list_sessions(directory: project_path, include_worktrees: false)
     end
 
-    test "filters sessions to a specific project directory", %{tmp_dir: tmp_dir} do
-      selected_dir = Path.join(tmp_dir, "-selected-project")
-      ignored_dir = Path.join(tmp_dir, "-ignored-project")
+    test "lists all sessions across projects and deduplicates by newest session id", %{
+      config_dir: config_dir
+    } do
+      older_dir = make_project_dir(config_dir, "/path/one")
+      newer_dir = make_project_dir(config_dir, "/path/two")
+      shared_id = make_uuid(42)
 
-      File.mkdir_p!(selected_dir)
-      File.mkdir_p!(ignored_dir)
+      {_session_id, older_path} =
+        make_session_file(older_dir, session_id: shared_id, first_prompt: "older")
 
-      selected_uuid = "00000000-0000-0000-0000-000000000010"
-      ignored_uuid = "00000000-0000-0000-0000-000000000011"
+      {_session_id, newer_path} =
+        make_session_file(newer_dir, session_id: shared_id, first_prompt: "newer")
 
-      File.write!(
-        Path.join(selected_dir, "#{selected_uuid}.jsonl"),
+      set_mtime!(older_path, 1_000)
+      set_mtime!(newer_path, 2_000)
+
+      assert [
+               %SessionInfo{
+                 session_id: ^shared_id,
+                 first_prompt: "newer",
+                 last_modified: 2_000_000
+               }
+             ] =
+               History.list_sessions()
+    end
+
+    test "falls back cwd to the project path and prefers gitBranch from tail", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "cwd-fallback") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      session_id = make_uuid(77)
+      file_path = Path.join(project_dir, "#{session_id}.jsonl")
+
+      lines = [
         Jason.encode!(%{
           "type" => "user",
-          "uuid" => "selected",
-          "sessionId" => selected_uuid,
-          "message" => %{"role" => "user", "content" => "Selected session"}
-        })
-      )
+          "message" => %{"content" => "hello"},
+          "gitBranch" => "old-branch"
+        }),
+        Jason.encode!(%{"type" => "summary", "gitBranch" => "new-branch"})
+      ]
 
-      File.write!(
-        Path.join(ignored_dir, "#{ignored_uuid}.jsonl"),
-        Jason.encode!(%{
-          "type" => "user",
-          "uuid" => "ignored",
-          "sessionId" => ignored_uuid,
-          "message" => %{"role" => "user", "content" => "Ignored session"}
-        })
-      )
+      File.write!(file_path, Enum.join(lines, "\n") <> "\n")
 
-      sessions =
-        History.list_sessions(projects_dir: tmp_dir, directory: Path.basename(selected_dir))
+      assert [%SessionInfo{} = session] =
+               History.list_sessions(directory: project_path, include_worktrees: false)
 
-      assert Enum.map(sessions, & &1.session_id) == [selected_uuid]
-      assert Enum.all?(sessions, &(&1.project_path == selected_dir))
+      assert session.cwd == project_path
+      assert session.project_path == project_path
+      assert session.git_branch == "new-branch"
+    end
+
+    test "include_worktrees scans git worktree session directories and deduplicates", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      repo = Path.join(root, "repo") |> Path.expand()
+      worktree = Path.join(root, "repo-worktree") |> Path.expand()
+      setup_git_worktree!(repo, worktree)
+
+      main_dir = make_project_dir(config_dir, repo)
+      worktree_dir = make_project_dir(config_dir, worktree)
+      shared_id = make_uuid(99)
+
+      {_sid, main_path} = make_session_file(main_dir, session_id: shared_id, first_prompt: "main")
+
+      {_sid, worktree_path} =
+        make_session_file(worktree_dir, session_id: shared_id, first_prompt: "worktree")
+
+      set_mtime!(main_path, 1_000)
+      set_mtime!(worktree_path, 3_000)
+
+      sessions = History.list_sessions(directory: repo, include_worktrees: true)
+
+      assert [%SessionInfo{session_id: ^shared_id, first_prompt: "worktree"}] = sessions
     end
   end
 
   describe "get_session_messages/2" do
-    test "returns messages from a session file", %{tmp_dir: tmp_dir} do
-      project_dir = Path.join(tmp_dir, "-messages-test")
-      File.mkdir_p!(project_dir)
+    test "returns empty list for invalid or missing session ids" do
+      assert History.get_session_messages("not-a-uuid") == []
+      assert History.get_session_messages(@session_uuid) == []
+    end
 
-      session_file = Path.join(project_dir, "#{@session_uuid}.jsonl")
+    test "builds the canonical conversation chain and returns visible session messages", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "messages") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
 
-      content =
-        [
-          Jason.encode!(%{
-            "type" => "user",
-            "uuid" => "uuid-1",
-            "sessionId" => @session_uuid,
-            "message" => %{"role" => "user", "content" => "Hello"}
-          }),
-          Jason.encode!(%{
-            "type" => "assistant",
-            "uuid" => "uuid-2",
-            "parentUuid" => "uuid-1",
-            "sessionId" => @session_uuid,
-            "message" => %{"role" => "assistant", "content" => "Hi there"}
-          })
-        ]
-        |> Enum.join("\n")
+      u1 = make_uuid(1)
+      a1 = make_uuid(2)
+      u2 = make_uuid(3)
+      a2 = make_uuid(4)
 
-      File.write!(session_file, content)
+      entries = [
+        make_transcript_entry("user", u1, nil, @session_uuid, "hello"),
+        make_transcript_entry("assistant", a1, u1, @session_uuid, "hi!"),
+        make_transcript_entry("user", u2, a1, @session_uuid, "thanks"),
+        make_transcript_entry("assistant", a2, u2, @session_uuid, "welcome")
+      ]
+
+      write_transcript!(project_dir, @session_uuid, entries)
+
+      messages = History.get_session_messages(@session_uuid, directory: project_path)
+
+      assert [
+               %SessionMessage{
+                 type: "user",
+                 uuid: ^u1,
+                 session_id: @session_uuid,
+                 message: %{"role" => "user", "content" => "hello"},
+                 parent_tool_use_id: nil
+               },
+               %SessionMessage{type: "assistant", uuid: ^a1},
+               %SessionMessage{type: "user", uuid: ^u2},
+               %SessionMessage{type: "assistant", uuid: ^a2}
+             ] = messages
+    end
+
+    test "filters meta and non-user-assistant entries but walks through them in the chain", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "filtered-chain") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      u1 = make_uuid(10)
+      meta = make_uuid(11)
+      progress = make_uuid(12)
+      a1 = make_uuid(13)
+
+      entries = [
+        make_transcript_entry("user", u1, nil, @session_uuid, "hello"),
+        make_transcript_entry("user", meta, u1, @session_uuid, "meta", isMeta: true),
+        make_transcript_entry("progress", progress, meta, @session_uuid, nil),
+        make_transcript_entry("assistant", a1, progress, @session_uuid, "hi")
+      ]
 
       messages =
-        History.get_session_messages(@session_uuid, projects_dir: tmp_dir)
+        project_dir
+        |> write_transcript!(@session_uuid, entries)
+        |> then(fn _ ->
+          History.get_session_messages(@session_uuid, directory: project_path)
+        end)
 
-      assert length(messages) == 2
-      assert hd(messages).type == "user"
-      assert List.last(messages).type == "assistant"
+      assert Enum.map(messages, & &1.uuid) == [u1, a1]
+      assert Enum.all?(messages, &(&1.type in ["user", "assistant"]))
     end
 
-    test "returns empty list for invalid UUID" do
-      messages = History.get_session_messages("not-a-uuid")
-      assert messages == []
-    end
+    test "keeps compact summaries, prefers the main leaf, and supports pagination", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "pagination") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
 
-    test "returns empty list for nonexistent session" do
-      messages = History.get_session_messages(@session_uuid, projects_dir: "/nonexistent")
-      assert messages == []
-    end
-
-    test "supports limit and offset", %{tmp_dir: tmp_dir} do
-      project_dir = Path.join(tmp_dir, "-pagination-test")
-      File.mkdir_p!(project_dir)
-
-      session_file = Path.join(project_dir, "#{@session_uuid}.jsonl")
+      uuids = Enum.map(1..6, &make_uuid/1)
 
       entries =
-        for i <- 1..6 do
-          type = if rem(i, 2) == 1, do: "user", else: "assistant"
-          parent = if i > 1, do: "uuid-#{i - 1}", else: nil
+        uuids
+        |> Enum.with_index()
+        |> Enum.map(fn {uuid, index} ->
+          parent = if index == 0, do: nil, else: Enum.at(uuids, index - 1)
+          type = if rem(index, 2) == 0, do: "user", else: "assistant"
 
-          entry = %{
-            "type" => type,
-            "uuid" => "uuid-#{i}",
-            "sessionId" => @session_uuid,
-            "message" => %{"role" => type, "content" => "Message #{i}"}
-          }
+          extras = if index == 0, do: [isCompactSummary: true], else: []
+          make_transcript_entry(type, uuid, parent, @session_uuid, "m#{index}", extras)
+        end)
 
-          entry = if parent, do: Map.put(entry, "parentUuid", parent), else: entry
-          Jason.encode!(entry)
-        end
+      side_leaf = make_uuid(100)
 
-      File.write!(session_file, Enum.join(entries, "\n"))
+      entries =
+        entries ++
+          [
+            make_transcript_entry("assistant", side_leaf, hd(uuids), @session_uuid, "side",
+              isSidechain: true
+            )
+          ]
 
-      all = History.get_session_messages(@session_uuid, projects_dir: tmp_dir)
-      assert length(all) == 6
+      write_transcript!(project_dir, @session_uuid, entries)
 
-      page =
-        History.get_session_messages(@session_uuid, projects_dir: tmp_dir, limit: 2, offset: 2)
+      all_messages = History.get_session_messages(@session_uuid, directory: project_path)
 
-      assert length(page) == 2
+      paged_messages =
+        History.get_session_messages(@session_uuid, directory: project_path, limit: 2, offset: 2)
+
+      assert Enum.map(all_messages, & &1.uuid) == uuids
+      assert Enum.map(paged_messages, & &1.uuid) == Enum.slice(uuids, 2, 2)
+
+      assert length(
+               History.get_session_messages(@session_uuid, directory: project_path, limit: 0)
+             ) == 6
+
+      assert History.get_session_messages(@session_uuid, directory: project_path, offset: 100) ==
+               []
     end
 
-    test "filters out isMeta and isSidechain messages", %{tmp_dir: tmp_dir} do
-      project_dir = Path.join(tmp_dir, "-filter-test")
-      File.mkdir_p!(project_dir)
+    test "returns empty when parentUuid links are cyclic", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "cycles") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
 
-      session_file = Path.join(project_dir, "#{@session_uuid}.jsonl")
+      u1 = make_uuid(201)
+      a1 = make_uuid(202)
 
-      content =
-        [
-          Jason.encode!(%{
-            "type" => "user",
-            "uuid" => "uuid-1",
-            "sessionId" => @session_uuid,
-            "message" => %{"role" => "user", "content" => "Visible"}
-          }),
-          Jason.encode!(%{
-            "type" => "user",
-            "uuid" => "uuid-2",
-            "parentUuid" => "uuid-1",
-            "sessionId" => @session_uuid,
-            "isMeta" => true,
-            "message" => %{"role" => "user", "content" => "Meta message"}
-          }),
-          Jason.encode!(%{
-            "type" => "assistant",
-            "uuid" => "uuid-3",
-            "parentUuid" => "uuid-1",
-            "sessionId" => @session_uuid,
-            "message" => %{"role" => "assistant", "content" => "Visible response"}
-          })
-        ]
-        |> Enum.join("\n")
+      entries = [
+        make_transcript_entry("user", u1, a1, @session_uuid, "hi"),
+        make_transcript_entry("assistant", a1, u1, @session_uuid, "hello")
+      ]
 
-      File.write!(session_file, content)
+      write_transcript!(project_dir, @session_uuid, entries)
 
-      messages = History.get_session_messages(@session_uuid, projects_dir: tmp_dir)
-      assert length(messages) == 2
-      assert Enum.all?(messages, fn m -> m.type in ["user", "assistant"] end)
+      assert History.get_session_messages(@session_uuid, directory: project_path) == []
     end
+
+    test "searches all projects when no directory is given", %{config_dir: config_dir} do
+      project_dir = make_project_dir(config_dir, "/path/two")
+
+      u1 = make_uuid(301)
+      a1 = make_uuid(302)
+
+      write_transcript!(project_dir, @session_uuid, [
+        make_transcript_entry("user", u1, nil, @session_uuid, "hi"),
+        make_transcript_entry("assistant", a1, u1, @session_uuid, "hello")
+      ])
+
+      assert [%SessionMessage{uuid: ^u1}, %SessionMessage{uuid: ^a1}] =
+               History.get_session_messages(@session_uuid)
+    end
+  end
+
+  describe "top-level parity helpers" do
+    test "ClaudeAgentSDK.list_sessions/1 and get_session_messages/2 delegate to CLI history", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "top-level") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      make_session_file(project_dir, session_id: @session_uuid, first_prompt: "hello")
+
+      write_transcript!(project_dir, @session_uuid, [
+        make_transcript_entry("user", make_uuid(401), nil, @session_uuid, "hello")
+      ])
+
+      assert [%SessionInfo{session_id: @session_uuid}] =
+               ClaudeAgentSDK.list_sessions(directory: project_path, include_worktrees: false)
+
+      assert [%SessionMessage{session_id: @session_uuid}] =
+               ClaudeAgentSDK.get_session_messages(@session_uuid, directory: project_path)
+    end
+  end
+
+  defp restore_env(key, nil), do: System.delete_env(key)
+  defp restore_env(key, value), do: System.put_env(key, value)
+
+  defp make_project_dir(config_dir, project_path) do
+    sanitized_dir = History.sanitize_path(project_path)
+    project_dir = Path.join([config_dir, "projects", sanitized_dir])
+    File.mkdir_p!(project_dir)
+    project_dir
+  end
+
+  defp make_session_file(project_dir, opts) do
+    session_id = Keyword.get(opts, :session_id, make_uuid(System.unique_integer([:positive])))
+    file_path = Path.join(project_dir, "#{session_id}.jsonl")
+
+    first_prompt = Keyword.get(opts, :first_prompt, "Hello Claude")
+    summary = Keyword.get(opts, :summary)
+    custom_title = Keyword.get(opts, :custom_title)
+    git_branch = Keyword.get(opts, :git_branch)
+    cwd = Keyword.get(opts, :cwd)
+    is_sidechain = Keyword.get(opts, :is_sidechain, false)
+    is_meta_only = Keyword.get(opts, :is_meta_only, false)
+
+    first_entry =
+      %{
+        "type" => "user",
+        "message" => %{"role" => "user", "content" => first_prompt}
+      }
+      |> maybe_put("cwd", cwd)
+      |> maybe_put("gitBranch", git_branch)
+      |> maybe_put_if("isSidechain", is_sidechain)
+      |> maybe_put_if("isMeta", is_meta_only)
+
+    tail_entry =
+      %{"type" => "summary"}
+      |> maybe_put("summary", summary)
+      |> maybe_put("customTitle", custom_title)
+      |> maybe_put("gitBranch", git_branch)
+
+    content =
+      [
+        Jason.encode!(first_entry),
+        Jason.encode!(%{
+          "type" => "assistant",
+          "message" => %{"role" => "assistant", "content" => "Hi there!"}
+        }),
+        Jason.encode!(tail_entry)
+      ]
+      |> Enum.join("\n")
+      |> Kernel.<>("\n")
+
+    File.write!(file_path, content)
+
+    {session_id, file_path}
+  end
+
+  defp make_transcript_entry(type, uuid, parent_uuid, session_id, content, extras \\ []) do
+    entry = %{
+      "type" => type,
+      "uuid" => uuid,
+      "parentUuid" => parent_uuid,
+      "sessionId" => session_id
+    }
+
+    entry =
+      if is_nil(content) do
+        entry
+      else
+        role = if type in ["user", "assistant"], do: type, else: "user"
+        Map.put(entry, "message", %{"role" => role, "content" => content})
+      end
+
+    Enum.into(extras, entry, fn
+      {key, value} when is_atom(key) -> {Atom.to_string(key), value}
+      pair -> pair
+    end)
+  end
+
+  defp write_transcript!(project_dir, session_id, entries) do
+    path = Path.join(project_dir, "#{session_id}.jsonl")
+    content = Enum.map_join(entries, "\n", &Jason.encode!/1) <> "\n"
+    File.write!(path, content)
+    path
+  end
+
+  defp set_mtime!(path, posix_seconds) do
+    datetime =
+      posix_seconds
+      |> round()
+      |> DateTime.from_unix!()
+      |> DateTime.to_naive()
+      |> NaiveDateTime.to_erl()
+
+    File.touch!(path, datetime)
+  end
+
+  defp setup_git_worktree!(repo, worktree) do
+    File.mkdir_p!(repo)
+    run_git!(repo, ["init"])
+    run_git!(repo, ["config", "user.email", "sdk@example.com"])
+    run_git!(repo, ["config", "user.name", "SDK Test"])
+    File.write!(Path.join(repo, "README.md"), "history test\n")
+    run_git!(repo, ["add", "README.md"])
+    run_git!(repo, ["commit", "-m", "initial"])
+    run_git!(repo, ["worktree", "add", "-b", "feature", worktree])
+  end
+
+  defp run_git!(cwd, args) do
+    case System.cmd("git", args, cd: cwd, stderr_to_stdout: true) do
+      {_output, 0} ->
+        :ok
+
+      {output, status} ->
+        flunk("git #{Enum.join(args, " ")} failed with status #{status}: #{output}")
+    end
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp maybe_put_if(map, _key, false), do: map
+  defp maybe_put_if(map, key, true), do: Map.put(map, key, true)
+
+  defp make_uuid(integer) when is_integer(integer) do
+    tail =
+      integer
+      |> Integer.to_string()
+      |> String.pad_leading(12, "0")
+      |> String.slice(-12, 12)
+
+    "00000000-0000-0000-0000-#{tail}"
   end
 end

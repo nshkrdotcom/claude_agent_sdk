@@ -157,10 +157,6 @@ session
   %{type: :tool_use_start, name: tool_name} ->
     IO.write("\n[Using #{tool_name}...] ")
 
-  # Tool finished
-  %{type: :tool_complete} ->
-    IO.write("[Done]\n")
-
   # Response complete
   %{type: :message_stop} ->
     IO.puts("")
@@ -236,9 +232,11 @@ When streaming, you'll receive these event types:
 | `:text_delta` | A chunk of text | `text`, `accumulated` |
 | `:message_start` | Response beginning | `model`, `role` |
 | `:message_stop` | Response complete | `final_text` |
+| `:text_block_start` | Text block started | none |
+| `:content_block_stop` | Current content block finished | `final_text` |
 | `:tool_use_start` | Tool invocation started | `name`, `id` |
 | `:tool_input_delta` | Tool input being built | `json` |
-| `:tool_complete` | Tool finished | `tool_name`, `result` |
+| `:thinking_start` | Extended thinking block started | none |
 | `:thinking_delta` | Extended thinking (Opus) | `thinking` |
 | `:error` | An error occurred | `error` |
 

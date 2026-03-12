@@ -575,7 +575,7 @@ end
 }
 
 %Options{
-  permission_mode: :delegate         # Delegate decisions to SDK callback
+  permission_mode: :auto             # CLI auto permission flow
 }
 
 %Options{

@@ -224,7 +224,7 @@ defmodule ClaudeAgentSDK.ContentExtractor do
         data: %{session_id: "123"}
       }
       ClaudeAgentSDK.ContentExtractor.has_text?(message)
-      # => true (system messages can have extractable info)
+      # => false (system messages do not expose extractable text)
 
       message = %ClaudeAgentSDK.Message{
         type: :unknown, 

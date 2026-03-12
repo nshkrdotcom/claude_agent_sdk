@@ -100,4 +100,19 @@ defmodule ClaudeAgentSDK.QueryControlTest do
       assert updated.include_partial_messages == true
     end
   end
+
+  describe "permission mode validation" do
+    test "rejects deprecated delegate permission mode before starting a query" do
+      assert_raise ArgumentError, ~r/invalid permission_mode/, fn ->
+        Query.run("hello", %Options{permission_mode: :delegate}) |> Enum.to_list()
+      end
+    end
+
+    test "allows the CLI auto permission mode" do
+      options = %Options{permission_mode: :auto}
+
+      assert [:client_stream] = Query.run("hello", options) |> Enum.to_list()
+      assert_received {:client_stream_invoked, "hello", ^options, nil}
+    end
+  end
 end

@@ -263,7 +263,7 @@ defmodule ParentToolUseIdVerification do
     acc
   end
 
-  defp should_check_metadata?(%{type: type}) when type in [:message, :tool_complete], do: false
+  defp should_check_metadata?(%{type: :message}), do: false
   defp should_check_metadata?(%{type: _type}), do: true
   defp should_check_metadata?(_), do: false
 

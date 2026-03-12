@@ -89,6 +89,7 @@ defmodule ClaudeAgentSDK.Message do
           optional(:resets_at) => integer() | nil,
           optional(:rate_limit_type) => String.t() | nil,
           optional(:utilization) => float() | integer() | nil,
+          optional(:is_using_overage) => boolean() | nil,
           optional(:overage_status) => String.t() | nil,
           optional(:overage_resets_at) => integer() | nil,
           optional(:overage_disabled_reason) => String.t() | nil,
@@ -446,7 +447,7 @@ defmodule ClaudeAgentSDK.Message do
   end
 
   defp build_system_data(:init, raw) do
-    %{
+    Map.merge(raw, %{
       api_key_source: raw["apiKeySource"],
       cwd: raw["cwd"],
       session_id: raw["session_id"],
@@ -454,41 +455,43 @@ defmodule ClaudeAgentSDK.Message do
       mcp_servers: raw["mcp_servers"] || [],
       model: raw["model"],
       permission_mode: raw["permissionMode"]
-    }
+    })
   end
 
   defp build_task_started_data(raw) do
-    %{
+    Map.merge(raw, %{
       task_id: raw["task_id"],
       description: raw["description"],
       uuid: raw["uuid"],
       session_id: raw["session_id"],
       tool_use_id: raw["tool_use_id"],
       task_type: raw["task_type"]
-    }
+    })
   end
 
   defp build_task_progress_data(raw) do
-    %{
+    Map.merge(raw, %{
       task_id: raw["task_id"],
       description: raw["description"],
       uuid: raw["uuid"],
       session_id: raw["session_id"],
+      tool_use_id: raw["tool_use_id"],
       usage: raw["usage"],
       last_tool_name: raw["last_tool_name"]
-    }
+    })
   end
 
   defp build_task_notification_data(raw) do
-    %{
+    Map.merge(raw, %{
       task_id: raw["task_id"],
       status: raw["status"],
       output_file: raw["output_file"],
       summary: raw["summary"],
       uuid: raw["uuid"],
       session_id: raw["session_id"],
+      tool_use_id: raw["tool_use_id"],
       usage: raw["usage"]
-    }
+    })
   end
 
   defp build_rate_limit_event_data(raw) do
@@ -500,6 +503,7 @@ defmodule ClaudeAgentSDK.Message do
         resets_at: info["resetsAt"],
         rate_limit_type: info["rateLimitType"],
         utilization: info["utilization"],
+        is_using_overage: info["isUsingOverage"],
         overage_status: info["overageStatus"],
         overage_resets_at: info["overageResetsAt"],
         overage_disabled_reason: info["overageDisabledReason"],

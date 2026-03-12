@@ -358,11 +358,24 @@ end
 
 opts = %Options{
   can_use_tool: permission_callback,
-  permission_mode: :default  # :default | :accept_edits | :plan | :bypass_permissions | :delegate | :dont_ask
+  permission_mode: :default  # :default | :accept_edits | :plan | :bypass_permissions | :auto | :dont_ask
 }
 ```
 
-Note: `can_use_tool` is mutually exclusive with `permission_prompt_tool`. The SDK routes `can_use_tool` through the control client (including string prompts), auto-enables `include_partial_messages`, and sets `permission_prompt_tool` to `\"stdio\"` internally so the CLI can emit permission callbacks. Use `:default` or `:plan` for built-in tool permissions; `:delegate` is intended for external tool execution. Hook-based fallback only applies in non-`:delegate` modes and ignores `updated_permissions`. If you do not see callbacks, your CLI build may not emit control callbacks (see `examples/advanced_features/permissions_live.exs`).
+Note: `can_use_tool` is mutually exclusive with `permission_prompt_tool`. The SDK routes `can_use_tool` through the control client (including string prompts), auto-enables `include_partial_messages`, and sets `permission_prompt_tool` to `\"stdio\"` internally so the CLI can emit permission callbacks. Use `:default`, `:plan`, or the CLI's `:auto` mode for built-in tool permissions. Hook-based fallback only applies when the CLI does not emit `can_use_tool`, and that fallback ignores `updated_permissions`. `:delegate` is no longer forwarded because current Claude CLI builds reject it.
+
+CLI transcript history now matches the official SDK surface:
+
+```elixir
+# Claude CLI transcript history
+sessions = ClaudeAgentSDK.list_sessions(directory: "/path/to/project")
+messages = ClaudeAgentSDK.get_session_messages("550e8400-e29b-41d4-a716-446655440000",
+  directory: "/path/to/project"
+)
+
+# SDK-managed SessionStore history
+{:ok, saved_sessions} = ClaudeAgentSDK.list_saved_sessions(storage_dir: "/custom/path")
+```
 
 Stream a single client response until the final result:
 
@@ -438,11 +451,12 @@ Key options for `ClaudeAgentSDK.Options`:
 | `system_prompt` | string | Custom system instructions |
 | `output_format` | atom/map | `:text`, `:json`, `:stream_json`, or JSON schema (SDK enforces stream-json for transport; JSON schema still passed) |
 | `allowed_tools` | list | Tools Claude can use |
-| `permission_mode` | atom | `:default`, `:accept_edits`, `:plan`, `:bypass_permissions`, `:delegate`, `:dont_ask` |
+| `permission_mode` | atom | `:default`, `:accept_edits`, `:plan`, `:bypass_permissions`, `:auto`, `:dont_ask` |
 | `hooks` | map | Lifecycle hook callbacks |
 | `mcp_servers` | map or string | MCP server configurations (or JSON/path alias for `mcp_config`) |
 | `cwd` | string | Working directory for file operations |
 | `timeout_ms` | integer | Command timeout (default: 75 minutes) |
+| `transport_error_mode` | atom | `:result` (default) or `:raise` for strict transport/decode failures |
 | `max_buffer_size` | integer | Maximum JSON buffer size (default: 1MB, overflow yields `CLIJSONDecodeError`) |
 
 CLI path override: set `path_to_claude_code_executable` or `executable` in `Options` (Python `cli_path` equivalent).

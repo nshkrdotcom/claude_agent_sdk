@@ -33,6 +33,7 @@ defmodule ClaudeAgentSDK do
   """
 
   alias ClaudeAgentSDK.{Options, Query, SDKMCP}
+  alias ClaudeAgentSDK.Session.History
 
   @doc """
   Runs a query against Claude Code and returns a stream of messages.
@@ -110,13 +111,32 @@ defmodule ClaudeAgentSDK do
   end
 
   @doc """
-  Lists saved Claude sessions from the SessionStore.
+  Lists Claude CLI transcript sessions.
+
+  This mirrors the official Agent SDK `list_sessions()` surface and reads the
+  CLI's on-disk JSONL history under `~/.claude/projects`.
+  """
+  @spec list_sessions(keyword()) :: [ClaudeAgentSDK.Session.SessionInfo.t()]
+  def list_sessions(opts \\ []) do
+    History.list_sessions(opts)
+  end
+
+  @doc """
+  Reads visible user/assistant messages from a Claude CLI transcript session.
+  """
+  @spec get_session_messages(String.t(), keyword()) :: [ClaudeAgentSDK.Session.SessionMessage.t()]
+  def get_session_messages(session_id, opts \\ []) do
+    History.get_session_messages(session_id, opts)
+  end
+
+  @doc """
+  Lists SDK-managed sessions from `ClaudeAgentSDK.SessionStore`.
 
   Starts the SessionStore automatically when needed.
   """
-  @spec list_sessions(keyword()) ::
+  @spec list_saved_sessions(keyword()) ::
           {:ok, [ClaudeAgentSDK.SessionStore.session_metadata()]} | {:error, term()}
-  def list_sessions(opts \\ []) do
+  def list_saved_sessions(opts \\ []) do
     with :ok <- ensure_session_store_started(opts) do
       {:ok, ClaudeAgentSDK.SessionStore.list_sessions()}
     end

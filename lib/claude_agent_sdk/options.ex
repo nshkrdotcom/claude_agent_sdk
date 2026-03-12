@@ -32,6 +32,7 @@ defmodule ClaudeAgentSDK.Options do
   - `include_partial_messages` - Enable character-level streaming (boolean) (v0.8.0+)
   - `stream_buffer_limit` - Max inbound entries buffered before first subscriber (integer, default: 1000)
   - `preferred_transport` - Override automatic transport selection (`:auto | :cli | :control`) (v0.8.0+)
+  - `transport_error_mode` - Surface transport/decode failures as synthetic result messages or raised errors (`:result | :raise`)
 
   ## Streaming + Tools (v0.8.0)
 
@@ -142,6 +143,8 @@ defmodule ClaudeAgentSDK.Options do
     :stream_buffer_limit,
     # Override automatic transport selection
     :preferred_transport,
+    # Surface transport failures as result messages (default) or raised errors
+    :transport_error_mode,
     :user,
     :max_thinking_tokens,
     # Effort level (:low, :medium, :high, :max)
@@ -167,11 +170,12 @@ defmodule ClaudeAgentSDK.Options do
 
   @type output_format :: :text | :json | :stream_json | structured_output_format()
   @type permission_mode ::
-          :default | :accept_edits | :bypass_permissions | :plan | :delegate | :dont_ask
+          :default | :accept_edits | :bypass_permissions | :plan | :auto | :dont_ask
   @type model_name :: String.t()
   @type agent_name :: atom()
   @type agent_definition :: ClaudeAgentSDK.Agent.t()
   @type transport_preference :: :auto | :cli | :control
+  @type transport_error_mode :: :result | :raise
 
   @typedoc """
   Tools preset configuration.
@@ -295,6 +299,7 @@ defmodule ClaudeAgentSDK.Options do
           include_partial_messages: boolean() | nil,
           stream_buffer_limit: non_neg_integer() | nil,
           preferred_transport: transport_preference() | nil,
+          transport_error_mode: transport_error_mode() | nil,
           max_buffer_size: pos_integer() | nil,
           extra_args: %{optional(String.t()) => String.t() | boolean() | nil},
           env: %{optional(String.t()) => String.t()},
@@ -812,14 +817,7 @@ defmodule ClaudeAgentSDK.Options do
   defp add_permission_mode_args(args, %{permission_mode: nil}), do: args
 
   defp add_permission_mode_args(args, %{permission_mode: mode}) do
-    # Convert permission mode atom to CLI string format
-    mode_string =
-      case mode do
-        :accept_edits -> "acceptEdits"
-        :bypass_permissions -> "bypassPermissions"
-        :dont_ask -> "dontAsk"
-        other -> to_string(other)
-      end
+    mode_string = ClaudeAgentSDK.Permission.mode_to_string(mode)
 
     args ++ ["--permission-mode", mode_string]
   end

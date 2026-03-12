@@ -185,9 +185,6 @@ defmodule Mix.Tasks.Chat do
       %{type: :tool_use_start, name: tool_name} ->
         IO.write("\n[Using #{tool_name}...] ")
 
-      %{type: :tool_complete} ->
-        IO.write("[Done]\n")
-
       %{type: :message_stop} ->
         IO.puts("")
 

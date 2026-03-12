@@ -11,21 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`:max` effort level**: The SDK now supports all four effort modes (`:low`, `:medium`, `:high`, `:max`), matching the Python SDK and Anthropic API. The `:max` level is Opus-only and provides maximum reasoning capability with no token constraints.
-- **Opus-aware effort gating**: When `:max` effort is used with a non-Opus model, the SDK logs a warning and omits the flag.
-- **`opus_model?/1` helper**: Internal model detection for Opus models, mirroring the existing `haiku_model?/1` pattern.
+- **`:max` effort level**: All four effort modes (`:low`, `:medium`, `:high`, `:max`) now supported. `:max` is Opus-only; non-Opus models log a warning and omit the flag.
+- **`:rate_limit_event` message type**: New `Message` type for CLI rate-limit state changes, with structured `rate_limit_info` data.
+- **`transport_error_mode` option**: New `:result` (default) or `:raise` mode controlling whether transport/decode errors surface as result messages or raised exceptions.
+- **`list_sessions/1` and `get_session_messages/2` top-level API**: Read CLI transcript history directly; the old `list_sessions/1` is renamed to `list_saved_sessions/1`.
+- **`SessionMessage` struct**: New struct for historical user/assistant messages from CLI transcripts.
+- **`max_effort_opus_live.exs` example**: Exercises `:max` effort on Opus in request/response and streaming modes.
 
 ### Changed
 
-- `@valid_efforts` expanded from `[:low, :medium, :high]` to `[:low, :medium, :high, :max]`.
-- `OptionBuilder.with_effort/2` guard and `@spec` updated to accept `:max`.
-- Error messages for invalid effort values now list all four valid options.
-- Effort documentation in all guides updated with model-specific support table and clarified default-model gating behavior.
-- `effort_gating_live.exs` updated: `:max` + Opus now runs as a live case; invalid-effort demo uses `:invalid_effort_level` instead of the now-valid `:max`.
-
-### Added (Examples)
-
-- **`max_effort_opus_live.exs`**: Standalone example exercising `:max` effort on both `opus` and `opus[1m]` in request/response and streaming modes, with emitted CLI args shown for each case. Not included in `run_all.sh` (expensive).
+- **Permission mode `:delegate` renamed to `:auto`**: Aligns with current Claude CLI naming. All types, docs, and CLI string conversion updated.
+- **`Permission.mode_to_string/1` raises on invalid input** instead of falling through to `Atom.to_string/1`.
+- **Message data builders use `Map.merge/2`**: System init, task started/progress/notification data now preserves extra CLI fields for forward compatibility.
+- **Task progress/notification data includes `tool_use_id`** field.
+- **`ContentExtractor.extract_text/1` returns `nil` for empty strings** via `normalize_extracted_text/1`.
+- **CLI version defaults bumped**: Minimum `2.1.0`, recommended `2.1.74`.
+- **`Query.continue/2` and `Query.resume/3`** now validate permission mode and transport error mode before streaming.
+- **Effort gating uses `effective_effort_model/1`** to resolve `nil` model via `Model.default_model/0`.
+- **`CLIStream` error handling refactored**: Decode errors produce structured `CLIJSONDecodeError` structs; transport errors wrapped via `transport_error_struct/1`.
 
 ## [0.15.0] - 2026-03-05
 

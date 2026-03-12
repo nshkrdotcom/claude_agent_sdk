@@ -742,6 +742,10 @@ arrive after `start_link` succeeds. Handle transport exits as part of normal sup
 Query/control streaming boundaries normalize equivalent low-level transport errors:
 
 - `{:command_not_found, "claude"}` becomes `:cli_not_found`
+- By default, `query/2` and control-backed query streams surface transport/decode
+  failures as synthetic `:error_during_execution` result messages.
+- Set `%Options{transport_error_mode: :raise}` to raise first-class
+  `ClaudeAgentSDK.Errors.*` exceptions instead.
 
 Use the normalized reason atoms in retry/fallback logic:
 

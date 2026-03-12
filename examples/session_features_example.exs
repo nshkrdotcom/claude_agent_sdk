@@ -5,7 +5,8 @@
 # Demonstrates:
 #   - Capturing a real `session_id`
 #   - Persisting session transcripts (SessionStore)
-#   - Searching/listing saved sessions
+#   - Searching/listing saved SessionStore sessions
+#   - Reading CLI transcript history via ClaudeAgentSDK.list_sessions/1
 #   - Resuming the same session
 #   - CLI flag parity for --fork-session, --add-dir, --strict-mcp-config
 #
@@ -84,6 +85,13 @@ case session_id do
       sid = meta[:session_id] || meta["session_id"] || "unknown"
       tags = meta[:tags] || meta["tags"] || []
       IO.puts("  - #{sid} (tags: #{inspect(tags)})")
+    end)
+
+    IO.puts("\nRecent CLI transcript sessions for this project:")
+
+    ClaudeAgentSDK.list_sessions(directory: File.cwd!(), limit: 3, include_worktrees: false)
+    |> Enum.each(fn session ->
+      IO.puts("  - #{session.session_id}: #{session.summary}")
     end)
 
     IO.puts("\nResuming the same session (no tools)...\n")

@@ -46,7 +46,7 @@ defmodule ClaudeAgentSDK.Message.TaskTest do
   end
 
   describe "task_progress system message" do
-    test "parses task_progress with usage" do
+    test "parses task_progress with usage and tool_use_id" do
       json =
         Jason.encode!(%{
           "type" => "system",
@@ -55,6 +55,7 @@ defmodule ClaudeAgentSDK.Message.TaskTest do
           "description" => "Analyzing code",
           "uuid" => "uuid-456",
           "session_id" => "sess-1",
+          "tool_use_id" => "tool-2",
           "usage" => %{
             "total_tokens" => 5000,
             "tool_uses" => 3,
@@ -68,8 +69,10 @@ defmodule ClaudeAgentSDK.Message.TaskTest do
       assert msg.subtype == :task_progress
       assert msg.data.task_id == "task-abc"
       assert msg.data.description == "Analyzing code"
+      assert msg.data.tool_use_id == "tool-2"
       assert msg.data.usage == %{"total_tokens" => 5000, "tool_uses" => 3, "duration_ms" => 2000}
       assert msg.data.last_tool_name == "Read"
+      assert msg.data["tool_use_id"] == "tool-2"
     end
   end
 
@@ -85,6 +88,7 @@ defmodule ClaudeAgentSDK.Message.TaskTest do
           "summary" => "Analysis complete",
           "uuid" => "uuid-789",
           "session_id" => "sess-1",
+          "tool_use_id" => "tool-3",
           "usage" => %{
             "total_tokens" => 10_000,
             "tool_uses" => 7,
@@ -99,6 +103,7 @@ defmodule ClaudeAgentSDK.Message.TaskTest do
       assert msg.data.status == "completed"
       assert msg.data.output_file == "/tmp/output.txt"
       assert msg.data.summary == "Analysis complete"
+      assert msg.data.tool_use_id == "tool-3"
       assert msg.data.usage["total_tokens"] == 10_000
     end
 
@@ -135,6 +140,42 @@ defmodule ClaudeAgentSDK.Message.TaskTest do
 
       {:ok, msg} = Message.from_json(json)
       assert msg.data.status == "stopped"
+    end
+  end
+
+  describe "init system message" do
+    test "preserves the full raw init payload in data while keeping typed accessors" do
+      json =
+        Jason.encode!(%{
+          "type" => "system",
+          "subtype" => "init",
+          "session_id" => "sess-init",
+          "cwd" => "/tmp/project",
+          "tools" => ["Read", "Write"],
+          "mcp_servers" => [%{"name" => "calendar", "status" => "needs-auth"}],
+          "model" => "claude-haiku-4-5-20251001",
+          "permissionMode" => "default",
+          "apiKeySource" => "none",
+          "agents" => ["general-purpose"],
+          "claude_code_version" => "2.1.74",
+          "fast_mode_state" => "off",
+          "plugins" => [],
+          "skills" => ["debug"],
+          "slash_commands" => ["review"],
+          "uuid" => "uuid-init"
+        })
+
+      {:ok, msg} = Message.from_json(json)
+
+      assert msg.type == :system
+      assert msg.subtype == :init
+      assert msg.data.session_id == "sess-init"
+      assert msg.data.permission_mode == "default"
+      assert msg.data["agents"] == ["general-purpose"]
+      assert msg.data["claude_code_version"] == "2.1.74"
+      assert msg.data["skills"] == ["debug"]
+      assert msg.data["slash_commands"] == ["review"]
+      assert msg.data["uuid"] == "uuid-init"
     end
   end
 end

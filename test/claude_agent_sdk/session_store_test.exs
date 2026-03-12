@@ -31,6 +31,16 @@ defmodule ClaudeAgentSDK.SessionStoreTest do
     assert Process.alive?(Process.whereis(SessionStore))
   end
 
+  test "list_saved_sessions/1 preserves the explicit SessionStore helper", %{
+    storage_dir: storage_dir
+  } do
+    session_id = "saved-session"
+    assert :ok = SessionStore.save_session(session_id, sample_messages(), tags: ["saved"])
+
+    assert {:ok, sessions} = ClaudeAgentSDK.list_saved_sessions(storage_dir: storage_dir)
+    assert Enum.any?(sessions, &(&1.session_id == session_id))
+  end
+
   test "periodic cleanup message does not terminate the session store", %{
     storage_dir: storage_dir
   } do

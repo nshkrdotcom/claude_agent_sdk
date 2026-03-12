@@ -23,7 +23,7 @@ The SDK supports six permission modes that control how tool permissions are hand
 
 ```elixir
 options = %ClaudeAgentSDK.Options{
-  permission_mode: :default  # or :accept_edits, :plan, :bypass_permissions, :delegate, :dont_ask
+  permission_mode: :default  # or :accept_edits, :plan, :bypass_permissions, :auto, :dont_ask
 }
 ```
 
@@ -38,13 +38,13 @@ options = %ClaudeAgentSDK.Options{
 }
 ```
 
-### `:delegate` Mode
+### `:auto` Mode
 
-Delegates tool execution to the SDK. Use this when you plan to execute tools yourself instead of the Claude CLI.
+Uses the current Claude CLI `auto` permission behavior. This mode is available in current Claude CLI builds even though some upstream docs and SDKs still lag it.
 
 ```elixir
 options = %ClaudeAgentSDK.Options{
-  permission_mode: :delegate,
+  permission_mode: :auto,
   can_use_tool: &my_permission_callback/1
 }
 ```
@@ -96,10 +96,10 @@ options = %ClaudeAgentSDK.Options{
 | Mode | Edit Tools | Other Tools | Use Case |
 |------|------------|-------------|----------|
 | `:default` | CLI flow | CLI flow | Built-in tool permissions |
-| `:delegate` | Callback | Callback | External tool execution |
 | `:accept_edits` | Auto-allow | Callback | Trusted file operations |
 | `:plan` | Plan + approval | Plan + approval | Review-before-execute workflows |
 | `:bypass_permissions` | Auto-allow | Auto-allow | Development/sandboxed |
+| `:auto` | CLI auto flow | CLI auto flow | Match current CLI auto mode |
 | `:dont_ask` | Auto-allow | Auto-allow | No prompt / headless flows |
 
 ---
@@ -111,9 +111,10 @@ The `can_use_tool` option accepts a callback function that receives a `Permissio
 Important constraints:
 - `can_use_tool` routes `query/2` through the control client (string or streaming prompts).
 - `can_use_tool` cannot be combined with `permission_prompt_tool`; the SDK sets `permission_prompt_tool` to `"stdio"` internally.
-- For built-in tool permissions, use `permission_mode: :default` or `:plan`.
+- For built-in tool permissions, use `permission_mode: :default`, `:plan`, or `:auto`.
 - `can_use_tool` enables `include_partial_messages` automatically so tool events stream to the SDK.
-- Hook-based fallback only applies in non-`:delegate` modes and ignores `updated_permissions`.
+- Hook-based fallback only applies when the CLI does not emit `can_use_tool`, and it ignores `updated_permissions`.
+- `:delegate` is intentionally not supported as a CLI permission mode because current Claude CLI builds reject `--permission-mode delegate`.
 
 ### Troubleshooting Missing Callbacks
 
@@ -827,8 +828,9 @@ Tool Execution
 Response to User
 ```
 
-Note: Hook fallback only applies in non-`:delegate` modes. In `:delegate`, the
-permission callback only runs when the CLI emits `can_use_tool`.
+Note: Hook fallback only applies when the CLI does not emit `can_use_tool`.
+That fallback ignores `updated_permissions`; full permission updates still require
+direct control callbacks from the CLI.
 
 ### Combined Example
 

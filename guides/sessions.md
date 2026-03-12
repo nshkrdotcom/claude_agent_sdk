@@ -511,8 +511,8 @@ end)
 ### Using the Main Module Helper
 
 ```elixir
-# ClaudeAgentSDK.list_sessions/1 auto-starts SessionStore
-case ClaudeAgentSDK.list_sessions(storage_dir: "/custom/path") do
+# ClaudeAgentSDK.list_saved_sessions/1 auto-starts SessionStore
+case ClaudeAgentSDK.list_saved_sessions(storage_dir: "/custom/path") do
   {:ok, sessions} ->
     IO.puts("Found #{length(sessions)} sessions")
 
@@ -806,51 +806,67 @@ end
 
 ---
 
-## Reading CLI Session History (v0.15.0)
+## Reading CLI Session History
 
-The `Session.History` module reads Claude Code's on-disk JSONL session files
-stored at `~/.claude/projects/<sanitized-cwd>/<uuid>.jsonl`. This is separate
-from `SessionStore` — it reads the CLI's own history rather than SDK-managed state.
+The top-level `ClaudeAgentSDK.list_sessions/1` and
+`ClaudeAgentSDK.get_session_messages/2` functions now mirror the official Agent SDK
+session-history surface. They read Claude Code's on-disk JSONL transcripts under
+`~/.claude/projects/<sanitized-cwd>/<uuid>.jsonl` (respecting `CLAUDE_CONFIG_DIR`).
+This is separate from `SessionStore` and returns CLI transcript history rather than
+SDK-managed session storage.
 
 ### Listing Sessions
 
 ```elixir
-alias ClaudeAgentSDK.Session.History
+alias ClaudeAgentSDK
 
-# List all sessions (most recent first)
-sessions = History.list_sessions()
+# List sessions for a real project path (worktrees included by default)
+sessions = ClaudeAgentSDK.list_sessions(directory: "/path/to/project")
 
 Enum.each(sessions, fn session ->
   IO.puts("#{session.session_id}: #{session.summary}")
-  IO.puts("  Size: #{session.file_size} bytes, Modified: #{session.last_modified}")
+  IO.puts("  cwd: #{inspect(session.cwd)} branch: #{inspect(session.git_branch)}")
 end)
 
 # Limit results
-recent = History.list_sessions(limit: 5)
+recent = ClaudeAgentSDK.list_sessions(directory: "/path/to/project", limit: 5)
+
+# List all transcript sessions across every project
+all_sessions = ClaudeAgentSDK.list_sessions()
+
+# Disable worktree scanning for an exact project directory
+exact_project_only =
+  ClaudeAgentSDK.list_sessions(directory: "/path/to/project", include_worktrees: false)
 ```
 
 ### Reading Session Messages
 
 ```elixir
-alias ClaudeAgentSDK.Session.History
+alias ClaudeAgentSDK
 
-messages = History.get_session_messages("550e8400-e29b-41d4-a716-446655440000")
+messages =
+  ClaudeAgentSDK.get_session_messages(
+    "550e8400-e29b-41d4-a716-446655440000",
+    directory: "/path/to/project"
+  )
 
 Enum.each(messages, fn msg ->
   IO.puts("[#{msg.type}] #{get_in(msg.message, ["content"])}")
 end)
 
 # With pagination
-page = History.get_session_messages(session_id, limit: 10, offset: 20)
+page = ClaudeAgentSDK.get_session_messages(session_id, directory: "/path/to/project", limit: 10, offset: 20)
 ```
 
-Messages with `isMeta` or `isSidechain` flags are automatically filtered out.
+Messages are reconstructed from the canonical `parentUuid` chain. Meta, sidechain,
+progress, and other non-user/assistant transcript entries are walked through when
+needed but filtered from the returned `%ClaudeAgentSDK.Session.SessionMessage{}` list.
 
 ### Custom Projects Directory
 
 ```elixir
 # Point to a non-default location
-History.list_sessions(projects_dir: "/custom/path/to/projects")
+ClaudeAgentSDK.list_sessions(projects_dir: "/custom/path/to/projects")
 ```
 
 ---
@@ -869,7 +885,7 @@ The Claude Agent SDK provides comprehensive session management through:
 | Tagging | `SessionStore.save_session/3` | Organize with tags |
 | Search | `SessionStore.search/1` | Find sessions by criteria |
 | Cleanup | `SessionStore.cleanup_old_sessions/1` | Remove old sessions |
-| CLI history | `Session.History.list_sessions/1` | Read CLI's JSONL files |
-| CLI messages | `Session.History.get_session_messages/2` | Read messages from CLI history |
+| CLI history | `ClaudeAgentSDK.list_sessions/1` | Read CLI transcript metadata |
+| CLI messages | `ClaudeAgentSDK.get_session_messages/2` | Read canonical transcript messages |
 
 Sessions enable building sophisticated conversational applications with context persistence, multi-step workflows, and proper conversation management.

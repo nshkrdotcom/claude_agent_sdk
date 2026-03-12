@@ -503,7 +503,7 @@ defmodule ClaudeAgentSDK.Client do
   ## Parameters
 
   - `client` - Client PID
-  - `mode` - Permission mode atom (`:default`, `:accept_edits`, `:plan`, `:bypass_permissions`, `:delegate`, `:dont_ask`)
+  - `mode` - Permission mode atom (`:default`, `:accept_edits`, `:plan`, `:bypass_permissions`, `:auto`, `:dont_ask`)
 
   ## Returns
 
@@ -515,7 +515,7 @@ defmodule ClaudeAgentSDK.Client do
       Client.set_permission_mode(pid, :plan)
       Client.set_permission_mode(pid, :accept_edits)
       Client.set_permission_mode(pid, :bypass_permissions)
-      Client.set_permission_mode(pid, :delegate)
+      Client.set_permission_mode(pid, :auto)
   """
   @spec set_permission_mode(pid(), ClaudeAgentSDK.Permission.permission_mode()) ::
           :ok | {:error, :invalid_permission_mode}
@@ -652,6 +652,7 @@ defmodule ClaudeAgentSDK.Client do
     # Validate hooks and permission callback configuration before starting
     with :ok <- validate_hooks(options.hooks),
          :ok <- validate_permission_callback(options.can_use_tool),
+         :ok <- validate_transport_error_mode(options.transport_error_mode),
          {:ok, updated_options} <- apply_agent_settings(options),
          {:ok, updated_options} <- apply_permission_mode(updated_options),
          {:ok, updated_options} <- apply_permission_streaming(updated_options),
@@ -1036,13 +1037,19 @@ defmodule ClaudeAgentSDK.Client do
 
   @impl true
   def handle_info({:transport_error, error}, state) do
-    message = transport_error_message(error)
+    if transport_error_mode?(state, :raise) do
+      error = transport_error_struct(error)
+      broadcast_transport_error(state, error)
+      {:noreply, fail_pending_control_requests(state, {:transport_error, error})}
+    else
+      message = transport_error_message(error)
 
-    Enum.each(state.subscribers, fn {_ref, pid} ->
-      send(pid, {:claude_message, message})
-    end)
+      Enum.each(state.subscribers, fn {_ref, pid} ->
+        send(pid, {:claude_message, message})
+      end)
 
-    {:noreply, state}
+      {:noreply, state}
+    end
   end
 
   def handle_info({:transport_message, payload}, state) do
@@ -1055,15 +1062,7 @@ defmodule ClaudeAgentSDK.Client do
         {:noreply, state}
 
       {:error, reason} ->
-        # Log both the reason AND the payload (truncated) for debugging
-        payload_preview = inspect(payload, limit: 50)
-
-        Logger.warning("Failed to decode transport message",
-          reason: inspect(reason),
-          payload_preview: payload_preview
-        )
-
-        {:noreply, state}
+        {:noreply, handle_decode_error(payload, reason, state)}
     end
   end
 
@@ -1301,12 +1300,29 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp handle_decode_error(line, reason, state) do
-    if is_function(state.options.stderr, 1) do
-      state.options.stderr.(line)
-      state
-    else
-      Logger.warning("Failed to decode message: #{inspect(reason)}")
-      state
+    error =
+      %ClaudeAgentSDK.Errors.CLIJSONDecodeError{
+        message: "Failed to decode JSON: #{inspect(line, limit: 50)}",
+        line: decode_error_line(line),
+        original_error: reason
+      }
+
+    cond do
+      transport_error_mode?(state, :raise) ->
+        broadcast_transport_error(state, error)
+        fail_pending_control_requests(state, {:decode_error, error})
+
+      is_function(state.options.stderr, 1) ->
+        state.options.stderr.(line)
+        state
+
+      true ->
+        Logger.warning("Failed to decode message",
+          reason: inspect(reason),
+          payload_preview: inspect(line, limit: 50)
+        )
+
+        state
     end
   end
 
@@ -1386,6 +1402,10 @@ defmodule ClaudeAgentSDK.Client do
     ClaudeAgentSDK.Permission.validate_callback(callback)
   end
 
+  defp validate_transport_error_mode(nil), do: :ok
+  defp validate_transport_error_mode(mode) when mode in [:result, :raise], do: :ok
+  defp validate_transport_error_mode(_mode), do: {:error, :invalid_transport_error_mode}
+
   # Apply agent settings to options
   defp apply_agent_settings(%Options{agent: nil} = options), do: {:ok, options}
 
@@ -1417,7 +1437,15 @@ defmodule ClaudeAgentSDK.Client do
 
   defp apply_agent_settings(options), do: {:ok, options}
 
-  defp apply_permission_mode(options), do: {:ok, options}
+  defp apply_permission_mode(%Options{permission_mode: nil} = options), do: {:ok, options}
+
+  defp apply_permission_mode(%Options{permission_mode: mode} = options) do
+    if ClaudeAgentSDK.Permission.valid_mode?(mode) do
+      {:ok, options}
+    else
+      {:error, {:invalid_permission_mode, mode}}
+    end
+  end
 
   defp apply_permission_streaming(%Options{can_use_tool: nil} = options), do: {:ok, options}
 
@@ -1455,12 +1483,6 @@ defmodule ClaudeAgentSDK.Client do
   defp stream_timeout_ms(_options), do: Timeouts.streaming_session_ms()
 
   defp maybe_attach_permission_hook(%Options{can_use_tool: nil} = options) do
-    {:ok, options, nil}
-  end
-
-  defp maybe_attach_permission_hook(
-         %Options{can_use_tool: _callback, permission_mode: :delegate} = options
-       ) do
     {:ok, options, nil}
   end
 
@@ -3444,11 +3466,34 @@ defmodule ClaudeAgentSDK.Client do
     |> Protocol.decode_message()
   end
 
-  defp transport_error_message(%ClaudeAgentSDK.Errors.CLIJSONDecodeError{} = error) do
-    Message.error_result(Exception.message(error), error_struct: error)
+  defp transport_error_message(error) do
+    error_struct = transport_error_struct(error)
+    Message.error_result(Exception.message(error_struct), error_struct: error_struct)
   end
 
-  defp transport_error_message(error) do
-    Message.error_result("Transport error: #{inspect(error)}", error_struct: error)
+  defp transport_error_struct(%ClaudeAgentSDK.Errors.CLIJSONDecodeError{} = error), do: error
+  defp transport_error_struct(%ClaudeAgentSDK.Errors.CLIConnectionError{} = error), do: error
+  defp transport_error_struct(%ClaudeAgentSDK.Errors.CLINotFoundError{} = error), do: error
+  defp transport_error_struct(%ClaudeAgentSDK.Errors.ProcessError{} = error), do: error
+  defp transport_error_struct(%ClaudeAgentSDK.Errors.ClaudeSDKError{} = error), do: error
+
+  defp transport_error_struct(error) do
+    %ClaudeAgentSDK.Errors.ClaudeSDKError{
+      message: "Transport error: #{inspect(error)}",
+      cause: error
+    }
   end
+
+  defp broadcast_transport_error(state, error) do
+    Enum.each(state.subscribers, fn {_ref, pid} ->
+      send(pid, {:claude_error, error})
+    end)
+  end
+
+  defp transport_error_mode?(state, mode) do
+    state.options.transport_error_mode == mode
+  end
+
+  defp decode_error_line(line) when is_binary(line), do: line
+  defp decode_error_line(line), do: inspect(line)
 end

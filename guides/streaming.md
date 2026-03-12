@@ -262,7 +262,7 @@ Each event map also includes streaming metadata: `uuid`, `session_id`, `parent_t
 %{type: :message_start, model: "haiku", role: "assistant", usage: %{}}
 
 # Content block lifecycle
-%{type: :content_block_start}
+%{type: :text_block_start}
 %{type: :content_block_stop, final_text: "Complete text"}
 
 # Message delta with metadata
@@ -280,8 +280,8 @@ When Claude uses tools, you receive lifecycle events:
 # Tool input being streamed
 %{type: :tool_input_delta, json: "{\"command\": \"ls\"}"}
 
-# Tool execution complete
-%{type: :tool_complete, tool_name: "Bash", result: "..."}
+# Content block stop fires when the tool-use block is complete
+%{type: :content_block_stop, final_text: ""}
 ```
 
 ### Thinking Events (Extended Thinking)
@@ -292,9 +292,6 @@ When Claude uses tools, you receive lifecycle events:
 
 # Thinking content
 %{type: :thinking_delta, thinking: "Let me analyze this..."}
-
-# Thinking end
-%{type: :thinking_stop}
 ```
 
 ### Error Events
@@ -364,8 +361,8 @@ Streaming.send_message(session, prompt)
       IO.puts("\n[Using tool: #{name}]")
       {:cont, %{acc | tools: [{name, id} | acc.tools]}}
 
-    %{type: :tool_complete, tool_name: name} ->
-      IO.puts("[Tool #{name} complete]")
+    %{type: :content_block_stop} ->
+      IO.puts("[Content block complete]")
       {:cont, acc}
 
     %{type: :message_stop} ->

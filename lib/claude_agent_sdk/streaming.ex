@@ -62,7 +62,7 @@ defmodule ClaudeAgentSDK.Streaming do
 
   ### Message Lifecycle
   - `%{type: :message_start, model: "...", role: "...", usage: %{}}` - Message begins
-  - `%{type: :content_block_start}` - Content block starts
+  - `%{type: :text_block_start}` - Text block starts
   - `%{type: :content_block_stop, final_text: "..."}` - Content block complete
 
   ### Tools & Thinking
