@@ -104,7 +104,7 @@ defmodule ClaudeAgentSDK.CLITest do
   end
 
   test "minimum_version/0 returns the configured minimum version string" do
-    assert CLI.minimum_version() == "2.0.0"
+    assert CLI.minimum_version() == "2.1.0"
   end
 
   test "version_supported?/0 returns true when installed version meets minimum", %{
@@ -133,7 +133,7 @@ defmodule ClaudeAgentSDK.CLITest do
         end)
       end)
 
-    assert log =~ "Claude CLI version 0.9.0 is below minimum 2.0.0"
+    assert log =~ "Claude CLI version 0.9.0 is below minimum 2.1.0"
   end
 
   test "find_executable/0 falls back to known locations when not on PATH", %{

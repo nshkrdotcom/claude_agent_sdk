@@ -19,9 +19,9 @@ Support.ensure_live!()
 Support.header!("Web Tools Example (live)")
 
 IO.puts("""
-This example demonstrates web access tools:
-  - WebSearch: Search the web for current information
-  - WebFetch: Fetch and process content from URLs
+This example demonstrates web access tools working together:
+  - WebSearch: find a current answer
+  - WebFetch: confirm it from a fetched page
 
 These tools enable Claude to access real-time information beyond its training data.
 """)
@@ -79,10 +79,13 @@ options =
     }
   )
 
-# Prompt that requests web search - focused on getting useful info
+# Prompt that explicitly requires both web tools
 prompt = """
-Use WebSearch to find the latest stable version of Elixir.
-Tell me the version number and release date. Keep it brief (1-2 sentences).
+Use both web tools for this task:
+1. Use WebSearch to find the latest stable version of Elixir.
+2. Use WebFetch on an official source, such as https://github.com/elixir-lang/elixir/releases
+   or an elixir-lang.org release page, to confirm the version number and release date.
+3. Reply in 1-2 sentences with the version number, release date, and the URL you fetched.
 """
 
 IO.puts("Prompt: #{String.trim(prompt)}\n")
@@ -145,6 +148,10 @@ if search_count < 1 do
   raise "Expected at least one WebSearch call, observed none."
 end
 
+if fetch_count < 1 do
+  raise "Expected at least one WebFetch call, observed none."
+end
+
 IO.puts("Total web tool calls: #{length(web_calls)}")
 IO.puts("  - WebSearch calls: #{search_count}")
 IO.puts("  - WebFetch calls: #{fetch_count}")
@@ -165,8 +172,9 @@ IO.puts("\n[ok] Successfully demonstrated web tools!")
 IO.puts(String.duplicate("-", 60))
 
 IO.puts("\nWhat this example demonstrates:")
-IO.puts("  1. WebSearch - Query the web for current information")
-IO.puts("  2. Hook-based tracking of web tool usage")
+IO.puts("  1. WebSearch - Find a current answer")
+IO.puts("  2. WebFetch - Confirm it from a fetched page")
+IO.puts("  3. Hook-based tracking of web tool usage")
 IO.puts("\nUse cases:")
 IO.puts("  - Research agents that gather current data")
 IO.puts("  - Fact-checking with real-time sources")

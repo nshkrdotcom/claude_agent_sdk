@@ -85,4 +85,15 @@ defmodule Examples.Support do
     IO.puts(String.duplicate("=", 72))
     :ok
   end
+
+  def assert_exact_text!(text, expected, label \\ "response")
+      when is_binary(text) and is_binary(expected) and is_binary(label) do
+    actual = String.trim(text)
+
+    if actual != expected do
+      raise "#{label} mismatch: expected #{inspect(expected)}, got #{inspect(actual)}"
+    end
+
+    actual
+  end
 end

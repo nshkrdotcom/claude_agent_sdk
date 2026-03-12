@@ -38,17 +38,19 @@ defmodule FileCheckpointingLive do
       checkpoint_id =
         run_step(
           client,
-          "Create the file at #{file_path} with the single line: one. Use that exact path. Then say done.",
+          exact_write_prompt(file_path, "one"),
           file_path,
-          "one"
+          "one",
+          "DONE"
         )
 
       _ =
         run_step(
           client,
-          "Replace the file at #{file_path} so it contains the single line: two. Use that exact path. Then say done.",
+          exact_write_prompt(file_path, "two"),
           file_path,
-          "two"
+          "two",
+          "DONE"
         )
 
       attempt_rewind(client, checkpoint_id, file_path)
@@ -58,11 +60,11 @@ defmodule FileCheckpointingLive do
     end
   end
 
-  defp run_step(client, prompt, file_path, expected_contents) do
+  defp run_step(client, prompt, file_path, expected_contents, expected_assistant_text) do
     task =
       Task.async(fn ->
         Client.stream_messages(client)
-        |> Enum.reduce_while(%{checkpoint_id: nil}, fn message, acc ->
+        |> Enum.reduce_while(%{checkpoint_id: nil, assistant_text: []}, fn message, acc ->
           case message do
             %{type: :user} ->
               candidates = extract_user_message_id_candidates(message)
@@ -81,10 +83,21 @@ defmodule FileCheckpointingLive do
                 |> normalize_display_newlines()
 
               if text != "", do: IO.puts("Assistant: #{text}")
-              {:cont, acc}
+
+              if text == "" do
+                {:cont, acc}
+              else
+                {:cont, %{acc | assistant_text: [text | acc.assistant_text]}}
+              end
 
             %{type: :result} ->
-              {:halt, acc.checkpoint_id}
+              assistant_text =
+                acc.assistant_text
+                |> Enum.reverse()
+                |> List.last()
+                |> Kernel.||("")
+
+              {:halt, {acc.checkpoint_id, assistant_text}}
 
             _ ->
               {:cont, acc}
@@ -94,10 +107,16 @@ defmodule FileCheckpointingLive do
 
     Process.sleep(50)
     :ok = Client.query(client, prompt)
-    user_message_id = Task.await(task, 180_000)
+    {user_message_id, assistant_text} = Task.await(task, 180_000)
 
     print_file(file_path, "demo.txt after step")
     assert_file_contents!(file_path, expected_contents)
+
+    Support.assert_exact_text!(
+      assistant_text,
+      expected_assistant_text,
+      "checkpointing assistant response"
+    )
 
     if is_nil(user_message_id) do
       raise "No user_message_id captured for checkpointing."
@@ -177,6 +196,25 @@ defmodule FileCheckpointingLive do
     end
   end
 
+  defp exact_write_prompt(file_path, content) do
+    """
+    Use the Write tool to write exactly the values below.
+
+    <file_path>
+    #{file_path}
+    </file_path>
+
+    <content>
+    #{content}
+    </content>
+
+    Requirements:
+    - Use exactly the file path above.
+    - Write exactly the content above with no extra punctuation or commentary.
+    - After writing, reply with exactly: DONE
+    """
+  end
+
   defp normalize_display_newlines(text) when is_binary(text) do
     if String.contains?(text, "\\n") and not String.contains?(text, "\n") do
       String.replace(text, "\\n", "\n")
@@ -184,6 +222,8 @@ defmodule FileCheckpointingLive do
       text
     end
   end
+
+  defp normalize_display_newlines(nil), do: ""
 
   defp init_git_repo(dir) do
     if System.find_executable("git") do

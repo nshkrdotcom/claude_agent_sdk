@@ -77,7 +77,7 @@ defmodule SandboxSettingsLive do
       |> Enum.reduce(nil, fn
         %{type: :assistant} = message, acc ->
           text = ContentExtractor.extract_text(message)
-          if text != "", do: IO.puts("Assistant: #{text}")
+          if is_binary(text) and text != "", do: IO.puts("Assistant: #{text}")
           acc
 
         %{type: :result} = message, _acc ->

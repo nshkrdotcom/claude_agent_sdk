@@ -424,14 +424,19 @@ defmodule MyApp.ClaudeClient do
   def query_with_rate_limit_handling(prompt, options \\ nil, retry_count \\ 0) do
     messages = ClaudeAgentSDK.query(prompt, options) |> Enum.to_list()
 
-    # Check for rate limit in messages
-    rate_limited? = Enum.any?(messages, fn
+    # Check for assistant-level or CLI-level rate limit signals
+    assistant_rate_limited? = Enum.any?(messages, fn
       %Message{type: :assistant, data: %{error: "rate_limit"}} -> true
       %Message{type: :assistant, data: %{error: :rate_limit}} -> true
       _ -> false
     end)
 
-    if rate_limited? and retry_count < @max_retries do
+    cli_rate_limited? = Enum.any?(messages, fn
+      %Message{type: :rate_limit_event, data: %{rate_limit_info: %{status: "rejected"}}} -> true
+      _ -> false
+    end)
+
+    if (assistant_rate_limited? or cli_rate_limited?) and retry_count < @max_retries do
       delay = @base_delay_ms * :math.pow(2, retry_count) |> round()
       Logger.info("Rate limited, retrying in #{delay}ms (attempt #{retry_count + 1})")
       Process.sleep(delay)

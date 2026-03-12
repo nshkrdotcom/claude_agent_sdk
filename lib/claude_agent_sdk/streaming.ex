@@ -210,7 +210,7 @@ defmodule ClaudeAgentSDK.Streaming do
 
   ## Limitations
 
-  - Requires Claude CLI v2.0+ with streaming support
+  - Requires Claude CLI v2.1.0+ with streaming support
   - Subprocess spawning has ~100ms overhead
   - No message history persistence (use `ClaudeAgentSDK.SessionStore` for that)
   - Single active message per session (sequential only)

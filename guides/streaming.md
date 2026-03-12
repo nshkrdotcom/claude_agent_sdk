@@ -54,7 +54,7 @@ ClaudeAgentSDK.query("Write a haiku about Elixir")
 
     :assistant ->
       text = ContentExtractor.extract_text(message)
-      IO.puts("Claude: #{text}")
+      if is_binary(text) and text != "", do: IO.puts("Claude: #{text}")
 
     :result ->
       IO.puts("Cost: $#{message.data.total_cost_usd}")
@@ -82,6 +82,7 @@ messages = ClaudeAgentSDK.query("Explain pattern matching", options)
 text = messages
   |> Enum.filter(&(&1.type == :assistant))
   |> Enum.map(&ContentExtractor.extract_text/1)
+  |> Enum.reject(&(&1 in [nil, ""]))
   |> Enum.join("\n")
 
 IO.puts(text)
@@ -676,6 +677,22 @@ case assistant_error do
   :authentication_failed -> IO.puts("Authentication issue")
   error -> IO.puts("Error: #{inspect(error)}")
 end
+```
+
+Assistant errors and rate-limit events are separate signals:
+
+- Assistant errors appear on `:assistant` messages in `message.data.error`
+- CLI rate-limit status changes appear as `:rate_limit_event` messages in the stream
+- This is intentionally CLI-faithful behavior; the current Python SDK skips unknown message types for forward compatibility
+
+```elixir
+Enum.each(messages, fn
+  %{type: :rate_limit_event, data: %{rate_limit_info: info}} ->
+    IO.puts("Rate limit status: #{info.status}")
+
+  _ ->
+    :ok
+end)
 ```
 
 ### Handling Connection Issues

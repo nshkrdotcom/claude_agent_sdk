@@ -6,11 +6,16 @@ defmodule ClaudeAgentSDK.Message do
   different types of communication during a conversation with Claude, including system
   initialization, user inputs, assistant responses, and final results.
 
+  This SDK is CLI-faithful: when the Claude CLI emits distinct message frames, the Elixir
+  SDK prefers surfacing them directly even if the current Python SDK filters some unknown
+  message types for forward compatibility.
+
   ## Message Types
 
   - `:system` - Session initialization messages with metadata
   - `:user` - User input messages (echoed back from CLI)
   - `:assistant` - Claude's response messages containing the actual AI output
+  - `:rate_limit_event` - Rate limit state changes emitted by the CLI
   - `:result` - Final result messages with cost, duration, and completion status
 
   Assistant messages may optionally include an `error` code when the CLI surfaces
@@ -68,10 +73,32 @@ defmodule ClaudeAgentSDK.Message do
   defstruct [:type, :subtype, :data, :raw]
 
   @type message_type ::
-          :assistant | :user | :result | :system | :stream_event | :unknown | String.t()
+          :assistant
+          | :user
+          | :result
+          | :system
+          | :stream_event
+          | :rate_limit_event
+          | :unknown
+          | String.t()
   @type result_subtype :: :success | :error_max_turns | :error_during_execution | String.t()
   @type system_subtype :: :init | String.t()
   @type assistant_error :: AssistantError.t()
+  @type rate_limit_info :: %{
+          required(:status) => String.t(),
+          optional(:resets_at) => integer() | nil,
+          optional(:rate_limit_type) => String.t() | nil,
+          optional(:utilization) => float() | integer() | nil,
+          optional(:overage_status) => String.t() | nil,
+          optional(:overage_resets_at) => integer() | nil,
+          optional(:overage_disabled_reason) => String.t() | nil,
+          optional(:raw) => map()
+        }
+  @type rate_limit_data :: %{
+          required(:rate_limit_info) => rate_limit_info(),
+          required(:uuid) => String.t(),
+          required(:session_id) => String.t()
+        }
   @type assistant_data :: %{
           required(:message) => map(),
           required(:session_id) => String.t() | nil,
@@ -258,6 +285,10 @@ defmodule ClaudeAgentSDK.Message do
     %{message | data: data}
   end
 
+  defp parse_by_type(message, :rate_limit_event, raw) do
+    %{message | data: build_rate_limit_event_data(raw)}
+  end
+
   defp parse_by_type(message, _unknown_type, raw) do
     %{message | data: raw}
   end
@@ -269,6 +300,7 @@ defmodule ClaudeAgentSDK.Message do
       "result" -> :result
       "system" -> :system
       "stream_event" -> :stream_event
+      "rate_limit_event" -> :rate_limit_event
       other -> other
     end
   end
@@ -456,6 +488,25 @@ defmodule ClaudeAgentSDK.Message do
       uuid: raw["uuid"],
       session_id: raw["session_id"],
       usage: raw["usage"]
+    }
+  end
+
+  defp build_rate_limit_event_data(raw) do
+    info = Map.fetch!(raw, "rate_limit_info")
+
+    %{
+      rate_limit_info: %{
+        status: Map.fetch!(info, "status"),
+        resets_at: info["resetsAt"],
+        rate_limit_type: info["rateLimitType"],
+        utilization: info["utilization"],
+        overage_status: info["overageStatus"],
+        overage_resets_at: info["overageResetsAt"],
+        overage_disabled_reason: info["overageDisabledReason"],
+        raw: info
+      },
+      uuid: Map.fetch!(raw, "uuid"),
+      session_id: Map.fetch!(raw, "session_id")
     }
   end
 

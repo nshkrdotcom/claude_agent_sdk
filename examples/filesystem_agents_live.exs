@@ -20,6 +20,7 @@ defmodule FilesystemAgentsLive do
     try do
       agents_dir = Path.join([demo_dir, ".claude", "agents"])
       File.mkdir_p!(agents_dir)
+      expected_response = "fs agent ready"
 
       agent_content = """
       ---
@@ -46,7 +47,7 @@ defmodule FilesystemAgentsLive do
 
       {:ok, client} = Client.start_link(options)
 
-      :ok = Client.query(client, "Say hello in exactly 3 words")
+      :ok = Client.query(client, "Reply with exactly: #{expected_response}")
       {:ok, messages} = Client.receive_response(client)
       Client.stop(client)
 
@@ -81,7 +82,12 @@ defmodule FilesystemAgentsLive do
         raise "No assistant text returned."
       end
 
-      IO.puts("Assistant: #{Enum.join(assistant_text, "\n")}")
+      rendered_text =
+        assistant_text
+        |> Enum.join("\n")
+        |> Support.assert_exact_text!(expected_response, "filesystem agent response")
+
+      IO.puts("Assistant: #{rendered_text}")
     after
       Process.sleep(100)
       File.rm_rf!(demo_dir)

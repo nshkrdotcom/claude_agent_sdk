@@ -132,6 +132,15 @@ defmodule ClaudeAgentSDK.ContentExtractorTest do
 
       assert ContentExtractor.extract_text(message) == "Valid Also valid"
     end
+
+    test "returns nil for assistant messages with no extractable text blocks" do
+      message = %Message{
+        type: :assistant,
+        data: %{message: %{"content" => []}}
+      }
+
+      assert ContentExtractor.extract_text(message) == nil
+    end
   end
 
   describe "has_text?/1" do
@@ -215,6 +224,16 @@ defmodule ClaudeAgentSDK.ContentExtractorTest do
 
       result = ContentExtractor.extract_all_text(messages)
       assert result == "Hello\nWorld"
+    end
+
+    test "skips assistant messages with empty extracted text" do
+      messages = [
+        %Message{type: :assistant, data: %{message: %{"content" => []}}},
+        %Message{type: :assistant, data: %{message: %{"content" => "World"}}}
+      ]
+
+      result = ContentExtractor.extract_all_text(messages, "")
+      assert result == "World"
     end
 
     test "handles empty message list" do

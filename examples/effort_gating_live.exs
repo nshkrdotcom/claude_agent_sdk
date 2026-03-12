@@ -68,6 +68,7 @@ defmodule EffortGatingLive do
       ClaudeAgentSDK.query("Reply with exactly: OK", options)
       |> Enum.to_list()
       |> extract_response()
+      |> Support.assert_exact_text!("OK", "#{label} response")
 
     IO.puts("Response: #{response}")
   end

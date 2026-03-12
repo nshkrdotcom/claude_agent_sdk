@@ -156,7 +156,7 @@ response = Mock.get_response("test prompt")
 
 ## Mock Response Format
 
-Mock responses should match the Claude CLI JSON format. A complete response typically includes three message types.
+Mock responses should match the Claude CLI JSON format. A minimum successful response typically includes three core message types, but live CLI runs may also include `user`, `stream_event`, or `rate_limit_event` frames.
 
 ### Complete Response Structure
 
@@ -205,7 +205,11 @@ Mock responses should match the Claude CLI JSON format. A complete response typi
 | `system` | Session initialization | `session_id`, `model`, `cwd`, `tools` |
 | `user` | User input | `message`, `session_id` |
 | `assistant` | Claude response | `message`, `session_id` |
+| `stream_event` | Raw streaming event | `event`, `uuid`, `session_id` |
+| `rate_limit_event` | Rate limit state change | `rate_limit_info`, `uuid`, `session_id` |
 | `result` | Final result | `total_cost_usd`, `duration_ms`, `num_turns` |
+
+Note: `rate_limit_event` is included here because this SDK tracks the CLI wire format directly. The current Python SDK filters unknown message types instead of surfacing them.
 
 ### Result Subtypes
 

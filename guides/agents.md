@@ -471,6 +471,7 @@ msgs3 = ClaudeAgentSDK.resume(
 review = msgs3
   |> Enum.filter(&(&1.type == :assistant))
   |> Enum.map(&ContentExtractor.extract_text/1)
+  |> Enum.reject(&(&1 in [nil, ""]))
   |> Enum.join("\n")
 
 IO.puts("Review Results:\n#{review}")
@@ -555,6 +556,7 @@ defmodule MultiAgentWorkflow do
     messages
     |> Enum.filter(&(&1.type == :assistant))
     |> Enum.map(&ContentExtractor.extract_text/1)
+    |> Enum.reject(&(&1 in [nil, ""]))
     |> Enum.join("\n")
   end
 end

@@ -98,8 +98,8 @@ All values in milliseconds unless noted.
 
 | Function | Default | Description |
 |----------|---------|-------------|
-| `minimum_version/0` | `"2.0.0"` | Minimum supported CLI version |
-| `recommended_version/0` | `"2.0.75"` | Recommended CLI version |
+| `minimum_version/0` | `"2.1.0"` | Minimum supported CLI version |
+| `recommended_version/0` | `"2.1.74"` | Recommended CLI version |
 | `executable_candidates/0` | `["claude-code", "claude"]` | PATH search candidates |
 | `install_command/0` | `npm install -g @anthropic-ai/claude-code` | Install command for errors |
 | `streaming_output_args/0` | `["--output-format", "stream-json", "--verbose"]` | Output-only streaming flags |
@@ -155,7 +155,8 @@ config :claude_agent_sdk, ClaudeAgentSDK.Config.Auth,
   session_max_age_days: 60
 
 config :claude_agent_sdk, ClaudeAgentSDK.Config.CLI,
-  minimum_version: "2.1.0"
+  minimum_version: "2.1.0",
+  recommended_version: "2.1.74"
 
 config :claude_agent_sdk, ClaudeAgentSDK.Config.Orchestration,
   max_concurrent: 10,

@@ -11,7 +11,7 @@
 [![CI](https://github.com/nshkrdotcom/claude_agent_sdk/actions/workflows/elixir.yaml/badge.svg)](https://github.com/nshkrdotcom/claude_agent_sdk/actions/workflows/elixir.yaml)
 [![Last Commit](https://img.shields.io/github/last-commit/nshkrdotcom/claude_agent_sdk.svg)](https://github.com/nshkrdotcom/claude_agent_sdk/commits/main)
 
-An Elixir SDK aiming for feature-complete parity with the official [claude-agent-sdk-python](https://github.com/anthropics/claude-agent-sdk-python). Build AI-powered applications with Claude using a production-ready interface for the [Claude Code CLI](https://code.claude.com/docs/en/cli-reference), featuring streaming responses, lifecycle hooks, permission controls, and in-process tool execution via MCP.
+An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python](https://github.com/anthropics/claude-agent-sdk-python) while treating the [Claude Code CLI](https://code.claude.com/docs/en/cli-reference) as the authoritative runtime contract. Build AI-powered applications with Claude using a production-ready interface for the Claude Code CLI, featuring streaming responses, lifecycle hooks, permission controls, and in-process tool execution via MCP.
 
 > **Note:** This SDK does not bundle the Claude Code CLI. You must install it separately (see [Prerequisites](#prerequisites)).
 
@@ -34,7 +34,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.15.1"}
+    {:claude_agent_sdk, "~> 0.16.0"}
   ]
 end
 ```
@@ -58,6 +58,12 @@ Verify installation:
 ```bash
 claude --version
 ```
+
+### CLI Compatibility
+
+- Minimum supported Claude CLI version: `2.1.0`
+- Recommended Claude CLI version: `2.1.74`
+- Compatibility policy: this SDK follows the Python SDK where practical, but the Claude CLI wire protocol is authoritative. CLI-native frames such as `:rate_limit_event` are surfaced here even if the current Python SDK skips unknown message types for forward compatibility.
 
 ---
 

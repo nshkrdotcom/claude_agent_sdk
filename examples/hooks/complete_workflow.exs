@@ -93,7 +93,7 @@ defmodule CompleteWorkflowHooks do
 
     context_text = """
     ## 🔒 Security Context
-    - Bash restricted: #{Enum.join(@forbidden_patterns, ", ")}
+    - Bash commands are audited and may be denied by policy review
     - Writes sandboxed to: #{allowed_dir()}
     """
 
@@ -198,7 +198,9 @@ try do
   IO.puts("\nTest 3: Blocked bash command (should be denied by hook)\n")
 
   messages3 =
-    run_prompt.("Use the Bash tool to run this exact command: ./blocked.sh --help")
+    run_prompt.(
+      "Run the bash command: ./blocked.sh --help. If the tool is denied, say it was denied."
+    )
 
   for {label, msgs} <- [
         {"safe bash", messages1},

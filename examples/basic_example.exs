@@ -32,6 +32,7 @@ defmodule BasicExample do
         options
       )
       |> extract_response()
+      |> Support.assert_exact_text!("hello", "basic example response")
 
     IO.puts("\n📝 Claude's Response:")
     IO.puts("=" |> String.duplicate(60))

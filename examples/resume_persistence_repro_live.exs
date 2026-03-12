@@ -52,12 +52,13 @@ IO.puts("1) Creating a new session...")
 
 initial =
   ClaudeAgentSDK.query(
-    "Reply with exactly READY.",
+    "Reply with exactly: READY",
     options
   )
   |> Enum.to_list()
 
 assert_success.(initial, "initial query")
+initial |> assistant_text.() |> Support.assert_exact_text!("READY", "initial response")
 
 session_id =
   case Session.extract_session_id(initial) do
@@ -71,24 +72,26 @@ IO.puts("2) Turn 2: store token A")
 turn_two =
   ClaudeAgentSDK.resume(
     session_id,
-    "Store this token for later recall: #{token_a}. Reply exactly STORED_A.",
+    "Store this token for later recall: #{token_a}. Reply with exactly: STORED_A",
     options
   )
   |> Enum.to_list()
 
 assert_success.(turn_two, "turn 2")
+turn_two |> assistant_text.() |> Support.assert_exact_text!("STORED_A", "turn 2 response")
 
 IO.puts("3) Turn 3: store token B")
 
 turn_three =
   ClaudeAgentSDK.resume(
     session_id,
-    "Store this token for later recall: #{token_b}. Reply exactly STORED_B.",
+    "Store this token for later recall: #{token_b}. Reply with exactly: STORED_B",
     options
   )
   |> Enum.to_list()
 
 assert_success.(turn_three, "turn 3")
+turn_three |> assistant_text.() |> Support.assert_exact_text!("STORED_B", "turn 3 response")
 
 IO.puts("4) Turn 4: ask Claude to recall both prior tokens")
 

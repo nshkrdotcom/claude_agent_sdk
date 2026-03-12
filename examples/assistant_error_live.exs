@@ -15,7 +15,8 @@ defmodule AssistantErrorLiveExample do
   invalid token to get `:authentication_failed` or hit a rate limit).
   """
 
-  alias ClaudeAgentSDK.{ContentExtractor, Message, Options, Streaming}
+  alias ClaudeAgentSDK.AssistantError
+  alias ClaudeAgentSDK.{ContentExtractor, Message, Options}
 
   @prompt """
   You are a status bot. Reply with a very short update (1-2 sentences).
@@ -32,65 +33,43 @@ defmodule AssistantErrorLiveExample do
     IO.puts("\nAssistant error field demo (live CLI)")
     IO.puts("Tip: trigger an auth or rate-limit error to see the enum values.\n")
 
-    stream_result = stream_once()
+    messages =
+      ClaudeAgentSDK.query(prompt(), @options)
+      |> Enum.to_list()
 
-    case stream_result do
-      {:ok, final_text, nil} ->
-        IO.puts("Streamed text:\n#{final_text}\n")
-
-      {:ok, final_text, error} ->
-        IO.puts("Stream reported assistant error: #{inspect(error)}")
-        IO.puts("Partial/streamed text:\n#{final_text}\n")
-
-      {:error, reason} ->
-        raise "Streaming error: #{inspect(reason)}"
-    end
-
-    inspect_messages()
+    assert_success!(messages)
+    inspect_messages(messages)
   end
 
-  defp stream_once do
-    {:ok, session} = Streaming.start_session(@options)
+  defp inspect_messages(messages) do
+    IO.puts("Checking streaming and aggregated assistant-error parity...\n")
 
-    {text, error} =
-      Streaming.send_message(session, prompt())
-      |> Enum.reduce({"", nil}, fn
-        %{type: :text_delta, text: chunk}, {acc_text, err} ->
+    stream_summary =
+      Enum.reduce(messages, %{text: "", error: nil, saw_message_stop: false}, fn
+        %Message{
+          type: :stream_event,
+          data: %{
+            event: %{
+              "type" => "content_block_delta",
+              "delta" => %{"type" => "text_delta", "text" => chunk}
+            }
+          }
+        },
+        acc ->
           IO.write(chunk)
-          {acc_text <> chunk, err}
+          %{acc | text: acc.text <> chunk}
 
-        %{type: :message_stop, error: err_code}, {acc_text, _} ->
-          {acc_text, err_code}
+        %Message{type: :stream_event, data: %{event: %{"type" => "message_stop"} = event}}, acc ->
+          %{acc | error: extract_stream_error(event), saw_message_stop: true}
 
-        %{type: :message_stop}, acc ->
-          acc
-
-        %{type: :error, error: reason}, _ ->
-          {"", reason || :unknown}
-
-        _other, acc ->
+        _message, acc ->
           acc
       end)
 
-    Streaming.close_session(session)
-    IO.puts("")
+    IO.puts("\n")
 
-    {:ok, text, error}
-  rescue
-    error -> {:error, error}
-  end
-
-  defp inspect_messages do
-    IO.puts("Checking aggregated messages for assistant error metadata...\n")
-
-    messages =
-      ClaudeAgentSDK.query(prompt(), %{@options | include_partial_messages: nil})
-      |> Enum.to_list()
-
-    case Enum.find(messages, &(&1.type == :result)) do
-      %{subtype: :success} -> :ok
-      %{subtype: other} -> raise "Query did not succeed (result subtype: #{inspect(other)})"
-      nil -> raise "No result message returned."
+    if not stream_summary.saw_message_stop do
+      raise "No message_stop stream event observed."
     end
 
     assistant_error =
@@ -101,7 +80,7 @@ defmodule AssistantErrorLiveExample do
 
     case assistant_error do
       nil ->
-        IO.puts("No assistant error surfaced on the aggregated message path.")
+        IO.puts("No assistant error surfaced on this run.")
 
       err ->
         IO.puts("Assistant message error detected: #{inspect(err)}")
@@ -110,12 +89,46 @@ defmodule AssistantErrorLiveExample do
     assistant_text =
       messages
       |> Enum.filter(&(&1.type == :assistant))
-      |> Enum.map(&ContentExtractor.extract_text/1)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.join("\n")
+      |> ContentExtractor.extract_all_text("")
+
+    if stream_summary.text != assistant_text do
+      raise """
+      Streamed text and aggregated assistant text diverged.
+
+      Streamed:
+      #{stream_summary.text}
+
+      Aggregated:
+      #{assistant_text}
+      """
+    end
+
+    if stream_summary.error != assistant_error do
+      raise """
+      Streamed assistant error and aggregated assistant error diverged.
+
+      Streamed: #{inspect(stream_summary.error)}
+      Aggregated: #{inspect(assistant_error)}
+      """
+    end
+
+    IO.puts("Parity check passed for text and assistant error.")
 
     IO.puts("\nAssistant text:")
     IO.puts(assistant_text)
+  end
+
+  defp assert_success!(messages) do
+    case Enum.find(messages, &(&1.type == :result)) do
+      %{subtype: :success} -> :ok
+      %{subtype: other} -> raise "Query did not succeed (result subtype: #{inspect(other)})"
+      nil -> raise "No result message returned."
+    end
+  end
+
+  defp extract_stream_error(event) when is_map(event) do
+    raw_error = Map.get(event, "error") || get_in(event, ["message", "error"])
+    AssistantError.cast(raw_error)
   end
 
   defp prompt do

@@ -12,19 +12,77 @@ Support.ensure_live!()
 Support.header!("Runtime Control + Streaming Parity (live)")
 
 defmodule ControlParity do
-  def render_content(content) when is_binary(content), do: content
+  alias ClaudeAgentSDK.{ContentExtractor, Message}
 
-  def render_content(content) when is_list(content) do
-    content
-    |> Enum.map(fn
-      %{"type" => "text", "text" => text} -> text
-      %{"type" => "thinking", "thinking" => text} -> text
-      other -> inspect(other)
-    end)
-    |> Enum.join("")
+  def render_message(%Message{} = message) do
+    ContentExtractor.extract_text(message) || ""
   end
 
-  def render_content(other), do: inspect(other)
+  def render_system_init(%Message{data: %{model: model, permission_mode: mode, tools: tools}}) do
+    "[system] init model=#{model} permission_mode=#{inspect(mode)} tools=#{length(tools)}"
+  end
+
+  def render_system_init(other), do: "[system] #{inspect(other)}"
+
+  def render_rate_limit_event(%Message{
+        data: %{
+          rate_limit_info: %{
+            status: status,
+            rate_limit_type: rate_limit_type,
+            resets_at: resets_at,
+            overage_status: overage_status
+          }
+        }
+      }) do
+    "[rate_limit] status=#{status} type=#{inspect(rate_limit_type)} resets_at=#{inspect(resets_at)} overage_status=#{inspect(overage_status)}"
+  end
+
+  def render_stream_event(%{
+        "type" => "content_block_start",
+        "content_block" => %{"type" => "tool_use", "name" => name, "id" => id}
+      }) do
+    "[stream_event] tool_use_start name=#{name} id=#{id}"
+  end
+
+  def render_stream_event(%{"type" => "message_start", "message" => %{"model" => model}}) do
+    "[stream_event] message_start model=#{model}"
+  end
+
+  def render_stream_event(%{
+        "type" => "content_block_start",
+        "content_block" => %{"type" => type}
+      }) do
+    "[stream_event] content_block_start type=#{type}"
+  end
+
+  def render_stream_event(%{
+        "type" => "content_block_delta",
+        "delta" => %{"type" => "text_delta", "text" => text}
+      }) do
+    "[stream_event] text_delta #{inspect(text)}"
+  end
+
+  def render_stream_event(%{
+        "type" => "content_block_delta",
+        "delta" => %{"type" => "thinking_delta"}
+      }) do
+    "[stream_event] thinking_delta [redacted]"
+  end
+
+  def render_stream_event(%{
+        "type" => "content_block_delta",
+        "delta" => %{"type" => "input_json_delta", "partial_json" => json}
+      }) do
+    "[stream_event] tool_input_delta #{inspect(json)}"
+  end
+
+  def render_stream_event(%{"type" => "message_delta", "delta" => delta}) do
+    "[stream_event] message_delta stop_reason=#{inspect(delta["stop_reason"])}"
+  end
+
+  def render_stream_event(%{"type" => type}) do
+    "[stream_event] #{type}"
+  end
 end
 
 # Simple hook that just logs invocation and allows continuation
@@ -49,11 +107,21 @@ query_messages =
   |> Enum.to_list()
 
 Enum.each(query_messages, fn
-  %Message{type: :assistant, data: %{message: message}} ->
-    IO.puts("[assistant] #{ControlParity.render_content(message["content"])}")
+  %Message{type: :system, subtype: :init} = message ->
+    IO.puts(ControlParity.render_system_init(message))
+
+  %Message{type: :assistant} = message ->
+    text = ControlParity.render_message(message)
+    if text != "", do: IO.puts("[assistant] #{text}")
 
   %Message{type: :result} = msg ->
     IO.puts("[result] #{inspect(msg.data)}")
+
+  %Message{type: :stream_event, data: %{event: event}} ->
+    IO.puts(ControlParity.render_stream_event(event))
+
+  %Message{type: :rate_limit_event} = message ->
+    IO.puts(ControlParity.render_rate_limit_event(message))
 
   other ->
     IO.puts("[message] #{inspect(other)}")
@@ -93,12 +161,21 @@ defmodule LiveStreamer do
 
     result =
       Enum.reduce_while(stream, %{result: nil}, fn
-        %Message{type: :stream_event, data: %{event: event}}, acc ->
-          IO.puts("[stream_event] #{inspect(event)}")
+        %Message{type: :system, subtype: :init} = message, acc ->
+          IO.puts(ControlParity.render_system_init(message))
           {:cont, acc}
 
-        %Message{type: :assistant, data: %{message: message}}, acc ->
-          IO.puts("[assistant] #{ControlParity.render_content(message["content"])}")
+        %Message{type: :stream_event, data: %{event: event}}, acc ->
+          IO.puts(ControlParity.render_stream_event(event))
+          {:cont, acc}
+
+        %Message{type: :assistant} = message, acc ->
+          text = ControlParity.render_message(message)
+          if text != "", do: IO.puts("[assistant] #{text}")
+          {:cont, acc}
+
+        %Message{type: :rate_limit_event} = message, acc ->
+          IO.puts(ControlParity.render_rate_limit_event(message))
           {:cont, acc}
 
         %Message{type: :result} = msg, acc ->

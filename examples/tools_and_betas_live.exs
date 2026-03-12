@@ -14,6 +14,8 @@ Support.ensure_live!()
 Support.header!("Tools (and optional betas) Example (live)")
 
 defmodule ToolsAndBetasLive do
+  defp display_text(nil), do: ""
+
   defp display_text(text) when is_binary(text) do
     if String.contains?(text, "\\n") and not String.contains?(text, "\n") do
       String.replace(text, "\\n", "\n")
@@ -38,7 +40,7 @@ defmodule ToolsAndBetasLive do
 
       %{type: :assistant} = message, acc ->
         text = ContentExtractor.extract_text(message)
-        if text != "", do: IO.puts("Assistant:\n#{display_text(text)}")
+        if is_binary(text) and text != "", do: IO.puts("Assistant:\n#{display_text(text)}")
         acc
 
       %{type: :result} = message, _acc ->

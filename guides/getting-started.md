@@ -50,7 +50,7 @@ Verify the installation:
 claude --version
 ```
 
-You should see a version number like `2.1.12` or higher.
+Use Claude CLI `2.1.0` or newer. `2.1.74` is the recommended version for this SDK release.
 
 ### 3. Authentication
 
@@ -120,7 +120,7 @@ Add `claude_agent_sdk` to your Mix dependencies in `mix.exs`:
 ```elixir
 defp deps do
   [
-    {:claude_agent_sdk, "~> 0.15.1"}
+    {:claude_agent_sdk, "~> 0.16.0"}
   ]
 end
 ```
@@ -246,6 +246,7 @@ response = ClaudeAgentSDK.query("Explain pattern matching in one sentence.", opt
 text = response
 |> Enum.filter(&(&1.type == :assistant))
 |> Enum.map(&ContentExtractor.extract_text/1)
+|> Enum.reject(&(&1 in [nil, ""]))
 |> Enum.join("\n")
 
 IO.puts(text)
@@ -272,8 +273,11 @@ Each message in the stream has a `type` field indicating what it represents:
 | `:assistant` | Claude's response | `message` (with `content`), `session_id` |
 | `:result` | Final summary | `total_cost_usd`, `duration_ms`, `num_turns` |
 | `:stream_event` | Streaming event | `event`, `uuid`, `session_id`, `parent_tool_use_id` |
+| `:rate_limit_event` | Rate limit state change | `rate_limit_info`, `uuid`, `session_id` |
 
 Note: `:stream_event` messages expose the raw CLI event in `data.event`. For parsed streaming events (with `:text_delta`, `:message_start`, etc.), use the Streaming API. Parsed events include `uuid`, `session_id`, `parent_tool_use_id`, and `raw_event`.
+
+Note: `:rate_limit_event` is emitted separately from assistant messages. It reflects CLI rate-limit status changes such as `allowed_warning` or `rejected`; it is not the same as `message.data.error` on an assistant message. This SDK exposes the event because the CLI emits it, even though the current Python SDK filters unknown message types for forward compatibility.
 
 Note: CLI JSON frames are capped by `max_buffer_size` (default 1MB). If a frame exceeds the limit, the stream terminates with a `CLIJSONDecodeError` result.
 
@@ -355,6 +359,7 @@ def get_claude_response(prompt) do
   |> Enum.to_list()
   |> Enum.filter(&(&1.type == :assistant))
   |> Enum.map(&ContentExtractor.extract_text/1)
+  |> Enum.reject(&(&1 in [nil, ""]))
   |> Enum.join("\n")
 end
 

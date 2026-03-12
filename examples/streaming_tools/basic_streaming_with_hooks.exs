@@ -37,16 +37,18 @@ defmodule BasicStreamingExample do
 
     try do
       IO.puts("✓ Session started\n")
-      IO.puts("Sending: 'Say hello in exactly five words.'\n")
+      expected_response = "Hello from streaming demo today."
+      prompt = "Reply with exactly these five words and nothing else: #{expected_response}"
+      IO.puts("Sending: #{inspect(prompt)}\n")
       IO.puts("-" |> String.duplicate(70))
 
       result =
-        Streaming.send_message(session, "Say hello in exactly five words.")
-        |> Enum.reduce_while(%{completed: false}, fn event, acc ->
+        Streaming.send_message(session, prompt)
+        |> Enum.reduce_while(%{completed: false, text: ""}, fn event, acc ->
           case event do
             %{type: :text_delta, text: text} ->
               IO.write(text)
-              {:cont, acc}
+              {:cont, %{acc | text: acc.text <> text}}
 
             %{type: :message_stop} ->
               IO.puts("\n" <> ("-" |> String.duplicate(70)))
@@ -64,6 +66,8 @@ defmodule BasicStreamingExample do
       if not result.completed do
         raise "Expected message_stop event, but stream ended early."
       end
+
+      Support.assert_exact_text!(result.text, expected_response, "basic streaming response")
     after
       Streaming.close_session(session)
       IO.puts("\n✓ Session closed")

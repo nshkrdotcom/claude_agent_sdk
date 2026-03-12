@@ -6,7 +6,7 @@ defmodule ClaudeAgentSDK.Config.CLI do
 
       config :claude_agent_sdk, ClaudeAgentSDK.Config.CLI,
         minimum_version: "2.1.0",
-        recommended_version: "2.1.5"
+        recommended_version: "2.1.74"
   """
 
   @app :claude_agent_sdk
@@ -20,13 +20,13 @@ defmodule ClaudeAgentSDK.Config.CLI do
 
   # -- versions --------------------------------------------------------------
 
-  @doc "Minimum supported CLI version (default: `\"2.0.0\"`)."
+  @doc "Minimum supported CLI version (default: `\"2.1.0\"`)."
   @spec minimum_version() :: String.t()
-  def minimum_version, do: get(:minimum_version, "2.0.0")
+  def minimum_version, do: get(:minimum_version, "2.1.0")
 
-  @doc "Recommended CLI version for this SDK release (default: `\"2.0.75\"`)."
+  @doc "Recommended CLI version for this SDK release (default: `\"2.1.74\"`)."
   @spec recommended_version() :: String.t()
-  def recommended_version, do: get(:recommended_version, "2.0.75")
+  def recommended_version, do: get(:recommended_version, "2.1.74")
 
   # -- executable discovery --------------------------------------------------
 

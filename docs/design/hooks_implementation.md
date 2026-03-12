@@ -163,7 +163,7 @@ PostToolUse and UserPromptSubmit hooks must support:
 #### NFR4: Compatibility
 - Maintain backward compatibility with existing SDK code
 - Optional feature - works without hooks configured
-- Compatible with Claude CLI 2.0.0+
+- Compatible with Claude CLI 2.1.0+
 
 ---
 

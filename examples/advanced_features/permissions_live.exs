@@ -40,7 +40,8 @@ options = %Options{
   model: "haiku",
   max_turns: 3,
   tools: ["Write"],
-  allowed_tools: ["Write"]
+  allowed_tools: ["Write"],
+  preferred_transport: :control
 }
 
 wait_for_file = fn path, attempts, delay_ms ->
@@ -155,7 +156,13 @@ exit_code =
     IO.puts("\nWhat happened:")
     IO.puts("  1. Started streaming session (#{session_label})")
     IO.puts("  2. Asked Claude to write a file")
-    IO.puts("  3. Observed Write tool use in stream")
+
+    if summary.saw_write do
+      IO.puts("  3. Observed Write tool use in stream")
+    else
+      IO.puts("  3. Did not observe Write tool use in stream; verified the file on disk instead")
+    end
+
     IO.puts("  4. Verified file contents")
     0
   rescue

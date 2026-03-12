@@ -99,24 +99,24 @@ defmodule ClaudeAgentSDK.ContentExtractor do
   """
   @spec extract_text(Message.t() | map()) :: String.t() | nil
   def extract_text(%Message{type: :assistant, data: %{message: %{"content" => content}}}) do
-    extract_content_text(content)
+    normalize_extracted_text(extract_content_text(content))
   end
 
   def extract_text(%Message{type: :assistant, data: %{message: message}}) when is_map(message) do
     # Handle other message formats
     case message do
-      %{"text" => text} when is_binary(text) -> text
-      %{"content" => content} -> extract_content_text(content)
+      %{"text" => text} when is_binary(text) -> normalize_extracted_text(text)
+      %{"content" => content} -> normalize_extracted_text(extract_content_text(content))
       _ -> nil
     end
   end
 
   def extract_text(%Message{type: :user, data: %{message: %{"content" => content}}}) do
-    extract_content_text(content)
+    normalize_extracted_text(extract_content_text(content))
   end
 
   def extract_text(%Message{type: :result, data: %{result: result}}) when is_binary(result) do
-    result
+    normalize_extracted_text(result)
   end
 
   def extract_text(%Message{
@@ -142,7 +142,7 @@ defmodule ClaudeAgentSDK.ContentExtractor do
 
   # Handle direct content maps (for testing or direct usage)
   def extract_text(%{"content" => content}) do
-    extract_content_text(content)
+    normalize_extracted_text(extract_content_text(content))
   end
 
   def extract_text(_message), do: nil
@@ -377,4 +377,7 @@ defmodule ClaudeAgentSDK.ContentExtractor do
   end
 
   defp summarize_tool_input(_), do: ""
+
+  defp normalize_extracted_text(""), do: nil
+  defp normalize_extracted_text(text) when is_binary(text), do: text
 end

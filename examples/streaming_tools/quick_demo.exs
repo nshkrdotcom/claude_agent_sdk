@@ -24,15 +24,16 @@ options = %Options{
 {:ok, session} = Streaming.start_session(options)
 
 try do
-  prompt = "Say hello in exactly five words."
+  expected_response = "Hello from streaming demo today."
+  prompt = "Reply with exactly these five words and nothing else: #{expected_response}"
   IO.puts("Prompt: #{prompt}\n")
 
   summary =
     Streaming.send_message(session, prompt)
-    |> Enum.reduce_while(%{chunks: 0, stopped?: false}, fn
+    |> Enum.reduce_while(%{chunks: 0, stopped?: false, text: ""}, fn
       %{type: :text_delta, text: chunk}, acc ->
         IO.write(chunk)
-        {:cont, %{acc | chunks: acc.chunks + 1}}
+        {:cont, %{acc | chunks: acc.chunks + 1, text: acc.text <> chunk}}
 
       %{type: :message_stop}, acc ->
         IO.puts("")
@@ -52,6 +53,8 @@ try do
   if summary.stopped? != true do
     raise "Expected a message_stop event, but did not observe one."
   end
+
+  Support.assert_exact_text!(summary.text, expected_response, "quick demo response")
 after
   Streaming.close_session(session)
 end

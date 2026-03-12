@@ -14,11 +14,11 @@ defmodule ClaudeAgentSDK.Config.CLITest do
 
   describe "defaults" do
     test "minimum_version" do
-      assert CLI.minimum_version() == "2.0.0"
+      assert CLI.minimum_version() == "2.1.0"
     end
 
     test "recommended_version" do
-      assert CLI.recommended_version() == "2.0.75"
+      assert CLI.recommended_version() == "2.1.74"
     end
 
     test "executable_candidates" do
