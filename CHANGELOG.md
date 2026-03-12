@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-03-11
+
+### Added
+
+- **`:max` effort level**: The SDK now supports all four effort modes (`:low`, `:medium`, `:high`, `:max`), matching the Python SDK and Anthropic API. The `:max` level is Opus-only and provides maximum reasoning capability with no token constraints.
+- **Opus-aware effort gating**: When `:max` effort is used with a non-Opus model, the SDK logs a warning but still passes the value through to the CLI (which enforces the restriction). This matches the Python SDK's pass-through behavior.
+- **`opus_model?/1` helper**: Internal model detection for Opus models, mirroring the existing `haiku_model?/1` pattern.
+
+### Changed
+
+- `@valid_efforts` expanded from `[:low, :medium, :high]` to `[:low, :medium, :high, :max]`.
+- `OptionBuilder.with_effort/2` guard and `@spec` updated to accept `:max`.
+- Error messages for invalid effort values now list all four valid options.
+- Effort documentation in all guides updated with model-specific support table.
+- `effort_gating_live.exs` updated: `:max` + Opus now runs as a live case; invalid-effort demo uses `:invalid_effort_level` instead of the now-valid `:max`.
+
+### Added (Examples)
+
+- **`max_effort_opus_live.exs`**: Standalone example exercising `:max` effort on both `opus` and `opus[1m]` in request/response and streaming modes. Not included in `run_all.sh` (expensive).
+
 ## [0.15.0] - 2026-03-05
 
 ### Added

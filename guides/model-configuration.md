@@ -120,19 +120,40 @@ Application.put_env(:claude_agent_sdk, :models, %{config | default: "opus"})
 Control how much reasoning effort Claude applies:
 
 ```elixir
+# Standard effort levels (all Opus and Sonnet models)
 options = %ClaudeAgentSDK.Options{
   model: "sonnet",
-  effort: :high  # :low | :medium | :high
+  effort: :high  # :low | :medium | :high | :max
+}
+
+# Maximum effort (Opus only)
+options = %ClaudeAgentSDK.Options{
+  model: "opus",
+  effort: :max
 }
 ```
 
-This emits `--effort high` to the CLI.
+This emits `--effort <level>` to the CLI.
 
-> **Note:** Effort is not supported for Haiku models. If effort is set with a
-> Haiku model, the SDK logs a warning and silently omits the `--effort` flag.
-> Invalid effort values raise `ArgumentError` when options are built or converted
-> to CLI arguments.
-> See `examples/effort_gating_live.exs` for a runnable example.
+### Effort Levels
+
+| Level | Models | Description |
+|-------|--------|-------------|
+| `:low` | Opus, Sonnet | Minimal thinking, fewer tool calls, terse output |
+| `:medium` | Opus, Sonnet | Balanced cost/performance (recommended default for Sonnet) |
+| `:high` | Opus, Sonnet | Deep thinking, detailed responses (API default) |
+| `:max` | **Opus only** | Absolute maximum capability, no token constraints |
+
+### Model Gating
+
+- **Haiku**: Effort is not supported. The SDK logs a warning and silently omits the `--effort` flag.
+- **Sonnet**: Supports `:low`, `:medium`, `:high`. Using `:max` emits a warning but passes through to the CLI (which will reject it).
+- **Opus**: Supports all four levels including `:max`.
+- **nil model**: All effort levels pass through without warning.
+- Invalid effort values raise `ArgumentError` when options are built or converted to CLI arguments.
+
+> See `examples/effort_gating_live.exs` for a runnable example covering all levels and model gating.
+> See `examples/max_effort_opus_live.exs` for a standalone `:max` effort demo with Opus and Opus[1m] (not in `run_all.sh` — expensive).
 
 ## Thinking Configuration
 

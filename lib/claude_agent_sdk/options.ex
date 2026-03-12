@@ -73,7 +73,7 @@ defmodule ClaudeAgentSDK.Options do
 
   alias ClaudeAgentSDK.Log, as: Logger
 
-  @valid_efforts [:low, :medium, :high]
+  @valid_efforts [:low, :medium, :high, :max]
 
   # This struct intentionally has many fields as it mirrors the Claude Code CLI options.
   # The struct is created once per request and is short-lived, so memory overhead is minimal.
@@ -143,7 +143,7 @@ defmodule ClaudeAgentSDK.Options do
     :preferred_transport,
     :user,
     :max_thinking_tokens,
-    # Effort level (:low, :medium, :high)
+    # Effort level (:low, :medium, :high, :max)
     :effort,
     # Thinking config (%{type: :adaptive | :enabled | :disabled, budget_tokens: integer()})
     :thinking,
@@ -300,7 +300,7 @@ defmodule ClaudeAgentSDK.Options do
           stderr: (String.t() -> any()) | nil,
           user: String.t() | nil,
           max_thinking_tokens: pos_integer() | nil,
-          effort: :low | :medium | :high | nil,
+          effort: :low | :medium | :high | :max | nil,
           thinking: map() | nil
         }
 
@@ -915,11 +915,23 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_effort_args(args, %{effort: effort, model: model})
        when effort in @valid_efforts do
-    if haiku_model?(model) do
-      Logger.warning("Effort level is not supported for Haiku models; ignoring effort: #{effort}")
-      args
-    else
-      args ++ ["--effort", to_string(effort)]
+    cond do
+      haiku_model?(model) ->
+        Logger.warning(
+          "Effort level is not supported for Haiku models; ignoring effort: #{effort}"
+        )
+
+        args
+
+      effort == :max and not opus_model?(model) and not is_nil(model) ->
+        Logger.warning(
+          "Effort :max is only supported on Opus models; passing through but CLI may reject for model: #{model}"
+        )
+
+        args ++ ["--effort", to_string(effort)]
+
+      true ->
+        args ++ ["--effort", to_string(effort)]
     end
   end
 
@@ -941,6 +953,16 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   defp haiku_model?(_), do: false
+
+  @opus_patterns ["opus", "claude-opus"]
+  defp opus_model?(nil), do: false
+
+  defp opus_model?(model) when is_binary(model) do
+    downcased = String.downcase(model)
+    Enum.any?(@opus_patterns, &String.contains?(downcased, &1))
+  end
+
+  defp opus_model?(_), do: false
 
   # Thinking config takes precedence over raw max_thinking_tokens.
   # Resolution: thinking.type :enabled -> budget_tokens, :adaptive -> fallback or 32000,
@@ -1015,7 +1037,7 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   defp invalid_effort_message(effort) do
-    "effort must be one of :low, :medium, :high, or nil, got: #{inspect(effort)}"
+    "effort must be one of :low, :medium, :high, :max, or nil, got: #{inspect(effort)}"
   end
 
   defp normalize_plugin(%{type: type, path: path}) do
