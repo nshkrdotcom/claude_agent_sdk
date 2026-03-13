@@ -27,6 +27,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
             drain_scheduled?: false,
             status: :disconnected,
             stderr_callback: nil,
+            stderr_callback_owner: :transport,
             stderr_buffer: "",
             stderr_callback_buffer: "",
             max_buffer_size: Buffers.max_stdout_buffer_bytes(),
@@ -173,10 +174,14 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   def init(opts) do
     options = Keyword.get(opts, :options) || %Options{}
 
+    stderr_callback_owner =
+      normalize_stderr_callback_owner(Keyword.get(opts, :stderr_callback_owner))
+
     state = %__MODULE__{
       subprocess: nil,
       status: :disconnected,
-      stderr_callback: options.stderr,
+      stderr_callback: stderr_callback_for_owner(options.stderr, stderr_callback_owner),
+      stderr_callback_owner: stderr_callback_owner,
       max_buffer_size: max_buffer_size_from_options(options),
       max_stderr_buffer_size:
         normalize_max_stderr_buffer_size(Keyword.get(opts, :max_stderr_buffer_size, nil)),
@@ -580,7 +585,10 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
          {:ok, pid, os_pid} <- :exec.run(cmd, exec_opts) do
       state =
         %{state | subprocess: {pid, os_pid}, status: :connected}
-        |> Map.put(:stderr_callback, options.stderr)
+        |> Map.put(
+          :stderr_callback,
+          stderr_callback_for_owner(options.stderr, state.stderr_callback_owner)
+        )
         |> Map.put(:max_buffer_size, max_buffer_size_from_options(options))
         |> Map.put(:startup_opts, nil)
 
@@ -886,6 +894,12 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   end
 
   defp dispatch_stderr_callback(_callback, _lines), do: :ok
+
+  defp stderr_callback_for_owner(callback, :transport), do: callback
+  defp stderr_callback_for_owner(_callback, :client), do: nil
+
+  defp normalize_stderr_callback_owner(:client), do: :client
+  defp normalize_stderr_callback_owner(_owner), do: :transport
 
   defp flush_stderr_callback_buffer(%{stderr_callback_buffer: ""} = state), do: state
 

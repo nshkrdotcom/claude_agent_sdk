@@ -63,7 +63,17 @@ defmodule ClaudeAgentSDK.Client do
 
   use GenServer
 
-  alias ClaudeAgentSDK.{AbortSignal, CLI, Hooks, Message, Model, Options, TaskSupervisor}
+  alias ClaudeAgentSDK.{
+    AbortSignal,
+    CLI,
+    Hooks,
+    LineFraming,
+    Message,
+    Model,
+    Options,
+    TaskSupervisor
+  }
+
   alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
   alias ClaudeAgentSDK.ControlProtocol.Protocol
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
@@ -87,6 +97,7 @@ defmodule ClaudeAgentSDK.Client do
             pending_callbacks: %{},
             initialized: false,
             buffer: "",
+            stderr_buffer: "",
             session_id: nil,
             sdk_mcp_servers: %{},
             pending_permission_change: nil,
@@ -153,6 +164,7 @@ defmodule ClaudeAgentSDK.Client do
           },
           initialized: boolean(),
           buffer: String.t(),
+          stderr_buffer: String.t(),
           sdk_mcp_servers: %{String.t() => pid()},
           pending_permission_change: {GenServer.from(), reference()} | nil,
           control_request_timeout_ms: pos_integer(),
@@ -679,6 +691,7 @@ defmodule ClaudeAgentSDK.Client do
         pending_callbacks: %{},
         initialized: false,
         buffer: "",
+        stderr_buffer: "",
         session_id: nil,
         sdk_mcp_servers: sdk_mcp_servers,
         pending_permission_change: nil,
@@ -1052,6 +1065,10 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
+  def handle_info({:transport_stderr, data}, state) do
+    {:noreply, handle_transport_stderr(data, state)}
+  end
+
   def handle_info({:transport_message, payload}, state) do
     case decode_transport_payload(payload) do
       {:ok, {message_type, message_data}} ->
@@ -1138,6 +1155,7 @@ defmodule ClaudeAgentSDK.Client do
 
   @impl true
   def handle_info({:transport_exit, reason}, state) do
+    state = flush_transport_stderr(state)
     Logger.info("Transport disconnected", reason: inspect(reason))
 
     state =
@@ -1331,6 +1349,7 @@ defmodule ClaudeAgentSDK.Client do
       when is_pid(transport) do
     state =
       state
+      |> flush_transport_stderr()
       |> cancel_init_timeout()
       |> cancel_pending_callbacks()
 
@@ -1344,7 +1363,8 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   def terminate(reason, %{port: port} = state) when is_port(port) do
-    _state = state |> cancel_init_timeout() |> cancel_pending_callbacks()
+    _state =
+      state |> flush_transport_stderr() |> cancel_init_timeout() |> cancel_pending_callbacks()
 
     Logger.debug("Terminating client", reason: reason)
 
@@ -1383,6 +1403,7 @@ defmodule ClaudeAgentSDK.Client do
 
   def terminate(reason, state) do
     state
+    |> flush_transport_stderr()
     |> cancel_init_timeout()
     |> cancel_pending_callbacks()
 
@@ -1800,6 +1821,7 @@ defmodule ClaudeAgentSDK.Client do
       state.transport_opts
       |> Kernel.||([])
       |> Keyword.put(:options, state.options)
+      |> Keyword.put_new(:stderr_callback_owner, :client)
       |> maybe_put_bootstrap_subscriber(module)
 
     with {:ok, transport} <- module.start_link(transport_opts),
@@ -3488,6 +3510,42 @@ defmodule ClaudeAgentSDK.Client do
     Enum.each(state.subscribers, fn {_ref, pid} ->
       send(pid, {:claude_error, error})
     end)
+  end
+
+  defp handle_transport_stderr(data, state) do
+    data = IO.iodata_to_binary(data)
+    {lines, stderr_buffer} = LineFraming.consume_trimmed_lines(state.stderr_buffer, data)
+    dispatch_stderr_lines(lines, state.options.stderr)
+    %{state | stderr_buffer: stderr_buffer}
+  end
+
+  defp flush_transport_stderr(%{stderr_buffer: ""} = state), do: state
+
+  defp flush_transport_stderr(state) do
+    state.stderr_buffer
+    |> LineFraming.finalize_trimmed_lines()
+    |> dispatch_stderr_lines(state.options.stderr)
+
+    %{state | stderr_buffer: ""}
+  end
+
+  defp dispatch_stderr_lines(lines, callback) when is_function(callback, 1) and is_list(lines) do
+    Enum.each(lines, callback)
+  end
+
+  defp dispatch_stderr_lines(lines, _callback) when is_list(lines) do
+    Enum.each(lines, &log_stderr_line/1)
+  end
+
+  defp log_stderr_line(line) when is_binary(line) do
+    rendered_line =
+      if String.valid?(line) do
+        line
+      else
+        inspect(line)
+      end
+
+    Logger.warning("CLI stderr: #{rendered_line}")
   end
 
   defp transport_error_mode?(state, mode) do
