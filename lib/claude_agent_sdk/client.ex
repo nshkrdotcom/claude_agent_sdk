@@ -59,6 +59,14 @@ defmodule ClaudeAgentSDK.Client do
       messages = Task.await(task, :infinity)
 
   See: https://docs.anthropic.com/en/docs/claude-code/sdk
+
+  ## Architecture Note
+
+  `ClaudeAgentSDK.Client` remains SDK-local because it owns the advanced control
+  protocol family: hooks, permission callbacks, SDK MCP routing, and related
+  request/response state. The client now relies on the shared raw transport via
+  `ClaudeAgentSDK.Transport.Erlexec`, which is a compatibility wrapper over
+  `CliSubprocessCore.Transport.Erlexec`.
   """
 
   use GenServer

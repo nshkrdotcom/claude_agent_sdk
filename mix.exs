@@ -39,6 +39,7 @@ defmodule ClaudeAgentSdk.MixProject do
 
   defp deps do
     [
+      {:cli_subprocess_core, path: "../cli_subprocess_core"},
       {:erlexec, "~> 2.0", runtime: runtime_erlexec?()},
       {:jason, "~> 1.4"},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
@@ -151,6 +152,7 @@ defmodule ClaudeAgentSdk.MixProject do
         ],
         Streaming: [
           ClaudeAgentSDK.Streaming,
+          ClaudeAgentSDK.Runtime.CLI,
           ClaudeAgentSDK.Streaming.Session,
           ClaudeAgentSDK.Streaming.EventParser
         ],

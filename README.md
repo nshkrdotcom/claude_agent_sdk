@@ -27,6 +27,14 @@ An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python]
 
 ---
 
+## Runtime Architecture
+
+- Common CLI streaming/session flows now run on the shared `cli_subprocess_core` session runtime.
+- `ClaudeAgentSDK.Client` remains SDK-local for the advanced control family: hooks, permission callbacks, and SDK MCP routing.
+- Both lanes share the same raw subprocess transport through `ClaudeAgentSDK.Transport.Erlexec`, which now wraps `CliSubprocessCore.Transport.Erlexec`.
+
+---
+
 ## Installation
 
 Add to your `mix.exs`:

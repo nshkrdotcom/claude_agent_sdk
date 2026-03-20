@@ -1,105 +1,70 @@
 defmodule ClaudeAgentSDK.Streaming.Session do
   @moduledoc """
-  GenServer managing a persistent bidirectional streaming session with Claude.
+  GenServer managing a persistent Claude streaming session.
 
-  Maintains a long-lived subprocess with stdin/stdout pipes for interactive
-  conversations with character-level streaming support via `--include-partial-messages`.
-
-  ## Architecture
-
-  ```
-  Session GenServer
-    |
-    ├─> erlexec subprocess (claude CLI)
-    │   ├─ stdin  (send messages)
-    │   ├─ stdout (receive streaming events)
-    │   └─ stderr (capture errors)
-    |
-    └─> Subscriber Map
-        ├─ ref1 => {pid1, current_stream_ref}
-        ├─ ref2 => {pid2, current_stream_ref}
-        └─ ...
-  ```
-
-  ## State
-
-  - `subprocess` - {erlexec_pid, os_pid} tuple
-  - `session_id` - Claude session ID (extracted from first message)
-  - `options` - ClaudeAgentSDK.Options for configuration
-  - `subscribers` - Map of ref => {subscriber_pid, active: boolean}
-  - `message_buffer` - Incomplete JSON buffer from stdout
-  - `accumulated_text` - Current message text being assembled
-
-  ## Lifecycle
-
-  1. `init/1` - Spawn subprocess with streaming flags
-  2. `:read_output` loop - Continuously read from stdout
-  3. Parse events via EventParser
-  4. Broadcast to subscribers
-  5. `terminate/2` - Clean shutdown of subprocess
+  Real sessions run on `ClaudeAgentSDK.Runtime.CLI`, which itself runs on the
+  shared core session API. The in-memory mock mode remains local so tests can
+  drive streaming behavior deterministically without a subprocess.
   """
 
   use GenServer
+
   alias ClaudeAgentSDK.Log, as: Logger
 
-  alias ClaudeAgentSDK.{CLI, LineFraming, Options, Runtime}
+  alias ClaudeAgentSDK.{Options, Runtime.CLI, Streaming.EventParser}
   alias ClaudeAgentSDK.Config.Timeouts
-  alias ClaudeAgentSDK.Shell
-  alias ClaudeAgentSDK.Streaming.EventParser
+  alias ClaudeAgentSDK.Process, as: SDKProcess
   alias ClaudeAgentSDK.Streaming.Termination
-  alias ClaudeAgentSDK.Transport.{ExecOptions, Setup}
+  alias ClaudeAgentSDK.Transport.ExecOptions
+  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
+
+  @runtime_event_tag :claude_agent_sdk_runtime_cli
 
   @type subscriber_ref :: reference()
   @type subscriber_pid :: pid()
 
   defstruct [
-    # {erlexec_pid, os_pid}
-    :subprocess,
-    # Enable mock stream input (tests)
-    :mock_stream?,
-    # Claude session ID
+    :mode,
+    :runtime_session,
+    :runtime_transport,
+    :runtime_ref,
+    :runtime_projection_state,
+    :runtime_session_monitor_ref,
+    :runtime_transport_monitor_ref,
     :session_id,
-    # Configuration options
     :options,
-    # %{ref => pid} - all subscribers
     :subscribers,
-    # %{ref => monitor_ref} - subscriber process monitors
     :subscriber_monitors,
-    # [{ref, message}] - FIFO queue of pending subscribers with their messages
     :subscriber_queue,
-    # ref - currently active subscriber receiving events
     :active_subscriber,
-    # Incomplete JSON buffer
     :message_buffer,
-    # Currently assembling text
     :accumulated_text,
-    # Current stop reason for message termination
     :stop_reason,
-    # Incomplete stderr line buffer for callback framing
-    :stderr_buffer,
-    # Monitor reference for subprocess
-    :monitor_ref
+    :stderr_buffer
   ]
 
-  ## Public API
+  @type state :: %__MODULE__{
+          mode: :runtime | :mock,
+          runtime_session: pid() | nil,
+          runtime_transport: pid() | nil,
+          runtime_ref: reference() | nil,
+          runtime_projection_state: CLI.ProjectionState.t() | nil,
+          runtime_session_monitor_ref: reference() | nil,
+          runtime_transport_monitor_ref: reference() | nil,
+          session_id: String.t() | nil,
+          options: Options.t(),
+          subscribers: %{optional(reference()) => pid()},
+          subscriber_monitors: %{optional(reference()) => reference()},
+          subscriber_queue: [{reference(), String.t()}],
+          active_subscriber: reference() | nil,
+          message_buffer: String.t(),
+          accumulated_text: String.t(),
+          stop_reason: String.t() | nil,
+          stderr_buffer: String.t()
+        }
 
   @doc """
   Starts a new streaming session.
-
-  Spawns a Claude CLI subprocess with streaming flags enabled and
-  begins listening for events.
-
-  ## Parameters
-  - `options` - Optional `ClaudeAgentSDK.Options` struct
-
-  ## Returns
-  - `{:ok, pid}` - Session started successfully
-  - `{:error, reason}` - Failed to start subprocess
-
-  ## Examples
-
-      {:ok, session} = Session.start_link()
-      {:ok, session} = Session.start_link(%Options{model: "opus", max_turns: 10})
   """
   @spec start_link(Options.t() | nil) :: GenServer.on_start()
   def start_link(options \\ nil) do
@@ -113,79 +78,44 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   @doc """
-  Sends a message to the Claude session and returns a stream of events.
-
-  The returned stream yields events as they arrive from Claude, enabling
-  real-time typewriter effects and incremental UI updates.
-
-  ## Parameters
-  - `session` - Session PID
-  - `message` - Message text to send
-
-  ## Returns
-  Stream of event maps (see EventParser for event types)
-
-  ## Examples
-
-      {:ok, session} = Session.start_link()
-
-      # Get streaming response
-      Session.send_message(session, "Hello")
-      |> Stream.each(fn
-        %{type: :text_delta, text: text} -> IO.write(text)
-        %{type: :message_stop} -> IO.puts("")
-      end)
-      |> Stream.run()
+  Sends a message to the session and returns a lazy event stream.
   """
   @spec send_message(pid(), String.t()) :: Enumerable.t()
   def send_message(session, message) do
     ref = make_ref()
     timeout_ms = timeout_ms_for_session(session)
 
-    # Subscribe to receive events
     :ok = GenServer.call(session, {:subscribe, ref, self()}, Timeouts.streaming_session_ms())
-
-    # Send the message to Claude
     :ok = GenServer.cast(session, {:send_message, message, ref})
 
-    # Return stream that receives events
     Stream.resource(
       fn -> {session, ref, :active, nil, timeout_ms} end,
-      fn state ->
-        {session, ref, status, stop_reason, timeout_ms} = state
+      fn
+        {session, ref, :complete, stop_reason, timeout_ms} ->
+          {:halt, {session, ref, :complete, stop_reason, timeout_ms}}
 
-        if status == :complete do
-          {:halt, state}
-        else
+        {session, ref, :active, stop_reason, timeout_ms} ->
           receive do
             {:stream_event, ^ref, event} ->
-              {new_stop_reason, message_complete?} = Termination.step(event, stop_reason)
-
-              new_status =
-                if message_complete? do
-                  :complete
-                else
-                  :active
-                end
-
-              {[event], {session, ref, new_status, new_stop_reason, timeout_ms}}
+              {new_stop_reason, complete?} = Termination.step(event, stop_reason)
+              status = if complete?, do: :complete, else: :active
+              {[event], {session, ref, status, new_stop_reason, timeout_ms}}
 
             {:stream_error, ^ref, reason} ->
-              error_event = %{type: :error, error: reason}
-              {[error_event], {session, ref, :complete, stop_reason, timeout_ms}}
+              {[%{type: :error, error: reason}],
+               {session, ref, :complete, stop_reason, timeout_ms}}
 
             {:stream_complete, ^ref} ->
               {:halt, {session, ref, :complete, stop_reason, timeout_ms}}
           after
             timeout_ms ->
               Logger.warning("Streaming timeout after #{timeout_ms}ms")
-              timeout_event = %{type: :error, error: :timeout}
-              {[timeout_event], {session, ref, :complete, stop_reason, timeout_ms}}
+
+              {[%{type: :error, error: :timeout}],
+               {session, ref, :complete, stop_reason, timeout_ms}}
           end
-        end
       end,
       fn {session, ref, _status, _stop_reason, _timeout_ms} ->
-        # Unsubscribe on stream completion
         GenServer.cast(session, {:unsubscribe, ref})
       end
     )
@@ -195,22 +125,12 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   @spec push_events(pid(), [map()]) :: :ok
   def push_events(session, events) when is_pid(session) and is_list(events) do
     payload = Enum.map_join(events, "\n", &Jason.encode!/1)
-
     send(session, {:mock_stdout, payload <> "\n"})
     :ok
   end
 
   @doc """
-  Closes the streaming session and terminates the subprocess.
-
-  ## Parameters
-  - `session` - Session PID
-
-  ## Examples
-
-      {:ok, session} = Session.start_link()
-      # ... use session ...
-      :ok = Session.close(session)
+  Closes the session.
   """
   @spec close(pid()) :: :ok
   def close(session) do
@@ -220,37 +140,23 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   @doc """
-  Gets the Claude session ID.
-
-  The session ID is extracted from the first `message_start` event.
-
-  ## Returns
-  - `{:ok, session_id}` - Session ID available
-  - `{:error, :no_session_id}` - Session not yet initialized
-
-  ## Examples
-
-      {:ok, session} = Session.start_link()
-      {:ok, session_id} = Session.get_session_id(session)
+  Returns the current Claude session id if one has been observed.
   """
   @spec get_session_id(pid()) :: {:ok, String.t()} | {:error, :no_session_id}
   def get_session_id(session) do
     GenServer.call(session, :get_session_id, Timeouts.streaming_session_ms())
   end
 
-  ## GenServer Callbacks
-
   @impl true
   def init({options, start_opts}) when is_list(start_opts) do
     opts = options || %Options{}
-    startup_mode = startup_mode_from_opts(start_opts)
 
     case Keyword.get(start_opts, :mock_stream, false) do
       true ->
-        {:ok, initial_state(opts, true)}
+        {:ok, initial_state(opts, :mock)}
 
       false ->
-        init_with_subprocess(opts, startup_mode)
+        init_runtime_session(opts, start_opts)
     end
   end
 
@@ -258,46 +164,13 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     init({options, []})
   end
 
-  defp init_with_subprocess(opts, :lazy) do
-    {:ok, initial_state(opts, false), {:continue, :start_subprocess}}
-  end
-
-  defp init_with_subprocess(opts, :eager) do
-    state = initial_state(opts, false)
-
-    case start_subprocess(state) do
-      {:ok, connected_state} -> {:ok, connected_state}
-      {:error, reason} -> {:stop, {:subprocess_failed, reason}}
-    end
-  end
-
-  @impl true
-  def handle_continue(:start_subprocess, state) do
-    case start_subprocess(state) do
-      {:ok, connected_state} ->
-        {:noreply, connected_state}
-
-      {:error, reason} ->
-        {:stop, {:subprocess_failed, reason}, state}
-    end
-  end
-
   @impl true
   def handle_call({:subscribe, ref, pid}, _from, state) do
     state = put_subscriber(state, ref, pid)
-
-    # If no active subscriber, activate this one immediately
-    new_active =
-      if state.active_subscriber == nil do
-        ref
-      else
-        state.active_subscriber
-      end
-
-    {:reply, :ok, %{state | active_subscriber: new_active}}
+    active_subscriber = state.active_subscriber || ref
+    {:reply, :ok, %{state | active_subscriber: active_subscriber}}
   end
 
-  @impl true
   def handle_call(:get_session_id, _from, state) do
     case state.session_id do
       nil -> {:reply, {:error, :no_session_id}, state}
@@ -305,76 +178,88 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     end
   end
 
-  @impl true
   def handle_call(:timeout_ms, _from, state) do
     {:reply, timeout_ms_for_options(state.options), state}
   end
 
   @impl true
   def handle_cast({:send_message, message, ref}, state) do
-    # Only send if this subscriber is active
     if state.active_subscriber == ref do
-      # Send JSON message to Claude via stdin
-      json_msg =
-        Jason.encode!(%{
-          "type" => "user",
-          "message" => %{
-            "role" => "user",
-            "content" => message
-          }
-        })
+      case dispatch_message(state, message) do
+        :ok ->
+          {:noreply, state}
 
-      case state.subprocess do
-        {pid, _os_pid} ->
-          :ok = :exec.send(pid, json_msg <> "\n")
-          Logger.debug("Sent message to Claude (#{byte_size(message)} bytes)")
-
-        nil ->
-          Logger.debug("Mock session ignoring send_message (#{byte_size(message)} bytes)")
+        {:error, reason} ->
+          notify_stream_error(state, ref, reason)
+          {:noreply, handle_message_complete(%{state | accumulated_text: "", stop_reason: nil})}
       end
-
-      {:noreply, state}
     else
-      # Queue this message to be sent later
-      queue = state.subscriber_queue ++ [{ref, message}]
-      {:noreply, %{state | subscriber_queue: queue}}
+      {:noreply, %{state | subscriber_queue: state.subscriber_queue ++ [{ref, message}]}}
     end
   end
 
-  @impl true
   def handle_cast({:unsubscribe, ref}, state) do
     {:noreply, drop_subscriber(state, ref)}
   end
 
   @impl true
-  def handle_info({:stdout, os_pid, data}, %{subprocess: {_, subprocess_os_pid}} = state) do
-    if os_pid == subprocess_os_pid do
-      {:noreply, handle_stdout_data(state, data)}
+  def handle_info(
+        {@runtime_event_tag, runtime_ref, {:event, core_event}},
+        %{runtime_ref: runtime_ref} = state
+      ) do
+    {events, projection_state} = CLI.project_event(core_event, state.runtime_projection_state)
+    session_id = projection_state.session_id || extract_session_id(events) || state.session_id
+
+    maybe_broadcast_events(state, events)
+
+    {stop_reason, complete?} = Termination.reduce(events, state.stop_reason)
+
+    state = %{
+      state
+      | runtime_projection_state: projection_state,
+        accumulated_text: projection_state.accumulated_text,
+        session_id: session_id,
+        stop_reason: stop_reason
+    }
+
+    if complete? do
+      {:noreply, handle_message_complete(state)}
     else
       {:noreply, state}
     end
   end
 
-  def handle_info({:stdout, _os_pid, _data}, state), do: {:noreply, state}
-
-  def handle_info({:mock_stdout, data}, %{mock_stream?: true} = state) do
-    {:noreply, handle_stdout_data(state, data)}
+  def handle_info({:mock_stdout, data}, %{mode: :mock} = state) do
+    {:noreply, handle_mock_stdout(state, data)}
   end
 
-  @impl true
-  def handle_info({:stderr, os_pid, data}, %{subprocess: {_, subprocess_os_pid}} = state) do
-    if os_pid == subprocess_os_pid do
-      {:noreply, handle_stderr_data(data, state)}
+  def handle_info({:runtime_start_failed, reason}, state) do
+    {:stop, {:subprocess_failed, reason}, state}
+  end
+
+  def handle_info(
+        {:DOWN, monitor_ref, :process, pid, reason},
+        %{runtime_transport_monitor_ref: monitor_ref, runtime_transport: pid} = state
+      ) do
+    if normal_exit_reason?(reason) do
+      {:noreply, %{state | runtime_transport: nil, runtime_transport_monitor_ref: nil}}
     else
-      {:noreply, state}
+      {:stop, {:subprocess_failed, reason}, state}
     end
   end
 
-  def handle_info({:stderr, _os_pid, _data}, state), do: {:noreply, state}
+  def handle_info(
+        {:DOWN, monitor_ref, :process, pid, reason},
+        %{runtime_session_monitor_ref: monitor_ref, runtime_session: pid} = state
+      ) do
+    cond do
+      normal_exit_reason?(reason) ->
+        broadcast_complete(state.subscribers)
+        {:stop, :normal, %{state | runtime_session: nil, runtime_session_monitor_ref: nil}}
 
-  def handle_info({:DOWN, os_pid, :process, _pid, _reason}, %{subprocess: nil} = state)
-      when is_integer(os_pid) do
-    {:noreply, state}
+      true ->
+        {:stop, {:subprocess_failed, reason}, state}
+    end
   end
 
   def handle_info({:DOWN, monitor_ref, :process, _pid, _reason}, state)
@@ -388,53 +273,99 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     end
   end
 
-  @impl true
-  def handle_info({:DOWN, os_pid, :process, _pid, reason}, state) do
-    # Subprocess died - match on os_pid (integer)
-    {_erlexec_pid, subprocess_os_pid} = state.subprocess
+  def handle_info(_other, state), do: {:noreply, state}
 
-    if os_pid == subprocess_os_pid do
-      Logger.info("Claude subprocess terminated: #{inspect(reason)}")
-      state = flush_stderr_buffer(state)
-      broadcast_complete(state.subscribers)
-      {:stop, :normal, state}
-    else
-      # Different process
-      {:noreply, state}
-    end
+  @impl true
+  def terminate(_reason, %{runtime_session: runtime_session} = state)
+      when is_pid(runtime_session) do
+    demonitor_runtime(state)
+    demonitor_subscribers(state)
+    _ = CLI.close(runtime_session)
+    :ok
+  catch
+    _, _ -> :ok
   end
-
-  @impl true
-  def terminate(_reason, %{subprocess: nil}), do: :ok
 
   def terminate(_reason, state) do
-    # Clean shutdown of subprocess
-    {pid, _os_pid} = state.subprocess
-
-    try do
-      :exec.stop(pid)
-    catch
-      _, _ -> :ok
-    end
-
+    demonitor_runtime(state)
+    demonitor_subscribers(state)
     :ok
+  catch
+    _, _ -> :ok
   end
 
-  ## Private Functions
+  @doc false
+  def __shell_escape__(arg) when is_binary(arg), do: SDKProcess.__shell_escape__(arg)
 
-  defp startup_mode_from_opts(start_opts) do
-    case Keyword.get(start_opts, :startup_mode, :eager) do
-      :lazy -> :lazy
-      _ -> :eager
+  @doc false
+  def __exec_opts__(%Options{} = options), do: ExecOptions.erlexec(options)
+
+  defp init_runtime_session(%Options{} = options, start_opts) do
+    runtime_ref = make_ref()
+    startup_mode = normalize_startup_mode(Keyword.get(start_opts, :startup_mode, :eager))
+
+    case prevalidate_runtime_start(options, startup_mode) do
+      :ok ->
+        runtime_opts =
+          [
+            options: %{options | include_partial_messages: true},
+            subscriber: {self(), runtime_ref},
+            session_event_tag: Keyword.get(start_opts, :session_event_tag, @runtime_event_tag),
+            startup_mode: startup_mode
+          ]
+          |> maybe_put(:transport_module, Keyword.get(start_opts, :transport_module))
+          |> maybe_put(:task_supervisor, Keyword.get(start_opts, :task_supervisor))
+          |> maybe_put(
+            :headless_timeout_ms,
+            Keyword.get(start_opts, :headless_timeout_ms, :infinity)
+          )
+          |> maybe_put(:max_buffer_size, Keyword.get(start_opts, :max_buffer_size))
+          |> maybe_put(:max_stderr_buffer_size, Keyword.get(start_opts, :max_stderr_buffer_size))
+
+        case CLI.start_session(runtime_opts) do
+          {:ok, runtime_session, %{info: info, projection_state: projection_state}} ->
+            runtime_transport = get_in(info, [:transport, :pid])
+
+            {:ok,
+             %{
+               initial_state(options, :runtime)
+               | runtime_session: runtime_session,
+                 runtime_transport: runtime_transport,
+                 runtime_ref: runtime_ref,
+                 runtime_projection_state: projection_state,
+                 runtime_session_monitor_ref: Process.monitor(runtime_session),
+                 runtime_transport_monitor_ref: maybe_monitor(runtime_transport)
+             }}
+
+          {:error, reason} ->
+            {:stop, {:subprocess_failed, normalize_runtime_start_error(reason)}}
+        end
+
+      {:error, reason} when startup_mode == :lazy ->
+        send(self(), {:runtime_start_failed, reason})
+
+        {:ok,
+         %{
+           initial_state(options, :runtime)
+           | runtime_ref: runtime_ref
+         }}
+
+      {:error, reason} ->
+        {:stop, {:subprocess_failed, reason}}
     end
   end
 
-  defp initial_state(opts, mock_stream?) do
+  defp initial_state(options, mode) do
     %__MODULE__{
-      subprocess: nil,
-      mock_stream?: mock_stream?,
+      mode: mode,
+      runtime_session: nil,
+      runtime_transport: nil,
+      runtime_ref: nil,
+      runtime_projection_state: nil,
+      runtime_session_monitor_ref: nil,
+      runtime_transport_monitor_ref: nil,
       session_id: nil,
-      options: opts,
+      options: options,
       subscribers: %{},
       subscriber_monitors: %{},
       subscriber_queue: [],
@@ -442,10 +373,18 @@ defmodule ClaudeAgentSDK.Streaming.Session do
       message_buffer: "",
       accumulated_text: "",
       stop_reason: nil,
-      stderr_buffer: "",
-      monitor_ref: nil
+      stderr_buffer: ""
     }
   end
+
+  defp normalize_startup_mode(:lazy), do: :lazy
+  defp normalize_startup_mode(_), do: :eager
+
+  defp maybe_put(opts, _key, nil), do: opts
+  defp maybe_put(opts, key, value), do: Keyword.put(opts, key, value)
+
+  defp maybe_monitor(pid) when is_pid(pid), do: Process.monitor(pid)
+  defp maybe_monitor(_pid), do: nil
 
   defp timeout_ms_for_session(session) when is_pid(session) do
     GenServer.call(session, :timeout_ms, Timeouts.streaming_session_ms())
@@ -461,62 +400,36 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   defp timeout_ms_for_options(_options), do: Timeouts.streaming_session_ms()
 
-  defp start_subprocess(state) do
-    args = build_streaming_args(state.options)
+  defp dispatch_message(%{mode: :mock}, _message), do: :ok
 
-    case spawn_subprocess(args, state.options) do
-      {:ok, subprocess, monitor_ref} ->
-        {:ok, %{state | subprocess: subprocess, monitor_ref: monitor_ref}}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+  defp dispatch_message(%{runtime_session: runtime_session}, message)
+       when is_pid(runtime_session) do
+    CLI.send_input(runtime_session, message)
   end
 
-  defp handle_stderr_data(data, %{options: %Options{stderr: callback}} = state)
-       when is_function(callback, 1) do
-    {lines, stderr_buffer} = LineFraming.consume_trimmed_lines(state.stderr_buffer, data)
-    Enum.each(lines, callback)
-    %{state | stderr_buffer: stderr_buffer}
-  end
+  defp dispatch_message(_state, _message), do: {:error, :not_connected}
 
-  defp handle_stderr_data(data, state) do
-    Logger.warning("Claude stderr: #{data}")
-    state
-  end
+  defp handle_mock_stdout(state, data) do
+    buffer = state.message_buffer <> data
 
-  defp flush_stderr_buffer(%{options: %Options{stderr: callback}} = state)
-       when is_function(callback, 1) do
-    state.stderr_buffer
-    |> LineFraming.finalize_trimmed_lines()
-    |> Enum.each(callback)
+    {:ok, events, remaining, accumulated_text} =
+      EventParser.parse_buffer(buffer, state.accumulated_text)
 
-    %{state | stderr_buffer: ""}
-  end
-
-  defp flush_stderr_buffer(state), do: state
-
-  defp handle_stdout_data(state, data) do
-    new_buffer = state.message_buffer <> data
-
-    {:ok, events, remaining_buffer, new_accumulated} =
-      EventParser.parse_buffer(new_buffer, state.accumulated_text)
-
-    new_session_id = extract_session_id(events) || state.session_id
-
-    {stop_reason, message_complete?} = Termination.reduce(events, state.stop_reason)
+    session_id = extract_session_id(events) || state.session_id
 
     maybe_broadcast_events(state, events)
 
+    {stop_reason, complete?} = Termination.reduce(events, state.stop_reason)
+
     state = %{
       state
-      | message_buffer: remaining_buffer,
-        accumulated_text: new_accumulated,
-        session_id: new_session_id,
+      | message_buffer: remaining,
+        accumulated_text: accumulated_text,
+        session_id: session_id,
         stop_reason: stop_reason
     }
 
-    if message_complete? do
+    if complete? do
       handle_message_complete(state)
     else
       state
@@ -531,12 +444,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   defp handle_message_complete(state) do
-    state =
-      %{
-        state
-        | accumulated_text: "",
-          stop_reason: nil
-      }
+    state = %{state | accumulated_text: "", stop_reason: nil}
 
     case state.subscriber_queue do
       [] ->
@@ -544,98 +452,23 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
       [{next_ref, next_message} | rest] ->
         state = %{state | active_subscriber: next_ref, subscriber_queue: rest}
-        :ok = send_queued_message(state, next_message)
-        state
-    end
-  end
 
-  defp send_queued_message(%{subprocess: nil}, _next_message), do: :ok
-
-  defp send_queued_message(state, next_message) do
-    json_msg =
-      Jason.encode!(%{
-        "type" => "user",
-        "message" => %{
-          "role" => "user",
-          "content" => next_message
-        }
-      })
-
-    {pid, _} = state.subprocess
-    :ok = :exec.send(pid, json_msg <> "\n")
-    Logger.debug("Sent queued message to Claude (#{byte_size(next_message)} bytes)")
-    :ok
-  end
-
-  defp build_streaming_args(%Options{} = options) do
-    base_args = [
-      "--input-format",
-      "stream-json",
-      "--output-format",
-      "stream-json",
-      "--include-partial-messages",
-      # Required for stream-json output
-      "--verbose"
-    ]
-
-    # Add user options (but skip verbose/output_format since we already added them)
-    user_args = Options.to_stream_json_args(options)
-    base_args ++ user_args
-  end
-
-  defp spawn_subprocess(args, %Options{} = options) do
-    Runtime.ensure_erlexec_started!()
-
-    case Setup.validate_cwd(options.cwd) do
-      :ok ->
-        executable = CLI.resolve_executable!(options)
-        quoted_args = Enum.map(args, &shell_escape/1)
-        cmd = Enum.join([executable | quoted_args], " ")
-        exec_opts = build_exec_opts(options)
-
-        case :exec.run(cmd, exec_opts) do
-          {:ok, pid, os_pid} ->
-            {:ok, {pid, os_pid}, :monitor_via_erlexec}
+        case dispatch_message(state, next_message) do
+          :ok ->
+            state
 
           {:error, reason} ->
-            Logger.error("Failed to start Claude CLI subprocess",
-              cmd: cmd,
-              reason: reason,
-              env_keys: env_keys(exec_opts)
-            )
-
-            {:error, reason}
+            notify_stream_error(state, next_ref, reason)
+            handle_message_complete(state)
         end
-
-      {:error, {:cwd_not_found, cwd}} ->
-        {:error, {:cwd_not_found, cwd}}
     end
   end
 
-  defp shell_escape(arg) when is_binary(arg) do
-    Shell.escape_arg(arg)
-  end
-
-  @doc false
-  def __shell_escape__(arg) when is_binary(arg), do: shell_escape(arg)
-
-  defp build_exec_opts(%Options{} = options) do
-    ExecOptions.erlexec(options)
-  end
-
-  @doc false
-  def __exec_opts__(%Options{} = options), do: build_exec_opts(options)
-
-  defp env_keys(opts) do
-    opts
-    |> Enum.find_value([], fn
-      {:env, env} -> env
-      _ -> nil
-    end)
-    |> Enum.map(fn
-      {key, _} when is_list(key) -> to_string(key)
-      {key, _} -> inspect(key)
-    end)
+  defp notify_stream_error(state, ref, reason) do
+    case Map.get(state.subscribers, ref) do
+      nil -> :ok
+      pid -> send(pid, {:stream_error, ref, reason})
+    end
   end
 
   defp put_subscriber(state, ref, pid) when is_reference(ref) and is_pid(pid) do
@@ -673,7 +506,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
     subscribers = Map.delete(state.subscribers, ref)
     queue = Enum.reject(state.subscriber_queue, fn {queue_ref, _msg} -> queue_ref == ref end)
-
     state = %{state | subscribers: subscribers, subscriber_queue: queue}
 
     cond do
@@ -696,8 +528,15 @@ defmodule ClaudeAgentSDK.Streaming.Session do
          %{subscriber_queue: [{next_ref, next_message} | rest]} = state
        ) do
     state = %{state | active_subscriber: next_ref, subscriber_queue: rest}
-    :ok = send_queued_message(state, next_message)
-    state
+
+    case dispatch_message(state, next_message) do
+      :ok ->
+        state
+
+      {:error, reason} ->
+        notify_stream_error(state, next_ref, reason)
+        handle_message_complete(state)
+    end
   end
 
   defp find_subscriber_ref_by_monitor(state, monitor_ref) when is_reference(monitor_ref) do
@@ -707,14 +546,9 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   defp extract_session_id(events) do
-    # Look for session ID in system message (if present)
-    # Note: Claude CLI may not emit session_id in all events
-    # We'll try to extract it when available
-    Enum.find_value(events, fn event ->
-      case event do
-        %{session_id: id} when is_binary(id) -> id
-        _ -> nil
-      end
+    Enum.find_value(events, fn
+      %{session_id: id} when is_binary(id) -> id
+      _ -> nil
     end)
   end
 
@@ -731,9 +565,43 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   end
 
   defp broadcast_complete(subscribers) do
-    # Send complete to all remaining subscribers
     Enum.each(subscribers, fn {ref, pid} ->
       send(pid, {:stream_complete, ref})
     end)
   end
+
+  defp demonitor_runtime(state) do
+    if is_reference(state.runtime_session_monitor_ref) do
+      Process.demonitor(state.runtime_session_monitor_ref, [:flush])
+    end
+
+    if is_reference(state.runtime_transport_monitor_ref) do
+      Process.demonitor(state.runtime_transport_monitor_ref, [:flush])
+    end
+  end
+
+  defp demonitor_subscribers(state) do
+    Enum.each(state.subscriber_monitors, fn {_ref, monitor_ref} ->
+      Process.demonitor(monitor_ref, [:flush])
+    end)
+  end
+
+  defp normal_exit_reason?(reason), do: reason in [:normal, :shutdown, {:shutdown, :normal}]
+
+  defp prevalidate_runtime_start(%Options{cwd: cwd}, _startup_mode)
+       when is_binary(cwd) and cwd != "" do
+    if File.dir?(cwd) do
+      :ok
+    else
+      {:error, {:cwd_not_found, cwd}}
+    end
+  end
+
+  defp prevalidate_runtime_start(_options, _startup_mode), do: :ok
+
+  defp normalize_runtime_start_error({:transport, %CoreTransportError{reason: reason}}),
+    do: reason
+
+  defp normalize_runtime_start_error(%CoreTransportError{reason: reason}), do: reason
+  defp normalize_runtime_start_error(reason), do: reason
 end

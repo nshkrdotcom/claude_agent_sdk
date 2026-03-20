@@ -1,48 +1,57 @@
 defmodule ClaudeAgentSDK.Transport.Erlexec do
   @moduledoc """
-  Transport implementation backed by erlexec.
+  Compatibility wrapper around `CliSubprocessCore.Transport.Erlexec`.
 
-  This transport supports OS-level user execution via erlexec's `:user` option,
-  which `Port`-based transports cannot provide.
+  The Claude SDK preserves its public transport API and event shapes while the
+  underlying subprocess ownership now lives in `cli_subprocess_core`.
   """
 
   use GenServer
 
   import Kernel, except: [send: 2]
 
-  @behaviour ClaudeAgentSDK.Transport
-
-  alias ClaudeAgentSDK.{CLI, LineFraming, Options, Runtime, TaskSupervisor}
+  alias ClaudeAgentSDK.{CLI, Options, TaskSupervisor}
+  alias ClaudeAgentSDK.Process, as: SDKProcess
   alias ClaudeAgentSDK.Config.{Buffers, Timeouts}
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Errors.CLIJSONDecodeError
-  alias ClaudeAgentSDK.Process, as: SDKProcess
   alias ClaudeAgentSDK.Transport.ExecOptions
-  alias ClaudeAgentSDK.Transport.Setup
+  alias CliSubprocessCore.Command, as: CoreCommand
+  alias CliSubprocessCore.ProcessExit, as: CoreProcessExit
+  alias CliSubprocessCore.Transport.Erlexec, as: CoreErlexec
+  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
-  defstruct subprocess: nil,
+  @behaviour ClaudeAgentSDK.Transport
+
+  @default_event_tag :claude_agent_sdk_transport
+
+  defstruct core_transport: nil,
+            core_monitor_ref: nil,
             subscribers: %{},
-            stdout_buffer: "",
-            pending_lines: :queue.new(),
-            drain_scheduled?: false,
-            status: :disconnected,
-            stderr_callback: nil,
-            stderr_callback_owner: :transport,
-            stderr_buffer: "",
-            stderr_callback_buffer: "",
-            max_buffer_size: Buffers.max_stdout_buffer_bytes(),
-            max_stderr_buffer_size: Buffers.max_stderr_buffer_bytes(),
-            overflowed?: false,
-            pending_calls: %{},
-            finalize_timer_ref: nil,
             headless_timeout_ms: Timeouts.transport_headless_ms(),
             headless_timer_ref: nil,
+            stderr_buffer: "",
+            stderr_callback: nil,
+            max_stderr_buffer_size: Buffers.max_stderr_buffer_bytes(),
             task_supervisor: TaskSupervisor,
-            startup_opts: nil
+            event_tag: @default_event_tag
 
   @type subscriber_info :: %{
           monitor_ref: reference(),
           tag: ClaudeAgentSDK.Transport.subscription_tag()
+        }
+
+  @type state :: %__MODULE__{
+          core_transport: pid() | nil,
+          core_monitor_ref: reference() | nil,
+          subscribers: %{optional(pid()) => subscriber_info()},
+          headless_timeout_ms: pos_integer() | :infinity,
+          headless_timer_ref: reference() | nil,
+          stderr_buffer: String.t(),
+          stderr_callback: (String.t() -> any()) | nil,
+          max_stderr_buffer_size: pos_integer(),
+          task_supervisor: pid() | atom(),
+          event_tag: atom()
         }
 
   @impl ClaudeAgentSDK.Transport
@@ -58,31 +67,20 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   @impl ClaudeAgentSDK.Transport
   def start_link(opts) when is_list(opts) do
-    trap_exit? = Process.flag(:trap_exit, true)
-
-    try do
-      case GenServer.start_link(__MODULE__, opts) do
-        {:ok, pid} ->
-          case receive_startup_exit(pid) do
-            nil -> {:ok, pid}
-            reason -> transport_error(reason)
-          end
-
-        {:error, reason} ->
-          transport_error(reason)
-      end
-    catch
-      :exit, reason ->
-        transport_error(reason)
-    after
-      Process.flag(:trap_exit, trap_exit?)
+    case GenServer.start_link(__MODULE__, opts) do
+      {:ok, pid} -> {:ok, pid}
+      {:error, reason} -> transport_error(reason)
     end
+  catch
+    :exit, reason ->
+      transport_error(reason)
   end
 
   @impl ClaudeAgentSDK.Transport
   def send(transport, message) when is_pid(transport) do
     case safe_call(transport, {:send, message}) do
-      {:ok, result} -> result
+      {:ok, :ok} -> :ok
+      {:ok, {:error, reason}} -> transport_error(reason)
       {:error, reason} -> transport_error(reason)
     end
   end
@@ -96,7 +94,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   def subscribe(transport, pid, tag)
       when is_pid(transport) and is_pid(pid) and (tag == :legacy or is_reference(tag)) do
     case safe_call(transport, {:subscribe, pid, tag}) do
-      {:ok, result} -> result
+      {:ok, :ok} -> :ok
+      {:ok, {:error, reason}} -> transport_error(reason)
       {:error, reason} -> transport_error(reason)
     end
   end
@@ -105,7 +104,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   def unsubscribe(transport, pid) when is_pid(transport) and is_pid(pid) do
     case safe_call(transport, {:unsubscribe, pid}) do
       {:ok, :ok} -> :ok
-      {:error, _} -> :ok
+      {:error, _reason} -> :ok
     end
   end
 
@@ -123,8 +122,11 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
       {:ok, :ok} ->
         :ok
 
-      {:error, reason} when reason == :not_connected ->
+      {:ok, {:error, :not_connected}} ->
         :ok
+
+      {:ok, {:error, reason}} ->
+        transport_error(reason)
 
       {:error, reason} ->
         transport_error(reason)
@@ -137,8 +139,11 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
       {:ok, :ok} ->
         :ok
 
-      {:error, reason} when reason == :not_connected ->
+      {:ok, {:error, :not_connected}} ->
         :ok
+
+      {:ok, {:error, reason}} ->
+        transport_error(reason)
 
       {:error, reason} ->
         transport_error(reason)
@@ -148,7 +153,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   @impl ClaudeAgentSDK.Transport
   def end_input(transport) when is_pid(transport) do
     case safe_call(transport, :end_input) do
-      {:ok, result} -> result
+      {:ok, :ok} -> :ok
+      {:ok, {:error, reason}} -> transport_error(reason)
       {:error, reason} -> transport_error(reason)
     end
   end
@@ -157,8 +163,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   def status(transport) when is_pid(transport) do
     case safe_call(transport, :status) do
       {:ok, status} when status in [:connected, :disconnected, :error] -> status
-      {:ok, _other} -> :error
-      {:error, _reason} -> :disconnected
+      _ -> :disconnected
     end
   end
 
@@ -177,227 +182,150 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     stderr_callback_owner =
       normalize_stderr_callback_owner(Keyword.get(opts, :stderr_callback_owner))
 
-    state = %__MODULE__{
-      subprocess: nil,
-      status: :disconnected,
-      stderr_callback: stderr_callback_for_owner(options.stderr, stderr_callback_owner),
-      stderr_callback_owner: stderr_callback_owner,
-      max_buffer_size: max_buffer_size_from_options(options),
-      max_stderr_buffer_size:
-        normalize_max_stderr_buffer_size(Keyword.get(opts, :max_stderr_buffer_size, nil)),
-      overflowed?: false,
-      startup_opts: opts,
-      task_supervisor: Keyword.get(opts, :task_supervisor, TaskSupervisor),
-      headless_timeout_ms:
-        normalize_headless_timeout_ms(
-          Keyword.get(opts, :headless_timeout_ms, Timeouts.transport_headless_ms())
-        )
-    }
+    with {:ok, normalized} <- normalize_start_opts(opts, options, stderr_callback_owner),
+         {:ok, core_transport} <-
+           CoreErlexec.start(Keyword.put(normalized.core_opts, :subscriber, self())) do
+      state =
+        %__MODULE__{
+          core_transport: core_transport,
+          core_monitor_ref: Process.monitor(core_transport),
+          subscribers: %{},
+          headless_timeout_ms: normalized.headless_timeout_ms,
+          stderr_buffer: "",
+          stderr_callback: normalized.stderr_callback,
+          max_stderr_buffer_size: normalized.max_stderr_buffer_size,
+          task_supervisor: normalized.task_supervisor,
+          event_tag: normalized.event_tag
+        }
+        |> maybe_add_bootstrap_subscriber(normalized.bootstrap_subscriber)
+        |> maybe_schedule_headless_timer()
 
-    case startup_mode_from_opts(opts) do
-      :lazy ->
-        {:ok, maybe_schedule_headless_timer(state), {:continue, :start_subprocess}}
-
-      :eager ->
-        case start_subprocess(state, opts, options) do
-          {:ok, connected_state} ->
-            {:ok, connected_state}
-
-          {:error, reason} ->
-            {:stop, reason}
-        end
-    end
-  end
-
-  @impl GenServer
-  def handle_continue(:start_subprocess, %{startup_opts: opts} = state) do
-    options = Keyword.get(opts, :options) || %Options{}
-
-    case start_subprocess(state, opts, options) do
-      {:ok, connected_state} ->
-        {:noreply, connected_state}
-
-      {:error, reason} ->
-        {:stop, reason, %{state | startup_opts: nil}}
+      {:ok, state}
+    else
+      {:error, {:transport, reason}} -> {:stop, reason}
+      {:error, reason} -> {:stop, reason}
     end
   end
 
   @impl GenServer
   def handle_call({:subscribe, pid, tag}, _from, state) do
-    state =
-      state
-      |> put_subscriber(pid, tag)
-      |> cancel_headless_timer()
-
-    {:reply, :ok, state}
+    {:reply, :ok, put_subscriber(state, pid, tag)}
   end
 
   def handle_call({:unsubscribe, pid}, _from, state) do
-    {existing, subscribers} = Map.pop(state.subscribers, pid)
-
-    if is_map(existing) and is_reference(existing.monitor_ref) do
-      Process.demonitor(existing.monitor_ref, [:flush])
-    end
-
-    state = %{state | subscribers: subscribers} |> maybe_schedule_headless_timer()
-    {:reply, :ok, state}
+    {:reply, :ok, remove_subscriber(state, pid)}
   end
 
-  def handle_call({:send, message}, from, %{subprocess: {pid, _}} = state) do
-    case start_io_task(state, fn -> send_payload(pid, message) end) do
-      {:ok, task} ->
-        pending_calls = Map.put(state.pending_calls, task.ref, from)
-        {:noreply, %{state | pending_calls: pending_calls}}
-
-      {:error, reason} ->
-        {:reply, transport_error(reason), state}
-    end
+  def handle_call({:send, message}, _from, %{core_transport: core_transport} = state) do
+    {:reply, normalize_core_reply(CoreErlexec.send(core_transport, message)), state}
   end
 
-  def handle_call({:send, _}, _from, %{subprocess: nil} = state) do
-    {:reply, transport_error(:not_connected), state}
+  def handle_call({:send, _message}, _from, state) do
+    {:reply, {:error, :not_connected}, state}
+  end
+
+  def handle_call(:end_input, _from, %{core_transport: core_transport} = state) do
+    {:reply, normalize_core_reply(CoreErlexec.end_input(core_transport)), state}
+  end
+
+  def handle_call(:end_input, _from, state) do
+    {:reply, {:error, :not_connected}, state}
+  end
+
+  def handle_call(:interrupt, _from, %{core_transport: core_transport} = state) do
+    reply =
+      if CoreErlexec.status(core_transport) == :connected do
+        normalize_core_reply(CoreErlexec.interrupt(core_transport))
+      else
+        {:error, :not_connected}
+      end
+
+    {:reply, reply, state}
+  end
+
+  def handle_call(:interrupt, _from, state) do
+    {:reply, {:error, :not_connected}, state}
+  end
+
+  def handle_call(:force_close, _from, %{core_transport: core_transport} = state) do
+    reply =
+      if CoreErlexec.status(core_transport) == :connected do
+        normalize_core_reply(CoreErlexec.force_close(core_transport))
+      else
+        {:error, :not_connected}
+      end
+
+    {:stop, :normal, reply, %{state | core_transport: nil}}
+  end
+
+  def handle_call(:force_close, _from, state) do
+    {:stop, :normal, {:error, :not_connected}, state}
+  end
+
+  def handle_call(:status, _from, %{core_transport: core_transport} = state)
+      when is_pid(core_transport) do
+    {:reply, CoreErlexec.status(core_transport), state}
   end
 
   def handle_call(:status, _from, state) do
-    {:reply, state.status, state}
-  end
-
-  def handle_call(:end_input, from, %{subprocess: {pid, _}} = state) do
-    case start_io_task(state, fn -> send_eof(pid) end) do
-      {:ok, task} ->
-        pending_calls = Map.put(state.pending_calls, task.ref, from)
-        {:noreply, %{state | pending_calls: pending_calls}}
-
-      {:error, reason} ->
-        {:reply, transport_error(reason), state}
-    end
-  end
-
-  def handle_call(:end_input, _from, %{subprocess: nil} = state) do
-    {:reply, transport_error(:not_connected), state}
-  end
-
-  def handle_call(:interrupt, from, %{subprocess: {pid, _}} = state) do
-    case start_io_task(state, fn -> interrupt_subprocess(pid) end) do
-      {:ok, task} ->
-        pending_calls = Map.put(state.pending_calls, task.ref, from)
-        {:noreply, %{state | pending_calls: pending_calls}}
-
-      {:error, reason} ->
-        {:reply, transport_error(reason), state}
-    end
-  end
-
-  def handle_call(:interrupt, _from, %{subprocess: nil} = state) do
-    {:reply, transport_error(:not_connected), state}
+    {:reply, :disconnected, state}
   end
 
   def handle_call(:stderr, _from, state) do
     {:reply, state.stderr_buffer, state}
   end
 
-  def handle_call(:force_close, _from, state) do
-    state = force_stop_subprocess(state)
-    {:stop, :normal, :ok, state}
-  end
-
   @impl GenServer
-  def handle_info({:stdout, os_pid, data}, %{subprocess: {_pid, os_pid}} = state) do
-    data = IO.iodata_to_binary(data)
-
-    state =
-      state
-      |> append_stdout_data(data)
-      |> drain_stdout_lines(Buffers.max_lines_per_batch())
-      |> maybe_schedule_drain()
-
+  def handle_info({:transport_message, line}, state) when is_binary(line) do
+    broadcast_event(state, {:message, line})
     {:noreply, state}
   end
 
-  def handle_info({:stderr, _os_pid, data}, state) do
-    data = IO.iodata_to_binary(data)
-    stderr_buffer = append_stderr_data(state.stderr_buffer, data, state.max_stderr_buffer_size)
-
-    {stderr_lines, stderr_callback_buffer} =
-      LineFraming.consume_trimmed_lines(state.stderr_callback_buffer, data)
-
-    dispatch_stderr_callback(state.stderr_callback, stderr_lines)
-    send_event(state.subscribers, {:stderr, data})
-
-    {:noreply,
-     %{state | stderr_buffer: stderr_buffer, stderr_callback_buffer: stderr_callback_buffer}}
+  def handle_info({:transport_error, %CoreTransportError{} = error}, state) do
+    broadcast_event(state, {:error, error})
+    {:noreply, state}
   end
 
-  def handle_info({ref, result}, %{pending_calls: pending_calls} = state)
-      when is_reference(ref) do
-    case Map.pop(pending_calls, ref) do
-      {nil, _} ->
-        {:noreply, state}
-
-      {from, rest} ->
-        Process.demonitor(ref, [:flush])
-        GenServer.reply(from, normalize_call_result(result))
-        {:noreply, %{state | pending_calls: rest}}
-    end
-  end
-
-  def handle_info({:DOWN, os_pid, :process, pid, reason}, %{subprocess: {pid, os_pid}} = state) do
-    state = cancel_finalize_timer(state)
-
-    timer_ref =
-      Process.send_after(
-        self(),
-        {:finalize_exit, os_pid, pid, reason},
-        Timeouts.transport_finalize_ms()
+  def handle_info({:transport_stderr, data}, state) do
+    stderr_buffer =
+      append_stderr_tail(
+        state.stderr_buffer,
+        IO.iodata_to_binary(data),
+        state.max_stderr_buffer_size
       )
 
-    {:noreply, %{state | finalize_timer_ref: timer_ref}}
+    broadcast_event(state, {:stderr, data})
+    {:noreply, %{state | stderr_buffer: stderr_buffer}}
   end
 
-  def handle_info({:finalize_exit, os_pid, pid, reason}, %{subprocess: {pid, os_pid}} = state) do
-    state =
-      state
-      |> Map.put(:finalize_timer_ref, nil)
-      |> Map.put(:drain_scheduled?, false)
-      |> drain_stdout_lines(Buffers.max_lines_per_batch())
+  def handle_info({:transport_exit, %CoreProcessExit{} = exit}, state) do
+    broadcast_event(state, {:exit, exit})
+    {:stop, :normal, %{state | core_transport: nil}}
+  end
 
-    if :queue.is_empty(state.pending_lines) do
-      state = flush_stdout_fragment(state)
-      state = flush_stderr_callback_buffer(state)
-      send_event(state.subscribers, {:exit, reason})
-      {:stop, :normal, %{state | status: :disconnected, subprocess: nil}}
+  def handle_info(
+        {:DOWN, monitor_ref, :process, _pid, reason},
+        %{core_monitor_ref: monitor_ref} = state
+      ) do
+    translated_reason = translate_down_reason(reason)
+
+    if translated_reason != :normal do
+      broadcast_event(state, {:exit, CoreProcessExit.from_reason(translated_reason)})
+      {:stop, translated_reason, %{state | core_transport: nil, core_monitor_ref: nil}}
     else
-      Kernel.send(self(), {:finalize_exit, os_pid, pid, reason})
-      {:noreply, state}
+      {:stop, :normal, %{state | core_transport: nil, core_monitor_ref: nil}}
     end
   end
 
-  def handle_info({:DOWN, ref, :process, pid, reason}, %{pending_calls: pending_calls} = state)
-      when is_reference(ref) do
-    case Map.pop(pending_calls, ref) do
-      {from, rest} when not is_nil(from) ->
-        GenServer.reply(from, transport_error({:send_failed, reason}))
-        {:noreply, %{state | pending_calls: rest}}
-
-      {nil, _} ->
-        handle_subscriber_down(ref, pid, state)
-    end
-  end
-
-  def handle_info(:drain_stdout, state) do
-    state =
-      state
-      |> Map.put(:drain_scheduled?, false)
-      |> drain_stdout_lines(Buffers.max_lines_per_batch())
-      |> maybe_schedule_drain()
-
-    {:noreply, state}
+  def handle_info({:DOWN, monitor_ref, :process, pid, _reason}, state)
+      when is_reference(monitor_ref) do
+    {:noreply, remove_subscriber_by_monitor(state, monitor_ref, pid)}
   end
 
   def handle_info(:headless_timeout, state) do
     state = %{state | headless_timer_ref: nil}
 
-    if map_size(state.subscribers) == 0 and not is_nil(state.subprocess) do
+    if map_size(state.subscribers) == 0 do
       {:stop, :normal, state}
     else
       {:noreply, state}
@@ -407,73 +335,56 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   def handle_info(_other, state), do: {:noreply, state}
 
   @impl GenServer
-  def terminate(_reason, state) do
-    state =
-      state
-      |> cancel_finalize_timer()
-      |> cancel_headless_timer()
-
+  def terminate(_reason, %{core_transport: core_transport} = state) do
+    state = cancel_headless_timer(state)
     demonitor_subscribers(state.subscribers)
-    cleanup_pending_calls(state.pending_calls)
-    _ = force_stop_subprocess(state)
+
+    if is_pid(core_transport) do
+      _ = CoreErlexec.close(core_transport)
+    end
+
     :ok
   catch
     _, _ -> :ok
   end
 
+  @doc false
+  def __exec_opts__(%Options{} = options), do: ExecOptions.erlexec(options)
+
   defp safe_call(transport, message, timeout \\ Timeouts.transport_call_ms())
 
   defp safe_call(transport, message, timeout)
        when is_pid(transport) and is_integer(timeout) and timeout >= 0 do
-    case start_call_task(fn ->
-           try do
-             {:ok, GenServer.call(transport, message, :infinity)}
-           catch
-             :exit, reason -> {:error, normalize_call_exit(reason)}
-           end
-         end) do
-      {:ok, task} ->
-        await_call_task(task, timeout)
-
-      {:error, reason} ->
-        {:error, normalize_call_task_start_error(reason)}
-    end
-  end
-
-  defp await_call_task(task, timeout) when is_integer(timeout) and timeout >= 0 do
-    task_ref = Map.get(task, :ref)
-    task_pid = Map.get(task, :pid)
-
-    if is_reference(task_ref) do
-      receive do
-        {^task_ref, result} ->
-          Process.demonitor(task_ref, [:flush])
-          result
-
-        {:DOWN, ^task_ref, :process, _pid, reason} ->
-          {:error, normalize_call_exit(reason)}
-      after
-        timeout ->
-          maybe_kill_task(task_pid)
-          Process.demonitor(task_ref, [:flush])
-          {:error, :timeout}
+    task =
+      try do
+        Task.Supervisor.async_nolink(configured_task_supervisor(), fn ->
+          try do
+            {:ok, GenServer.call(transport, message, :infinity)}
+          catch
+            :exit, reason -> {:error, normalize_call_exit(reason)}
+          end
+        end)
+      catch
+        :exit, _ ->
+          Task.async(fn ->
+            try do
+              {:ok, GenServer.call(transport, message, :infinity)}
+            catch
+              :exit, reason -> {:error, normalize_call_exit(reason)}
+            end
+          end)
       end
-    else
-      {:error, {:call_exit, :invalid_task_ref}}
+
+    case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} -> result
+      nil -> {:error, :timeout}
+      {:exit, reason} -> {:error, normalize_call_exit(reason)}
     end
   end
 
-  defp maybe_kill_task(pid) when is_pid(pid) do
-    Process.exit(pid, :kill)
-    :ok
-  catch
-    :exit, _ ->
-      :ok
+  defp configured_task_supervisor do
+    Application.get_env(:claude_agent_sdk, :task_supervisor, TaskSupervisor)
   end
-
-  defp maybe_kill_task(_), do: :ok
-
-  defp normalize_call_task_start_error(reason), do: {:call_exit, reason}
 
   defp normalize_call_exit({:noproc, _}), do: :not_connected
   defp normalize_call_exit(:noproc), do: :not_connected
@@ -482,141 +393,132 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   defp normalize_call_exit({:timeout, _}), do: :timeout
   defp normalize_call_exit(reason), do: {:call_exit, reason}
 
-  defp normalize_call_result(:ok), do: :ok
-  defp normalize_call_result({:error, {:transport, _reason}} = error), do: error
-  defp normalize_call_result({:error, reason}), do: transport_error(reason)
-  defp normalize_call_result(other), do: transport_error({:unexpected_task_result, other})
+  defp normalize_start_opts(opts, %Options{} = options, stderr_callback_owner) do
+    bootstrap_subscriber = Keyword.get(opts, :subscriber)
 
-  defp receive_startup_exit(pid) when is_pid(pid) do
-    receive do
-      {:EXIT, ^pid, reason} -> reason
-    after
-      0 -> nil
+    with :ok <- validate_bootstrap_subscriber(bootstrap_subscriber),
+         {:ok, {command, args, cwd, env}} <- resolve_invocation(opts, options) do
+      stderr_callback =
+        opts
+        |> Keyword.get(:stderr_callback, options.stderr)
+        |> stderr_callback_for_owner(stderr_callback_owner)
+
+      headless_timeout_ms = normalize_headless_timeout_ms(Keyword.get(opts, :headless_timeout_ms))
+
+      max_stderr_buffer_size =
+        normalize_max_stderr_buffer_size(Keyword.get(opts, :max_stderr_buffer_size))
+
+      max_buffer_size =
+        normalize_max_buffer_size(Keyword.get(opts, :max_buffer_size, options.max_buffer_size))
+
+      task_supervisor = Keyword.get(opts, :task_supervisor, TaskSupervisor)
+
+      core_task_supervisor =
+        Keyword.get(opts, :task_supervisor, CliSubprocessCore.TaskSupervisor)
+
+      event_tag = Keyword.get(opts, :event_tag, @default_event_tag)
+      startup_mode = normalize_startup_mode(Keyword.get(opts, :startup_mode, :eager))
+
+      core_opts = [
+        command: command,
+        args: args,
+        cwd: cwd,
+        env: env,
+        startup_mode: startup_mode,
+        task_supervisor: core_task_supervisor,
+        event_tag: event_tag,
+        headless_timeout_ms: :infinity,
+        max_buffer_size: max_buffer_size,
+        max_stderr_buffer_size: max_stderr_buffer_size,
+        stderr_callback: stderr_callback
+      ]
+
+      {:ok,
+       %{
+         core_opts: core_opts,
+         bootstrap_subscriber: bootstrap_subscriber,
+         headless_timeout_ms: headless_timeout_ms,
+         max_stderr_buffer_size: max_stderr_buffer_size,
+         stderr_callback: stderr_callback,
+         task_supervisor: task_supervisor,
+         event_tag: event_tag
+       }}
     end
   end
 
-  defp start_call_task(fun) do
-    supervisor = configured_task_supervisor()
+  defp resolve_invocation(opts, %Options{} = options) do
+    command = Keyword.get(opts, :command)
+    args = Keyword.get(opts, :args, [])
 
-    try do
-      {:ok, Task.Supervisor.async_nolink(supervisor, fun)}
-    catch
-      :exit, {:noproc, _} ->
-        try do
-          {:ok, Task.async(fun)}
-        catch
-          :exit, reason -> {:error, {:task_start_failed, reason}}
-        end
-
-      :exit, :noproc ->
-        try do
-          {:ok, Task.async(fun)}
-        catch
-          :exit, reason -> {:error, {:task_start_failed, reason}}
-        end
-
-      :exit, reason ->
-        {:error, {:task_start_failed, reason}}
-    end
-  end
-
-  defp configured_task_supervisor do
-    Application.get_env(:claude_agent_sdk, :task_supervisor, TaskSupervisor)
-  end
-
-  defp resolve_command(opts, options) do
-    case Keyword.fetch(opts, :command) do
-      {:ok, command} when is_binary(command) ->
-        with :ok <- validate_command(command) do
-          {:ok, command, Keyword.get(opts, :args, [])}
-        end
-
-      {:ok, _command} ->
-        {:error, :invalid_command}
-
-      :error ->
-        case build_command_from_options(options) do
-          {:ok, {cmd, args}} -> {:ok, cmd, args}
-          {:error, reason} -> {:error, reason}
-        end
-    end
-  end
-
-  defp startup_mode_from_opts(opts) do
-    case Keyword.get(opts, :startup_mode, :eager) do
-      :lazy -> :lazy
-      _ -> :eager
-    end
-  end
-
-  defp validate_command(command) when is_binary(command) do
-    if command_exists?(command) do
-      :ok
-    else
-      {:error, {:command_not_found, command}}
-    end
-  end
-
-  defp command_exists?(command) when is_binary(command) do
     cond do
-      String.trim(command) == "" ->
-        false
+      is_binary(command) ->
+        {:ok, {command, args, options.cwd, SDKProcess.__env_vars__(options)}}
 
-      String.contains?(command, [" ", "\t", "\n"]) ->
-        # Treat composite shell command strings as caller-managed.
-        true
-
-      String.contains?(command, "/") ->
-        File.exists?(command)
+      match?(%CoreCommand{}, command) ->
+        {:ok, {command.command, command.args, command.cwd, command.env}}
 
       true ->
-        not is_nil(System.find_executable(command))
+        build_invocation_from_options(options)
     end
   end
 
-  defp start_subprocess(state, opts, options) do
-    subscriber = Keyword.get(opts, :subscriber)
+  defp build_invocation_from_options(%Options{} = options) do
+    case CLI.resolve_executable(options) do
+      {:ok, executable} ->
+        args = CLIConfig.streaming_bidirectional_args() ++ Options.to_stream_json_args(options)
+        {:ok, {executable, args, options.cwd, SDKProcess.__env_vars__(options)}}
 
-    with {:ok, command, args} <- resolve_command(opts, options),
-         :ok <- Setup.validate_cwd(options.cwd),
-         :ok <- Runtime.ensure_erlexec_started(),
-         cmd <- build_command(command, args),
-         exec_opts <- build_exec_opts(options),
-         {:ok, pid, os_pid} <- :exec.run(cmd, exec_opts) do
-      state =
-        %{state | subprocess: {pid, os_pid}, status: :connected}
-        |> Map.put(
-          :stderr_callback,
-          stderr_callback_for_owner(options.stderr, state.stderr_callback_owner)
-        )
-        |> Map.put(:max_buffer_size, max_buffer_size_from_options(options))
-        |> Map.put(:startup_opts, nil)
-
-      with {:ok, state} <- add_bootstrap_subscriber(state, subscriber) do
-        {:ok, maybe_schedule_headless_timer(state)}
-      end
+      {:error, :not_found} ->
+        {:error, :cli_not_found}
     end
   end
 
-  defp add_bootstrap_subscriber(state, nil), do: {:ok, state}
+  defp validate_bootstrap_subscriber(nil), do: :ok
+  defp validate_bootstrap_subscriber(pid) when is_pid(pid), do: :ok
 
-  defp add_bootstrap_subscriber(state, pid) when is_pid(pid),
-    do: {:ok, put_subscriber(state, pid, :legacy)}
+  defp validate_bootstrap_subscriber({pid, tag})
+       when is_pid(pid) and (tag == :legacy or is_reference(tag)),
+       do: :ok
 
-  defp add_bootstrap_subscriber(state, {pid, tag})
+  defp validate_bootstrap_subscriber(subscriber), do: {:error, {:invalid_subscriber, subscriber}}
+
+  defp normalize_startup_mode(:lazy), do: :lazy
+  defp normalize_startup_mode(_mode), do: :eager
+
+  defp normalize_headless_timeout_ms(:infinity), do: :infinity
+
+  defp normalize_headless_timeout_ms(timeout_ms)
+       when is_integer(timeout_ms) and timeout_ms > 0,
+       do: timeout_ms
+
+  defp normalize_headless_timeout_ms(_timeout_ms), do: Timeouts.transport_headless_ms()
+
+  defp normalize_max_buffer_size(size) when is_integer(size) and size > 0, do: size
+  defp normalize_max_buffer_size(_size), do: Buffers.max_stdout_buffer_bytes()
+
+  defp normalize_max_stderr_buffer_size(size) when is_integer(size) and size > 0, do: size
+  defp normalize_max_stderr_buffer_size(_size), do: Buffers.max_stderr_buffer_bytes()
+
+  defp normalize_stderr_callback_owner(:client), do: :client
+  defp normalize_stderr_callback_owner(_owner), do: :transport
+
+  defp stderr_callback_for_owner(callback, :transport) when is_function(callback, 1), do: callback
+  defp stderr_callback_for_owner(_callback, _owner), do: nil
+
+  defp maybe_add_bootstrap_subscriber(state, nil), do: state
+
+  defp maybe_add_bootstrap_subscriber(state, pid) when is_pid(pid),
+    do: put_subscriber(state, pid, :legacy)
+
+  defp maybe_add_bootstrap_subscriber(state, {pid, tag})
        when is_pid(pid) and (tag == :legacy or is_reference(tag)) do
-    {:ok, put_subscriber(state, pid, tag)}
+    put_subscriber(state, pid, tag)
   end
-
-  defp add_bootstrap_subscriber(_state, _subscriber), do: {:error, :invalid_subscriber}
 
   defp put_subscriber(state, pid, tag) do
     subscribers =
       case Map.fetch(state.subscribers, pid) do
         {:ok, %{monitor_ref: monitor_ref}} ->
-          Map.put(state.subscribers, pid, %{monitor_ref: monitor_ref, tag: tag})
-
-        {:ok, monitor_ref} when is_reference(monitor_ref) ->
           Map.put(state.subscribers, pid, %{monitor_ref: monitor_ref, tag: tag})
 
         :error ->
@@ -625,23 +527,41 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
       end
 
     %{state | subscribers: subscribers}
+    |> cancel_headless_timer()
   end
 
-  defp handle_subscriber_down(ref, pid, state) do
+  defp remove_subscriber(state, pid) do
+    case Map.pop(state.subscribers, pid) do
+      {nil, _subscribers} ->
+        state
+
+      {%{monitor_ref: monitor_ref}, subscribers} ->
+        Process.demonitor(monitor_ref, [:flush])
+
+        %{state | subscribers: subscribers}
+        |> maybe_schedule_headless_timer()
+    end
+  end
+
+  defp remove_subscriber_by_monitor(state, monitor_ref, pid) do
     subscribers =
       case Map.pop(state.subscribers, pid) do
-        {%{monitor_ref: ^ref}, rest} -> rest
-        {^ref, rest} -> rest
-        {_, rest} -> rest
+        {%{monitor_ref: ^monitor_ref}, rest} -> rest
+        {_value, rest} -> rest
       end
 
-    state = %{state | subscribers: subscribers}
+    %{state | subscribers: subscribers}
+    |> maybe_schedule_headless_timer()
+  end
 
-    if map_size(subscribers) == 0 do
-      {:stop, :normal, state}
-    else
-      {:noreply, state}
-    end
+  defp demonitor_subscribers(subscribers) do
+    Enum.each(subscribers, fn
+      {_pid, %{monitor_ref: monitor_ref}} when is_reference(monitor_ref) ->
+        Process.demonitor(monitor_ref, [:flush])
+
+      _other ->
+        :ok
+    end)
   end
 
   defp maybe_schedule_headless_timer(%{headless_timer_ref: ref} = state) when not is_nil(ref),
@@ -655,8 +575,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   defp maybe_schedule_headless_timer(%{headless_timeout_ms: timeout_ms} = state)
        when is_integer(timeout_ms) and timeout_ms > 0 do
-    timer_ref = Process.send_after(self(), :headless_timeout, timeout_ms)
-    %{state | headless_timer_ref: timer_ref}
+    %{state | headless_timer_ref: Process.send_after(self(), :headless_timeout, timeout_ms)}
   end
 
   defp maybe_schedule_headless_timer(state), do: state
@@ -677,207 +596,39 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     end
   end
 
-  defp start_io_task(state, fun) when is_function(fun, 0) do
-    {:ok, Task.Supervisor.async_nolink(state.task_supervisor, fun)}
-  catch
-    :exit, {:noproc, _} ->
-      fallback_start_io_task(fun)
+  defp broadcast_event(state, event) do
+    Enum.each(state.subscribers, fn
+      {pid, %{tag: :legacy}} ->
+        dispatch_legacy_event(pid, event)
 
-    :exit, :noproc ->
-      fallback_start_io_task(fun)
-
-    :exit, reason ->
-      {:error, {:task_start_failed, reason}}
-  end
-
-  defp fallback_start_io_task(fun) when is_function(fun, 0) do
-    {:ok, Task.async(fun)}
-  catch
-    :exit, reason ->
-      {:error, {:task_start_failed, reason}}
-  end
-
-  defp send_payload(pid, message) do
-    payload = message |> normalize_payload() |> ensure_newline()
-    :exec.send(pid, payload)
-    :ok
-  catch
-    kind, reason ->
-      transport_error({:send_failed, {kind, reason}})
-  end
-
-  defp send_eof(pid) do
-    :exec.send(pid, :eof)
-    :ok
-  catch
-    kind, reason ->
-      transport_error({:send_failed, {kind, reason}})
-  end
-
-  defp interrupt_subprocess(pid) when is_pid(pid) do
-    _ = :exec.kill(pid, 2)
-    :ok
-  catch
-    _, _ ->
-      transport_error(:not_connected)
-  end
-
-  defp send_event(subscribers, event) do
-    Enum.each(subscribers, fn {pid, info} ->
-      dispatch_event(pid, info, event)
+      {pid, %{tag: ref}} when is_reference(ref) ->
+        Kernel.send(pid, {state.event_tag, ref, event})
     end)
   end
 
-  defp dispatch_event(pid, %{tag: :legacy}, {:message, line}),
+  defp dispatch_legacy_event(pid, {:message, line}),
     do: Kernel.send(pid, {:transport_message, line})
 
-  defp dispatch_event(pid, %{tag: :legacy}, {:error, reason}),
-    do: Kernel.send(pid, {:transport_error, reason})
+  defp dispatch_legacy_event(pid, {:error, %CoreTransportError{} = error}),
+    do: Kernel.send(pid, {:transport_error, legacy_transport_reason(error)})
 
-  defp dispatch_event(pid, %{tag: :legacy}, {:stderr, data}),
+  defp dispatch_legacy_event(pid, {:error, error}),
+    do: Kernel.send(pid, {:transport_error, error})
+
+  defp dispatch_legacy_event(pid, {:stderr, data}),
     do: Kernel.send(pid, {:transport_stderr, data})
 
-  defp dispatch_event(pid, %{tag: :legacy}, {:exit, reason}),
+  defp dispatch_legacy_event(pid, {:exit, %CoreProcessExit{reason: reason}}),
     do: Kernel.send(pid, {:transport_exit, reason})
 
-  defp dispatch_event(pid, %{tag: ref}, event) when is_reference(ref),
-    do: Kernel.send(pid, {:claude_agent_sdk_transport, ref, event})
-
-  defp dispatch_event(pid, monitor_ref, {:message, line}) when is_reference(monitor_ref),
-    do: Kernel.send(pid, {:transport_message, line})
-
-  defp dispatch_event(pid, monitor_ref, {:error, reason}) when is_reference(monitor_ref),
-    do: Kernel.send(pid, {:transport_error, reason})
-
-  defp dispatch_event(pid, monitor_ref, {:stderr, data}) when is_reference(monitor_ref),
-    do: Kernel.send(pid, {:transport_stderr, data})
-
-  defp dispatch_event(pid, monitor_ref, {:exit, reason}) when is_reference(monitor_ref),
+  defp dispatch_legacy_event(pid, {:exit, reason}),
     do: Kernel.send(pid, {:transport_exit, reason})
 
-  defp append_stdout_data(%{overflowed?: true} = state, data) do
-    case drop_until_next_newline(data) do
-      :none ->
-        state
-
-      {:rest, rest} ->
-        state
-        |> Map.put(:overflowed?, false)
-        |> Map.put(:stdout_buffer, "")
-        |> append_stdout_data(rest)
-    end
-  end
-
-  defp append_stdout_data(state, data) do
-    full = state.stdout_buffer <> data
-    {complete_lines, remaining} = LineFraming.split_complete_lines(full)
-
-    pending_lines =
-      Enum.reduce(complete_lines, state.pending_lines, fn line, queue ->
-        :queue.in(line, queue)
-      end)
-
-    state = %{state | pending_lines: pending_lines, stdout_buffer: "", overflowed?: false}
-
-    if byte_size(remaining) > state.max_buffer_size do
-      send_event(state.subscribers, {:error, buffer_overflow_error(state, remaining)})
-      %{state | stdout_buffer: "", overflowed?: true}
-    else
-      %{state | stdout_buffer: remaining}
-    end
-  end
-
-  defp drain_stdout_lines(state, 0), do: state
-
-  defp drain_stdout_lines(state, remaining) when is_integer(remaining) and remaining > 0 do
-    case :queue.out(state.pending_lines) do
-      {:empty, _queue} ->
-        state
-
-      {{:value, line}, queue} ->
-        state = %{state | pending_lines: queue}
-
-        if byte_size(line) > state.max_buffer_size do
-          send_event(state.subscribers, {:error, buffer_overflow_error(state, line)})
-        else
-          send_event(state.subscribers, {:message, line})
-        end
-
-        drain_stdout_lines(state, remaining - 1)
-    end
-  end
-
-  defp maybe_schedule_drain(%{drain_scheduled?: true} = state), do: state
-
-  defp maybe_schedule_drain(state) do
-    if :queue.is_empty(state.pending_lines) do
-      state
-    else
-      Kernel.send(self(), :drain_stdout)
-      %{state | drain_scheduled?: true}
-    end
-  end
-
-  defp flush_stdout_fragment(state) do
-    line = LineFraming.trim_ascii(state.stdout_buffer)
-
-    cond do
-      line == "" ->
-        %{state | stdout_buffer: "", overflowed?: false, drain_scheduled?: false}
-
-      byte_size(line) > state.max_buffer_size ->
-        send_event(state.subscribers, {:error, buffer_overflow_error(state, line)})
-        %{state | stdout_buffer: "", overflowed?: false, drain_scheduled?: false}
-
-      true ->
-        send_event(state.subscribers, {:message, line})
-        %{state | stdout_buffer: "", overflowed?: false, drain_scheduled?: false}
-    end
-  end
-
-  defp cancel_finalize_timer(%{finalize_timer_ref: nil} = state), do: state
-
-  defp cancel_finalize_timer(state) do
-    _ = Process.cancel_timer(state.finalize_timer_ref, async: false, info: false)
-    flush_finalize_message(state.subprocess)
-    %{state | finalize_timer_ref: nil}
-  end
-
-  defp flush_finalize_message({pid, os_pid}) do
-    receive do
-      {:finalize_exit, ^os_pid, ^pid, _reason} -> :ok
-    after
-      0 -> :ok
-    end
-  end
-
-  defp flush_finalize_message(_), do: :ok
-
-  defp drop_until_next_newline(data) do
-    case :binary.match(data, "\n") do
-      :nomatch ->
-        :none
-
-      {idx, 1} ->
-        rest_start = idx + 1
-        rest_size = byte_size(data) - rest_start
-
-        rest =
-          if rest_size > 0 do
-            :binary.part(data, rest_start, rest_size)
-          else
-            ""
-          end
-
-        {:rest, rest}
-    end
-  end
-
-  defp append_stderr_data(_existing, _data, max_size)
+  defp append_stderr_tail(_existing, _data, max_size)
        when not is_integer(max_size) or max_size <= 0,
        do: ""
 
-  defp append_stderr_data(existing, data, max_size) do
+  defp append_stderr_tail(existing, data, max_size) do
     combined = existing <> data
     combined_size = byte_size(combined)
 
@@ -888,124 +639,47 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     end
   end
 
-  defp dispatch_stderr_callback(callback, lines)
-       when is_function(callback, 1) and is_list(lines) do
-    Enum.each(lines, callback)
+  defp normalize_core_reply(:ok), do: :ok
+
+  defp normalize_core_reply({:error, {:transport, %CoreTransportError{} = error}}) do
+    {:error, legacy_transport_reason(error)}
   end
 
-  defp dispatch_stderr_callback(_callback, _lines), do: :ok
-
-  defp stderr_callback_for_owner(callback, :transport), do: callback
-  defp stderr_callback_for_owner(_callback, :client), do: nil
-
-  defp normalize_stderr_callback_owner(:client), do: :client
-  defp normalize_stderr_callback_owner(_owner), do: :transport
-
-  defp flush_stderr_callback_buffer(%{stderr_callback_buffer: ""} = state), do: state
-
-  defp flush_stderr_callback_buffer(state) do
-    state.stderr_callback_buffer
-    |> LineFraming.finalize_trimmed_lines()
-    |> dispatch_stderr_callback(state.stderr_callback)
-
-    %{state | stderr_callback_buffer: ""}
+  defp normalize_core_reply({:error, %CoreTransportError{} = error}) do
+    {:error, legacy_transport_reason(error)}
   end
 
-  defp cleanup_pending_calls(pending_calls) do
-    Enum.each(pending_calls, fn {ref, from} ->
-      Process.demonitor(ref, [:flush])
-      GenServer.reply(from, transport_error(:transport_stopped))
-    end)
-  end
+  defp normalize_core_reply({:error, reason}), do: {:error, legacy_transport_reason(reason)}
+  defp normalize_core_reply(other), do: {:error, {:unexpected_core_reply, other}}
 
-  defp demonitor_subscribers(subscribers) do
-    Enum.each(subscribers, fn
-      {_pid, %{monitor_ref: ref}} -> Process.demonitor(ref, [:flush])
-      {_pid, ref} when is_reference(ref) -> Process.demonitor(ref, [:flush])
-    end)
-  end
-
-  defp force_stop_subprocess(%{subprocess: {pid, _}} = state) do
-    stop_subprocess(pid)
-    %{state | subprocess: nil, status: :disconnected}
-  end
-
-  defp force_stop_subprocess(state), do: state
-
-  defp stop_subprocess(pid) when is_pid(pid) do
-    :exec.stop(pid)
-    _ = :exec.kill(pid, 9)
-    :ok
-  catch
-    _, _ ->
-      :ok
-  end
-
-  defp build_command(command, args) when is_binary(command) and is_list(args) do
-    quoted_args = Enum.map(args, &SDKProcess.__shell_escape__/1)
-    Enum.join([command | quoted_args], " ")
-  end
-
-  defp build_exec_opts(%Options{} = options) do
-    ExecOptions.erlexec(options)
-  end
-
-  defp normalize_payload(message) when is_binary(message), do: message
-
-  defp normalize_payload(message) when is_map(message) or is_list(message),
-    do: Jason.encode!(message)
-
-  defp normalize_payload(message), do: to_string(message)
-
-  defp ensure_newline(payload) do
-    if String.ends_with?(payload, "\n"), do: payload, else: payload <> "\n"
-  end
-
-  @doc false
-  def __exec_opts__(%Options{} = options), do: build_exec_opts(options)
-
-  defp max_buffer_size_from_options(%Options{max_buffer_size: size}) do
-    normalize_max_buffer_size(size)
-  end
-
-  defp normalize_max_buffer_size(size) when is_integer(size) and size > 0, do: size
-  defp normalize_max_buffer_size(_), do: Buffers.max_stdout_buffer_bytes()
-
-  defp normalize_max_stderr_buffer_size(size) when is_integer(size) and size > 0, do: size
-  defp normalize_max_stderr_buffer_size(_), do: Buffers.max_stderr_buffer_bytes()
-
-  defp normalize_headless_timeout_ms(:infinity), do: :infinity
-  defp normalize_headless_timeout_ms(size) when is_integer(size) and size > 0, do: size
-  defp normalize_headless_timeout_ms(_), do: Timeouts.transport_headless_ms()
-
-  defp build_command_from_options(%Options{} = options) do
-    case CLI.resolve_executable(options) do
-      {:ok, executable} ->
-        args = CLIConfig.streaming_bidirectional_args()
-
-        args = args ++ ClaudeAgentSDK.Options.to_stream_json_args(options)
-        {:ok, {executable, args}}
-
-      {:error, :not_found} ->
-        {:error, :cli_not_found}
-    end
-  end
-
-  defp buffer_overflow_error(state, data) do
+  defp legacy_transport_reason(%CoreTransportError{
+         reason: {:buffer_overflow, actual, max},
+         context: context
+       }) do
     %CLIJSONDecodeError{
-      message: "JSON message exceeded maximum buffer size of #{state.max_buffer_size} bytes",
-      line: truncate_line(data),
-      original_error: {:buffer_overflow, byte_size(data), state.max_buffer_size}
+      message: "JSON message exceeded maximum buffer size of #{max} bytes",
+      line: Map.get(context, :preview, ""),
+      original_error: {:buffer_overflow, actual, max}
     }
   end
 
-  defp truncate_line(data) when is_binary(data) do
-    if byte_size(data) > Buffers.error_preview_length() do
-      binary_part(data, 0, Buffers.error_preview_length()) <> "..."
-    else
-      data
-    end
+  defp legacy_transport_reason(%CoreTransportError{reason: {:command_not_found, command}})
+       when command in ["claude", "claude-code"] do
+    :cli_not_found
   end
+
+  defp legacy_transport_reason(%CoreTransportError{reason: reason}),
+    do: legacy_transport_reason(reason)
+
+  defp legacy_transport_reason(%CLIJSONDecodeError{} = error), do: error
+  defp legacy_transport_reason(:noproc), do: :not_connected
+  defp legacy_transport_reason({:call_exit, :noproc}), do: :not_connected
+  defp legacy_transport_reason({:transport, :noproc}), do: :not_connected
+  defp legacy_transport_reason(:transport_stopped), do: :transport_stopped
+  defp legacy_transport_reason(reason), do: reason
+
+  defp translate_down_reason(%CoreTransportError{} = error), do: legacy_transport_reason(error)
+  defp translate_down_reason(reason), do: legacy_transport_reason(reason)
 
   defp transport_error(reason), do: {:error, {:transport, reason}}
 end

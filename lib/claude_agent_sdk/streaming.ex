@@ -15,16 +15,36 @@ defmodule ClaudeAgentSDK.Streaming do
 
   ## Architecture
 
+  Common CLI streaming/session flows now run on the shared `cli_subprocess_core`
+  runtime, while the advanced control-client family remains SDK-local above the
+  shared raw transport.
+
   ```
+  Common lane:
   Your App
       ↓
-  ClaudeAgentSDK.Streaming (Public API)
+  ClaudeAgentSDK.Streaming
       ↓
-  Session GenServer (Manages subprocess)
+  ClaudeAgentSDK.Streaming.Session
       ↓
-  claude --input-format stream-json \\
-         --output-format stream-json \\
-         --include-partial-messages
+  ClaudeAgentSDK.Runtime.CLI
+      ↓
+  CliSubprocessCore.Session
+      ↓
+  ClaudeAgentSDK.Transport.Erlexec
+      ↓
+  CliSubprocessCore.Transport.Erlexec
+
+  Control lane:
+  Your App
+      ↓
+  ClaudeAgentSDK.Streaming / ClaudeAgentSDK.Client
+      ↓
+  ClaudeAgentSDK.Client (SDK-local control family)
+      ↓
+  ClaudeAgentSDK.Transport.Erlexec
+      ↓
+  CliSubprocessCore.Transport.Erlexec
   ```
 
   ## Quick Start
@@ -231,8 +251,8 @@ defmodule ClaudeAgentSDK.Streaming do
   @doc """
   Starts a new streaming session.
 
-  Spawns a Claude CLI subprocess with streaming flags and begins listening
-  for events.
+  Starts the common Claude CLI lane on the shared core session runtime and
+  begins listening for projected public streaming events.
 
   ## Parameters
 

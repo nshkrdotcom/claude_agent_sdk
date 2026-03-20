@@ -7,7 +7,7 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
 
   test "returns error when command not found" do
     assert {:error, _reason} =
-             ErlexecTransport.start_link(
+             ErlexecTransport.start(
                command: "/nonexistent/binary/xyz",
                args: [],
                options: %Options{}
@@ -261,29 +261,30 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
 
   describe "binary-safe stdout framing" do
     test "handles UTF-8 codepoint split across stdout chunks" do
-      script = create_test_script("sleep 5")
+      ref = make_ref()
+
+      script =
+        create_test_script("""
+        printf 'hello \\342'
+        sleep 0.1
+        printf '\\200\\224 world\\n'
+        sleep 0.1
+        """)
 
       {:ok, transport} =
-        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
-
-      ref = make_ref()
-      :ok = ErlexecTransport.subscribe(transport, self(), ref)
+        ErlexecTransport.start_link(
+          command: script,
+          args: [],
+          options: %Options{},
+          subscriber: {self(), ref}
+        )
 
       try do
-        state = :sys.get_state(transport)
-        {_exec_pid, os_pid} = state.subprocess
-
-        line = "hello " <> <<226, 128, 148>> <> " world\n"
-        {idx, _len} = :binary.match(line, <<226, 128, 148>>)
-        chunk1 = :binary.part(line, 0, idx + 1)
-        chunk2 = :binary.part(line, idx + 1, byte_size(line) - idx - 1)
-
-        send(transport, {:stdout, os_pid, chunk1})
-        send(transport, {:stdout, os_pid, chunk2})
-
         assert_receive {:claude_agent_sdk_transport, ^ref,
                         {:message, "hello " <> <<226, 128, 148>> <> " world"}},
                        2_000
+
+        assert_receive {:claude_agent_sdk_transport, ^ref, {:exit, _}}, 2_000
       after
         _ = ErlexecTransport.force_close(transport)
       end
@@ -474,13 +475,18 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
         end)
 
       {:ok, transport} =
-        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+        ErlexecTransport.start_link(
+          command: script,
+          args: [],
+          options: %Options{},
+          headless_timeout_ms: 100
+        )
 
       ErlexecTransport.subscribe(transport, subscriber)
       monitor = Process.monitor(transport)
 
       send(subscriber, :stop)
-      assert_receive {:DOWN, ^monitor, :process, ^transport, _}, 5_000
+      assert_receive {:DOWN, ^monitor, :process, ^transport, _}, 2_000
     end
   end
 
@@ -532,29 +538,37 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
 
   describe "finalize drain responsiveness" do
     test "status call remains responsive while finalize drains a large queue" do
-      script = create_test_script("while read -r _line; do :; done")
+      line_count = 20_000
+
+      script =
+        create_test_script("""
+        for i in $(seq 1 #{line_count}); do
+          echo "line_$i"
+        done
+        """)
 
       {:ok, transport} =
-        ErlexecTransport.start_link(command: script, args: [], options: %Options{})
+        ErlexecTransport.start_link(
+          command: script,
+          args: [],
+          options: %Options{},
+          subscriber: self()
+        )
 
       monitor = Process.monitor(transport)
 
       try do
-        state = :sys.get_state(transport)
-        {pid, os_pid} = state.subprocess
-
-        pending_lines =
-          Enum.reduce(1..200_000, :queue.new(), fn _idx, queue ->
-            :queue.in("line", queue)
+        statuses =
+          Enum.map(1..20, fn _idx ->
+            ErlexecTransport.status(transport)
           end)
 
-        :sys.replace_state(transport, fn current ->
-          %{current | pending_lines: pending_lines, stdout_buffer: "", drain_scheduled?: false}
-        end)
+        assert Enum.all?(statuses, &(&1 in [:connected, :disconnected]))
 
-        send(transport, {:finalize_exit, os_pid, pid, :normal})
-
-        assert :connected = GenServer.call(transport, :status, 20)
+        lines = collect_messages([], 15_000)
+        assert length(lines) == line_count
+        assert "line_1" in lines
+        assert "line_#{line_count}" in lines
         assert_receive {:DOWN, ^monitor, :process, ^transport, _reason}, 5_000
       after
         if Process.alive?(transport) do

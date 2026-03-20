@@ -24,6 +24,13 @@ The Claude Agent SDK provides two streaming approaches:
 
 2. **Bidirectional Streaming API** - Provides persistent sessions with real-time character-by-character updates. Best for chat interfaces and interactive applications.
 
+### Runtime Split
+
+- The common CLI streaming/session lane now runs on `cli_subprocess_core` through `ClaudeAgentSDK.Runtime.CLI`.
+- `ClaudeAgentSDK.Streaming.Session` stays SDK-local as the public session process and preserves the existing stream/subscriber contract.
+- The advanced control client family still lives in `ClaudeAgentSDK.Client` for hooks, permission callbacks, and SDK MCP features.
+- Both lanes share the same raw transport boundary through `ClaudeAgentSDK.Transport.Erlexec`, which now wraps `CliSubprocessCore.Transport.Erlexec`.
+
 ### Key Differences
 
 | Feature | `query/2` | Streaming API |
@@ -178,6 +185,11 @@ config should use `cli_stream_module`.
 ## Streaming API
 
 The Streaming API provides persistent sessions with real-time character-level updates. This is ideal for building chat interfaces.
+
+When no control-only features are required, `Streaming.start_session/1` uses the
+common Claude provider profile and shared core session runtime. If hooks,
+permission callbacks, or SDK MCP servers are configured, the facade switches to
+the SDK-local control client family instead.
 
 ### Starting a Session
 

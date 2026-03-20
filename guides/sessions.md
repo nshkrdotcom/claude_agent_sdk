@@ -32,6 +32,13 @@ Sessions are managed by the Claude CLI and are separate from your application's 
 - Continue or resume sessions
 - Store session data persistently with `SessionStore`
 
+### Runtime Split
+
+- Query history and transcript helpers remain unchanged at the public SDK surface.
+- Common streaming sessions now run through `ClaudeAgentSDK.Runtime.CLI` on the shared `cli_subprocess_core` session API.
+- The advanced control client family stays SDK-local in `ClaudeAgentSDK.Client` for hooks, permission callbacks, and SDK MCP routing.
+- Both paths share the same raw subprocess transport through `ClaudeAgentSDK.Transport.Erlexec`.
+
 ### Key Concepts
 
 | Term | Description |
