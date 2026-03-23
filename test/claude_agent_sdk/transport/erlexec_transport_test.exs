@@ -1,6 +1,8 @@
 defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
   use ClaudeAgentSDK.SupertesterCase
 
+  import ExUnit.CaptureLog
+
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Transport.Erlexec, as: ErlexecTransport
   alias CliSubprocessCore.Transport, as: CoreTransport
@@ -127,26 +129,19 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
     ErlexecTransport.close(transport)
   end
 
-  test "lazy startup defers subprocess start failures with core exit reasons" do
-    Process.flag(:trap_exit, true)
-
+  test "lazy startup returns deterministic core preflight failures immediately" do
     missing_cwd =
       Path.join(System.tmp_dir!(), "erlexec_missing_cwd_#{System.unique_integer([:positive])}")
 
-    assert {:ok, transport} =
-             ErlexecTransport.start_link(
-               command: "/bin/cat",
-               args: [],
-               startup_mode: :lazy,
-               options: %Options{cwd: missing_cwd}
-             )
-
-    assert_receive {:EXIT, ^transport,
-                    %CoreTransportError{
-                      reason: {:cwd_not_found, ^missing_cwd},
-                      context: %{cwd: ^missing_cwd}
-                    }},
-                   1_000
+    assert capture_log(fn ->
+             assert {:error, {:transport, {:cwd_not_found, ^missing_cwd}}} =
+                      ErlexecTransport.start_link(
+                        command: "/bin/cat",
+                        args: [],
+                        startup_mode: :lazy,
+                        options: %Options{cwd: missing_cwd}
+                      )
+           end) == ""
   end
 
   test "transport info preserves invocation command when built from Options" do

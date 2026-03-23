@@ -556,8 +556,10 @@ but `list/search` can be briefly incomplete immediately after boot while warmup 
 
 `CliSubprocessCore.Transport`, `Transport.Erlexec`, and `Streaming.Session`
 support `startup_mode: :lazy`
-to defer subprocess startup to `handle_continue/2`. In lazy mode, `start_link` can succeed
-before the subprocess is spawned; startup failures then surface as process exit after init.
+to defer subprocess startup to `handle_continue/2`. Deterministic startup
+validation still happens before `start_link` returns, so missing cwd/command
+style failures surface immediately. Once preflight passes, lazy mode can still
+surface subprocess launch failures as a process exit after init.
 
 Query-side transport errors normalize equivalent reasons to stable atoms where possible:
 `{:command_not_found, "claude"}` is treated as `:cli_not_found`.

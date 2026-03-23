@@ -1,6 +1,8 @@
 defmodule ClaudeAgentSDK.Streaming.SessionCwdSemanticsTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Streaming.Session
 
@@ -19,7 +21,7 @@ defmodule ClaudeAgentSDK.Streaming.SessionCwdSemanticsTest do
              Session.start_link(%Options{cwd: cwd})
   end
 
-  test "lazy startup defers cwd validation failure to post-init" do
+  test "lazy startup returns cwd validation failures before init completes" do
     cwd =
       Path.join(
         System.tmp_dir!(),
@@ -27,10 +29,11 @@ defmodule ClaudeAgentSDK.Streaming.SessionCwdSemanticsTest do
       )
 
     _ = File.rm_rf(cwd)
-
     Process.flag(:trap_exit, true)
 
-    assert {:ok, session} = Session.start_link(%Options{cwd: cwd}, startup_mode: :lazy)
-    assert_receive {:EXIT, ^session, {:subprocess_failed, {:cwd_not_found, ^cwd}}}, 1_000
+    assert capture_log(fn ->
+             assert {:error, {:subprocess_failed, {:cwd_not_found, ^cwd}}} =
+                      Session.start_link(%Options{cwd: cwd}, startup_mode: :lazy)
+           end) == ""
   end
 end

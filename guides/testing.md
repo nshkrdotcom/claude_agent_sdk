@@ -898,8 +898,11 @@ Use bounded retries/assertions for `list/search` immediately after start, or ass
 For transport failures, assert normalized reasons (`:not_connected`, `:cli_not_found`)
 instead of transport-specific internals (for example `{:command_not_found, "claude"}`).
 
-For transport/session startup lifecycle tests, `startup_mode: :lazy` lets you assert post-init
-startup failures deterministically (process exits after `start_link`).
+For transport/session startup lifecycle tests, `startup_mode: :lazy` still lets
+you assert post-init launch failures deterministically. `Streaming.Session.start_link/2`
+keeps normal linked-GenServer semantics, so trap exits before you assert
+deterministic config failures such as missing cwd/command directly from
+`start_link`.
 
 ### Development Configuration (config/dev.exs)
 

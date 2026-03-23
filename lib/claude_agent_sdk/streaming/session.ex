@@ -233,10 +233,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     {:noreply, handle_mock_stdout(state, data)}
   end
 
-  def handle_info({:runtime_start_failed, reason}, state) do
-    {:stop, {:subprocess_failed, reason}, state}
-  end
-
   def handle_info(
         {:DOWN, monitor_ref, :process, pid, reason},
         %{runtime_transport_monitor_ref: monitor_ref, runtime_transport: pid} = state
@@ -299,7 +295,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     runtime_ref = make_ref()
     startup_mode = normalize_startup_mode(Keyword.get(start_opts, :startup_mode, :eager))
 
-    case prevalidate_runtime_start(options, startup_mode) do
+    case prevalidate_runtime_start(options) do
       :ok ->
         runtime_opts =
           [
@@ -335,15 +331,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
           {:error, reason} ->
             {:stop, {:subprocess_failed, normalize_runtime_start_error(reason)}}
         end
-
-      {:error, reason} when startup_mode == :lazy ->
-        send(self(), {:runtime_start_failed, reason})
-
-        {:ok,
-         %{
-           initial_state(options, :runtime)
-           | runtime_ref: runtime_ref
-         }}
 
       {:error, reason} ->
         {:stop, {:subprocess_failed, reason}}
@@ -583,7 +570,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   defp normal_exit_reason?(reason), do: reason in [:normal, :shutdown, {:shutdown, :normal}]
 
-  defp prevalidate_runtime_start(%Options{cwd: cwd}, _startup_mode)
+  defp prevalidate_runtime_start(%Options{cwd: cwd})
        when is_binary(cwd) and cwd != "" do
     if File.dir?(cwd) do
       :ok
@@ -592,7 +579,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     end
   end
 
-  defp prevalidate_runtime_start(_options, _startup_mode), do: :ok
+  defp prevalidate_runtime_start(_options), do: :ok
 
   defp normalize_runtime_start_error({:transport, %CoreTransportError{reason: reason}}),
     do: reason

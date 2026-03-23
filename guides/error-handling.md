@@ -729,12 +729,17 @@ defp do_query_until_complete(prompt, options, remaining, acc) do
 end
 ```
 
-When using `startup_mode: :lazy` on transport/session start options, startup failures can
-arrive after `start_link` succeeds. Handle transport exits as part of normal supervision:
+When using `startup_mode: :lazy` on transport/session start options,
+deterministic startup validation failures still return from `start_link`
+immediately. `ClaudeAgentSDK.Streaming.Session.start_link/2` is still a linked
+GenServer API, so direct callers should trap exits or run it under supervision.
+Once preflight passes, subprocess launch failures can still arrive after
+`start_link` succeeds. Handle those exits as part of normal supervision:
 
 ```elixir
+Process.flag(:trap_exit, true)
 {:ok, session} = ClaudeAgentSDK.Streaming.Session.start_link(%Options{}, startup_mode: :lazy)
-# If cwd/command startup fails, the session process exits with {:subprocess_failed, reason}
+# If subprocess launch fails after preflight, the session exits with {:subprocess_failed, reason}
 ```
 
 ### Transport Reason Normalization
