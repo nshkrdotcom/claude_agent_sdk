@@ -176,14 +176,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
     transport_error(legacy_transport_reason(error))
   end
 
-  defp normalize_core_reply({:error, %CoreTransportError{} = error}) do
-    transport_error(legacy_transport_reason(error))
-  end
-
-  defp normalize_core_reply({:error, reason}),
+  defp normalize_core_reply({:error, {:transport, reason}}),
     do: transport_error(legacy_transport_reason(reason))
-
-  defp normalize_core_reply(other), do: transport_error({:unexpected_core_reply, other})
 
   defp legacy_transport_reason(%CoreTransportError{
          reason: {:buffer_overflow, actual, max},

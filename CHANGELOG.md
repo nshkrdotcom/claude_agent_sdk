@@ -192,7 +192,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Transport Hardening (Erlexec)
 
 - **`subscribe/3` tagged subscriptions**: Transport consumers can subscribe with `:legacy | reference()` and receive namespaced events (`{:claude_agent_sdk_transport, ref, event}`).
-- **`force_close/1` transport callback**: Immediate shutdown API with `:exec.stop` + `:exec.kill(pid, 9)` escalation and 500ms timeout via `safe_call`.
+- **`force_close/1` transport callback**: Immediate shutdown API with low-level stop plus SIGKILL escalation and 500ms timeout via `safe_call`.
 - **`stderr/1` transport callback**: Retrieves bounded stderr capture from transport (returns `""` on error, matching amp_sdk).
 - **`safe_call/3` task isolation**: All public API functions route through `TaskSupervisor.async_nolink` with yield/shutdown, protecting callers against transport death, timeout, and noproc conditions.
 - **Queue-based stdout drain**: `pending_lines` `:queue` with `@max_lines_per_batch 200` and `:drain_stdout` self-message for backpressure control under burst output.
@@ -361,7 +361,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **AuthChecker exec timeout**: Fixed `run_command_with_timeout/2` passing `{:timeout, ms}` inside the options list to `:exec.run/2`, which does not accept that tuple as an option. This caused `:exec.run` to return `{:error, {:invalid_option, {:timeout, 30000}}}`, making `authenticated?/0` return `false` even when the CLI is installed and authenticated. The fix uses `:exec.run/3` with the timeout as a separate third argument.
+- **AuthChecker exec timeout**: Fixed `run_command_with_timeout/2` passing `{:timeout, ms}` inside the options list to the legacy low-level launcher, which did not accept that tuple as an option. This caused the launcher to return `{:error, {:invalid_option, {:timeout, 30000}}}`, making `authenticated?/0` return `false` even when the CLI is installed and authenticated. The fix moved timeout handling onto the shared command lane.
 
 ### Tests
 

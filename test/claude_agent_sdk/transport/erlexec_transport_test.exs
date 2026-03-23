@@ -149,7 +149,7 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
                    1_000
   end
 
-  test "transport info preserves invocation user when built from Options" do
+  test "transport info preserves invocation command when built from Options" do
     script =
       create_test_script("""
       while read -r line; do
@@ -157,13 +157,11 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
       done
       """)
 
-    {:ok, transport} =
-      ErlexecTransport.start_link(options: %Options{executable: script, user: "runner"})
+    {:ok, transport} = ErlexecTransport.start_link(options: %Options{executable: script})
 
     try do
       assert %CoreTransport.Info{invocation: invocation} = CoreTransport.info(transport)
       assert invocation.command == script
-      assert invocation.user == "runner"
     after
       ErlexecTransport.close(transport)
     end

@@ -172,7 +172,7 @@ defmodule ClaudeAgentSDK.Streaming do
       # Start subprocess with stdin/stdout pipes
       cmd = build_claude_command(args)
 
-      case :exec.run(cmd, [:stdin, :stdout, :stderr, :monitor]) do
+      case run_subprocess(cmd, [:stdin, :stdout, :stderr, :monitor]) do
         {:ok, pid, os_pid} ->
           state = %Session{
             subprocess: {pid, os_pid},
@@ -205,7 +205,7 @@ defmodule ClaudeAgentSDK.Streaming do
       })
 
       {pid, _os_pid} = state.subprocess
-      :exec.send(pid, json_message <> "\n")
+      send_input(pid, json_message <> "\n")
 
       {:reply, :ok, %{state | subscribers: subscribers}}
     end

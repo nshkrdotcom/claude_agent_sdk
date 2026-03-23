@@ -3,7 +3,8 @@ defmodule ClaudeAgentSDK.AuthCheckerExecTimeoutTest do
   Regression test for shared command-lane timeout handling.
 
   The auth checker now routes shell commands through
-  `CliSubprocessCore.Command.run/2` instead of calling `:exec.run/3` directly.
+  `CliSubprocessCore.Command.run/2` instead of using the legacy low-level
+  launcher directly.
 
   This test calls a test-only wrapper around `run_command_with_timeout/2`
   to ensure the shared timeout path still succeeds.

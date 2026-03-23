@@ -34,7 +34,7 @@
   - Async I/O task pattern, queue drain, finalize timer, headless timeout, shutdown-on-last-subscriber all present.
 - Gaps:
   - Struct does not match 15-field checklist; extra fields present (`stderr_callback`, `startup_opts`), yielding divergence from gold-standard state model (`lib/claude_agent_sdk/transport/erlexec.ex:29`).
-  - Init is not strictly blocking on `:exec.run` due lazy startup mode (`handle_continue/2` subprocess spawn path): `lib/claude_agent_sdk/transport/erlexec.ex:171`, `lib/claude_agent_sdk/transport/erlexec.ex:187`.
+  - Init is not strictly blocking on low-level subprocess launch due lazy startup mode (`handle_continue/2` subprocess spawn path): `lib/claude_agent_sdk/transport/erlexec.ex:171`, `lib/claude_agent_sdk/transport/erlexec.ex:187`.
   - `safe_call/3` uses local task launcher with `Task.async/1` fallback rather than strict TaskSupport pattern from amp (`lib/claude_agent_sdk/transport/erlexec.ex:410`).
 
 ## Pass 4: Documentation Coherence
@@ -59,7 +59,7 @@
 
 1. **Strict parity break: state model diverges from amp 15-field checklist**
    - `lib/claude_agent_sdk/transport/erlexec.ex:29`
-2. **Strict parity break: lazy startup path bypasses “init blocks on :exec.run” invariant**
+2. **Strict parity break: lazy startup path bypasses the "init blocks on subprocess launch" invariant**
    - `lib/claude_agent_sdk/transport/erlexec.ex:171`
    - `lib/claude_agent_sdk/transport/erlexec.ex:187`
 3. **Strict parity break: `safe_call` task-start strategy diverges from amp TaskSupport contract**

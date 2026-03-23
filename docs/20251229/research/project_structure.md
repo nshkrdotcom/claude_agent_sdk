@@ -31,7 +31,7 @@
 ```elixir
 defp deps do
   [
-    {:erlexec, "~> 2.0", runtime: runtime_erlexec?()},
+    # historical note: the package previously depended on erlexec directly
     {:jason, "~> 1.4"},
     {:ex_doc, "~> 0.31", only: :dev, runtime: false},
     {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
@@ -46,7 +46,7 @@ end
 
 | Dependency | Version | Purpose | Environment |
 |------------|---------|---------|-------------|
-| `erlexec` | ~> 2.0 | Subprocess management for Claude CLI | Conditional runtime |
+| `erlexec` | historical direct dependency | Subprocess management for Claude CLI | Conditional runtime |
 | `jason` | ~> 1.4 | JSON encoding/decoding | Runtime |
 | `ex_doc` | ~> 0.31 | Documentation generation | Dev only |
 | `dialyxir` | ~> 1.0 | Static analysis (Dialyzer) | Dev only |

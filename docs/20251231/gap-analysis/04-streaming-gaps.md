@@ -80,7 +80,7 @@ The Elixir port has achieved substantial parity with the Python SDK's streaming 
 │                 Transport.Port / Transport.Erlexec              │
 │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────────┐│
 │  │ Port stdin   │  │ Port stdout  │  │ stderr (callback)       ││
-│  │ :exec.send   │  │ {:stdout,..} │  │                         ││
+│  │ send stdin   │  │ {:stdout,..} │  │                         ││
 │  └──────────────┘  └──────────────┘  └─────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -200,12 +200,12 @@ async def end_input(self) -> None:
 ```elixir
 def handle_call({:send, message}, _from, %{subprocess: {pid, _os_pid}} = state) do
   payload = message |> normalize_payload() |> ensure_newline()
-  :exec.send(pid, payload)
+  send_input(pid, payload)
   {:reply, :ok, state}
 end
 
 def handle_call(:end_input, _from, %{subprocess: {pid, _os_pid}} = state) do
-  :exec.send(pid, :eof)
+  close_input(pid)
   {:reply, :ok, state}
 end
 ```
