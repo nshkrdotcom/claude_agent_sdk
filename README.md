@@ -50,6 +50,11 @@ The optional ASM seam for Claude lives under
 - derive `ClaudeAgentSDK.Options` from ASM-style config
 - start `ClaudeAgentSDK.Client` from ASM session defaults or ASM-style config
 
+If `claude_agent_sdk` is present in the dependency graph, ASM activates that
+namespace automatically in `ASM.Extensions.ProviderSDK.available_extensions/0`
+and `ASM.Extensions.ProviderSDK.capability_report/0`. Client apps do not need
+to register it manually.
+
 ASM-owned fields such as `cwd`, `permission_mode`, `model`, `max_turns`, and
 the transport timeout still stay in ASM config. The extension's native override
 bag is for Claude-native fields only.
