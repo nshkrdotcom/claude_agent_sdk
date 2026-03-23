@@ -9,11 +9,12 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   use GenServer
 
-  alias ClaudeAgentSDK.Log, as: Logger
-
-  alias ClaudeAgentSDK.{Options, Runtime.CLI, Streaming.EventParser}
   alias ClaudeAgentSDK.Config.Timeouts
+  alias ClaudeAgentSDK.Log, as: Logger
+  alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Process, as: SDKProcess
+  alias ClaudeAgentSDK.Runtime.CLI
+  alias ClaudeAgentSDK.Streaming.EventParser
   alias ClaudeAgentSDK.Streaming.Termination
   alias ClaudeAgentSDK.Transport.ExecOptions
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
@@ -252,13 +253,11 @@ defmodule ClaudeAgentSDK.Streaming.Session do
         {:DOWN, monitor_ref, :process, pid, reason},
         %{runtime_session_monitor_ref: monitor_ref, runtime_session: pid} = state
       ) do
-    cond do
-      normal_exit_reason?(reason) ->
-        broadcast_complete(state.subscribers)
-        {:stop, :normal, %{state | runtime_session: nil, runtime_session_monitor_ref: nil}}
-
-      true ->
-        {:stop, {:subprocess_failed, reason}, state}
+    if normal_exit_reason?(reason) do
+      broadcast_complete(state.subscribers)
+      {:stop, :normal, %{state | runtime_session: nil, runtime_session_monitor_ref: nil}}
+    else
+      {:stop, {:subprocess_failed, reason}, state}
     end
   end
 

@@ -18,8 +18,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   alias ClaudeAgentSDK.Runtime.CLI, as: RuntimeCLI
   alias ClaudeAgentSDK.Transport.ExecOptions
   alias CliSubprocessCore.Command, as: CoreCommand
-  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
   alias CliSubprocessCore.Transport.Erlexec, as: CoreErlexec
+  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
   @behaviour ClaudeAgentSDK.Transport
 

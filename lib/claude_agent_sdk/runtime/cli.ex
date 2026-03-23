@@ -16,7 +16,9 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
   @runtime_metadata %{lane: :claude_agent_sdk_common_cli}
 
   defmodule ProjectionState do
-    @moduledoc false
+    @moduledoc """
+    Projection accumulator for the shared Claude CLI runtime lane.
+    """
 
     defstruct accumulated_text: "",
               session_id: nil

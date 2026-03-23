@@ -84,11 +84,11 @@ defmodule ClaudeAgentSDK.Client do
   }
 
   alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
-  alias ClaudeAgentSDK.Runtime.CLI, as: RuntimeCLI
   alias ClaudeAgentSDK.ControlProtocol.Protocol
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Permission.{Context, Result}
+  alias ClaudeAgentSDK.Runtime.CLI, as: RuntimeCLI
   alias ClaudeAgentSDK.Streaming.{EventParser, Termination}
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
   @edit_tools ["Write", "Edit", "MultiEdit"]

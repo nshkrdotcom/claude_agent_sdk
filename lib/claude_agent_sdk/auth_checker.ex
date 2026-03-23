@@ -121,7 +121,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
       {:ok, %{path: cli_path, version: cli_version}} ->
         {authenticated, auth_info} = check_detailed_auth(cli_path)
 
-        status = determine_status(true, authenticated, auth_info)
+        status = determine_status(authenticated, auth_info)
         recommendations = generate_recommendations(status, auth_info)
 
         %{
@@ -312,39 +312,46 @@ defmodule ClaudeAgentSDK.AuthChecker do
   """
   @spec get_api_key_source() :: {:ok, String.t()} | {:error, String.t()}
   def get_api_key_source do
-    cond do
-      System.get_env(Env.anthropic_api_key()) ->
+    case {
+      System.get_env(Env.anthropic_api_key()),
+      System.get_env(Env.use_bedrock()),
+      System.get_env(Env.use_vertex())
+    } do
+      {api_key, _, _} when is_binary(api_key) ->
         {:ok, "environment variable ANTHROPIC_API_KEY"}
 
-      System.get_env(Env.use_bedrock()) == "1" ->
+      {_, "1", _} ->
         if check_aws_credentials() do
           {:ok, "AWS credentials for Bedrock"}
         else
           {:error, "CLAUDE_AGENT_USE_BEDROCK set but AWS credentials not found"}
         end
 
-      System.get_env(Env.use_vertex()) == "1" ->
+      {_, _, "1"} ->
         if check_gcp_credentials() do
           {:ok, "Google Cloud credentials for Vertex AI"}
         else
           {:error, "CLAUDE_AGENT_USE_VERTEX set but GCP credentials not found"}
         end
 
-      true ->
-        case check_cli_session() do
-          true -> {:ok, "claude login session"}
-          false -> {:error, "no authentication method found"}
+      _ ->
+        if check_cli_session() do
+          {:ok, "claude login session"}
+        else
+          {:error, "no authentication method found"}
         end
     end
   end
 
   # Private helper functions
 
-  if Mix.env() == :test do
-    @doc false
-    def run_command_with_timeout_for_test(command, timeout_ms) do
-      run_command_with_timeout(command, timeout_ms)
-    end
+  @doc false
+  def run_command_with_timeout_for_test(command, timeout_ms) do
+    shell = System.find_executable("sh") || "/bin/sh"
+
+    shell
+    |> CoreCommand.new(["-lc", command])
+    |> run_invocation_with_timeout(timeout_ms)
   end
 
   defp check_cli_installation_private do
@@ -394,35 +401,34 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp parse_cli_error(error) do
-    cond do
-      String.contains?(error, "not authenticated") or
-        String.contains?(error, "login") or
-          String.contains?(error, "API key") ->
-        {:error, :not_authenticated}
-
-      String.contains?(error, "network") or
-          String.contains?(error, "connection") ->
+    if String.contains?(error, "not authenticated") or
+         String.contains?(error, "login") or
+         String.contains?(error, "API key") do
+      {:error, :not_authenticated}
+    else
+      if String.contains?(error, "network") or
+           String.contains?(error, "connection") do
         {:error, :network_error}
-
-      true ->
+      else
         {:error, :unknown}
+      end
     end
   end
 
   defp check_detailed_auth(executable) do
     # Check different auth methods in order of preference
-    cond do
-      check_anthropic_auth(executable) ->
+    case {check_anthropic_auth(executable), check_bedrock_auth(), check_vertex_auth()} do
+      {true, _, _} ->
         source = if System.get_env(Env.anthropic_api_key()), do: "env", else: "session"
         {true, %{method: "Anthropic API", source: source}}
 
-      check_bedrock_auth() ->
+      {false, true, _} ->
         {true, %{method: "AWS Bedrock", source: "aws_credentials"}}
 
-      check_vertex_auth() ->
+      {false, false, true} ->
         {true, %{method: "Google Vertex AI", source: "gcp_credentials"}}
 
-      true ->
+      {false, false, false} ->
         {false, %{method: nil, source: nil}}
     end
   end
@@ -490,24 +496,19 @@ defmodule ClaudeAgentSDK.AuthChecker do
       File.exists?(Path.expand(Auth.gcp_credentials_path()))
   end
 
-  defp determine_status(cli_installed, authenticated, auth_info) do
-    cond do
-      not cli_installed ->
-        :cli_not_found
+  defp determine_status(authenticated, auth_info) do
+    case {authenticated, auth_info[:method]} do
+      {false, nil} ->
+        :not_authenticated
 
-      not authenticated ->
-        # Check if we have partial auth info indicating invalid credentials
-        if auth_info[:method] && not authenticated do
-          :invalid_credentials
-        else
-          :not_authenticated
-        end
+      {false, _method} ->
+        :invalid_credentials
 
-      authenticated and auth_info[:method] ->
-        :ready
-
-      true ->
+      {true, nil} ->
         :unknown
+
+      {true, _method} ->
+        :ready
     end
   end
 
@@ -545,14 +546,14 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp get_provider_specific_recommendations do
-    cond do
-      System.get_env(Env.use_bedrock()) == "1" ->
+    case {System.get_env(Env.use_bedrock()), System.get_env(Env.use_vertex())} do
+      {"1", _} ->
         ["Ensure AWS credentials are configured", "Check AWS_PROFILE or AWS_ACCESS_KEY_ID"]
 
-      System.get_env(Env.use_vertex()) == "1" ->
+      {_, "1"} ->
         ["Ensure GCP credentials are configured", "Check GOOGLE_APPLICATION_CREDENTIALS"]
 
-      true ->
+      _ ->
         ["Or set ANTHROPIC_API_KEY environment variable"]
     end
   end
@@ -561,14 +562,6 @@ defmodule ClaudeAgentSDK.AuthChecker do
        when is_binary(executable) and is_list(args) do
     executable
     |> CoreCommand.new(args)
-    |> run_invocation_with_timeout(timeout_ms)
-  end
-
-  defp run_command_with_timeout(command, timeout_ms) do
-    shell = System.find_executable("sh") || "/bin/sh"
-
-    shell
-    |> CoreCommand.new(["-lc", command])
     |> run_invocation_with_timeout(timeout_ms)
   end
 
@@ -600,10 +593,8 @@ defmodule ClaudeAgentSDK.AuthChecker do
     {:error, "Command failed: #{Exception.message(error)}"}
   end
 
-  defp extract_error_text(stdout_text, stderr_text) do
-    stdout_text = if is_binary(stdout_text), do: stdout_text, else: ""
-    stderr_text = if is_binary(stderr_text), do: stderr_text, else: ""
-
+  defp extract_error_text(stdout_text, stderr_text)
+       when is_binary(stdout_text) and is_binary(stderr_text) do
     if stderr_text != "", do: stderr_text, else: stdout_text
   end
 

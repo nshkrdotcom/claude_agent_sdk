@@ -44,11 +44,11 @@ defmodule ClaudeAgentSDK.Process do
         exit_result_state(result, options)
       end
     else
-      {:error, error_state} when is_map(error_state) ->
-        error_state
-
       {:error, %CoreCommandError{} = error} ->
         command_error_state(error, options)
+
+      {:error, error_state} when is_map(error_state) ->
+        error_state
     end
   end
 
@@ -331,9 +331,8 @@ defmodule ClaudeAgentSDK.Process do
     parse_sync_result(%{stdout: result.stdout, stderr: result.stderr}, options)
   end
 
-  defp parse_sync_result(%{stdout: stdout_data, stderr: stderr_data}, %Options{} = options) do
-    stdout_output = collapse_output(stdout_data)
-    stderr_output = collapse_output(stderr_data)
+  defp parse_sync_result(%{stdout: stdout_output, stderr: stderr_output}, %Options{} = options)
+       when is_binary(stdout_output) and is_binary(stderr_output) do
     combined_text = stdout_output <> stderr_output
 
     case detect_challenge_url(combined_text) do
@@ -356,10 +355,6 @@ defmodule ClaudeAgentSDK.Process do
         ]
     end
   end
-
-  defp collapse_output(output) when is_binary(output), do: output
-  defp collapse_output(output) when is_list(output), do: Enum.join(output)
-  defp collapse_output(_output), do: ""
 
   defp parse_sync_lines(combined_text, max_buffer_size) do
     combined_text
@@ -450,9 +445,8 @@ defmodule ClaudeAgentSDK.Process do
     Message.error_result(Exception.message(error), error_struct: error)
   end
 
-  defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil
-  defp blank_to_nil(value), do: value
+  defp blank_to_nil(value) when is_binary(value), do: value
 
   defp message_parse_error_message(data, reason) do
     error =
@@ -489,9 +483,9 @@ defmodule ClaudeAgentSDK.Process do
 
   defp format_exit_error_message(%RunResult{} = result, options) do
     cwd_info = if options.cwd, do: " (cwd: #{options.cwd})", else: ""
-    stderr_text = collapse_output(result.stderr)
+    stderr_text = result.stderr
     error_details = if stderr_text != "", do: "\nstderr: #{stderr_text}", else: ""
-    formatted_json = format_json_output(collapse_output(result.stdout))
+    formatted_json = format_json_output(result.stdout)
 
     case result.exit.code do
       code when is_integer(code) ->
