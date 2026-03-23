@@ -9,6 +9,10 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
 
   Messages are exchanged as JSON over stdin/stdout.
 
+  This module remains SDK-local even when higher-level callers enter through an
+  ASM extension seam. `ASM.Extensions.ProviderSDK.Claude` may bridge into the
+  Claude client, but protocol ownership stays here.
+
   ## Message Types
 
   ### SDK → CLI

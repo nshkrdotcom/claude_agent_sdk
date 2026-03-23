@@ -17,6 +17,25 @@ This guide explains how to use the runtime control capabilities introduced in `c
 - `ClaudeAgentSDK.Transport.Erlexec` is now a compatibility facade. It no
   longer owns subprocess lifecycle.
 
+## ASM Extension Seam
+
+`agent_session_manager` may offer an optional Claude extension seam under
+`ASM.Extensions.ProviderSDK.Claude`, but that seam is only a bridge.
+
+It can:
+
+- derive `ClaudeAgentSDK.Options` from ASM-style config
+- start `ClaudeAgentSDK.Client` from ASM config or session defaults
+
+It does not redefine any control semantics.
+
+The actual control family remains here in `claude_agent_sdk`:
+
+- `ClaudeAgentSDK.Client`
+- `ClaudeAgentSDK.ControlProtocol.Protocol`
+- `ClaudeAgentSDK.Hooks`
+- `ClaudeAgentSDK.Permission`
+
 ## Quick Start
 
 ```elixir

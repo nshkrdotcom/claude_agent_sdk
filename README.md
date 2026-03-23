@@ -38,6 +38,27 @@ An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python]
 - `ClaudeAgentSDK.Transport.Erlexec` remains available as a compatibility
   facade, but it no longer owns subprocess lifecycle.
 
+## ASM Boundary
+
+If you enter Claude through `agent_session_manager`, the normalized ASM kernel
+still stops at provider selection, lane selection, event projection, and
+session/run orchestration.
+
+The optional ASM seam for Claude lives under
+`ASM.Extensions.ProviderSDK.Claude`. That extension may:
+
+- derive `ClaudeAgentSDK.Options` from ASM-style config
+- start `ClaudeAgentSDK.Client` from ASM session defaults or ASM-style config
+
+It does not move the control family into ASM. Once you cross that seam, the
+real control APIs remain here:
+
+- `ClaudeAgentSDK.Client.set_permission_mode/2`
+- `ClaudeAgentSDK.Client.set_model/2`
+- `ClaudeAgentSDK.Client.interrupt/1`
+- `ClaudeAgentSDK.Client.rewind_files/2`
+- `ClaudeAgentSDK.ControlProtocol.Protocol`
+
 ---
 
 ## Installation

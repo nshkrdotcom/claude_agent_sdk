@@ -68,6 +68,10 @@ defmodule ClaudeAgentSDK.Client do
   `CliSubprocessCore.Transport` by default. `ClaudeAgentSDK.Transport.Erlexec`
   remains available only as a compatibility facade for callers that explicitly
   request the old SDK-local transport module name.
+
+  `agent_session_manager` may optionally bridge into this module through
+  `ASM.Extensions.ProviderSDK.Claude`, but the bridge does not redefine these
+  control APIs. Runtime control ownership remains here.
   """
 
   use GenServer

@@ -2,6 +2,7 @@ defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
   @version "0.16.0"
+  @cli_subprocess_core_requirement "~> 0.1.0"
 
   def project do
     [
@@ -39,7 +40,11 @@ defmodule ClaudeAgentSdk.MixProject do
 
   defp deps do
     [
-      {:cli_subprocess_core, path: "../cli_subprocess_core"},
+      workspace_dep(
+        :cli_subprocess_core,
+        "../cli_subprocess_core",
+        @cli_subprocess_core_requirement
+      ),
       {:erlexec, "~> 2.0", runtime: runtime_erlexec?()},
       {:jason, "~> 1.4"},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
@@ -258,5 +263,17 @@ defmodule ClaudeAgentSdk.MixProject do
       _ ->
         true
     end
+  end
+
+  defp workspace_dep(app, path, requirement, opts \\ []) do
+    if hex_packaging?() do
+      {app, requirement, opts}
+    else
+      {app, Keyword.put(opts, :path, path)}
+    end
+  end
+
+  defp hex_packaging? do
+    Enum.any?(System.argv(), &String.starts_with?(&1, "hex."))
   end
 end
