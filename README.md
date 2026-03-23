@@ -70,7 +70,7 @@ real control APIs remain here:
 
 ## Packaging Boundary
 
-Phase 2B freezes the Claude publication boundary:
+Phase 3 finalizes the Claude release boundary:
 
 - `cli_subprocess_core` remains the required lower dependency for the common
   Claude query and streaming lane
@@ -80,8 +80,8 @@ Phase 2B freezes the Claude publication boundary:
 - ASM may bridge into that richer family only through
   `ASM.Extensions.ProviderSDK.Claude`; that seam does not move the control
   family into ASM or the shared core
-- the published dependency cutover order for this slice remains
-  `cli_subprocess_core`, then `claude_agent_sdk`, then
+- the operator publication order remains `cli_subprocess_core`, then
+  `claude_agent_sdk`, then
   `agent_session_manager`
 
 ---

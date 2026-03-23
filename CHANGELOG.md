@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Runtime-control docs and release notes now describe the final Phase 3
+  boundary explicitly: `cli_subprocess_core` owns the shared subprocess
+  lifecycle, `claude_agent_sdk` owns Claude-native control semantics, and
+  ASM composition remains an optional bridge above that split.
+
 ## [0.16.0] - 2026-03-11
 
 ### Added
