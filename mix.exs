@@ -3,6 +3,9 @@ defmodule ClaudeAgentSdk.MixProject do
 
   @version "0.16.0"
   @cli_subprocess_core_requirement "~> 0.1.0"
+  @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
+  @homepage_url "https://hex.pm/packages/claude_agent_sdk"
+  @docs_url "https://hexdocs.pm/claude_agent_sdk"
 
   def project do
     [
@@ -12,11 +15,12 @@ defmodule ClaudeAgentSdk.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "An Elixir SDK for Claude Code - Build AI-powered CLI tools with Claude",
+      description: description(),
       package: package(),
       docs: docs(),
       dialyzer: dialyzer(),
-      source_url: "https://github.com/nshkrdotcom/claude_agent_sdk"
+      homepage_url: @homepage_url,
+      source_url: @source_url
     ]
   end
 
@@ -58,13 +62,17 @@ defmodule ClaudeAgentSdk.MixProject do
   defp package do
     [
       name: "claude_agent_sdk",
+      description: description(),
       licenses: ["MIT"],
       links: %{
-        "GitHub" => "https://github.com/nshkrdotcom/claude_agent_sdk",
+        "GitHub" => @source_url,
+        "Hex" => @homepage_url,
+        "HexDocs" => @docs_url,
         "Claude Code" => "https://claude.ai/code",
-        "Examples" => "https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples"
+        "Examples" => "#{@source_url}/tree/main/examples",
+        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
       },
-      maintainers: [{"NSHkr", "ZeroTrust@NSHkr.com"}],
+      maintainers: ["nshkrdotcom"],
       files: ~w(
           lib
           guides
@@ -86,13 +94,17 @@ defmodule ClaudeAgentSdk.MixProject do
     ]
   end
 
+  defp description do
+    "An Elixir SDK for Claude Code - build AI-powered CLI tools with Claude."
+  end
+
   defp docs do
     [
       main: "readme",
       name: "ClaudeAgentSDK",
       source_ref: "v#{@version}",
-      source_url: "https://github.com/nshkrdotcom/claude_agent_sdk",
-      homepage_url: "https://hex.pm/packages/claude_agent_sdk",
+      source_url: @source_url,
+      homepage_url: @homepage_url,
       assets: %{"assets" => "assets"},
       logo: "assets/claude_agent_sdk.svg",
       extras: [
