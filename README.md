@@ -63,6 +63,22 @@ real control APIs remain here:
 - `ClaudeAgentSDK.Client.rewind_files/2`
 - `ClaudeAgentSDK.ControlProtocol.Protocol`
 
+## Packaging Boundary
+
+Phase 2B freezes the Claude publication boundary:
+
+- `cli_subprocess_core` remains the required lower dependency for the common
+  Claude query and streaming lane
+- `claude_agent_sdk` remains the source of truth for Claude-native control
+  features such as hooks, permission callbacks, SDK MCP routing, and control
+  protocol state
+- ASM may bridge into that richer family only through
+  `ASM.Extensions.ProviderSDK.Claude`; that seam does not move the control
+  family into ASM or the shared core
+- the published dependency cutover order for this slice remains
+  `cli_subprocess_core`, then `claude_agent_sdk`, then
+  `agent_session_manager`
+
 ---
 
 ## Installation
