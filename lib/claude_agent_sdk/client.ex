@@ -66,8 +66,8 @@ defmodule ClaudeAgentSDK.Client do
   protocol family: hooks, permission callbacks, SDK MCP routing, and related
   request/response state. The client now relies on the shared raw transport via
   `CliSubprocessCore.Transport` by default. `ClaudeAgentSDK.Transport.Erlexec`
-  remains available only as a compatibility facade for callers that explicitly
-  request the old SDK-local transport module name.
+  remains available as the Claude-named public transport entrypoint on top of
+  that core-backed transport.
 
   `agent_session_manager` may optionally bridge into this module through
   `ASM.Extensions.ProviderSDK.Claude`, but the bridge does not redefine these
@@ -1836,7 +1836,7 @@ defmodule ClaudeAgentSDK.Client do
       state.transport_opts
       |> Kernel.||([])
       |> Keyword.put(:options, state.options)
-      |> Keyword.put_new(:stderr_callback_owner, :client)
+      |> maybe_disable_transport_stderr_callback(module)
       |> maybe_put_bootstrap_subscriber(module)
 
     with {:ok, transport_opts} <-
@@ -3374,6 +3374,15 @@ defmodule ClaudeAgentSDK.Client do
        when is_list(transport_opts) and is_atom(module) do
     if built_in_transport_module?(module) do
       Keyword.put_new(transport_opts, :subscriber, self())
+    else
+      transport_opts
+    end
+  end
+
+  defp maybe_disable_transport_stderr_callback(transport_opts, module)
+       when is_list(transport_opts) and is_atom(module) do
+    if built_in_transport_module?(module) do
+      Keyword.put(transport_opts, :stderr_callback, nil)
     else
       transport_opts
     end

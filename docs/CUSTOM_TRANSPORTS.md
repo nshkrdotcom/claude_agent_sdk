@@ -5,7 +5,8 @@ The new transport abstraction lets you decide where the SDK sends control frames
 ## Boundary Note
 
 - Common CLI transport ownership lives in `cli_subprocess_core`.
-- `ClaudeAgentSDK.Transport.Erlexec` is now a compatibility facade only.
+- `ClaudeAgentSDK.Transport.Erlexec` is the built-in Claude-named transport
+  entrypoint backed by `cli_subprocess_core`.
 - Build a custom `ClaudeAgentSDK.Transport` implementation only when you need a
   non-common transport family or a deliberate transport override.
 
@@ -122,7 +123,8 @@ For your WebSocket transport write a focused integration test that uses a local 
 ## 5. Reference Implementation
 
 See `CliSubprocessCore.Transport` for the shared built-in runtime lane and
-`ClaudeAgentSDK.Transport.Erlexec` for the SDK's compatibility facade. The core
+`ClaudeAgentSDK.Transport.Erlexec` for the Claude-named public transport
+surface on top of that core. The core
 transport owns:
 
 - subprocess lifecycle management

@@ -2,49 +2,25 @@ defmodule ClaudeAgentSDK.UserOptionTest do
   use ExUnit.Case, async: true
 
   alias ClaudeAgentSDK.{Options, Process}
-  alias ClaudeAgentSDK.Streaming.Session
+  alias ClaudeAgentSDK.Runtime.CLI, as: RuntimeCLI
+  alias CliSubprocessCore.Command
 
-  defp env_list_to_map(nil), do: %{}
-
-  defp env_list_to_map(list) do
-    list
-    |> Enum.into(%{}, fn {k, v} -> {to_string(k), to_string(v)} end)
-  end
-
-  test "process exec options include user for erlexec runs" do
+  test "process env vars include user overrides" do
     options = %Options{user: "runner"}
 
-    exec_opts = Process.__exec_options__(options)
-
-    assert {:user, ~c"runner"} in exec_opts
-
-    env_map =
-      exec_opts
-      |> Enum.find_value([], fn
-        {:env, env_list} -> env_list
-        _ -> nil
-      end)
-      |> env_list_to_map()
+    env_map = Process.__env_vars__(options)
 
     assert env_map["USER"] == "runner"
     assert env_map["LOGNAME"] == "runner"
   end
 
-  test "streaming session exec opts propagate user" do
-    options = %Options{user: "runner"}
+  test "runtime invocation propagates user onto the core command" do
+    cat = System.find_executable("cat") || "cat"
 
-    exec_opts = Session.__exec_opts__(options)
+    assert {:ok, %Command{} = command} =
+             RuntimeCLI.build_invocation(options: %Options{executable: cat, user: "runner"})
 
-    assert {:user, ~c"runner"} in exec_opts
-
-    env_map =
-      exec_opts
-      |> Enum.find_value([], fn
-        {:env, env_list} -> env_list
-        _ -> nil
-      end)
-      |> env_list_to_map()
-
-    assert env_map["USER"] == "runner"
+    assert command.command == cat
+    assert command.user == "runner"
   end
 end

@@ -1,12 +1,11 @@
 defmodule ClaudeAgentSDK.Transport.Erlexec do
   @moduledoc """
-  Compatibility facade over `CliSubprocessCore.Transport.Erlexec`.
+  Claude raw transport entrypoint backed by `CliSubprocessCore.Transport`.
 
-  The shared core now owns subprocess startup, subscriber fan-out, stderr
-  delivery, interrupt handling, and shutdown semantics. This module only keeps
-  the Claude SDK's public transport module name, legacy default event tag, and
-  legacy error normalization for callers that still reference
-  `ClaudeAgentSDK.Transport.Erlexec` directly.
+  The shared core owns subprocess startup, subscriber fan-out, stderr
+  delivery, interrupt handling, and shutdown semantics. This module preserves
+  the Claude SDK's public transport module name, default event tag, and
+  legacy error normalization on top of that core-backed implementation.
   """
 
   import Kernel, except: [send: 2]
@@ -16,9 +15,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Process, as: SDKProcess
   alias ClaudeAgentSDK.Runtime.CLI, as: RuntimeCLI
-  alias ClaudeAgentSDK.Transport.ExecOptions
   alias CliSubprocessCore.Command, as: CoreCommand
-  alias CliSubprocessCore.Transport.Erlexec, as: CoreErlexec
+  alias CliSubprocessCore.Transport, as: CoreTransport
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
   @behaviour ClaudeAgentSDK.Transport
@@ -34,14 +32,14 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   @impl ClaudeAgentSDK.Transport
   def send(transport, message) when is_pid(transport) do
     transport
-    |> CoreErlexec.send(message)
+    |> CoreTransport.send(message)
     |> normalize_core_reply()
   end
 
   @impl ClaudeAgentSDK.Transport
   def subscribe(transport, pid) when is_pid(transport) and is_pid(pid) do
     transport
-    |> CoreErlexec.subscribe(pid)
+    |> CoreTransport.subscribe(pid)
     |> normalize_core_reply()
   end
 
@@ -49,56 +47,48 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   def subscribe(transport, pid, tag)
       when is_pid(transport) and is_pid(pid) and (tag == :legacy or is_reference(tag)) do
     transport
-    |> CoreErlexec.subscribe(pid, tag)
+    |> CoreTransport.subscribe(pid, tag)
     |> normalize_core_reply()
   end
 
   @spec unsubscribe(pid(), pid()) :: :ok
   def unsubscribe(transport, pid) when is_pid(transport) and is_pid(pid) do
-    CoreErlexec.unsubscribe(transport, pid)
+    CoreTransport.unsubscribe(transport, pid)
   end
 
   @impl ClaudeAgentSDK.Transport
-  def close(transport) when is_pid(transport) do
-    CoreErlexec.close(transport)
-  catch
-    :exit, {:noproc, _} -> :ok
-    :exit, :noproc -> :ok
-  end
+  def close(transport) when is_pid(transport), do: CoreTransport.close(transport)
 
   @impl ClaudeAgentSDK.Transport
   def force_close(transport) when is_pid(transport) do
     transport
-    |> CoreErlexec.force_close()
+    |> CoreTransport.force_close()
     |> normalize_core_reply()
   end
 
   @impl ClaudeAgentSDK.Transport
   def interrupt(transport) when is_pid(transport) do
     transport
-    |> CoreErlexec.interrupt()
+    |> CoreTransport.interrupt()
     |> normalize_core_reply()
   end
 
   @impl ClaudeAgentSDK.Transport
   def end_input(transport) when is_pid(transport) do
     transport
-    |> CoreErlexec.end_input()
+    |> CoreTransport.end_input()
     |> normalize_core_reply()
   end
 
   @impl ClaudeAgentSDK.Transport
-  def status(transport) when is_pid(transport), do: CoreErlexec.status(transport)
+  def status(transport) when is_pid(transport), do: CoreTransport.status(transport)
 
   @impl ClaudeAgentSDK.Transport
-  def stderr(transport) when is_pid(transport), do: CoreErlexec.stderr(transport)
-
-  @doc false
-  def __exec_opts__(%Options{} = options), do: ExecOptions.erlexec(options)
+  def stderr(transport) when is_pid(transport), do: CoreTransport.stderr(transport)
 
   defp start_core_transport(fun, opts) do
     with {:ok, core_opts} <- normalize_start_opts(opts) do
-      case apply(CoreErlexec, fun, [core_opts]) do
+      case apply(CoreTransport, fun, [core_opts]) do
         {:ok, transport} ->
           {:ok, transport}
 
@@ -117,15 +107,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   defp normalize_start_opts(opts) do
     options = Keyword.get(opts, :options) || %Options{}
 
-    stderr_callback_owner =
-      normalize_stderr_callback_owner(Keyword.get(opts, :stderr_callback_owner))
-
     with {:ok, command} <- resolve_invocation(opts, options) do
-      stderr_callback =
-        opts
-        |> Keyword.get(:stderr_callback, options.stderr)
-        |> stderr_callback_for_owner(stderr_callback_owner)
-
       core_opts = [
         command: command,
         subscriber: Keyword.get(opts, :subscriber),
@@ -138,7 +120,7 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
           normalize_max_buffer_size(Keyword.get(opts, :max_buffer_size, options.max_buffer_size)),
         max_stderr_buffer_size:
           normalize_max_stderr_buffer_size(Keyword.get(opts, :max_stderr_buffer_size)),
-        stderr_callback: stderr_callback
+        stderr_callback: Keyword.get(opts, :stderr_callback, options.stderr)
       ]
 
       {:ok,
@@ -186,12 +168,6 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
 
   defp normalize_max_stderr_buffer_size(size) when is_integer(size) and size > 0, do: size
   defp normalize_max_stderr_buffer_size(_size), do: Buffers.max_stderr_buffer_bytes()
-
-  defp normalize_stderr_callback_owner(:client), do: :client
-  defp normalize_stderr_callback_owner(_owner), do: :transport
-
-  defp stderr_callback_for_owner(callback, :transport) when is_function(callback, 1), do: callback
-  defp stderr_callback_for_owner(_callback, _owner), do: nil
 
   defp normalize_core_reply(:ok), do: :ok
 

@@ -16,7 +16,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   alias ClaudeAgentSDK.Runtime.CLI
   alias ClaudeAgentSDK.Streaming.EventParser
   alias ClaudeAgentSDK.Streaming.Termination
-  alias ClaudeAgentSDK.Transport.ExecOptions
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
   @runtime_event_tag :claude_agent_sdk_runtime_cli
@@ -295,9 +294,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   @doc false
   def __shell_escape__(arg) when is_binary(arg), do: SDKProcess.__shell_escape__(arg)
-
-  @doc false
-  def __exec_opts__(%Options{} = options), do: ExecOptions.erlexec(options)
 
   defp init_runtime_session(%Options{} = options, start_opts) do
     runtime_ref = make_ref()

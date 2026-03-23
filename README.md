@@ -35,8 +35,8 @@ An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python]
 - `ClaudeAgentSDK.Client` remains SDK-local only for the advanced Claude
   control family: hooks, permission callbacks, SDK MCP routing, and control
   request/response state.
-- `ClaudeAgentSDK.Transport.Erlexec` remains available as a compatibility
-  facade, but it no longer owns subprocess lifecycle.
+- `ClaudeAgentSDK.Transport.Erlexec` remains available as the Claude-named
+  public transport entrypoint backed by the shared core transport.
 
 ## ASM Boundary
 
@@ -680,8 +680,8 @@ For breaking changes and migration notes, see `CHANGELOG.md`.
 
 **0.12.0 breaking changes:**
 - `Transport.Port` removed. The built-in common transport lane now runs through
-  `CliSubprocessCore.Transport`; `Transport.Erlexec` remains as a compatibility
-  facade for callers that still reference the old SDK-local module name.
+  `CliSubprocessCore.Transport`; `Transport.Erlexec` remains available as the
+  Claude-named public transport entrypoint.
 - `Transport.normalize_reason(:port_closed)` removed. Custom transports should return `:not_connected` directly.
 - Transport error tuple shape updated: low-level failures now use `{:error, {:transport, reason}}` instead of bare `{:error, reason}`.
 - String prompts now delivered via stdin (`--input-format stream-json`) instead of CLI arg (`-- prompt`).

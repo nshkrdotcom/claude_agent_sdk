@@ -29,7 +29,7 @@ The Claude Agent SDK provides two streaming approaches:
 - The common CLI streaming/session lane now runs on `cli_subprocess_core` through `ClaudeAgentSDK.Runtime.CLI`.
 - `ClaudeAgentSDK.Streaming.Session` stays SDK-local as the public session process and preserves the existing stream/subscriber contract.
 - The advanced control client family still lives in `ClaudeAgentSDK.Client` for hooks, permission callbacks, and SDK MCP features.
-- Both lanes share the same raw transport boundary through `ClaudeAgentSDK.Transport.Erlexec`, which now wraps `CliSubprocessCore.Transport.Erlexec`.
+- Both lanes share the same raw transport boundary through `ClaudeAgentSDK.Transport.Erlexec`, backed by `CliSubprocessCore.Transport`.
 
 ### Key Differences
 

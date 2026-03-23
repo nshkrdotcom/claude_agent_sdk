@@ -1,6 +1,6 @@
 defmodule ClaudeAgentSDK.Process do
   @moduledoc """
-  Compatibility facade for the CLI-only one-shot query lane.
+  Claude CLI one-shot query surface backed by the shared command lane.
 
   The shared `cli_subprocess_core` command lane now owns subprocess execution.
   This module keeps the Claude SDK's environment shaping, stderr callback
@@ -12,7 +12,6 @@ defmodule ClaudeAgentSDK.Process do
   alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Errors
-  alias ClaudeAgentSDK.Transport.ExecOptions
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.Command.Error, as: CoreCommandError
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
@@ -274,19 +273,12 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   @doc false
-  def __exec_options__(%Options{} = options), do: build_exec_options(options)
-
-  @doc false
   def __shell_escape__(arg) when is_binary(arg), do: shell_escape(arg)
 
   @doc false
   @spec __parse_output__(String.t(), Options.t()) :: [Message.t()]
   def __parse_output__(output, %Options{} = options \\ %Options{}) when is_binary(output) do
     parse_sync_result(%{stdout: output, stderr: ""}, options)
-  end
-
-  defp build_exec_options(options) do
-    ExecOptions.erlexec(options, [:sync, :stdout, :stderr])
   end
 
   defp ensure_json_flags(args) do

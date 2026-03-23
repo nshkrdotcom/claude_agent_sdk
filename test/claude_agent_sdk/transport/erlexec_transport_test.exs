@@ -3,6 +3,7 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
 
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Transport.Erlexec, as: ErlexecTransport
+  alias CliSubprocessCore.Transport, as: CoreTransport
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
   test "returns error when command not found" do
@@ -148,9 +149,24 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
                    1_000
   end
 
-  test "exec opts include :user when Options.user is set" do
-    exec_opts = ErlexecTransport.__exec_opts__(%Options{user: "runner"})
-    assert {:user, ~c"runner"} in exec_opts
+  test "transport info preserves invocation user when built from Options" do
+    script =
+      create_test_script("""
+      while read -r line; do
+        echo "$line"
+      done
+      """)
+
+    {:ok, transport} =
+      ErlexecTransport.start_link(options: %Options{executable: script, user: "runner"})
+
+    try do
+      assert %CoreTransport.Info{invocation: invocation} = CoreTransport.info(transport)
+      assert invocation.command == script
+      assert invocation.user == "runner"
+    after
+      ErlexecTransport.close(transport)
+    end
   end
 
   test "repeated subscribe calls do not create duplicate subscriber monitors" do
