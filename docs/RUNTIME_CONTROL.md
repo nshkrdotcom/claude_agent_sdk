@@ -27,6 +27,10 @@ It can:
 - derive `ClaudeAgentSDK.Options` from ASM-style config
 - start `ClaudeAgentSDK.Client` from ASM config or session defaults
 
+ASM-owned fields such as `cwd`, `permission_mode`, `model`, `max_turns`, and
+the transport timeout still stay in ASM config. The optional native override
+bag is only for Claude-native settings.
+
 It does not redefine any control semantics.
 
 The actual control family remains here in `claude_agent_sdk`:

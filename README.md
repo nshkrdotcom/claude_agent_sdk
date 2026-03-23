@@ -50,6 +50,10 @@ The optional ASM seam for Claude lives under
 - derive `ClaudeAgentSDK.Options` from ASM-style config
 - start `ClaudeAgentSDK.Client` from ASM session defaults or ASM-style config
 
+ASM-owned fields such as `cwd`, `permission_mode`, `model`, `max_turns`, and
+the transport timeout still stay in ASM config. The extension's native override
+bag is for Claude-native fields only.
+
 It does not move the control family into ASM. Once you cross that seam, the
 real control APIs remain here:
 

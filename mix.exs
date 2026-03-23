@@ -65,7 +65,24 @@ defmodule ClaudeAgentSdk.MixProject do
         "Examples" => "https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples"
       },
       maintainers: [{"NSHkr", "ZeroTrust@NSHkr.com"}],
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs)
+      files: ~w(
+          lib
+          guides
+          examples/README.md
+          examples/mix_task_chat/README.md
+          examples/phoenix_chat/README.md
+          examples/document_generation/README.md
+          examples/research_agent/README.md
+          examples/skill_invocation/README.md
+          examples/email_agent/README.md
+          assets/claude_agent_sdk.svg
+          docs/RUNTIME_CONTROL.md
+          mix.exs
+          README.md
+          LICENSE
+          CHANGELOG.md
+          .formatter.exs
+        )
     ]
   end
 
@@ -90,6 +107,7 @@ defmodule ClaudeAgentSdk.MixProject do
         "guides/model-configuration.md",
         "guides/agents.md",
         "guides/sessions.md",
+        "docs/RUNTIME_CONTROL.md",
         "guides/testing.md",
         "guides/error-handling.md",
         {"examples/README.md", filename: "examples"},
@@ -118,7 +136,8 @@ defmodule ClaudeAgentSdk.MixProject do
           "guides/configuration-internals.md",
           "guides/model-configuration.md",
           "guides/agents.md",
-          "guides/sessions.md"
+          "guides/sessions.md",
+          "docs/RUNTIME_CONTROL.md"
         ],
         "Testing & Errors": [
           "guides/testing.md",
