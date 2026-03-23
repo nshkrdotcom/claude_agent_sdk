@@ -5,7 +5,8 @@ defmodule ClaudeAgentSDK.Transport.Erlexec do
   The shared core owns subprocess startup, subscriber fan-out, stderr
   delivery, interrupt handling, and shutdown semantics. This module preserves
   the Claude SDK's public transport module name, default event tag, and
-  legacy error normalization on top of that core-backed implementation.
+  Claude-specific error normalization on top of that core-backed
+  implementation.
   """
 
   import Kernel, except: [send: 2]

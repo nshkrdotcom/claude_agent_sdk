@@ -40,9 +40,8 @@ defmodule ClaudeAgentSDK.Streaming do
       ↓
   ClaudeAgentSDK.Client (SDK-local control family)
       ↓
-  CliSubprocessCore.Transport
-      ↓
-  ClaudeAgentSDK.Transport.Erlexec (compat facade only when explicitly selected)
+  ClaudeAgentSDK.Transport.Erlexec (when you explicitly select the Claude-named
+  raw transport surface)
       ↓
   CliSubprocessCore.Transport.Erlexec
   ```
