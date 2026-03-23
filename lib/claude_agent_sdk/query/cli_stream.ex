@@ -21,6 +21,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   alias ClaudeAgentSDK.Config.{Buffers, Timeouts}
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
+  alias CliSubprocessCore.Command, as: CoreCommand
+  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
   @type transport_spec :: module() | {module(), keyword()} | nil
 
@@ -99,6 +101,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       transport_opts
       |> Keyword.put_new(:args, args)
       |> Keyword.put_new(:options, options)
+      |> maybe_put_event_tag(module)
 
     transport_ref = make_ref()
     transport_opts = maybe_put_bootstrap_subscriber(module, transport_opts, transport_ref)
@@ -129,9 +132,10 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp maybe_put_cli_command(module, transport_opts, options) do
     if needs_cli_command?(module, transport_opts) do
-      with {:ok, executable} <- CLI.resolve_executable(options) do
+      with {:ok, command} <-
+             build_transport_command(options, Keyword.get(transport_opts, :args, [])) do
         _ = CLI.warn_if_outdated()
-        {:ok, Keyword.put_new(transport_opts, :command, executable)}
+        {:ok, Keyword.put_new(transport_opts, :command, command)}
       end
     else
       {:ok, transport_opts}
@@ -139,12 +143,11 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp needs_cli_command?(module, transport_opts) do
-    module == ClaudeAgentSDK.Transport.Erlexec and
-      Keyword.get(transport_opts, :command) == nil
+    built_in_transport_module?(module) and Keyword.get(transport_opts, :command) == nil
   end
 
   defp normalize_transport(nil, _options, input) do
-    module = ClaudeAgentSDK.Transport.Erlexec
+    module = CliSubprocessCore.Transport
     ensure_streaming_transport!(module, input)
     {module, []}
   end
@@ -171,7 +174,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     unless function_exported?(module, :end_input, 1) do
       raise ArgumentError,
             "Streaming prompts require a transport with end_input/1. " <>
-              "Use ClaudeAgentSDK.Transport.Erlexec or provide a compatible transport."
+              "Use CliSubprocessCore.Transport, ClaudeAgentSDK.Transport.Erlexec, or provide a compatible transport."
     end
 
     :ok
@@ -497,8 +500,17 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp maybe_put_bootstrap_subscriber(module, transport_opts, transport_ref) do
-    if module == ClaudeAgentSDK.Transport.Erlexec do
+    if built_in_transport_module?(module) do
       Keyword.put_new(transport_opts, :subscriber, {self(), transport_ref})
+    else
+      transport_opts
+    end
+  end
+
+  defp maybe_put_event_tag(transport_opts, module)
+       when is_list(transport_opts) and is_atom(module) do
+    if built_in_transport_module?(module) do
+      Keyword.put_new(transport_opts, :event_tag, :claude_agent_sdk_transport)
     else
       transport_opts
     end
@@ -513,11 +525,53 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp transport_error_struct(%Errors.ProcessError{} = error), do: error
   defp transport_error_struct(%Errors.ClaudeSDKError{} = error), do: error
 
+  defp transport_error_struct(%CoreTransportError{} = error) do
+    case Transport.normalize_reason(error) do
+      %Errors.CLIJSONDecodeError{} = normalized ->
+        normalized
+
+      :cli_not_found ->
+        %Errors.CLINotFoundError{
+          message:
+            "Claude CLI not found. Please install with: #{ClaudeAgentSDK.Config.CLI.install_command()}"
+        }
+
+      normalized ->
+        %Errors.ClaudeSDKError{
+          message: "Transport error: #{inspect(normalized)}",
+          cause: error
+        }
+    end
+  end
+
   defp transport_error_struct(error) do
     %Errors.ClaudeSDKError{
       message: "Transport error: #{inspect(error)}",
       cause: error
     }
+  end
+
+  defp build_transport_command(%Options{} = options, args) when is_list(args) do
+    case CLI.resolve_executable(options) do
+      {:ok, executable} ->
+        {:ok,
+         CoreCommand.new(executable, args,
+           cwd: options.cwd,
+           env: ClaudeAgentSDK.Process.__env_vars__(options),
+           user: options.user
+         )}
+
+      {:error, :not_found} ->
+        {:error, :cli_not_found}
+    end
+  end
+
+  defp built_in_transport_module?(module) do
+    module in [
+      ClaudeAgentSDK.Transport.Erlexec,
+      CliSubprocessCore.Transport,
+      CliSubprocessCore.Transport.Erlexec
+    ]
   end
 
   defp transport_error_mode(%Options{transport_error_mode: :raise}), do: :raise

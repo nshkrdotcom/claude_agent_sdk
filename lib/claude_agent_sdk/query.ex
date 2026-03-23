@@ -12,8 +12,8 @@ defmodule ClaudeAgentSDK.Query do
 
   When SDK MCP servers are detected in options, the query automatically uses
   the Client GenServer (which supports bidirectional control protocol) instead
-  of the simpler Process.stream approach. This is transparent to the caller -
-  you still get the same Stream interface.
+  of the simpler CLI-only stream lane. This is transparent to the caller - you
+  still get the same Stream interface.
   """
 
   alias ClaudeAgentSDK.Config

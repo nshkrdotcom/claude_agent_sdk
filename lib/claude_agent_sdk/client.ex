@@ -65,8 +65,9 @@ defmodule ClaudeAgentSDK.Client do
   `ClaudeAgentSDK.Client` remains SDK-local because it owns the advanced control
   protocol family: hooks, permission callbacks, SDK MCP routing, and related
   request/response state. The client now relies on the shared raw transport via
-  `ClaudeAgentSDK.Transport.Erlexec`, which is a compatibility wrapper over
-  `CliSubprocessCore.Transport.Erlexec`.
+  `CliSubprocessCore.Transport` by default. `ClaudeAgentSDK.Transport.Erlexec`
+  remains available only as a compatibility facade for callers that explicitly
+  request the old SDK-local transport module name.
   """
 
   use GenServer
@@ -83,11 +84,13 @@ defmodule ClaudeAgentSDK.Client do
   }
 
   alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
+  alias ClaudeAgentSDK.Runtime.CLI, as: RuntimeCLI
   alias ClaudeAgentSDK.ControlProtocol.Protocol
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Permission.{Context, Result}
   alias ClaudeAgentSDK.Streaming.{EventParser, Termination}
+  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
   @edit_tools ["Write", "Edit", "MultiEdit"]
 
   # Client state intentionally mirrors the control-protocol lifecycle and streaming buffers.
@@ -734,7 +737,7 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  defp default_transport_module(_options), do: ClaudeAgentSDK.Transport.Erlexec
+  defp default_transport_module(_options), do: CliSubprocessCore.Transport
 
   @impl true
   def handle_continue(:start_cli, state) do
@@ -1832,7 +1835,9 @@ defmodule ClaudeAgentSDK.Client do
       |> Keyword.put_new(:stderr_callback_owner, :client)
       |> maybe_put_bootstrap_subscriber(module)
 
-    with {:ok, transport} <- module.start_link(transport_opts),
+    with {:ok, transport_opts} <-
+           maybe_put_transport_command(module, transport_opts, state.options),
+         {:ok, transport} <- module.start_link(transport_opts),
          :ok <- module.subscribe(transport, self()) do
       {init_request_id, init_json} =
         Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil, agents_for_init)
@@ -3363,18 +3368,47 @@ defmodule ClaudeAgentSDK.Client do
 
   defp maybe_put_bootstrap_subscriber(transport_opts, module)
        when is_list(transport_opts) and is_atom(module) do
-    if module == ClaudeAgentSDK.Transport.Erlexec do
+    if built_in_transport_module?(module) do
       Keyword.put_new(transport_opts, :subscriber, self())
     else
       transport_opts
     end
   end
 
+  defp maybe_put_transport_command(module, transport_opts, %Options{} = options)
+       when is_list(transport_opts) and is_atom(module) do
+    if built_in_transport_module?(module) and Keyword.get(transport_opts, :command) == nil do
+      case RuntimeCLI.build_invocation(options: options) do
+        {:ok, command} ->
+          {:ok, Keyword.put_new(transport_opts, :command, command)}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      {:ok, transport_opts}
+    end
+  end
+
+  defp built_in_transport_module?(module) do
+    module in [
+      ClaudeAgentSDK.Transport.Erlexec,
+      CliSubprocessCore.Transport,
+      CliSubprocessCore.Transport.Erlexec
+    ]
+  end
+
   defp send_payload(%{transport: transport, transport_module: module}, payload)
        when is_pid(transport) do
     case module.send(transport, ensure_newline(payload)) do
-      {:error, {:transport, reason}} -> {:error, reason}
-      other -> other
+      {:error, {:transport, reason}} ->
+        {:error, ClaudeAgentSDK.Transport.normalize_reason(reason)}
+
+      {:error, reason} ->
+        {:error, ClaudeAgentSDK.Transport.normalize_reason(reason)}
+
+      other ->
+        other
     end
   end
 
@@ -3506,6 +3540,25 @@ defmodule ClaudeAgentSDK.Client do
   defp transport_error_struct(%ClaudeAgentSDK.Errors.CLINotFoundError{} = error), do: error
   defp transport_error_struct(%ClaudeAgentSDK.Errors.ProcessError{} = error), do: error
   defp transport_error_struct(%ClaudeAgentSDK.Errors.ClaudeSDKError{} = error), do: error
+
+  defp transport_error_struct(%CoreTransportError{} = error) do
+    case ClaudeAgentSDK.Transport.normalize_reason(error) do
+      %ClaudeAgentSDK.Errors.CLIJSONDecodeError{} = normalized ->
+        normalized
+
+      :cli_not_found ->
+        %ClaudeAgentSDK.Errors.CLINotFoundError{
+          message:
+            "Claude CLI not found. Please install with: #{ClaudeAgentSDK.Config.CLI.install_command()}"
+        }
+
+      normalized ->
+        %ClaudeAgentSDK.Errors.ClaudeSDKError{
+          message: "Transport error: #{inspect(normalized)}",
+          cause: error
+        }
+    end
+  end
 
   defp transport_error_struct(error) do
     %ClaudeAgentSDK.Errors.ClaudeSDKError{

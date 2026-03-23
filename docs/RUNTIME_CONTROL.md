@@ -8,6 +8,15 @@ This guide explains how to use the runtime control capabilities introduced in `c
 - **Transport Abstraction** – provide a module that implements `ClaudeAgentSDK.Transport` to customise how the SDK talks to the Claude CLI (or any future backend).
 - **Deterministic Tests** – the new transport layer is fully mockable, making it simple to run acceptance tests without shelling out to the CLI.
 
+## Runtime Boundary
+
+- Common query and streaming transport ownership now lives in
+  `cli_subprocess_core`.
+- `ClaudeAgentSDK.Client` stays SDK-local only for the Claude control family:
+  hooks, permissions, SDK MCP routing, and control request state.
+- `ClaudeAgentSDK.Transport.Erlexec` is now a compatibility facade. It no
+  longer owns subprocess lifecycle.
+
 ## Quick Start
 
 ```elixir
@@ -73,7 +82,10 @@ end
 
 ## Transport Abstraction
 
-Every client now delegates IO to a transport module. The default erlexec-based transport mirrors previous behaviour, but you can provide your own implementation:
+Every client now delegates IO to a transport module. The default built-in path
+uses `CliSubprocessCore.Transport` directly, while
+`ClaudeAgentSDK.Transport.Erlexec` remains available for legacy callers that
+still want the old SDK-local module name.
 
 ```elixir
 {:ok, client} =
@@ -83,7 +95,8 @@ Every client now delegates IO to a transport module. The default erlexec-based t
   )
 ```
 
-A transport module must implement the `ClaudeAgentSDK.Transport` behaviour:
+A custom transport module must implement the `ClaudeAgentSDK.Transport`
+behaviour:
 
 ```elixir
 defmodule MyApp.Transport.WebSocket do
@@ -130,5 +143,5 @@ These helpers keep the transport layer simple and make it easy to write integrat
 ## Migration Notes
 
 - Applications that previously held onto the client port should now treat the transport as an opaque module. Use `Client.stop/1` to trigger a graceful shutdown.
-- `Client.start_link/2` accepts an optional keyword list with `:transport` and `:transport_opts`. Existing code that only passes `%Options{}` will continue to use the erlexec transport automatically.
+- `Client.start_link/2` accepts an optional keyword list with `:transport` and `:transport_opts`. Existing code that only passes `%Options{}` now defaults to the shared-core transport lane automatically.
 - Tests that previously called the CLI directly should be switched to the mock transport to benefit from deterministic messaging. See `test/support/mock_transport.ex` for reference.

@@ -29,9 +29,14 @@ An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python]
 
 ## Runtime Architecture
 
-- Common CLI streaming/session flows now run on the shared `cli_subprocess_core` session runtime.
-- `ClaudeAgentSDK.Client` remains SDK-local for the advanced control family: hooks, permission callbacks, and SDK MCP routing.
-- Both lanes share the same raw subprocess transport through `ClaudeAgentSDK.Transport.Erlexec`, which now wraps `CliSubprocessCore.Transport.Erlexec`.
+- Common CLI query/streaming flows run on the shared `cli_subprocess_core`
+  runtime: `CliSubprocessCore.Session`, `CliSubprocessCore.Transport`, and
+  `CliSubprocessCore.Command`.
+- `ClaudeAgentSDK.Client` remains SDK-local only for the advanced Claude
+  control family: hooks, permission callbacks, SDK MCP routing, and control
+  request/response state.
+- `ClaudeAgentSDK.Transport.Erlexec` remains available as a compatibility
+  facade, but it no longer owns subprocess lifecycle.
 
 ---
 
@@ -221,14 +226,14 @@ prompts = [
 ClaudeAgentSDK.query(prompts, opts) |> Enum.to_list()
 
 # Custom transport injection
-ClaudeAgentSDK.query("Hello", opts, {ClaudeAgentSDK.Transport.Erlexec, []})
+ClaudeAgentSDK.query("Hello", opts, {CliSubprocessCore.Transport, []})
 |> Enum.to_list()
 
 # Lazy transport startup (defer subprocess spawn to handle_continue)
 ClaudeAgentSDK.query(
   "Hello",
   opts,
-  {ClaudeAgentSDK.Transport.Erlexec, [startup_mode: :lazy]}
+  {CliSubprocessCore.Transport, [startup_mode: :lazy]}
 )
 |> Enum.to_list()
 
@@ -503,7 +508,8 @@ but it is deprecated and logs a warning once per legacy module.
 `SessionStore` now hydrates on-disk cache in a `handle_continue/2` step. Startup is faster,
 but `list/search` can be briefly incomplete immediately after boot while warmup finishes.
 
-`Transport.Erlexec` and `Streaming.Session` support `startup_mode: :lazy`
+`CliSubprocessCore.Transport`, `Transport.Erlexec`, and `Streaming.Session`
+support `startup_mode: :lazy`
 to defer subprocess startup to `handle_continue/2`. In lazy mode, `start_link` can succeed
 before the subprocess is spawned; startup failures then surface as process exit after init.
 
@@ -632,7 +638,9 @@ cd examples/email_agent && mix deps.get && mix email.assistant "find emails from
 For breaking changes and migration notes, see `CHANGELOG.md`.
 
 **0.12.0 breaking changes:**
-- `Transport.Port` removed. `Transport.Erlexec` is now the sole built-in transport. Users who explicitly passed `Transport.Port` must switch to `Transport.Erlexec` or omit the transport option.
+- `Transport.Port` removed. The built-in common transport lane now runs through
+  `CliSubprocessCore.Transport`; `Transport.Erlexec` remains as a compatibility
+  facade for callers that still reference the old SDK-local module name.
 - `Transport.normalize_reason(:port_closed)` removed. Custom transports should return `:not_connected` directly.
 - Transport error tuple shape updated: low-level failures now use `{:error, {:transport, reason}}` instead of bare `{:error, reason}`.
 - String prompts now delivered via stdin (`--input-format stream-json`) instead of CLI arg (`-- prompt`).

@@ -31,8 +31,12 @@ defmodule ClaudeAgentSDK.AuthChecker do
   This module detects and validates all supported authentication methods.
   """
 
-  alias ClaudeAgentSDK.{CLI, Runtime, Shell}
+  alias ClaudeAgentSDK.{CLI, Runtime}
   alias ClaudeAgentSDK.Config.{Auth, Env, Timeouts}
+  alias CliSubprocessCore.Command, as: CoreCommand
+  alias CliSubprocessCore.Command.Error, as: CoreCommandError
+  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
+  alias CliSubprocessCore.Transport.RunResult
 
   @type auth_status ::
           :ready | :cli_not_found | :not_authenticated | :invalid_credentials | :unknown
@@ -553,52 +557,54 @@ defmodule ClaudeAgentSDK.AuthChecker do
     end
   end
 
-  defp execute_with_timeout(command, timeout_ms) do
-    Runtime.ensure_erlexec_started!()
-    run_command_with_timeout(command, timeout_ms)
-  end
-
   defp execute_cli_command(executable, args, timeout_ms)
        when is_binary(executable) and is_list(args) do
-    command = build_cli_command(executable, args)
-    execute_with_timeout(command, timeout_ms)
+    executable
+    |> CoreCommand.new(args)
+    |> run_invocation_with_timeout(timeout_ms)
   end
 
   defp run_command_with_timeout(command, timeout_ms) do
-    case :exec.run(command, [:sync, :stdout, :stderr], timeout_ms) do
-      {:ok, result} ->
+    shell = System.find_executable("sh") || "/bin/sh"
+
+    shell
+    |> CoreCommand.new(["-lc", command])
+    |> run_invocation_with_timeout(timeout_ms)
+  end
+
+  defp run_invocation_with_timeout(%CoreCommand{} = invocation, timeout_ms) do
+    case CoreCommand.run(invocation, timeout: timeout_ms, stderr: :separate) do
+      {:ok, %RunResult{} = result} ->
         handle_successful_execution(result)
 
-      {:error, error_data} ->
-        handle_execution_error(error_data)
+      {:error, %CoreCommandError{} = error} ->
+        handle_execution_error(error)
     end
   end
 
-  defp handle_successful_execution(result) do
-    stdout_data = get_in(result, [:stdout]) || []
-    output = Enum.join(stdout_data, "")
-    {:ok, output}
+  defp handle_successful_execution(%RunResult{} = result) do
+    if RunResult.success?(result) do
+      {:ok, result.stdout}
+    else
+      error_text = extract_error_text(result.stdout, result.stderr)
+      {:error, "Command failed (exit #{result.exit.code}): #{error_text}"}
+    end
   end
 
-  defp handle_execution_error(exit_status: status, stdout: stdout_data, stderr: stderr_data) do
-    error_text = extract_error_text(stdout_data, stderr_data)
-    {:error, "Command failed (exit #{status}): #{error_text}"}
+  defp handle_execution_error(%CoreCommandError{
+         reason: {:transport, %CoreTransportError{reason: :timeout}}
+       }),
+       do: {:error, :timeout}
+
+  defp handle_execution_error(%CoreCommandError{} = error) do
+    {:error, "Command failed: #{Exception.message(error)}"}
   end
 
-  defp handle_execution_error(:timeout), do: {:error, :timeout}
-
-  defp handle_execution_error(reason), do: {:error, "Command failed: #{inspect(reason)}"}
-
-  defp extract_error_text(stdout_data, stderr_data) do
-    stdout_text = if is_list(stdout_data), do: Enum.join(stdout_data, ""), else: ""
-    stderr_text = if is_list(stderr_data), do: Enum.join(stderr_data, ""), else: ""
+  defp extract_error_text(stdout_text, stderr_text) do
+    stdout_text = if is_binary(stdout_text), do: stdout_text, else: ""
+    stderr_text = if is_binary(stderr_text), do: stderr_text, else: ""
 
     if stderr_text != "", do: stderr_text, else: stdout_text
-  end
-
-  defp build_cli_command(executable, args) do
-    quoted_args = Enum.map(args, &Shell.escape_arg/1)
-    Enum.join([Shell.escape_arg(executable) | quoted_args], " ")
   end
 
   defp cli_version(path) when is_binary(path) do

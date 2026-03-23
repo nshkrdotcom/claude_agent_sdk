@@ -9,7 +9,7 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
   ## Why This Exists
 
   SDK MCP servers require bidirectional communication (control protocol) to work.
-  The simple `Process.stream` approach is unidirectional and cannot handle
+  The CLI-only stream lane is unidirectional and cannot handle
   `control_request` messages from the CLI. This module bridges the gap by:
 
   1. Starting a Client GenServer (which handles control protocol)

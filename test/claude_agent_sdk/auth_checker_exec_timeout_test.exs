@@ -1,22 +1,19 @@
 defmodule ClaudeAgentSDK.AuthCheckerExecTimeoutTest do
   @moduledoc """
-  Regression test for erlexec timeout handling.
+  Regression test for shared command-lane timeout handling.
 
-  Bug: `run_command_with_timeout/2` passed `{:timeout, ms}` in the options
-  list to `:exec.run/2`, which erlexec rejects as `{:invalid_option, _}`.
-  Fix: use `:exec.run/3` and pass the timeout as the third argument.
+  The auth checker now routes shell commands through
+  `CliSubprocessCore.Command.run/2` instead of calling `:exec.run/3` directly.
 
   This test calls a test-only wrapper around `run_command_with_timeout/2`
-  to ensure the corrected `:exec.run/3` signature succeeds.
+  to ensure the shared timeout path still succeeds.
   """
   use ExUnit.Case, async: false
 
   alias ClaudeAgentSDK.AuthChecker
 
   @tag :live_cli
-  test "AuthChecker uses the valid erlexec timeout signature" do
-    {:ok, _} = Application.ensure_all_started(:erlexec)
-
+  test "AuthChecker uses the shared command timeout lane" do
     result = AuthChecker.run_command_with_timeout_for_test("echo hello", 5_000)
 
     assert match?({:ok, output} when is_binary(output), result)

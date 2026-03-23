@@ -190,7 +190,8 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
         {:ok,
          Command.new(executable, args,
            cwd: options.cwd,
-           env: SDKProcess.__env_vars__(options)
+           env: SDKProcess.__env_vars__(options),
+           user: options.user
          )}
 
       {:error, :not_found} ->
@@ -206,8 +207,7 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
     base_opts = [
       provider: :claude,
       profile: Profile,
-      transport_module:
-        Keyword.get(runtime_opts, :transport_module, ClaudeAgentSDK.Transport.Erlexec),
+      transport_module: Keyword.get(runtime_opts, :transport_module, CliSubprocessCore.Transport),
       subscriber: Keyword.get(runtime_opts, :subscriber),
       metadata: metadata,
       session_event_tag:

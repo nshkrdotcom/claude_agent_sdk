@@ -1,81 +1,62 @@
 defmodule ClaudeAgentSDK.Process do
   @moduledoc """
-  Handles spawning and communicating with the Claude Code CLI process using erlexec.
+  Compatibility facade for the CLI-only one-shot query lane.
 
-  This module manages the lifecycle of Claude CLI subprocess execution:
-  - Starting the CLI process with proper arguments
-  - Capturing and parsing JSON output from stdout/stderr
-  - Converting the output into a stream of `ClaudeAgentSDK.Message` structs
-  - Handling errors and cleanup
-
-  The module uses erlexec's synchronous execution mode to capture all output
-  at once, then converts it to a lazy stream for consumption.
+  The shared `cli_subprocess_core` command lane now owns subprocess execution.
+  This module keeps the Claude SDK's environment shaping, stderr callback
+  handling, and stream-json output parsing so existing callers still see the
+  same message structs and helper functions.
   """
 
-  alias ClaudeAgentSDK.Log, as: Logger
-
-  alias ClaudeAgentSDK.{CLI, LineFraming, Message, Options, Runtime}
+  alias ClaudeAgentSDK.{CLI, LineFraming, Message, Options, Runtime, Shell}
   alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
-  alias ClaudeAgentSDK.Shell
-  alias ClaudeAgentSDK.Transport.{ExecOptions, Setup}
+  alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
+  alias ClaudeAgentSDK.Errors
+  alias ClaudeAgentSDK.Transport.ExecOptions
+  alias CliSubprocessCore.Command, as: CoreCommand
+  alias CliSubprocessCore.Command.Error, as: CoreCommandError
+  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
+  alias CliSubprocessCore.Transport.RunResult
 
   @doc """
-  Streams messages from Claude Code CLI using erlexec.
-
-  ## Parameters
-
-  - `args` - List of command-line arguments for the Claude CLI
-  - `options` - Configuration options (see `t:ClaudeAgentSDK.Options.t/0`)
-
-  ## Returns
-
-  A stream of `t:ClaudeAgentSDK.Message.t/0` structs.
-
-  ## Examples
-
-      ClaudeAgentSDK.Process.stream(["--output-format", "stream-json", "--verbose"], %ClaudeAgentSDK.Options{})
-
+  Streams messages from Claude Code CLI using the shared non-PTY command lane.
   """
   @spec stream([String.t()], Options.t(), String.t() | nil) ::
           Enumerable.t(ClaudeAgentSDK.Message.t())
   def stream(args, %Options{} = options, stdin_input \\ nil) do
-    # Check if we should use mock
     if Runtime.use_mock?() and not Runtime.force_real?(options) do
       ClaudeAgentSDK.Mock.Process.stream(args, options, stdin_input)
     else
-      stream_real(args, options, stdin_input)
+      state = start_claude_process(args, options, stdin_input)
+      Stream.resource(fn -> state end, &receive_messages/1, &cleanup_process/1)
     end
   end
 
-  defp stream_real(args, options, stdin_input) do
-    Stream.resource(
-      fn -> start_claude_process(args, options, stdin_input) end,
-      &receive_messages/1,
-      &cleanup_process/1
-    )
-  end
-
   defp start_claude_process(args, options, stdin_input) do
-    Runtime.ensure_erlexec_started!()
-    cmd = build_claude_command(args, options, stdin_input)
+    with :ok <- validate_cwd(options.cwd),
+         {:ok, invocation} <- build_claude_invocation(args, options),
+         {:ok, %RunResult{} = result} <- run_claude_invocation(invocation, stdin_input, options) do
+      _ = dispatch_stderr_from_result(result, options)
 
-    case validate_cwd(options.cwd) do
-      {:error, error_state} ->
+      if RunResult.success?(result) do
+        sync_state(parse_sync_result(result, options), result)
+      else
+        exit_result_state(result, options)
+      end
+    else
+      {:error, error_state} when is_map(error_state) ->
         error_state
 
-      :ok ->
-        exec_options = build_exec_options(options)
-        start_exec(cmd, exec_options, options, stdin_input)
+      {:error, %CoreCommandError{} = error} ->
+        command_error_state(error, options)
     end
   end
 
   defp validate_cwd(cwd) when is_binary(cwd) do
-    case Setup.validate_cwd(cwd) do
-      :ok ->
-        :ok
-
-      {:error, {:cwd_not_found, missing_cwd}} ->
-        {:error, cwd_not_found_state(missing_cwd)}
+    if File.dir?(cwd) do
+      :ok
+    else
+      {:error, cwd_not_found_state(cwd)}
     end
   end
 
@@ -83,13 +64,90 @@ defmodule ClaudeAgentSDK.Process do
 
   defp cwd_not_found_state(cwd) do
     error =
-      %ClaudeAgentSDK.Errors.CLIConnectionError{
+      %Errors.CLIConnectionError{
         message: "Working directory does not exist: #{cwd}",
         cwd: cwd,
         reason: :cwd_not_found
       }
 
-    error_msg = Message.error_result(Exception.message(error), error_struct: error)
+    error_state(Exception.message(error), error)
+  end
+
+  defp build_claude_invocation(args, %Options{} = options) do
+    case CLI.resolve_executable(options) do
+      {:ok, executable} ->
+        _ = CLI.warn_if_outdated()
+
+        {:ok,
+         CoreCommand.new(executable, ensure_json_flags(args),
+           cwd: options.cwd,
+           env: __env_vars__(options),
+           user: options.user
+         )}
+
+      {:error, :not_found} ->
+        error =
+          %Errors.CLINotFoundError{
+            message: "Claude CLI not found. Please install with: #{CLIConfig.install_command()}"
+          }
+
+        {:error, error_state(Exception.message(error), error)}
+    end
+  end
+
+  defp run_claude_invocation(%CoreCommand{} = invocation, stdin_input, %Options{} = options) do
+    timeout_ms = options.timeout_ms || Timeouts.query_total_ms()
+
+    run_opts =
+      [timeout: timeout_ms, stderr: :separate]
+      |> maybe_put_stdin(stdin_input)
+
+    CoreCommand.run(invocation, run_opts)
+  end
+
+  defp maybe_put_stdin(run_opts, nil), do: run_opts
+
+  defp maybe_put_stdin(run_opts, stdin_input) when is_binary(stdin_input),
+    do: Keyword.put(run_opts, :stdin, stdin_input)
+
+  defp command_error_state(
+         %CoreCommandError{reason: {:transport, %CoreTransportError{} = error}},
+         %Options{} = options
+       ) do
+    case ClaudeAgentSDK.Transport.normalize_reason(error) do
+      :timeout ->
+        timeout_state(options)
+
+      :cli_not_found ->
+        not_found =
+          %Errors.CLINotFoundError{
+            message: "Claude CLI not found. Please install with: #{CLIConfig.install_command()}"
+          }
+
+        error_state(Exception.message(not_found), not_found)
+
+      %Errors.CLIJSONDecodeError{} = normalized ->
+        error_state(Exception.message(normalized), normalized)
+
+      normalized ->
+        sdk_error =
+          %Errors.ClaudeSDKError{
+            message: "Failed to execute Claude CLI: #{inspect(normalized)}",
+            cause: error
+          }
+
+        error_state(Exception.message(sdk_error), sdk_error)
+    end
+  end
+
+  defp command_error_state(%CoreCommandError{} = error, _options) do
+    sdk_error = %Errors.ClaudeSDKError{message: Exception.message(error), cause: error}
+    error_state(Exception.message(sdk_error), sdk_error)
+  end
+
+  defp exit_result_state(%RunResult{} = result, %Options{} = options) do
+    formatted_error = format_exit_error_message(result, options)
+    error_msg = process_error_message(formatted_error, result)
 
     %{
       mode: :error,
@@ -99,269 +157,58 @@ defmodule ClaudeAgentSDK.Process do
     }
   end
 
-  defp start_exec(cmd, exec_options, options, nil) do
-    case :exec.run(cmd, exec_options) do
-      {:ok, result} ->
-        _ = dispatch_stderr_from_result(result, options)
+  defp timeout_state(%Options{} = options) do
+    timeout_ms = options.timeout_ms || Timeouts.query_total_ms()
+    timeout_seconds = div(timeout_ms, 1_000)
+    timeout_minutes = div(timeout_seconds, 60)
 
-        %{
-          mode: :sync,
-          result: result,
-          messages: parse_sync_result(result, options),
-          current_index: 0,
-          done: false
-        }
+    timeout_display =
+      if timeout_minutes > 0 do
+        "#{timeout_minutes} minutes"
+      else
+        "#{timeout_seconds} seconds"
+      end
 
-      {:error, reason} ->
-        Logger.error("Failed to start Claude CLI (sync run)",
-          cmd: cmd,
-          reason: reason,
-          env_keys: env_keys(exec_options)
-        )
+    error_msg = Message.error_result("Command timed out after #{timeout_display}")
 
-        formatted_error = format_error_message(reason, options)
-        error_msg = process_error_message(formatted_error, reason)
-
-        %{
-          mode: :error,
-          messages: [error_msg],
-          current_index: 0,
-          done: false
-        }
-    end
+    %{
+      mode: :error,
+      messages: [error_msg],
+      current_index: 0,
+      done: false
+    }
   end
 
-  defp start_exec(cmd, exec_options, options, input) when is_binary(input) do
-    run_with_stdin_erlexec(cmd, input, exec_options, options)
+  defp sync_state(messages, result) when is_list(messages) do
+    %{
+      mode: :sync,
+      result: result,
+      messages: messages,
+      current_index: 0,
+      done: false
+    }
   end
 
-  defp run_with_stdin_erlexec(cmd, input, _exec_options, options) do
-    stdin_exec_options = ExecOptions.erlexec(options)
-
-    case :exec.run(cmd, stdin_exec_options) do
-      {:ok, pid, os_pid} ->
-        # Send the input to stdin
-        :exec.send(pid, input)
-        :exec.send(pid, :eof)
-
-        # Get timeout from options (default: 75 minutes)
-        timeout_ms = options.timeout_ms || Timeouts.query_total_ms()
-
-        Logger.debug("Using timeout for CLI run", timeout_ms: timeout_ms)
-
-        # Collect output until process exits
-        receive_exec_output(pid, os_pid, [], [], "", timeout_ms, options)
-
-      {:error, reason} ->
-        Logger.error("Failed to start Claude CLI (stdin run)",
-          cmd: cmd,
-          reason: reason,
-          env_keys: env_keys(stdin_exec_options)
-        )
-
-        formatted_error = format_error_message(reason, options)
-        error_msg = process_error_message(formatted_error, reason)
-
-        %{
-          mode: :error,
-          messages: [error_msg],
-          current_index: 0,
-          done: false
-        }
-    end
+  defp error_state(message, error_struct) do
+    %{
+      mode: :error,
+      messages: [Message.error_result(message, error_struct: error_struct)],
+      current_index: 0,
+      done: false
+    }
   end
 
-  defp receive_exec_output(
-         pid,
-         os_pid,
-         stdout_acc,
-         stderr_acc,
-         stderr_callback_buffer,
-         timeout_ms,
-         options
-       ) do
-    receive do
-      {:stdout, ^os_pid, data} ->
-        # Check for challenge URL in the output
-        combined_output = [data | stdout_acc] |> Enum.reverse() |> Enum.join()
-
-        if challenge_url = detect_challenge_url(combined_output) do
-          # Challenge URL detected - dump it and terminate
-          IO.puts("\n🔐 Challenge URL detected:")
-          IO.puts("#{challenge_url}")
-          IO.puts("\nTerminating process...")
-
-          # Stop the process
-          :exec.stop(pid)
-
-          # Return a special error message indicating challenge URL was detected
-          error_msg = %Message{
-            type: :result,
-            subtype: :authentication_required,
-            data: %{
-              error: "Authentication challenge detected",
-              challenge_url: challenge_url,
-              session_id: "auth_challenge",
-              is_error: true
-            }
-          }
-
-          %{
-            mode: :error,
-            messages: [error_msg],
-            current_index: 0,
-            done: false
-          }
-        else
-          receive_exec_output(
-            pid,
-            os_pid,
-            [data | stdout_acc],
-            stderr_acc,
-            stderr_callback_buffer,
-            timeout_ms,
-            options
-          )
-        end
-
-      {:stderr, ^os_pid, data} ->
-        stderr_callback_buffer = dispatch_stderr_chunk(data, stderr_callback_buffer, options)
-
-        # Also check stderr for challenge URL
-        combined_output = [data | stderr_acc] |> Enum.reverse() |> Enum.join()
-
-        if challenge_url = detect_challenge_url(combined_output) do
-          # Challenge URL detected - dump it and terminate
-          IO.puts("\n🔐 Challenge URL detected:")
-          IO.puts("#{challenge_url}")
-          IO.puts("\nTerminating process...")
-
-          # Stop the process
-          :exec.stop(pid)
-
-          # Return a special error message indicating challenge URL was detected
-          error_msg = %Message{
-            type: :result,
-            subtype: :authentication_required,
-            data: %{
-              error: "Authentication challenge detected",
-              challenge_url: challenge_url,
-              session_id: "auth_challenge",
-              is_error: true
-            }
-          }
-
-          %{
-            mode: :error,
-            messages: [error_msg],
-            current_index: 0,
-            done: false
-          }
-        else
-          receive_exec_output(
-            pid,
-            os_pid,
-            stdout_acc,
-            [data | stderr_acc],
-            stderr_callback_buffer,
-            timeout_ms,
-            options
-          )
-        end
-
-      {:DOWN, ^os_pid, :process, ^pid, _exit_status} ->
-        _ = flush_stderr_buffer(stderr_callback_buffer, options)
-
-        # Process completed, parse the accumulated output
-        stdout_output = stdout_acc |> Enum.reverse() |> Enum.join()
-        stderr_output = stderr_acc |> Enum.reverse() |> Enum.join()
-
-        stdout_lines = if stdout_output == "", do: [], else: [stdout_output]
-        stderr_lines = if stderr_output == "", do: [], else: [stderr_output]
-
-        result = %{stdout: stdout_lines, stderr: stderr_lines}
-
-        %{
-          mode: :sync,
-          result: result,
-          messages: parse_sync_result(result, options),
-          current_index: 0,
-          done: false
-        }
-    after
-      timeout_ms ->
-        # Timeout - use configured value
-        :exec.stop(pid)
-
-        timeout_seconds = div(timeout_ms, 1000)
-        timeout_minutes = div(timeout_seconds, 60)
-
-        timeout_display =
-          if timeout_minutes > 0 do
-            "#{timeout_minutes} minutes"
-          else
-            "#{timeout_seconds} seconds"
-          end
-
-        error_msg = Message.error_result("Command timed out after #{timeout_display}")
-
-        %{
-          mode: :error,
-          messages: [error_msg],
-          current_index: 0,
-          done: false
-        }
-    end
-  end
-
-  defp dispatch_stderr_from_result(result, %Options{stderr: callback})
+  defp dispatch_stderr_from_result(%RunResult{stderr: stderr}, %Options{stderr: callback})
        when is_function(callback, 1) do
-    stderr_data = get_in(result, [:stderr]) || []
-
-    stderr_data
-    |> Enum.join("")
+    stderr
     |> LineFraming.finalize_trimmed_lines()
     |> dispatch_stderr_lines(callback)
   end
 
   defp dispatch_stderr_from_result(_result, _options), do: :ok
 
-  defp dispatch_stderr_chunk(data, stderr_buffer, %Options{stderr: callback})
-       when is_function(callback, 1) do
-    {lines, stderr_buffer} = LineFraming.consume_trimmed_lines(stderr_buffer, data)
-    dispatch_stderr_lines(lines, callback)
-    stderr_buffer
-  end
-
-  defp dispatch_stderr_chunk(_data, stderr_buffer, _options), do: stderr_buffer
-
-  defp flush_stderr_buffer(stderr_buffer, %Options{stderr: callback})
-       when is_function(callback, 1) do
-    stderr_buffer
-    |> LineFraming.finalize_trimmed_lines()
-    |> dispatch_stderr_lines(callback)
-  end
-
-  defp flush_stderr_buffer(_stderr_buffer, _options), do: :ok
-
   defp dispatch_stderr_lines(lines, callback) when is_function(callback, 1) do
     Enum.each(lines, callback)
-  end
-
-  defp build_claude_command(args, %Options{} = options, _stdin_input) do
-    executable = CLI.resolve_executable!(options)
-    _ = CLI.warn_if_outdated()
-
-    # Ensure proper flags for JSON output
-    final_args = ensure_json_flags(args)
-
-    # Always return the command string format - erlexec handles both cases
-    quoted_args = Enum.map(final_args, &shell_escape/1)
-    Enum.join([executable | quoted_args], " ")
-  end
-
-  defp build_exec_options(options) do
-    ExecOptions.erlexec(options, [:sync, :stdout, :stderr])
   end
 
   defp build_env_vars(%Options{} = options) do
@@ -393,15 +240,12 @@ defmodule ClaudeAgentSDK.Process do
       |> Map.put_new(Env.sdk_version(), version_string())
       |> maybe_put_file_checkpointing_env(options)
 
-    Enum.map(merged, fn {k, v} -> {k, v} end)
+    Map.new(merged)
   end
 
   @doc false
   @spec __env_vars__(Options.t()) :: map()
-  def __env_vars__(%Options{} = options) do
-    build_env_vars(options)
-    |> Map.new()
-  end
+  def __env_vars__(%Options{} = options), do: build_env_vars(options)
 
   defp maybe_put_file_checkpointing_env(env_map, %Options{enable_file_checkpointing: true}) do
     Map.put(env_map, Env.file_checkpointing(), "true")
@@ -418,14 +262,9 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp maybe_put_pwd_env(env_map, nil), do: env_map
+  defp maybe_put_pwd_env(env_map, cwd) when is_binary(cwd), do: Map.put(env_map, "PWD", cwd)
 
-  defp maybe_put_pwd_env(env_map, cwd) when is_binary(cwd) do
-    Map.put(env_map, "PWD", cwd)
-  end
-
-  defp shell_escape(arg) do
-    Shell.escape_arg(arg)
-  end
+  defp shell_escape(arg), do: Shell.escape_arg(arg)
 
   defp version_string do
     case Application.spec(:claude_agent_sdk, :vsn) do
@@ -443,20 +282,11 @@ defmodule ClaudeAgentSDK.Process do
   @doc false
   @spec __parse_output__(String.t(), Options.t()) :: [Message.t()]
   def __parse_output__(output, %Options{} = options \\ %Options{}) when is_binary(output) do
-    parse_sync_result(%{stdout: [output], stderr: []}, options)
+    parse_sync_result(%{stdout: output, stderr: ""}, options)
   end
 
-  defp env_keys(opts) do
-    opts
-    |> Enum.find_value([], fn
-      {:env, env} -> env
-      _ -> nil
-    end)
-    |> Enum.map(fn
-      {key, _} when is_binary(key) -> key
-      {key, _} when is_atom(key) -> Atom.to_string(key)
-      {key, _} -> to_string(key)
-    end)
+  defp build_exec_options(options) do
+    ExecOptions.erlexec(options, [:sync, :stdout, :stderr])
   end
 
   defp ensure_json_flags(args) do
@@ -497,26 +327,21 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp parse_sync_result(result, %Options{} = options) do
-    stdout_data = get_in(result, [:stdout]) || []
-    stderr_data = get_in(result, [:stderr]) || []
+  defp parse_sync_result(%RunResult{} = result, %Options{} = options) do
+    parse_sync_result(%{stdout: result.stdout, stderr: result.stderr}, options)
+  end
 
-    # Combine all output
-    stdout_output = Enum.join(stdout_data)
-    stderr_output = Enum.join(stderr_data)
+  defp parse_sync_result(%{stdout: stdout_data, stderr: stderr_data}, %Options{} = options) do
+    stdout_output = collapse_output(stdout_data)
+    stderr_output = collapse_output(stderr_data)
     combined_text = stdout_output <> stderr_output
 
-    # First check for challenge URL
     case detect_challenge_url(combined_text) do
       nil ->
         output_to_parse = if stdout_output == "", do: stderr_output, else: stdout_output
         parse_sync_lines(output_to_parse, max_buffer_size(options))
 
       challenge_url ->
-        IO.puts("\n🔐 Challenge URL detected:")
-        IO.puts("#{challenge_url}")
-        IO.puts("\nTerminating process...")
-
         [
           %Message{
             type: :result,
@@ -531,6 +356,10 @@ defmodule ClaudeAgentSDK.Process do
         ]
     end
   end
+
+  defp collapse_output(output) when is_binary(output), do: output
+  defp collapse_output(output) when is_list(output), do: Enum.join(output)
+  defp collapse_output(_output), do: ""
 
   defp parse_sync_lines(combined_text, max_buffer_size) do
     combined_text
@@ -556,48 +385,27 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp parse_json_line(line) do
-    result = ClaudeAgentSDK.JSON.decode(line)
-
-    # Debug: Try with OTP :json directly to see actual error
-    case result do
-      {:error, _} ->
-        try do
-          :json.decode(line)
-        rescue
-          e ->
-            Logger.error(
-              "JSON parse failed. Line length: #{String.length(line)}, Error: #{inspect(e)}"
-            )
-        catch
-          kind, error ->
-            Logger.error("JSON parse caught #{kind}: #{inspect(error)}")
-        end
-
-      _ ->
-        :ok
-    end
-
-    case result do
-      {:ok, json_obj} when is_map(json_obj) ->
-        case Message.from_json(line) do
-          {:ok, message} ->
-            {:ok, message}
-
-          {:error, reason} ->
-            {:error, message_parse_error_message(json_obj, reason)}
-        end
-
-      {:ok, _other} ->
-        {:error, json_decode_error_message(line, :not_a_map)}
+    case Message.from_json(line) do
+      {:ok, message} ->
+        {:ok, message}
 
       {:error, reason} ->
-        {:error, json_decode_error_message(line, reason)}
+        case ClaudeAgentSDK.JSON.decode(line) do
+          {:ok, json_obj} when is_map(json_obj) ->
+            {:error, message_parse_error_message(json_obj, reason)}
+
+          {:ok, _other} ->
+            {:error, json_decode_error_message(line, :not_a_map)}
+
+          {:error, decode_reason} ->
+            {:error, json_decode_error_message(line, decode_reason)}
+        end
     end
   end
 
   defp json_decode_error_message(line, original_error) do
     error =
-      %ClaudeAgentSDK.Errors.CLIJSONDecodeError{
+      %Errors.CLIJSONDecodeError{
         message:
           "Failed to decode JSON: #{String.slice(line, 0, Buffers.error_preview_length())}...",
         line: line,
@@ -609,7 +417,7 @@ defmodule ClaudeAgentSDK.Process do
 
   defp buffer_overflow_error_message(line, max_buffer_size) do
     error =
-      %ClaudeAgentSDK.Errors.CLIJSONDecodeError{
+      %Errors.CLIJSONDecodeError{
         message: "JSON message exceeded maximum buffer size of #{max_buffer_size} bytes",
         line: truncate_line(line),
         original_error: {:buffer_overflow, byte_size(line), max_buffer_size}
@@ -631,47 +439,24 @@ defmodule ClaudeAgentSDK.Process do
 
   defp max_buffer_size(_), do: Buffers.max_stdout_buffer_bytes()
 
-  defp process_error_message(formatted_error, reason) do
-    {exit_code, stderr} = extract_process_error_details(reason)
-
+  defp process_error_message(formatted_error, %RunResult{} = result) do
     error =
-      %ClaudeAgentSDK.Errors.ProcessError{
+      %Errors.ProcessError{
         message: formatted_error,
-        exit_code: exit_code,
-        stderr: stderr
+        exit_code: result.exit.code,
+        stderr: blank_to_nil(result.stderr)
       }
 
     Message.error_result(Exception.message(error), error_struct: error)
   end
 
-  defp extract_process_error_details(reason) when is_list(reason) do
-    if Keyword.keyword?(reason) do
-      exit_code =
-        case Keyword.get(reason, :exit_status) do
-          code when is_integer(code) -> code
-          _ -> nil
-        end
-
-      stderr =
-        case Keyword.get(reason, :stderr) do
-          lines when is_list(lines) -> Enum.join(lines, "")
-          other when is_binary(other) -> other
-          _ -> nil
-        end
-
-      {exit_code, stderr}
-    else
-      {nil, nil}
-    end
-  end
-
-  defp extract_process_error_details(_reason) do
-    {nil, nil}
-  end
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
 
   defp message_parse_error_message(data, reason) do
     error =
-      %ClaudeAgentSDK.Errors.MessageParseError{
+      %Errors.MessageParseError{
         message: "Failed to parse CLI message",
         data: data
       }
@@ -679,9 +464,7 @@ defmodule ClaudeAgentSDK.Process do
     Message.error_result(Exception.message(error) <> " (#{inspect(reason)})", error_struct: error)
   end
 
-  defp receive_messages(%{done: true} = state) do
-    {:halt, state}
-  end
+  defp receive_messages(%{done: true} = state), do: {:halt, state}
 
   defp receive_messages(%{mode: :error, messages: [msg], current_index: 0} = state) do
     {[msg], %{state | current_index: 1, done: true}}
@@ -694,7 +477,6 @@ defmodule ClaudeAgentSDK.Process do
       message = Enum.at(messages, idx)
       new_state = %{state | current_index: idx + 1}
 
-      # Check if this is the final message
       if Message.final?(message) do
         {[message], %{new_state | done: true}}
       else
@@ -703,35 +485,20 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp cleanup_process(_state) do
-    :ok
-  end
+  defp cleanup_process(_state), do: :ok
 
-  defp format_error_message(reason, options) do
+  defp format_exit_error_message(%RunResult{} = result, options) do
     cwd_info = if options.cwd, do: " (cwd: #{options.cwd})", else: ""
+    stderr_text = collapse_output(result.stderr)
+    error_details = if stderr_text != "", do: "\nstderr: #{stderr_text}", else: ""
+    formatted_json = format_json_output(collapse_output(result.stdout))
 
-    case reason do
-      [exit_status: status, stdout: stdout_data] when is_list(stdout_data) ->
-        # Extract and format JSON from stdout
-        json_output = Enum.join(stdout_data, "")
-        formatted_json = format_json_output(json_output)
-        "Failed to execute claude#{cwd_info} (exit status: #{status}):\n#{formatted_json}"
+    case result.exit.code do
+      code when is_integer(code) ->
+        "Failed to execute claude#{cwd_info} (exit status: #{code}):\n#{formatted_json}#{error_details}"
 
-      [exit_status: status, stdout: stdout_data, stderr: stderr_data]
-      when is_list(stdout_data) ->
-        # Extract and format JSON from stdout
-        json_output = Enum.join(stdout_data, "")
-        formatted_json = format_json_output(json_output)
-        stderr_text = if is_list(stderr_data), do: Enum.join(stderr_data, ""), else: ""
-        error_details = if stderr_text != "", do: "\nstderr: #{stderr_text}", else: ""
-
-        "Failed to execute claude#{cwd_info} (exit status: #{status}):\n#{formatted_json}#{error_details}"
-
-      [exit_status: status] ->
-        "Failed to execute claude#{cwd_info} (exit status: #{status})"
-
-      other ->
-        "Failed to execute claude#{cwd_info}: #{inspect(other)}"
+      _other ->
+        "Failed to execute claude#{cwd_info}: #{inspect(result.exit.reason)}#{error_details}"
     end
   end
 
@@ -743,41 +510,22 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp format_single_json_line(line) do
-    # Try to parse and pretty print the JSON
     case ClaudeAgentSDK.JSON.decode(line) do
-      {:ok, _parsed} ->
-        # Since we don't have a pretty print encoder, just return the line
-        line
-
-      {:error, _} ->
-        # If parsing fails, return the original line
-        line
+      {:ok, _parsed} -> line
+      {:error, _reason} -> line
     end
   end
 
   @doc false
-  # Detects challenge URLs in CLI output
-  # Common patterns:
-  # - "Please visit: https://console.anthropic.com/..."
-  # - "Open this URL in your browser: https://..."
-  # - "Visit https://console.anthropic.com/challenge/..."
-  # - URLs containing "challenge", "auth", "login", or "verify"
   defp detect_challenge_url(output) do
-    # Define patterns to look for
     patterns = [
-      # Direct URL patterns with common auth/challenge keywords
       ~r/https:\/\/[^\s]*(?:challenge|auth|login|verify|oauth|signin|authenticate)[^\s]*/i,
-      # Console URLs that might be auth-related
       ~r/https:\/\/console\.anthropic\.com\/[^\s]+/i,
-      # URLs preceded by common prompts
       ~r/(?:visit|open|go to|navigate to|click|access)[\s:]+?(https:\/\/[^\s]+)/i,
-      # Any URL in a line containing auth-related keywords
       ~r/(?:authenticate|login|sign in|verify|challenge).*?(https:\/\/[^\s]+)/i,
-      # URLs in JSON that might be auth URLs
       ~r/"(?:url|challenge_url|auth_url|login_url)"[\s:]+?"(https:\/\/[^\s"]+)"/i
     ]
 
-    # Try each pattern
     Enum.find_value(patterns, fn pattern ->
       pattern
       |> Regex.run(output)
@@ -785,7 +533,6 @@ defmodule ClaudeAgentSDK.Process do
     end)
   end
 
-  # Process regex match result
   defp process_regex_match(nil), do: nil
 
   defp process_regex_match([full_match | _captures]) do
@@ -793,16 +540,13 @@ defmodule ClaudeAgentSDK.Process do
     if valid_challenge_url?(url), do: url, else: nil
   end
 
-  # Extract clean URL from a regex match
   defp extract_url_from_match(match) do
-    # If the match contains an URL starting with https://, extract it
     case Regex.run(~r/https:\/\/[^\s"'>\]]+/, match) do
       [url] -> url
       _ -> match
     end
   end
 
-  # Validate that the URL looks like an authentication challenge URL
   defp valid_challenge_url?(url) do
     String.starts_with?(url, "https://") and
       (String.contains?(url, "anthropic.com") or

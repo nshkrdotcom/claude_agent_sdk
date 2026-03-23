@@ -2,6 +2,13 @@
 
 The new transport abstraction lets you decide where the SDK sends control frames. This guide shows how to build, configure, and test a custom transport module.
 
+## Boundary Note
+
+- Common CLI transport ownership lives in `cli_subprocess_core`.
+- `ClaudeAgentSDK.Transport.Erlexec` is now a compatibility facade only.
+- Build a custom `ClaudeAgentSDK.Transport` implementation only when you need a
+  non-common transport family or a deliberate transport override.
+
 ## 1. Implement the Behaviour
 
 Create a module that implements `ClaudeAgentSDK.Transport`:
@@ -114,9 +121,11 @@ For your WebSocket transport write a focused integration test that uses a local 
 
 ## 5. Reference Implementation
 
-See `ClaudeAgentSDK.Transport.Erlexec` for a complete example of a transport module. It demonstrates:
+See `CliSubprocessCore.Transport` for the shared built-in runtime lane and
+`ClaudeAgentSDK.Transport.Erlexec` for the SDK's compatibility facade. The core
+transport owns:
 
-- Subprocess lifecycle management via erlexec
-- Broadcasting messages to subscribers
-- Maintaining connection status
-- Graceful shutdown semantics
+- subprocess lifecycle management
+- subscriber broadcasting
+- connection status
+- shutdown and interrupt semantics

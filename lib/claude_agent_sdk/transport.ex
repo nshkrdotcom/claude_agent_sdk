@@ -10,6 +10,10 @@ defmodule ClaudeAgentSDK.Transport do
   that encapsulate any state required to maintain the connection.
   """
 
+  alias ClaudeAgentSDK.Config.Buffers
+  alias ClaudeAgentSDK.Errors.CLIJSONDecodeError
+  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
+
   @typedoc "Opaque transport reference returned from `start_link/1`."
   @type t :: pid()
 
@@ -73,6 +77,36 @@ defmodule ClaudeAgentSDK.Transport do
 
   @doc false
   @spec normalize_reason(term()) :: term()
+  def normalize_reason({:transport, %CoreTransportError{} = error}), do: normalize_reason(error)
+
+  def normalize_reason(%CoreTransportError{
+        reason: {:buffer_overflow, actual_size, max_size},
+        context: context
+      }) do
+    %CLIJSONDecodeError{
+      message: "JSON message exceeded maximum buffer size of #{max_size} bytes",
+      line: Map.get(context, :preview, "") |> truncate_preview(),
+      original_error: {:buffer_overflow, actual_size, max_size}
+    }
+  end
+
+  def normalize_reason(%CoreTransportError{reason: {:command_not_found, command}})
+      when command in ["claude", "claude-code"],
+      do: :cli_not_found
+
+  def normalize_reason(%CoreTransportError{reason: reason}), do: normalize_reason(reason)
+  def normalize_reason({:command_not_found, "claude-code"}), do: :cli_not_found
   def normalize_reason({:command_not_found, "claude"}), do: :cli_not_found
+  def normalize_reason(:noproc), do: :not_connected
+  def normalize_reason({:call_exit, :noproc}), do: :not_connected
+  def normalize_reason({:transport, :noproc}), do: :not_connected
   def normalize_reason(reason), do: reason
+
+  defp truncate_preview(preview) do
+    if byte_size(preview) > Buffers.error_preview_length() do
+      binary_part(preview, 0, Buffers.error_preview_length()) <> "..."
+    else
+      preview
+    end
+  end
 end

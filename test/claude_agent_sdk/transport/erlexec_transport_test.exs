@@ -1,9 +1,9 @@
 defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
   use ClaudeAgentSDK.SupertesterCase
 
-  alias ClaudeAgentSDK.Errors.CLIJSONDecodeError
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Transport.Erlexec, as: ErlexecTransport
+  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
   test "returns error when command not found" do
     assert {:error, _reason} =
@@ -33,12 +33,32 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
     end
   end
 
-  test "start_link delegates directly to GenServer.start_link without manual linking" do
+  test "start_link delegates directly to the shared core transport" do
     start_link_form = function_form!(ErlexecTransport, :start_link, 1)
 
-    assert contains_remote_call?(start_link_form, GenServer, :start_link)
-    refute contains_local_call?(start_link_form, :start)
+    assert contains_local_call?(start_link_form, :start_core_transport)
+    refute contains_remote_call?(start_link_form, GenServer, :start_link)
     refute contains_remote_call?(start_link_form, Process, :link)
+  end
+
+  test "builds a core command from Options when command is omitted" do
+    script =
+      create_test_script("""
+      while read -r line; do
+        echo "$line"
+      done
+      """)
+
+    {:ok, transport} = ErlexecTransport.start_link(options: %Options{executable: script})
+
+    try do
+      assert :ok = ErlexecTransport.subscribe(transport, self())
+      assert :ok = ErlexecTransport.send(transport, "PING")
+      assert :ok = ErlexecTransport.end_input(transport)
+      assert_receive {:transport_message, "PING"}, 1_000
+    after
+      ErlexecTransport.close(transport)
+    end
   end
 
   test "streams stdout lines to subscribers and routes stderr to callback" do
@@ -77,7 +97,7 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
     ErlexecTransport.close(transport)
   end
 
-  test "emits CLIJSONDecodeError when max_buffer_size is exceeded" do
+  test "emits core transport errors when max_buffer_size is exceeded" do
     options = %Options{max_buffer_size: 10}
 
     script =
@@ -92,13 +112,21 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
 
     :ok = ErlexecTransport.send(transport, String.duplicate("a", 20))
 
-    assert_receive {:transport_error, %CLIJSONDecodeError{message: message}}, 1_000
-    assert message =~ "maximum buffer size"
+    assert_receive {:transport_error,
+                    %CoreTransportError{
+                      reason: {:buffer_overflow, actual_size, max_size},
+                      context: %{preview: preview}
+                    }},
+                   1_000
+
+    assert actual_size == 20
+    assert max_size == 10
+    assert preview == String.duplicate("a", 20)
 
     ErlexecTransport.close(transport)
   end
 
-  test "lazy startup defers subprocess start failures" do
+  test "lazy startup defers subprocess start failures with core exit reasons" do
     Process.flag(:trap_exit, true)
 
     missing_cwd =
@@ -112,7 +140,12 @@ defmodule ClaudeAgentSDK.Transport.ErlexecTransportTest do
                options: %Options{cwd: missing_cwd}
              )
 
-    assert_receive {:EXIT, ^transport, {:cwd_not_found, ^missing_cwd}}, 1_000
+    assert_receive {:EXIT, ^transport,
+                    %CoreTransportError{
+                      reason: {:cwd_not_found, ^missing_cwd},
+                      context: %{cwd: ^missing_cwd}
+                    }},
+                   1_000
   end
 
   test "exec opts include :user when Options.user is set" do

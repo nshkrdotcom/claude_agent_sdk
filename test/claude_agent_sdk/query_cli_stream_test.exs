@@ -1,6 +1,7 @@
 defmodule ClaudeAgentSDK.QueryCLIStreamTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
+  alias ClaudeAgentSDK.Message
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Query.CLIStream
 
@@ -41,10 +42,41 @@ defmodule ClaudeAgentSDK.QueryCLIStreamTest do
     assert "--replay-user-messages" in args_with_flag
   end
 
+  test "default built-in transport uses the shared core transport lane" do
+    script =
+      create_test_script("""
+      echo '{"type":"assistant","message":{"role":"assistant","content":"hello"},"session_id":"sess"}'
+      """)
+
+    stream = CLIStream.stream_args([], %Options{executable: script})
+
+    assert [%Message{type: :assistant}] = Enum.take(stream, 1)
+  end
+
   defp flag_value(args, flag) do
     case Enum.find_index(args, &(&1 == flag)) do
       nil -> nil
       idx -> Enum.at(args, idx + 1)
     end
+  end
+
+  defp create_test_script(body) do
+    dir =
+      Path.join(System.tmp_dir!(), "query_cli_stream_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(dir)
+    path = Path.join(dir, "query_cli_stream_test.sh")
+
+    File.write!(path, """
+    #!/usr/bin/env bash
+    set -euo pipefail
+    #{body}
+    """)
+
+    File.chmod!(path, 0o755)
+
+    ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(dir) end)
+
+    path
   end
 end

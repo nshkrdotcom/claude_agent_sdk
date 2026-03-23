@@ -31,9 +31,7 @@ defmodule ClaudeAgentSDK.Streaming do
       ↓
   CliSubprocessCore.Session
       ↓
-  ClaudeAgentSDK.Transport.Erlexec
-      ↓
-  CliSubprocessCore.Transport.Erlexec
+  CliSubprocessCore.Transport
 
   Control lane:
   Your App
@@ -42,7 +40,9 @@ defmodule ClaudeAgentSDK.Streaming do
       ↓
   ClaudeAgentSDK.Client (SDK-local control family)
       ↓
-  ClaudeAgentSDK.Transport.Erlexec
+  CliSubprocessCore.Transport
+      ↓
+  ClaudeAgentSDK.Transport.Erlexec (compat facade only when explicitly selected)
       ↓
   CliSubprocessCore.Transport.Erlexec
   ```
