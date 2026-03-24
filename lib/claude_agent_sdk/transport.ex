@@ -2,6 +2,11 @@ defmodule ClaudeAgentSDK.Transport do
   @moduledoc """
   Behaviour describing the transport layer used to communicate with the Claude CLI.
 
+  `ClaudeAgentSDK.Transport.Erlexec` remains the Claude-named public
+  compatibility transport entrypoint backed by `CliSubprocessCore.Transport`.
+  The shared core owns subprocess lifecycle; this behaviour defines the
+  Claude-facing surface layered on top.
+
   A transport is responsible for starting and supervising the underlying connection,
   forwarding JSON control/data frames to the CLI, broadcasting replies to subscribers,
   and shutting down cleanly when the client stops.

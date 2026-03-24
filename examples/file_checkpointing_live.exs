@@ -33,7 +33,8 @@ defmodule FileCheckpointingLive do
         max_turns: 3
       }
 
-      {:ok, client} = Client.start_link(options, transport: ClaudeAgentSDK.Transport.Erlexec)
+      # The default client transport already uses the shared core-backed lane.
+      {:ok, client} = Client.start_link(options)
 
       checkpoint_id =
         run_step(
