@@ -217,16 +217,20 @@ ClaudeAgentSDK.query("What is Elixir best known for?", options)
 end)
 ```
 
-For advanced transport lifecycle control, query supports transport injection:
+Query already defaults to the shared core-backed subprocess lane. For advanced
+transport lifecycle control, you can inject the core transport directly:
 
 ```elixir
 ClaudeAgentSDK.query(
   "Hello",
   options,
-  {ClaudeAgentSDK.Transport.Erlexec, [startup_mode: :lazy]}
+  {CliSubprocessCore.Transport, [startup_mode: :lazy]}
 )
 |> Enum.to_list()
 ```
+
+`ClaudeAgentSDK.Transport.Erlexec` remains available when you need the
+Claude-named compatibility transport over that same core lane.
 
 ### Using the OptionBuilder
 

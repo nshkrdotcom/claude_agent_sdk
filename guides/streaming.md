@@ -148,10 +148,12 @@ now emits an explicit `:error_during_execution` result message instead of waitin
 
 ### Custom Transport Injection
 
-You can inject a transport for query flows (module or `{module, opts}` tuple):
+Query flows already use the shared core transport by default. You can inject
+either `CliSubprocessCore.Transport` or the Claude-named compatibility adapter
+when you need explicit transport control:
 
 ```elixir
-ClaudeAgentSDK.query("Hello", %Options{}, {ClaudeAgentSDK.Transport.Erlexec, []})
+ClaudeAgentSDK.query("Hello", %Options{}, {CliSubprocessCore.Transport, []})
 |> Enum.to_list()
 ```
 
@@ -161,10 +163,13 @@ You can also defer subprocess startup with lazy mode:
 ClaudeAgentSDK.query(
   "Hello",
   %Options{},
-  {ClaudeAgentSDK.Transport.Erlexec, [startup_mode: :lazy]}
+  {CliSubprocessCore.Transport, [startup_mode: :lazy]}
 )
 |> Enum.to_list()
 ```
+
+`ClaudeAgentSDK.Transport.Erlexec` accepts the same options when existing code
+needs the Claude-named compatibility surface.
 
 In lazy mode, startup errors can happen after `start_link` succeeds and are delivered as process exits.
 

@@ -167,7 +167,8 @@ SessionStore lifecycle note: persisted session cache is hydrated in a deferred s
 
 ---
 
-If you omit `max_buffer_size`, the SDK enforces a 1MB default across Port, erlexec, and sync process parsing to match Python SDK limits.
+If you omit `max_buffer_size`, the SDK enforces a 1MB default across the
+core-backed transport lane and sync process parsing to match Python SDK limits.
 
 The `stderr` callback is invoked for non-JSON stderr lines across query, client, and streaming session flows.
 
@@ -1036,8 +1037,9 @@ The SDK automatically selects the appropriate transport based on configured feat
 
 ### Transport Startup Mode
 
-`Transport.Erlexec` and `Streaming.Session` support
-`startup_mode: :eager | :lazy` in their start options.
+`CliSubprocessCore.Transport`, `ClaudeAgentSDK.Transport.Erlexec`, and
+`Streaming.Session` support `startup_mode: :eager | :lazy` in their start
+options.
 
 - `:eager` (default): subprocess startup happens in `init/1`
 - `:lazy`: subprocess startup is deferred to `handle_continue/2`
@@ -1046,10 +1048,13 @@ The SDK automatically selects the appropriate transport based on configured feat
 ClaudeAgentSDK.query(
   "Hello",
   %Options{},
-  {ClaudeAgentSDK.Transport.Erlexec, [startup_mode: :lazy]}
+  {CliSubprocessCore.Transport, [startup_mode: :lazy]}
 )
 |> Enum.to_list()
 ```
+
+`ClaudeAgentSDK.Transport.Erlexec` remains the Claude-named compatibility
+adapter over the same transport lane.
 
 In lazy mode, `start_link` can return `{:ok, pid}` before subprocess creation.
 If startup later fails (for example invalid cwd/command), the process exits with the startup reason.
