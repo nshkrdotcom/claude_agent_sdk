@@ -70,7 +70,7 @@ real control APIs remain here:
 
 ## Packaging Boundary
 
-Phase 3 finalizes the Claude release boundary:
+Phase 4 finalizes the Claude release boundary:
 
 - `cli_subprocess_core` remains the required lower dependency for the common
   Claude query and streaming lane
