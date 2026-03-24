@@ -1,6 +1,10 @@
 defmodule ClaudeAgentSDK.Runtime.CLI do
   @moduledoc """
   Session-oriented runtime kit for the shared Claude CLI lane.
+
+  The tagged mailbox event atom is provider-owned adapter detail. Higher-level
+  callers should prefer the projected Claude stream events instead of matching a
+  core session tag directly.
   """
 
   alias ClaudeAgentSDK.{CLI, Options}
@@ -14,6 +18,7 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
   alias CliSubprocessCore.Session, as: CoreSession
 
   @runtime_metadata %{lane: :claude_agent_sdk_common_cli}
+  @default_session_event_tag :claude_agent_sdk_runtime_cli
 
   defmodule ProjectionState do
     @moduledoc """
@@ -143,6 +148,10 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
   @spec capabilities() :: [atom()]
   def capabilities, do: CoreClaude.capabilities()
 
+  @doc false
+  @spec session_event_tag() :: atom()
+  def session_event_tag, do: @default_session_event_tag
+
   @spec new_projection_state(map()) :: ProjectionState.t()
   def new_projection_state(_info \\ %{}) do
     %ProjectionState{}
@@ -213,7 +222,7 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
       subscriber: Keyword.get(runtime_opts, :subscriber),
       metadata: metadata,
       session_event_tag:
-        Keyword.get(runtime_opts, :session_event_tag, :cli_subprocess_core_session),
+        Keyword.get(runtime_opts, :session_event_tag, @default_session_event_tag),
       options: options,
       cwd: options.cwd,
       env: SDKProcess.__env_vars__(options),
@@ -271,28 +280,6 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
   end
 
   defp start_core_session(session_opts) when is_list(session_opts) do
-    ref = make_ref()
-    previous_trap_exit? = Process.flag(:trap_exit, true)
-
-    try do
-      case CoreSession.start_link(Keyword.put(session_opts, :starter, {self(), ref})) do
-        {:ok, session} ->
-          receive do
-            {:cli_subprocess_core_session_started, ^ref, info} ->
-              {:ok, session, info}
-
-            {:EXIT, ^session, reason} ->
-              {:error, reason}
-          after
-            5_000 ->
-              {:error, :session_start_timeout}
-          end
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    after
-      Process.flag(:trap_exit, previous_trap_exit?)
-    end
+    CoreSession.start_link_session(session_opts)
   end
 end

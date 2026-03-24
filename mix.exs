@@ -5,7 +5,6 @@ defmodule ClaudeAgentSdk.MixProject do
   @cli_subprocess_core_requirement "~> 0.1.0"
   @cli_subprocess_core_repo "nshkrdotcom/cli_subprocess_core"
   @cli_subprocess_core_ref "d5f7c5daa810965f60503bd4499c42ca3c4f5574"
-  @workspace_deps_env "NSHKR_WORKSPACE_DEPS"
   @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
   @homepage_url "https://hex.pm/packages/claude_agent_sdk"
   @docs_url "https://hexdocs.pm/claude_agent_sdk"
@@ -290,32 +289,17 @@ defmodule ClaudeAgentSdk.MixProject do
 
   defp workspace_dep(app, path, requirement, opts) do
     {release_opts, dep_opts} = Keyword.split(opts, [:github, :git, :branch, :tag, :ref])
+    expanded_path = Path.expand(path, __DIR__)
 
     cond do
-      use_workspace_deps?() ->
-        {app, Keyword.put(dep_opts, :path, workspace_path!(path))}
+      File.dir?(expanded_path) ->
+        {app, Keyword.put(dep_opts, :path, path)}
 
       hex_packaging?() ->
         {app, requirement, dep_opts}
 
       true ->
         {app, Keyword.merge(dep_opts, release_opts)}
-    end
-  end
-
-  defp use_workspace_deps? do
-    System.get_env(@workspace_deps_env) in ["1", "true", "TRUE"]
-  end
-
-  defp workspace_path!(path) do
-    expanded_path = Path.expand(path, __DIR__)
-
-    if File.dir?(expanded_path) do
-      expanded_path
-    else
-      Mix.raise(
-        "#{@workspace_deps_env}=1 but workspace dependency path does not exist: #{expanded_path}"
-      )
     end
   end
 

@@ -18,8 +18,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   alias ClaudeAgentSDK.Streaming.Termination
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
-  @runtime_event_tag :claude_agent_sdk_runtime_cli
-
   @type subscriber_ref :: reference()
   @type subscriber_pid :: pid()
 
@@ -28,6 +26,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     :runtime_session,
     :runtime_transport,
     :runtime_ref,
+    :runtime_event_tag,
     :runtime_projection_state,
     :runtime_session_monitor_ref,
     :runtime_transport_monitor_ref,
@@ -48,6 +47,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
           runtime_session: pid() | nil,
           runtime_transport: pid() | nil,
           runtime_ref: reference() | nil,
+          runtime_event_tag: atom() | nil,
           runtime_projection_state: CLI.ProjectionState.t() | nil,
           runtime_session_monitor_ref: reference() | nil,
           runtime_transport_monitor_ref: reference() | nil,
@@ -204,9 +204,10 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   @impl true
   def handle_info(
-        {@runtime_event_tag, runtime_ref, {:event, core_event}},
-        %{runtime_ref: runtime_ref} = state
-      ) do
+        {event_tag, runtime_ref, {:event, core_event}},
+        %{runtime_ref: runtime_ref, runtime_event_tag: runtime_event_tag} = state
+      )
+      when event_tag == runtime_event_tag do
     {events, projection_state} = CLI.project_event(core_event, state.runtime_projection_state)
     session_id = projection_state.session_id || extract_session_id(events) || state.session_id
 
@@ -227,6 +228,13 @@ defmodule ClaudeAgentSDK.Streaming.Session do
     else
       {:noreply, state}
     end
+  end
+
+  def handle_info(
+        {_event_tag, runtime_ref, {:event, _core_event}},
+        %{runtime_ref: runtime_ref} = state
+      ) do
+    {:noreply, state}
   end
 
   def handle_info({:mock_stdout, data}, %{mode: :mock} = state) do
@@ -294,6 +302,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   defp init_runtime_session(%Options{} = options, start_opts) do
     runtime_ref = make_ref()
     startup_mode = normalize_startup_mode(Keyword.get(start_opts, :startup_mode, :eager))
+    runtime_event_tag = Keyword.get(start_opts, :session_event_tag, CLI.session_event_tag())
 
     case prevalidate_runtime_start(options) do
       :ok ->
@@ -301,7 +310,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
           [
             options: %{options | include_partial_messages: true},
             subscriber: {self(), runtime_ref},
-            session_event_tag: Keyword.get(start_opts, :session_event_tag, @runtime_event_tag),
+            session_event_tag: runtime_event_tag,
             startup_mode: startup_mode
           ]
           |> maybe_put(:transport_module, Keyword.get(start_opts, :transport_module))
@@ -323,6 +332,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
                | runtime_session: runtime_session,
                  runtime_transport: runtime_transport,
                  runtime_ref: runtime_ref,
+                 runtime_event_tag: Map.get(info, :session_event_tag, runtime_event_tag),
                  runtime_projection_state: projection_state,
                  runtime_session_monitor_ref: Process.monitor(runtime_session),
                  runtime_transport_monitor_ref: maybe_monitor(runtime_transport)
@@ -343,6 +353,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
       runtime_session: nil,
       runtime_transport: nil,
       runtime_ref: nil,
+      runtime_event_tag: nil,
       runtime_projection_state: nil,
       runtime_session_monitor_ref: nil,
       runtime_transport_monitor_ref: nil,

@@ -72,7 +72,10 @@ defmodule SDKMCPExample do
     IO.puts("   Claude CLI: #{cli_path}")
     {:ok, cli_version} = ClaudeAgentSDK.CLI.version()
     IO.puts("   CLI version: #{cli_version}")
-    IO.puts("   NOTE: Client uses Transport.Erlexec -> real CLI (ignores use_mock)")
+
+    IO.puts(
+      "   NOTE: Client uses the Claude-named transport adapter over the shared core -> real CLI (ignores use_mock)"
+    )
 
     # Step 1: Create SDK MCP server with calculator tools
     IO.puts("\n1. Creating SDK MCP server with calculator tools...")
