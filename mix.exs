@@ -4,7 +4,6 @@ defmodule ClaudeAgentSdk.MixProject do
   @version "0.16.0"
   @cli_subprocess_core_requirement "~> 0.1.0"
   @cli_subprocess_core_repo "nshkrdotcom/cli_subprocess_core"
-  @cli_subprocess_core_ref "d5f7c5daa810965f60503bd4499c42ca3c4f5574"
   @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
   @homepage_url "https://hex.pm/packages/claude_agent_sdk"
   @docs_url "https://hexdocs.pm/claude_agent_sdk"
@@ -50,8 +49,7 @@ defmodule ClaudeAgentSdk.MixProject do
         :cli_subprocess_core,
         "../cli_subprocess_core",
         @cli_subprocess_core_requirement,
-        github: @cli_subprocess_core_repo,
-        ref: @cli_subprocess_core_ref
+        github: @cli_subprocess_core_repo
       ),
       {:jason, "~> 1.4"},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
