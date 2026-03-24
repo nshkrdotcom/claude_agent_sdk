@@ -225,7 +225,7 @@ defmodule ClaudeAgentSDK.SessionStoreTest do
   end
 
   defp escaped_sibling_name(storage_dir) do
-    Path.basename(storage_dir) <> "_escaped"
+    Path.basename(storage_dir) <> "_#{System.unique_integer([:positive])}_escaped"
   end
 
   defp assert_eventually(fun, attempts \\ 20)

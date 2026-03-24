@@ -292,11 +292,11 @@ defmodule ClaudeAgentSdk.MixProject do
     expanded_path = Path.expand(path, __DIR__)
 
     cond do
-      File.dir?(expanded_path) ->
-        {app, Keyword.put(dep_opts, :path, path)}
-
       hex_packaging?() ->
         {app, requirement, dep_opts}
+
+      File.dir?(expanded_path) ->
+        {app, Keyword.put(dep_opts, :path, path)}
 
       true ->
         {app, Keyword.merge(dep_opts, release_opts)}

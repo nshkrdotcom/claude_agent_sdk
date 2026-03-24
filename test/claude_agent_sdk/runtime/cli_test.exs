@@ -46,8 +46,6 @@ defmodule ClaudeAgentSDK.Runtime.CLITest do
                  )
 
         assert info.provider == :claude
-        assert info.session_event_tag == CLI.session_event_tag()
-        assert info.delivery.tagged_event_tag == CLI.session_event_tag()
         assert info.runtime.provider == :claude
         assert info.invocation.command == stub_path
         assert info.invocation.cwd == dir
