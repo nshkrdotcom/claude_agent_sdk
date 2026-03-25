@@ -15,6 +15,15 @@ An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python]
 
 > **Note:** This SDK does not bundle the Claude Code CLI. You must install it separately (see [Prerequisites](#prerequisites)).
 
+## Documentation Menu
+
+- `README.md` - installation, quick start, and ownership boundaries
+- `guides/getting-started.md` - first query and streaming flows
+- `guides/configuration.md` - runtime config and defaults
+- `guides/model-configuration.md` - Claude model selection and effort controls
+- `guides/agents.md` - agent and orchestration patterns
+- `guides/testing.md` - local validation workflow
+
 ---
 
 ## What You Can Build
@@ -83,6 +92,30 @@ Phase 4 finalizes the Claude release boundary:
 - the operator publication order remains `cli_subprocess_core`, then
   `claude_agent_sdk`, then
   `agent_session_manager`
+
+## Centralized Model Selection
+
+`claude_agent_sdk` no longer owns active model defaulting or fallback policy.
+That authority lives in `cli_subprocess_core`.
+
+Authoritative core surface:
+
+- `CliSubprocessCore.ModelRegistry.resolve/3`
+- `CliSubprocessCore.ModelRegistry.validate/2`
+- `CliSubprocessCore.ModelRegistry.default_model/2`
+- `CliSubprocessCore.ModelRegistry.build_arg_payload/3`
+
+Claude-side behavior:
+
+- `ClaudeAgentSDK.Options.new/1` ensures `model_payload` and `model` are
+  aligned from the shared core contract
+- `ClaudeAgentSDK.Model.default_model/0` reads the shared core default instead
+  of carrying a local fallback
+- effort gating runs against the resolved model, not mutable app config
+- provider CLI rendering only formats arguments from resolved values
+
+Do not treat repo-local config snapshots as authoritative model policy. The
+shared core registry is the source of truth.
 
 ---
 
