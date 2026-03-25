@@ -284,7 +284,7 @@ defmodule ClaudeAgentSDK.Options do
           executable_args: [String.t()] | nil,
           path_to_claude_code_executable: String.t() | nil,
           abort_ref: reference() | nil,
-          model_payload: CliSubprocessCore.ModelRegistry.Selection.t() | nil,
+          model_payload: CliSubprocessCore.ModelRegistry.selection() | nil,
           model: model_name() | nil,
           fallback_model: model_name() | nil,
           betas: [sdk_beta()] | nil,
