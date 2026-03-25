@@ -97,6 +97,8 @@ defmodule ClaudeAgentSDK.SessionStoreTest do
     escaped_name = escaped_sibling_name(storage_dir)
     escaped_session_id = "../#{escaped_name}"
     escaped_path = sibling_session_path(storage_dir, escaped_name)
+    File.rm_rf(escaped_path)
+    on_exit(fn -> File.rm_rf(escaped_path) end)
 
     refute File.exists?(escaped_path)
 
@@ -110,6 +112,8 @@ defmodule ClaudeAgentSDK.SessionStoreTest do
     escaped_name = escaped_sibling_name(storage_dir)
     escaped_session_id = "../#{escaped_name}"
     escaped_path = sibling_session_path(storage_dir, escaped_name)
+    File.rm_rf(escaped_path)
+    on_exit(fn -> File.rm_rf(escaped_path) end)
 
     File.write!(
       escaped_path,
@@ -128,6 +132,9 @@ defmodule ClaudeAgentSDK.SessionStoreTest do
     escaped_name = escaped_sibling_name(storage_dir)
     escaped_session_id = "../#{escaped_name}"
     escaped_path = sibling_session_path(storage_dir, escaped_name)
+    File.rm_rf(escaped_path)
+    on_exit(fn -> File.rm_rf(escaped_path) end)
+
     File.write!(escaped_path, "{}")
 
     assert {:error, :invalid_session_id} = SessionStore.delete_session(escaped_session_id)

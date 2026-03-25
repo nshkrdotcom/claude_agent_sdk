@@ -1,10 +1,6 @@
 defmodule ClaudeAgentSDK.ModelTest do
   @moduledoc """
-  Tests for config-driven Model validation and normalization.
-
-  Tests verify that the Model module reads its registry from application
-  config rather than compile-time module attributes, enabling runtime
-  model additions without recompilation.
+  Tests for core-backed Model validation and normalization.
   """
   use ClaudeAgentSDK.SupertesterCase
 
@@ -40,32 +36,16 @@ defmodule ClaudeAgentSDK.ModelTest do
       assert {:error, :invalid_model} = Model.validate("")
     end
 
-    test "does not extend the model registry from app config overlays" do
-      original = Application.get_env(:claude_agent_sdk, :models)
-
-      try do
-        custom =
-          Map.put(
-            original,
-            :full_ids,
-            Map.put(original.full_ids, "custom-model-1", "custom-model-1")
-          )
-
-        Application.put_env(:claude_agent_sdk, :models, custom)
-
-        assert {:error, :invalid_model} = Model.validate("custom-model-1")
-      after
-        Application.put_env(:claude_agent_sdk, :models, original)
-      end
+    test "does not extend the model registry outside the shared core catalog" do
+      assert {:error, :invalid_model} = Model.validate("custom-model-1")
     end
   end
 
   # ── default_model/0 ────────────────────────────────────────────────
 
   describe "default_model/0" do
-    test "returns the configured default" do
-      config = Application.get_env(:claude_agent_sdk, :models)
-      assert Model.default_model() == config.default
+    test "returns the shared core default" do
+      assert Model.default_model() == "opus"
     end
 
     test "default is a valid model" do
@@ -131,23 +111,8 @@ defmodule ClaudeAgentSDK.ModelTest do
       end
     end
 
-    test "ignores runtime config changes outside the core catalog" do
-      original = Application.get_env(:claude_agent_sdk, :models)
-
-      try do
-        custom =
-          Map.put(
-            original,
-            :full_ids,
-            Map.put(original.full_ids, "runtime-added", "runtime-added")
-          )
-
-        Application.put_env(:claude_agent_sdk, :models, custom)
-
-        refute "runtime-added" in Model.list_models()
-      after
-        Application.put_env(:claude_agent_sdk, :models, original)
-      end
+    test "ignores models outside the shared core catalog" do
+      refute "runtime-added" in Model.list_models()
     end
   end
 

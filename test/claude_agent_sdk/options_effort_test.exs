@@ -167,15 +167,13 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert "--effort" in args
     end
 
-    test "resolves the configured default model when gating :max" do
-      original = Application.get_env(:claude_agent_sdk, :models)
-      Application.put_env(:claude_agent_sdk, :models, %{original | default: "sonnet"})
-
-      on_exit(fn ->
-        Application.put_env(:claude_agent_sdk, :models, original)
-      end)
-
-      opts = Options.new(effort: :max, model: nil)
+    test "uses the resolved payload model when gating :max" do
+      opts =
+        Options.new(
+          effort: :max,
+          model: nil,
+          model_payload: resolved_payload!("sonnet")
+        )
 
       log =
         capture_log(fn ->
@@ -186,15 +184,13 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert log =~ "only supported on Opus"
     end
 
-    test "resolves the configured default model when gating Haiku effort" do
-      original = Application.get_env(:claude_agent_sdk, :models)
-      Application.put_env(:claude_agent_sdk, :models, %{original | default: "haiku"})
-
-      on_exit(fn ->
-        Application.put_env(:claude_agent_sdk, :models, original)
-      end)
-
-      opts = Options.new(effort: :high, model: nil)
+    test "uses the resolved payload model when gating Haiku effort" do
+      opts =
+        Options.new(
+          effort: :high,
+          model: nil,
+          model_payload: resolved_payload!("haiku")
+        )
 
       log =
         capture_log(fn ->
@@ -204,5 +200,10 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
 
       assert log =~ "not supported for Haiku"
     end
+  end
+
+  defp resolved_payload!(model) do
+    {:ok, payload} = CliSubprocessCore.ModelRegistry.build_arg_payload(:claude, model, [])
+    payload
   end
 end

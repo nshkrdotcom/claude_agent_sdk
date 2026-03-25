@@ -72,9 +72,9 @@ defmodule ClaudeAgentSDK.Options do
 
   """
 
-  alias CliSubprocessCore.ModelRegistry
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Model
+  alias CliSubprocessCore.ModelRegistry
 
   @valid_efforts [:low, :medium, :high, :max]
 
@@ -429,25 +429,12 @@ defmodule ClaudeAgentSDK.Options do
     {:standard, format}
   end
 
-  defp normalize_output_format("text"), do: {:standard, :text}
-  defp normalize_output_format("json"), do: {:standard, :json}
-  defp normalize_output_format("stream-json"), do: {:standard, :stream_json}
-  defp normalize_output_format("stream_json"), do: {:standard, :stream_json}
-
   defp normalize_output_format({:json_schema, schema}) when is_map(schema) do
     {:json_schema, schema, :json}
   end
 
-  defp normalize_output_format({:json_schema, _schema}) do
-    raise ArgumentError, "structured output_format schema must be a map"
-  end
-
   defp normalize_output_format(%{} = config) do
     normalize_structured_output_config(config)
-  end
-
-  defp normalize_output_format(other) when is_binary(other) do
-    raise ArgumentError, "Unsupported output_format: #{inspect(other)}"
   end
 
   defp normalize_output_format(other) do
@@ -889,14 +876,8 @@ defmodule ClaudeAgentSDK.Options do
     Enum.reduce(directories, args, fn dir, acc -> acc ++ ["--add-dir", dir] end)
   end
 
-  defp add_dir_args(args, %{add_dir: add_dir}) do
-    add_dir_args(args, %{add_dir: add_dir, add_dirs: nil})
-  end
-
   defp append_directories(list, nil), do: list
   defp append_directories(list, dirs) when is_list(dirs), do: list ++ dirs
-
-  defp append_directories(list, dir) when is_binary(dir), do: list ++ [dir]
 
   defp add_strict_mcp_args(args, %{strict_mcp_config: true}), do: args ++ ["--strict-mcp-config"]
   defp add_strict_mcp_args(args, _), do: args
@@ -917,8 +898,6 @@ defmodule ClaudeAgentSDK.Options do
       end
     end)
   end
-
-  defp add_plugins_args(args, _), do: args
 
   defp add_effort_args(args, %{effort: nil}), do: args
 
@@ -1050,8 +1029,6 @@ defmodule ClaudeAgentSDK.Options do
       end
     end)
   end
-
-  defp add_extra_args(args, _), do: args
 
   @doc false
   @spec validate_effort!(atom() | nil) :: :ok

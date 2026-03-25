@@ -18,8 +18,11 @@ defmodule ClaudeAgentSDK.Model do
   @spec default_model() :: String.t()
   def default_model do
     case ModelRegistry.default_model(:claude) do
-      {:ok, model} -> model
-      {:error, _reason} -> "opus"
+      {:ok, model} ->
+        model
+
+      {:error, reason} ->
+        raise ArgumentError, "claude model registry default_model failed: #{inspect(reason)}"
     end
   end
 

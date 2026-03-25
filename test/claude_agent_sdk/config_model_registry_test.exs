@@ -42,9 +42,9 @@ defmodule ClaudeAgentSDK.Config.ModelRegistryTest do
       assert Map.has_key?(models.full_ids, "claude-haiku-4-5-20251001")
     end
 
-    test "default model is opus" do
+    test "default model matches the shared core default" do
       models = Application.get_env(:claude_agent_sdk, :models)
-      assert models.default == "opus"
+      assert models.default == ClaudeAgentSDK.Model.default_model()
     end
   end
 end
