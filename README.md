@@ -724,3 +724,9 @@ MIT License - see [LICENSE](LICENSE) for details.
 <div align="center">
   <sub>Built with Elixir and Claude</sub>
 </div>
+
+## Model Selection Contract
+
+`/home/home/p/g/n/claude_agent_sdk` no longer owns active model-selection policy. Model catalog visibility, defaulting, validation, and failure semantics are owned by `/home/home/p/g/n/cli_subprocess_core` through `CliSubprocessCore.ModelRegistry.resolve/3`, `CliSubprocessCore.ModelRegistry.validate/2`, and `CliSubprocessCore.ModelRegistry.default_model/2`.
+
+The Claude SDK now treats model values as resolved payload data and limits its responsibility to option shaping and command rendering.

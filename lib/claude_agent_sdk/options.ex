@@ -72,6 +72,7 @@ defmodule ClaudeAgentSDK.Options do
 
   """
 
+  alias CliSubprocessCore.ModelRegistry
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Model
 
@@ -109,6 +110,7 @@ defmodule ClaudeAgentSDK.Options do
     :abort_ref,
     # New fields for v0.1.0
     # Model selection ("opus", "sonnet", "haiku", or full name)
+    :model_payload,
     :model,
     # Fallback model when primary is busy
     :fallback_model,
@@ -282,6 +284,7 @@ defmodule ClaudeAgentSDK.Options do
           executable_args: [String.t()] | nil,
           path_to_claude_code_executable: String.t() | nil,
           abort_ref: reference() | nil,
+          model_payload: CliSubprocessCore.ModelRegistry.Selection.t() | nil,
           model: model_name() | nil,
           fallback_model: model_name() | nil,
           betas: [sdk_beta()] | nil,
@@ -336,7 +339,9 @@ defmodule ClaudeAgentSDK.Options do
   @spec new(keyword()) :: t()
   def new(attrs \\ []) do
     validate_effort!(Keyword.get(attrs, :effort))
+
     struct(__MODULE__, attrs)
+    |> ensure_model_payload!()
   end
 
   @doc """
@@ -360,6 +365,7 @@ defmodule ClaudeAgentSDK.Options do
   @spec to_args(t()) :: [String.t()]
   def to_args(%__MODULE__{} = options) do
     validate_effort!(options.effort)
+    options = ensure_model_payload!(options)
 
     []
     |> add_output_format_args(options)
@@ -825,8 +831,12 @@ defmodule ClaudeAgentSDK.Options do
   defp add_verbose_args(args, %{verbose: true}), do: args ++ ["--verbose"]
   defp add_verbose_args(args, _), do: args
 
-  defp add_model_args(args, %{model: nil}), do: args
-  defp add_model_args(args, %{model: model}), do: args ++ ["--model", model]
+  defp add_model_args(args, options) do
+    case resolved_model(options) do
+      nil -> args
+      model -> args ++ ["--model", model]
+    end
+  end
 
   defp add_fallback_model_args(args, %{fallback_model: nil}), do: args
 
@@ -941,8 +951,9 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   @spec effective_effort_model(t()) :: model_name()
-  defp effective_effort_model(%__MODULE__{model: nil}), do: Model.default_model()
-  defp effective_effort_model(%__MODULE__{model: model}), do: model
+  defp effective_effort_model(%__MODULE__{} = options) do
+    resolved_model(options) || Model.default_model()
+  end
 
   @haiku_patterns ["haiku", "claude-haiku"]
 
@@ -959,6 +970,28 @@ defmodule ClaudeAgentSDK.Options do
     downcased = String.downcase(model)
     Enum.any?(@opus_patterns, &String.contains?(downcased, &1))
   end
+
+  @doc false
+  @spec ensure_model_payload!(t()) :: t()
+  def ensure_model_payload!(%__MODULE__{model_payload: payload} = options) when is_map(payload) do
+    %{options | model: resolved_model(options) || options.model}
+  end
+
+  def ensure_model_payload!(%__MODULE__{} = options) do
+    case ModelRegistry.build_arg_payload(:claude, options.model, []) do
+      {:ok, payload} ->
+        %{options | model_payload: payload, model: payload.resolved_model}
+
+      {:error, reason} ->
+        raise ArgumentError, "model resolution failed for :claude: #{inspect(reason)}"
+    end
+  end
+
+  defp resolved_model(%__MODULE__{model_payload: payload}) when is_map(payload) do
+    Map.get(payload, :resolved_model, Map.get(payload, "resolved_model"))
+  end
+
+  defp resolved_model(%__MODULE__{model: model}), do: model
 
   # Thinking config takes precedence over raw max_thinking_tokens.
   # Resolution: thinking.type :enabled -> budget_tokens, :adaptive -> fallback or 32000,

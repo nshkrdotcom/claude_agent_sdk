@@ -1,172 +1,64 @@
 defmodule ClaudeAgentSDK.Model do
   @moduledoc """
-  Config-driven model validation and normalization.
-
-  All known models are read at runtime from application config, so new
-  models can be added without recompilation.
-
-  ## Configuration
-
-  Models are configured in `config/config.exs` (or any environment overlay):
-
-      config :claude_agent_sdk, :models, %{
-        short_forms: %{
-          "opus"       => "opus",
-          "sonnet"     => "sonnet",
-          "haiku"      => "haiku",
-          "opus[1m]"   => "opus[1m]",
-          "sonnet[1m]" => "sonnet[1m]"
-        },
-        full_ids: %{
-          "claude-opus-4-6"            => "claude-opus-4-6",
-          "claude-sonnet-4-6"          => "claude-sonnet-4-6",
-          "claude-haiku-4-5-20251001"  => "claude-haiku-4-5-20251001",
-          "claude-opus-4-6[1m]"        => "claude-opus-4-6[1m]",
-          "claude-sonnet-4-6[1m]"      => "claude-sonnet-4-6[1m]"
-        },
-        default: "opus"
-      }
-
-  SDK consumers can add custom models at runtime:
-
-      config = Application.get_env(:claude_agent_sdk, :models)
-      updated = Map.update!(config, :full_ids, &Map.put(&1, "my-custom-model", "my-custom-model"))
-      Application.put_env(:claude_agent_sdk, :models, updated)
-
-  See the **Model Configuration** guide for details.
-
-  ## Examples
-
-      iex> ClaudeAgentSDK.Model.validate("opus")
-      {:ok, "opus"}
-
-      iex> ClaudeAgentSDK.Model.validate("invalid")
-      {:error, :invalid_model}
-
-      iex> "opus" in ClaudeAgentSDK.Model.list_models()
-      true
-
-      iex> ClaudeAgentSDK.Model.suggest("opuss")
-      ["opus"]
+  Core-backed Claude model helpers.
   """
 
-  @doc """
-  Returns the merged map of all known models (short forms + full IDs).
-  """
+  alias CliSubprocessCore.{ModelCatalog, ModelRegistry}
+
   @spec known_models() :: %{String.t() => String.t()}
   def known_models do
-    config = Application.get_env(:claude_agent_sdk, :models, %{})
-
-    Map.merge(
-      Map.get(config, :short_forms, %{}),
-      Map.get(config, :full_ids, %{})
-    )
+    catalog_entries()
+    |> Enum.reduce(%{}, fn {id, aliases}, acc ->
+      acc
+      |> Map.put(id, id)
+      |> Map.merge(Map.new(aliases, &{&1, &1}))
+    end)
   end
 
-  @doc """
-  Returns the configured default model name.
-  """
   @spec default_model() :: String.t()
   def default_model do
-    config = Application.get_env(:claude_agent_sdk, :models, %{})
-    Map.get(config, :default, "opus")
-  end
-
-  @doc """
-  Returns the list of configured short-form aliases.
-  """
-  @spec short_forms() :: [String.t()]
-  def short_forms do
-    config = Application.get_env(:claude_agent_sdk, :models, %{})
-    config |> Map.get(:short_forms, %{}) |> Map.keys() |> Enum.sort()
-  end
-
-  @doc """
-  Returns the list of configured full model identifiers.
-  """
-  @spec full_ids() :: [String.t()]
-  def full_ids do
-    config = Application.get_env(:claude_agent_sdk, :models, %{})
-    config |> Map.get(:full_ids, %{}) |> Map.keys() |> Enum.sort()
-  end
-
-  @doc """
-  Validates and normalizes a model name.
-
-  Accepts both short forms (e.g., `"opus"`) and full model identifiers.
-  Returns the normalized value on success.
-
-  ## Examples
-
-      iex> ClaudeAgentSDK.Model.validate("opus")
-      {:ok, "opus"}
-
-      iex> ClaudeAgentSDK.Model.validate("sonnet")
-      {:ok, "sonnet"}
-
-      iex> ClaudeAgentSDK.Model.validate("invalid-model")
-      {:error, :invalid_model}
-
-      iex> ClaudeAgentSDK.Model.validate(nil)
-      {:error, :invalid_model}
-
-      iex> ClaudeAgentSDK.Model.validate("")
-      {:error, :invalid_model}
-  """
-  @spec validate(String.t() | nil) :: {:ok, String.t()} | {:error, :invalid_model}
-  def validate(model) when is_binary(model) and model != "" do
-    case Map.get(known_models(), model) do
-      nil -> {:error, :invalid_model}
-      normalized -> {:ok, normalized}
+    case ModelRegistry.default_model(:claude) do
+      {:ok, model} -> model
+      {:error, _reason} -> "opus"
     end
   end
 
-  def validate(_), do: {:error, :invalid_model}
-
-  @doc """
-  Returns a sorted list of all known model names.
-
-  The list includes both short forms and full model identifiers.
-
-  ## Examples
-
-      iex> models = ClaudeAgentSDK.Model.list_models()
-      iex> "opus" in models
-      true
-
-      iex> models = ClaudeAgentSDK.Model.list_models()
-      iex> models == Enum.sort(models)
-      true
-  """
-  @spec list_models() :: [String.t()]
-  def list_models do
-    known_models()
-    |> Map.keys()
+  @spec short_forms() :: [String.t()]
+  def short_forms do
+    catalog_entries()
+    |> Enum.map(fn {id, _aliases} -> id end)
     |> Enum.sort()
   end
 
-  @doc """
-  Suggests similar model names for an invalid input.
+  @spec full_ids() :: [String.t()]
+  def full_ids do
+    catalog_entries()
+    |> Enum.flat_map(fn {_id, aliases} ->
+      Enum.filter(aliases, &String.starts_with?(&1, "claude-"))
+    end)
+    |> Enum.sort()
+  end
 
-  Uses Jaro distance algorithm to find models with similarity > 0.7.
-  Returns up to 3 suggestions, sorted by similarity (highest first).
+  @spec validate(String.t() | nil) :: {:ok, String.t()} | {:error, :invalid_model}
+  def validate(model) when is_binary(model) and model != "" do
+    case ModelRegistry.validate(:claude, model) do
+      {:ok, _model} -> {:ok, model}
+      {:error, _reason} -> {:error, :invalid_model}
+    end
+  end
 
-  ## Examples
+  def validate(_model), do: {:error, :invalid_model}
 
-      iex> ClaudeAgentSDK.Model.suggest("opuss")
-      ["opus"]
+  @spec list_models() :: [String.t()]
+  def list_models do
+    (short_forms() ++ full_ids())
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
 
-      iex> ClaudeAgentSDK.Model.suggest("completely-unrelated-xyz123")
-      []
-
-      iex> suggestions = ClaudeAgentSDK.Model.suggest("claude")
-      iex> length(suggestions) <= 3
-      true
-  """
   @spec suggest(String.t()) :: [String.t()]
   def suggest(invalid_model) when is_binary(invalid_model) do
-    known_models()
-    |> Map.keys()
+    list_models()
     |> Enum.map(fn model ->
       {model, String.jaro_distance(invalid_model, model)}
     end)
@@ -176,5 +68,15 @@ defmodule ClaudeAgentSDK.Model do
     |> Enum.map(fn {model, _distance} -> model end)
   end
 
-  def suggest(_), do: []
+  def suggest(_invalid_model), do: []
+
+  defp catalog_entries do
+    case ModelCatalog.load(:claude) do
+      {:ok, catalog} ->
+        Enum.map(catalog.models, fn model -> {model.id, model.aliases} end)
+
+      {:error, _reason} ->
+        []
+    end
+  end
 end

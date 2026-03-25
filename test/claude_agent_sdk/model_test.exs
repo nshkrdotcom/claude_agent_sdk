@@ -40,11 +40,10 @@ defmodule ClaudeAgentSDK.ModelTest do
       assert {:error, :invalid_model} = Model.validate("")
     end
 
-    test "validates models added at runtime via config overlay" do
+    test "does not extend the model registry from app config overlays" do
       original = Application.get_env(:claude_agent_sdk, :models)
 
       try do
-        # Add a custom model at runtime
         custom =
           Map.put(
             original,
@@ -54,7 +53,7 @@ defmodule ClaudeAgentSDK.ModelTest do
 
         Application.put_env(:claude_agent_sdk, :models, custom)
 
-        assert {:ok, "custom-model-1"} = Model.validate("custom-model-1")
+        assert {:error, :invalid_model} = Model.validate("custom-model-1")
       after
         Application.put_env(:claude_agent_sdk, :models, original)
       end
@@ -132,7 +131,7 @@ defmodule ClaudeAgentSDK.ModelTest do
       end
     end
 
-    test "reflects runtime config changes" do
+    test "ignores runtime config changes outside the core catalog" do
       original = Application.get_env(:claude_agent_sdk, :models)
 
       try do
@@ -145,7 +144,7 @@ defmodule ClaudeAgentSDK.ModelTest do
 
         Application.put_env(:claude_agent_sdk, :models, custom)
 
-        assert "runtime-added" in Model.list_models()
+        refute "runtime-added" in Model.list_models()
       after
         Application.put_env(:claude_agent_sdk, :models, original)
       end
