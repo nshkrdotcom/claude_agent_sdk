@@ -7,8 +7,9 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
   import Kernel, except: [send: 2]
 
   @behaviour ClaudeAgentSDK.Transport
+  @event_tag :claude_agent_sdk_transport
 
-  defstruct subscribers: MapSet.new(),
+  defstruct subscribers: %{},
             messages: [],
             status: :connected,
             test_pid: nil
@@ -46,6 +47,11 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
   end
 
   @impl ClaudeAgentSDK.Transport
+  def subscribe(transport, pid, tag) do
+    GenServer.call(transport, {:subscribe, pid, tag})
+  end
+
+  @impl ClaudeAgentSDK.Transport
   def close(transport) do
     GenServer.stop(transport, :normal)
   end
@@ -76,10 +82,18 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
     {:reply, :ok, %{state | messages: [message | state.messages]}}
   end
 
-  def handle_call({:subscribe, pid}, _from, state) do
+  def handle_call({:subscribe, pid}, from, state) do
+    handle_call({:subscribe, pid, :legacy}, from, state)
+  end
+
+  def handle_call({:subscribe, pid, tag}, _from, state) do
     Process.monitor(pid)
-    if state.test_pid, do: Kernel.send(state.test_pid, {:mock_transport_subscribed, pid})
-    {:reply, :ok, %{state | subscribers: MapSet.put(state.subscribers, pid)}}
+
+    if state.test_pid do
+      Kernel.send(state.test_pid, {:mock_transport_subscribed, {pid, tag}})
+    end
+
+    {:reply, :ok, %{state | subscribers: Map.put(state.subscribers, pid, tag)}}
   end
 
   def handle_call(:status, _from, state) do
@@ -97,8 +111,8 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
 
   @impl GenServer
   def handle_cast({:push, payload}, state) do
-    Enum.each(state.subscribers, fn pid ->
-      Kernel.send(pid, {:transport_message, payload})
+    Enum.each(state.subscribers, fn {pid, tag} ->
+      dispatch_event(pid, tag, {:message, payload})
     end)
 
     {:noreply, state}
@@ -106,6 +120,14 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
 
   @impl GenServer
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
+    {:noreply, %{state | subscribers: Map.delete(state.subscribers, pid)}}
+  end
+
+  defp dispatch_event(pid, :legacy, {:message, payload}) do
+    Kernel.send(pid, {:transport_message, payload})
+  end
+
+  defp dispatch_event(pid, ref, event) when is_reference(ref) do
+    Kernel.send(pid, {@event_tag, ref, event})
   end
 end

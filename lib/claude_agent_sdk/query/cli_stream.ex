@@ -22,8 +22,10 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   alias ClaudeAgentSDK.Config.{Buffers, Timeouts}
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias CliSubprocessCore.Command, as: CoreCommand
+  alias CliSubprocessCore.Transport, as: CoreTransport
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
+  @transport_event_tag :claude_agent_sdk_transport
   @type transport_spec :: module() | {module(), keyword()} | nil
 
   @doc """
@@ -103,7 +105,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       |> Keyword.put_new(:options, options)
       |> maybe_put_event_tag(module)
 
-    transport_ref = make_ref()
+    transport_ref = transport_subscription_ref(module)
     transport_opts = maybe_put_bootstrap_subscriber(module, transport_opts, transport_ref)
 
     with {:ok, transport_opts} <- maybe_put_cli_command(module, transport_opts, options),
@@ -239,35 +241,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       {:DOWN, monitor_ref, :process, _pid, reason} ->
         maybe_handle_input_task_down(state, monitor_ref, reason)
 
-      {:claude_agent_sdk_transport, ref, {:message, line}}
-      when ref == state.transport_ref and is_binary(line) ->
-        handle_line(line, state)
-
-      {:claude_agent_sdk_transport, ref, {:error, error}} when ref == state.transport_ref ->
-        handle_transport_error(error, state)
-
-      {:claude_agent_sdk_transport, ref, {:stderr, _data}} when ref == state.transport_ref ->
-        receive_next(state)
-
-      {:claude_agent_sdk_transport, ref, {:exit, _reason}} when ref == state.transport_ref ->
-        if process_running?(state.transport) do
-          receive_next(state)
-        else
-          {:halt, %{state | done?: true}}
-        end
-
-      {:transport_message, line} when is_binary(line) ->
-        handle_line(line, state)
-
-      {:transport_error, error} ->
-        handle_transport_error(error, state)
-
-      {:transport_exit, _reason} ->
-        if process_running?(state.transport) do
-          receive_next(state)
-        else
-          {:halt, %{state | done?: true}}
-        end
+      message ->
+        handle_transport_mailbox_message(message, state)
     after
       Timeouts.stream_receive_ms() ->
         if process_running?(state.transport) do
@@ -400,7 +375,10 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp drain_stale_transport_messages do
     receive do
-      {:claude_agent_sdk_transport, _ref, _event} ->
+      {@transport_event_tag, _ref, _event} ->
+        drain_stale_transport_messages()
+
+      {:transport_stderr, _data} ->
         drain_stale_transport_messages()
 
       {:transport_message, _line} ->
@@ -419,7 +397,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp flush_transport_messages(ref) when is_reference(ref) do
     receive do
-      {:claude_agent_sdk_transport, ^ref, _event} ->
+      {@transport_event_tag, ^ref, _event} ->
         flush_transport_messages(ref)
     after
       0 ->
@@ -428,6 +406,32 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp flush_transport_messages(_), do: :ok
+
+  defp handle_transport_mailbox_message(message, state) do
+    case extract_transport_event(message, state.transport_ref) do
+      {:ok, {:message, line}} ->
+        handle_line(line, state)
+
+      {:ok, {:error, error}} ->
+        handle_transport_error(error, state)
+
+      {:ok, {:stderr, _chunk}} ->
+        receive_next(state)
+
+      {:ok, {:exit, _reason}} ->
+        if process_running?(state.transport) do
+          receive_next(state)
+        else
+          {:halt, %{state | done?: true}}
+        end
+
+      {:ok, {:data, _chunk}} ->
+        receive_next(state)
+
+      :error ->
+        receive_next(state)
+    end
+  end
 
   defp await_down_or_shutdown(ref, transport, timeout_ms) do
     case ProcessSupport.await_down(ref, transport, timeout_ms) do
@@ -488,7 +492,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp subscribe_transport(module, transport_pid, transport_ref) do
     cond do
-      function_exported?(module, :subscribe, 3) ->
+      is_reference(transport_ref) and function_exported?(module, :subscribe, 3) ->
         module.subscribe(transport_pid, self(), transport_ref)
 
       function_exported?(module, :subscribe, 2) ->
@@ -500,7 +504,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp maybe_put_bootstrap_subscriber(module, transport_opts, transport_ref) do
-    if built_in_transport_module?(module) do
+    if built_in_transport_module?(module) and is_reference(transport_ref) do
       Keyword.put_new(transport_opts, :subscriber, {self(), transport_ref})
     else
       transport_opts
@@ -510,7 +514,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp maybe_put_event_tag(transport_opts, module)
        when is_list(transport_opts) and is_atom(module) do
     if built_in_transport_module?(module) do
-      Keyword.put_new(transport_opts, :event_tag, :claude_agent_sdk_transport)
+      Keyword.put_new(transport_opts, :event_tag, @transport_event_tag)
     else
       transport_opts
     end
@@ -518,6 +522,28 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
   defp process_running?(_pid), do: false
+
+  defp transport_subscription_ref(module) when is_atom(module) do
+    if function_exported?(module, :subscribe, 3), do: make_ref(), else: nil
+  end
+
+  defp extract_transport_event(message, transport_ref) when is_reference(transport_ref) do
+    CoreTransport.extract_event(message, transport_ref)
+  end
+
+  defp extract_transport_event({:transport_message, line}, _transport_ref) when is_binary(line),
+    do: {:ok, {:message, line}}
+
+  defp extract_transport_event({:transport_error, error}, _transport_ref),
+    do: {:ok, {:error, error}}
+
+  defp extract_transport_event({:transport_stderr, data}, _transport_ref),
+    do: {:ok, {:stderr, data}}
+
+  defp extract_transport_event({:transport_exit, reason}, _transport_ref),
+    do: {:ok, {:exit, reason}}
+
+  defp extract_transport_event(message, _transport_ref), do: CoreTransport.extract_event(message)
 
   defp transport_error_struct(%Errors.CLIJSONDecodeError{} = error), do: error
   defp transport_error_struct(%Errors.CLIConnectionError{} = error), do: error

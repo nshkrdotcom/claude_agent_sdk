@@ -109,7 +109,8 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
     task = Task.async(fn -> Enum.take(stream, 1) end)
 
     assert_receive {:mock_transport_started, transport}, 1_000
-    assert_receive {:mock_transport_subscribed, _pid}, 1_000
+    assert_receive {:mock_transport_subscribed, {_pid, ref}}, 1_000
+    assert is_reference(ref)
     assert_receive {:mock_transport_send, sent_prompt}, 1_000
     assert sent_prompt == hd(prompt)
     assert_receive {:mock_transport_end_input, ^transport}, 1_000
@@ -184,8 +185,6 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
     assert_raise CLIJSONDecodeError, fn ->
       Enum.to_list(stream)
     end
-
-    assert_receive {:transport_started, _transport}, 1_000
   end
 
   test "transport_error_mode :raise raises on malformed control-client frames" do
@@ -231,8 +230,6 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
     assert_raise CLIJSONDecodeError, fn ->
       Enum.to_list(stream)
     end
-
-    assert_receive {:transport_started, _transport}, 1_000
   end
 
   defp assert_receive_transport(tag) do

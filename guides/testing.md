@@ -27,7 +27,7 @@ The Claude Agent SDK includes a comprehensive mocking system that enables testin
 
 2. **Mock Process (`ClaudeAgentSDK.Mock.Process`)**: Intercepts CLI calls when mock mode is enabled and returns stored responses.
 
-3. **Mock Transport (`ClaudeAgentSDK.TestSupport.MockTransport`)**: A test transport that records outbound messages and allows pushing inbound frames for testing the control protocol client.
+3. **Mock Transport (`ClaudeAgentSDK.TestSupport.MockTransport`)**: A test transport that records outbound messages, allows pushing inbound frames, and reports subscription metadata as `{pid, :legacy | reference()}` so tests can exercise both legacy and tagged subscriber paths.
 
 ### Benefits
 
@@ -667,7 +667,7 @@ test "client handles messages correctly" do
   assert_receive {:mock_transport_started, transport_pid}
 
   # Subscribe to get messages
-  assert_receive {:mock_transport_subscribed, _pid}
+  assert_receive {:mock_transport_subscribed, {_pid, :legacy}}
 
   # Push a message to the client
   response = %{

@@ -94,13 +94,16 @@ defmodule ClaudeAgentSDK.Client do
   alias ClaudeAgentSDK.Permission.{Context, Result}
   alias ClaudeAgentSDK.Runtime.CLI, as: RuntimeCLI
   alias ClaudeAgentSDK.Streaming.{EventParser, Termination}
+  alias CliSubprocessCore.Transport, as: CoreTransport
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
   @edit_tools ["Write", "Edit", "MultiEdit"]
+  @transport_event_tag :claude_agent_sdk_transport
 
   # Client state intentionally mirrors the control-protocol lifecycle and streaming buffers.
   # credo:disable-for-next-line Credo.Check.Warning.StructFieldAmount
   defstruct port: nil,
             transport: nil,
+            transport_ref: nil,
             transport_module: nil,
             transport_opts: [],
             options: nil,
@@ -137,6 +140,7 @@ defmodule ClaudeAgentSDK.Client do
 
   Fields:
   - `port` - Port to Claude CLI process
+  - `transport_ref` - Tagged transport subscriber reference for built-in transports
   - `options` - Configuration options
   - `registry` - Hook callback registry
   - `hook_callback_timeouts` - Map of callback_id => timeout_ms
@@ -161,6 +165,7 @@ defmodule ClaudeAgentSDK.Client do
   @type state :: %__MODULE__{
           port: port() | nil,
           transport: pid() | nil,
+          transport_ref: reference() | nil,
           transport_module: module() | nil,
           transport_opts: keyword(),
           options: Options.t(),
@@ -1064,41 +1069,6 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @impl true
-  def handle_info({:transport_error, error}, state) do
-    if transport_error_mode?(state, :raise) do
-      error = transport_error_struct(error)
-      broadcast_transport_error(state, error)
-      {:noreply, fail_pending_control_requests(state, {:transport_error, error})}
-    else
-      message = transport_error_message(error)
-
-      Enum.each(state.subscribers, fn {_ref, pid} ->
-        send(pid, {:claude_message, message})
-      end)
-
-      {:noreply, state}
-    end
-  end
-
-  def handle_info({:transport_stderr, data}, state) do
-    {:noreply, handle_transport_stderr(data, state)}
-  end
-
-  def handle_info({:transport_message, payload}, state) do
-    case decode_transport_payload(payload) do
-      {:ok, {message_type, message_data}} ->
-        new_state = handle_decoded_message(message_type, message_data, state)
-        {:noreply, new_state}
-
-      {:error, :empty_message} ->
-        {:noreply, state}
-
-      {:error, reason} ->
-        {:noreply, handle_decode_error(payload, reason, state)}
-    end
-  end
-
-  @impl true
   def handle_info({:callback_result, request_id, :hook, signal, result}, state) do
     {pending, updated_state} = pop_pending_callback(state, request_id)
 
@@ -1166,19 +1136,6 @@ defmodule ClaudeAgentSDK.Client do
 
         {:noreply, updated_state}
     end
-  end
-
-  @impl true
-  def handle_info({:transport_exit, reason}, state) do
-    state = flush_transport_stderr(state)
-    Logger.info("Transport disconnected", reason: inspect(reason))
-
-    state =
-      state
-      |> cancel_pending_callbacks()
-      |> fail_pending_control_requests({:transport_exit, reason})
-
-    {:stop, :normal, %{state | transport: nil}}
   end
 
   @impl true
@@ -1298,6 +1255,21 @@ defmodule ClaudeAgentSDK.Client do
 
       subscriber_ref ->
         {:noreply, drop_subscriber(state, subscriber_ref, skip_demonitor: true)}
+    end
+  end
+
+  @impl true
+  def handle_info(message, state) do
+    case extract_transport_event(message, state.transport_ref) do
+      {:ok, event} ->
+        handle_transport_event(event, state)
+
+      :error ->
+        Logger.warning("Ignoring unexpected client mailbox message",
+          payload_preview: inspect(message, pretty: true, limit: 20)
+        )
+
+        {:noreply, state}
     end
   end
 
@@ -1830,6 +1802,7 @@ defmodule ClaudeAgentSDK.Client do
     hooks_config = build_hooks_config(registry, state.options.hooks)
     sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
     agents_for_init = Options.agents_for_initialize(state.options.agents)
+    transport_ref = transport_subscription_ref(module)
 
     # Pass Options to transport so it can build CLI command with streaming flags
     transport_opts =
@@ -1837,12 +1810,13 @@ defmodule ClaudeAgentSDK.Client do
       |> Kernel.||([])
       |> Keyword.put(:options, state.options)
       |> maybe_disable_transport_stderr_callback(module)
-      |> maybe_put_bootstrap_subscriber(module)
+      |> maybe_put_transport_event_tag(module)
+      |> maybe_put_bootstrap_subscriber(module, transport_ref)
 
     with {:ok, transport_opts} <-
            maybe_put_transport_command(module, transport_opts, state.options),
          {:ok, transport} <- module.start_link(transport_opts),
-         :ok <- module.subscribe(transport, self()) do
+         :ok <- subscribe_transport(module, transport, transport_ref) do
       {init_request_id, init_json} =
         Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil, agents_for_init)
 
@@ -1854,6 +1828,7 @@ defmodule ClaudeAgentSDK.Client do
        %{
          state
          | transport: transport,
+           transport_ref: transport_ref,
            registry: registry,
            hook_callback_timeouts: hook_callback_timeouts,
            initialized: false,
@@ -3370,10 +3345,19 @@ defmodule ClaudeAgentSDK.Client do
 
   defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
 
-  defp maybe_put_bootstrap_subscriber(transport_opts, module)
+  defp maybe_put_bootstrap_subscriber(transport_opts, module, transport_ref)
+       when is_list(transport_opts) and is_atom(module) do
+    if built_in_transport_module?(module) and is_reference(transport_ref) do
+      Keyword.put_new(transport_opts, :subscriber, {self(), transport_ref})
+    else
+      transport_opts
+    end
+  end
+
+  defp maybe_put_transport_event_tag(transport_opts, module)
        when is_list(transport_opts) and is_atom(module) do
     if built_in_transport_module?(module) do
-      Keyword.put_new(transport_opts, :subscriber, self())
+      Keyword.put_new(transport_opts, :event_tag, @transport_event_tag)
     else
       transport_opts
     end
@@ -3409,6 +3393,24 @@ defmodule ClaudeAgentSDK.Client do
       CliSubprocessCore.Transport,
       CliSubprocessCore.Transport.Erlexec
     ]
+  end
+
+  defp transport_subscription_ref(module) when is_atom(module) do
+    if built_in_transport_module?(module), do: make_ref(), else: nil
+  end
+
+  defp subscribe_transport(module, transport, transport_ref)
+       when is_atom(module) and is_pid(transport) do
+    cond do
+      is_reference(transport_ref) and function_exported?(module, :subscribe, 3) ->
+        module.subscribe(transport, self(), transport_ref)
+
+      function_exported?(module, :subscribe, 2) ->
+        module.subscribe(transport, self())
+
+      true ->
+        {:error, :subscribe_not_supported}
+    end
   end
 
   defp send_payload(%{transport: transport, transport_module: module}, payload)
@@ -3585,6 +3587,78 @@ defmodule ClaudeAgentSDK.Client do
       send(pid, {:claude_error, error})
     end)
   end
+
+  defp handle_transport_event({:error, error}, state) do
+    if transport_error_mode?(state, :raise) do
+      error = transport_error_struct(error)
+      broadcast_transport_error(state, error)
+      {:noreply, fail_pending_control_requests(state, {:transport_error, error})}
+    else
+      message = transport_error_message(error)
+
+      Enum.each(state.subscribers, fn {_ref, pid} ->
+        send(pid, {:claude_message, message})
+      end)
+
+      {:noreply, state}
+    end
+  end
+
+  defp handle_transport_event({:stderr, data}, state) do
+    {:noreply, handle_transport_stderr(data, state)}
+  end
+
+  defp handle_transport_event({:message, payload}, state) do
+    case decode_transport_payload(payload) do
+      {:ok, {message_type, message_data}} ->
+        new_state = handle_decoded_message(message_type, message_data, state)
+        {:noreply, new_state}
+
+      {:error, :empty_message} ->
+        {:noreply, state}
+
+      {:error, reason} ->
+        {:noreply, handle_decode_error(payload, reason, state)}
+    end
+  end
+
+  defp handle_transport_event({:data, payload}, state) do
+    payload = IO.iodata_to_binary(payload)
+    full_data = state.buffer <> payload
+    {complete_lines, remaining} = split_complete_lines(full_data)
+    new_state = Enum.reduce(complete_lines, state, &process_message_line/2)
+    {:noreply, %{new_state | buffer: remaining}}
+  end
+
+  defp handle_transport_event({:exit, reason}, state) do
+    state = flush_transport_stderr(state)
+    Logger.info("Transport disconnected", reason: inspect(reason))
+
+    state =
+      state
+      |> cancel_pending_callbacks()
+      |> fail_pending_control_requests({:transport_exit, reason})
+
+    {:stop, :normal, %{state | transport: nil, transport_ref: nil}}
+  end
+
+  defp extract_transport_event(message, transport_ref) when is_reference(transport_ref) do
+    CoreTransport.extract_event(message, transport_ref)
+  end
+
+  defp extract_transport_event({:transport_message, payload}, _transport_ref),
+    do: {:ok, {:message, payload}}
+
+  defp extract_transport_event({:transport_error, error}, _transport_ref),
+    do: {:ok, {:error, error}}
+
+  defp extract_transport_event({:transport_stderr, data}, _transport_ref),
+    do: {:ok, {:stderr, data}}
+
+  defp extract_transport_event({:transport_exit, reason}, _transport_ref),
+    do: {:ok, {:exit, reason}}
+
+  defp extract_transport_event(message, _transport_ref), do: CoreTransport.extract_event(message)
 
   defp handle_transport_stderr(data, state) do
     data = IO.iodata_to_binary(data)

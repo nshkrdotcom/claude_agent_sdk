@@ -4,6 +4,8 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
   """
   use ClaudeAgentSDK.SupertesterCase
 
+  import ExUnit.CaptureLog
+
   @moduletag capture_log: true
 
   alias ClaudeAgentSDK.{Client, Options}
@@ -87,6 +89,28 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
       assert_receive {:DOWN, ^monitor, :process, ^client, :normal}, 1_000
     end
 
+    test "ignores unexpected mailbox messages without crashing" do
+      {:ok, client} =
+        Client.start_link(%Options{},
+          transport: MockTransport,
+          transport_opts: [test_pid: self()]
+        )
+
+      on_exit(fn -> safe_stop(client) end)
+
+      assert_receive {:mock_transport_started, _transport_pid}, 1_000
+
+      log =
+        capture_log(fn ->
+          send(client, {:unexpected_transport_shape, %{raw: true}})
+          _ = :sys.get_state(client)
+          Logger.flush()
+        end)
+
+      assert Process.alive?(client)
+      assert log =~ "Ignoring unexpected client mailbox message"
+    end
+
     test "built-in erlexec transport delivers stderr callback exactly once via the client" do
       test_pid = self()
 
@@ -130,9 +154,150 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
       on_exit(fn -> safe_stop(client) end)
 
+      assert is_reference(:sys.get_state(client).transport_ref)
       assert_receive {:stderr_line, "ERR_LINE"}, 1_000
       assert :ok = Client.await_initialized(client, 1_000)
       refute_receive {:stderr_line, "ERR_LINE"}, 100
+    end
+
+    test "built-in erlexec preserves invalid UTF-8 stderr lines" do
+      test_pid = self()
+
+      options = %Options{
+        stderr: fn line -> send(test_pid, {:stderr_line, line}) end
+      }
+
+      script =
+        create_test_script("""
+        python3 -c "$(cat <<'PY'
+        import json
+        import sys
+
+        line = sys.stdin.readline()
+        if not line:
+            raise SystemExit(1)
+
+        sys.stderr.buffer.write(b"\\xff\\n")
+        sys.stderr.flush()
+
+        request = json.loads(line)
+        response = {
+            "type": "control_response",
+            "response": {
+                "subtype": "success",
+                "request_id": request["request_id"],
+                "response": {}
+            }
+        }
+        print(json.dumps(response), flush=True)
+        PY
+        )"
+        """)
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: ErlexecTransport,
+          transport_opts: [command: script, args: []]
+        )
+
+      on_exit(fn -> safe_stop(client) end)
+
+      assert_receive {:stderr_line, <<255>>}, 1_000
+      assert :ok = Client.await_initialized(client, 1_000)
+    end
+
+    test "built-in erlexec flushes a partial stderr fragment on fast exit" do
+      test_pid = self()
+
+      options = %Options{
+        stderr: fn line -> send(test_pid, {:stderr_line, line}) end
+      }
+
+      script =
+        create_test_script("""
+        python3 -c "$(cat <<'PY'
+        import json
+        import sys
+
+        line = sys.stdin.readline()
+        if not line:
+            raise SystemExit(1)
+
+        request = json.loads(line)
+        response = {
+            "type": "control_response",
+            "response": {
+                "subtype": "success",
+                "request_id": request["request_id"],
+                "response": {}
+            }
+        }
+        print(json.dumps(response), flush=True)
+        sys.stderr.write("TAIL_FRAGMENT")
+        sys.stderr.flush()
+        PY
+        )"
+        """)
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: ErlexecTransport,
+          transport_opts: [command: script, args: []]
+        )
+
+      monitor = Process.monitor(client)
+
+      assert_receive {:stderr_line, "TAIL_FRAGMENT"}, 1_000
+      assert_receive {:DOWN, ^monitor, :process, ^client, :normal}, 1_000
+    end
+
+    test "built-in erlexec surfaces stderr emitted after initialize" do
+      test_pid = self()
+
+      options = %Options{
+        stderr: fn line -> send(test_pid, {:stderr_line, line}) end
+      }
+
+      script =
+        create_test_script("""
+        python3 -c "$(cat <<'PY'
+        import json
+        import sys
+
+        line = sys.stdin.readline()
+        if not line:
+            raise SystemExit(1)
+
+        request = json.loads(line)
+        response = {
+            "type": "control_response",
+            "response": {
+                "subtype": "success",
+                "request_id": request["request_id"],
+                "response": {}
+            }
+        }
+        print(json.dumps(response), flush=True)
+
+        for line in sys.stdin:
+            if not line:
+                break
+            print("ERR_AFTER_INIT", file=sys.stderr, flush=True)
+        PY
+        )"
+        """)
+
+      {:ok, client} =
+        Client.start_link(options,
+          transport: ErlexecTransport,
+          transport_opts: [command: script, args: []]
+        )
+
+      on_exit(fn -> safe_stop(client) end)
+
+      assert :ok = Client.await_initialized(client, 1_000)
+      assert :ok = Client.query(client, "hi")
+      assert_receive {:stderr_line, "ERR_AFTER_INIT"}, 1_000
     end
   end
 
