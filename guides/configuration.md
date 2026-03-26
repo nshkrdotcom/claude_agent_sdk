@@ -81,6 +81,10 @@ ClaudeAgentSDK.query("Refactor this code for better performance", options)
 | `effort` | `atom()` | `nil` | Reasoning effort level (`:low`, `:medium`, `:high`, `:max`). `:max` is Opus-only. Invalid values raise `ArgumentError`. Not supported for Haiku. |
 | `thinking` | `map()` | `nil` | Thinking config (`%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}`) |
 | `max_thinking_tokens` | `pos_integer()` | `nil` | Maximum tokens for model thinking (fallback when `thinking` is nil) |
+| `provider_backend` | `atom() \| String.t()` | `nil` | Claude backend selector. Use `:ollama` for Anthropic-compatible Ollama runs. |
+| `external_model_overrides` | `map()` | `nil` | Canonical Claude-to-external model mapping used by core model resolution. |
+| `anthropic_base_url` | `String.t()` | `nil` | Anthropic-compatible API base URL override. |
+| `anthropic_auth_token` | `String.t()` | `nil` | Anthropic-compatible auth token override. |
 
 ### Tool Options
 
@@ -258,6 +262,31 @@ For details on the config-driven model registry, adding custom models at
 runtime, and thinking tokens, see the [Model Configuration](model-configuration.md) guide.
 
 ### Available Models
+
+Active model selection is owned by `cli_subprocess_core`.
+
+For the native Claude backend, use canonical Claude names such as `haiku`,
+`sonnet`, and `opus`.
+
+For the Claude `:ollama` backend, either:
+
+- pass a direct external model id such as `llama3.2`
+- or keep canonical Claude names and map them with `external_model_overrides`
+
+Example:
+
+```elixir
+options =
+  ClaudeAgentSDK.Options.new(
+    provider_backend: :ollama,
+    anthropic_base_url: "http://localhost:11434",
+    external_model_overrides: %{"haiku" => "llama3.2"},
+    model: "haiku"
+  )
+```
+
+When the resolved payload comes from an external backend, the SDK does not emit
+Claude-native `--effort`.
 
 | Shorthand | Full Model ID | Best For |
 |-----------|---------------|----------|

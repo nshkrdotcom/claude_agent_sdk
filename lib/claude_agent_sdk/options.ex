@@ -33,6 +33,10 @@ defmodule ClaudeAgentSDK.Options do
   - `stream_buffer_limit` - Max inbound entries buffered before first subscriber (integer, default: 1000)
   - `preferred_transport` - Override automatic transport selection (`:auto | :cli | :control`) (v0.8.0+)
   - `transport_error_mode` - Surface transport/decode failures as synthetic result messages or raised errors (`:result | :raise`)
+  - `provider_backend` - Claude backend selector (`:anthropic` or `:ollama`)
+  - `external_model_overrides` - Canonical Claude-to-external model map used by core model resolution
+  - `anthropic_base_url` - Anthropic-compatible API base URL override
+  - `anthropic_auth_token` - Anthropic-compatible auth token override
 
   ## Streaming + Tools (v0.8.0)
 
@@ -72,6 +76,7 @@ defmodule ClaudeAgentSDK.Options do
 
   """
 
+  alias ClaudeAgentSDK.Config.Env
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Model
   alias CliSubprocessCore.ModelRegistry
@@ -147,6 +152,10 @@ defmodule ClaudeAgentSDK.Options do
     :preferred_transport,
     # Surface transport failures as result messages (default) or raised errors
     :transport_error_mode,
+    :provider_backend,
+    :external_model_overrides,
+    :anthropic_base_url,
+    :anthropic_auth_token,
     :user,
     :max_thinking_tokens,
     # Effort level (:low, :medium, :high, :max)
@@ -303,6 +312,10 @@ defmodule ClaudeAgentSDK.Options do
           stream_buffer_limit: non_neg_integer() | nil,
           preferred_transport: transport_preference() | nil,
           transport_error_mode: transport_error_mode() | nil,
+          provider_backend: atom() | String.t() | nil,
+          external_model_overrides: %{optional(String.t()) => String.t()} | nil,
+          anthropic_base_url: String.t() | nil,
+          anthropic_auth_token: String.t() | nil,
           max_buffer_size: pos_integer() | nil,
           extra_args: %{optional(String.t()) => String.t() | boolean() | nil},
           env: %{optional(String.t()) => String.t()},
@@ -630,19 +643,39 @@ defmodule ClaudeAgentSDK.Options do
     end
   end
 
-  defp build_settings_value(%{settings: nil, sandbox: nil}), do: nil
-
-  defp build_settings_value(%{settings: settings, sandbox: nil}) when is_binary(settings) do
-    settings
+  defp build_settings_value(%{settings: nil, sandbox: nil} = options) do
+    if settings_patch(options) == %{} do
+      nil
+    else
+      options
+      |> settings_object_from_options()
+      |> Jason.encode!()
+    end
   end
 
-  defp build_settings_value(%{settings: settings, sandbox: sandbox}) when not is_nil(sandbox) do
-    settings_obj = parse_existing_settings(settings)
+  defp build_settings_value(%{settings: settings, sandbox: nil} = options)
+       when is_binary(settings) do
+    if settings_patch(options) == %{} do
+      settings
+    else
+      options
+      |> settings_object_from_options()
+      |> Jason.encode!()
+    end
+  end
 
-    settings_obj
-    |> Map.put("sandbox", deep_stringify_keys(sandbox))
-    |> deep_stringify_keys()
+  defp build_settings_value(%{sandbox: sandbox} = options) when not is_nil(sandbox) do
+    options
+    |> settings_object_from_options()
     |> Jason.encode!()
+  end
+
+  defp settings_object_from_options(%{settings: settings, sandbox: sandbox} = options) do
+    settings
+    |> parse_existing_settings()
+    |> deep_merge_maps(settings_patch(options))
+    |> maybe_put_sandbox(sandbox)
+    |> deep_stringify_keys()
   end
 
   defp parse_existing_settings(nil), do: %{}
@@ -700,6 +733,25 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   defp deep_stringify_keys(value), do: value
+
+  defp maybe_put_sandbox(settings_obj, nil), do: settings_obj
+
+  defp maybe_put_sandbox(settings_obj, sandbox) do
+    Map.put(settings_obj, "sandbox", deep_stringify_keys(sandbox))
+  end
+
+  defp deep_merge_maps(left, right) when left == %{}, do: right
+  defp deep_merge_maps(left, right) when right == %{}, do: left
+
+  defp deep_merge_maps(left, right) when is_map(left) and is_map(right) do
+    Map.merge(left, right, fn _key, left_value, right_value ->
+      if is_map(left_value) and is_map(right_value) do
+        deep_merge_maps(left_value, right_value)
+      else
+        right_value
+      end
+    end)
+  end
 
   # Do not emit --setting-sources by default. Passing an empty value can disable
   # CLI-side persisted context (including resume session lookup).
@@ -903,25 +955,29 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_effort_args(args, %{effort: effort} = options)
        when effort in @valid_efforts do
-    model = effective_effort_model(options)
+    if external_backend?(options) do
+      args
+    else
+      model = effective_effort_model(options)
 
-    cond do
-      haiku_model?(model) ->
-        Logger.warning(
-          "Effort level is not supported for Haiku models; ignoring effort: #{effort}"
-        )
+      cond do
+        haiku_model?(model) ->
+          Logger.warning(
+            "Effort level is not supported for Haiku models; ignoring effort: #{effort}"
+          )
 
-        args
+          args
 
-      effort == :max and not opus_model?(model) ->
-        Logger.warning(
-          "Effort :max is only supported on Opus models; ignoring effort for model: #{model}"
-        )
+        effort == :max and not opus_model?(model) ->
+          Logger.warning(
+            "Effort :max is only supported on Opus models; ignoring effort for model: #{model}"
+          )
 
-        args
+          args
 
-      true ->
-        args ++ ["--effort", to_string(effort)]
+        true ->
+          args ++ ["--effort", to_string(effort)]
+      end
     end
   end
 
@@ -957,7 +1013,7 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   def ensure_model_payload!(%__MODULE__{} = options) do
-    case ModelRegistry.build_arg_payload(:claude, options.model, []) do
+    case ModelRegistry.build_arg_payload(:claude, options.model, registry_opts(options)) do
       {:ok, payload} ->
         %{options | model_payload: payload, model: payload.resolved_model}
 
@@ -971,6 +1027,85 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   defp resolved_model(%__MODULE__{model: model}), do: model
+
+  defp registry_opts(%__MODULE__{} = options) do
+    []
+    |> maybe_put_registry_opt(:env_model, env_model(options))
+    |> maybe_put_registry_opt(:provider_backend, provider_backend(options))
+    |> maybe_put_registry_opt(:external_model_overrides, external_model_overrides(options))
+    |> maybe_put_registry_opt(:anthropic_base_url, anthropic_base_url(options))
+    |> maybe_put_registry_opt(:anthropic_auth_token, anthropic_auth_token(options))
+  end
+
+  defp maybe_put_registry_opt(opts, _key, nil), do: opts
+
+  defp maybe_put_registry_opt(opts, _key, value) when is_map(value) and map_size(value) == 0,
+    do: opts
+
+  defp maybe_put_registry_opt(opts, key, value), do: Keyword.put(opts, key, value)
+
+  defp provider_backend(%__MODULE__{provider_backend: nil}) do
+    case System.get_env(Env.provider_backend()) do
+      nil -> nil
+      value -> value |> String.trim() |> String.downcase() |> String.to_atom()
+    end
+  end
+
+  defp provider_backend(%__MODULE__{provider_backend: value}) when is_binary(value) do
+    value |> String.trim() |> String.downcase() |> String.to_atom()
+  end
+
+  defp provider_backend(%__MODULE__{provider_backend: value}), do: value
+
+  defp env_model(%__MODULE__{model: nil}), do: System.get_env(Env.anthropic_model())
+  defp env_model(_options), do: nil
+
+  defp external_model_overrides(%__MODULE__{external_model_overrides: nil}) do
+    case System.get_env(Env.external_model_overrides()) do
+      nil ->
+        nil
+
+      json ->
+        case Jason.decode(json) do
+          {:ok, decoded} when is_map(decoded) ->
+            decoded
+
+          {:ok, _other} ->
+            raise ArgumentError,
+                  "#{Env.external_model_overrides()} must decode to a JSON object"
+
+          {:error, reason} ->
+            raise ArgumentError,
+                  "invalid #{Env.external_model_overrides()} JSON: #{Exception.message(reason)}"
+        end
+    end
+  end
+
+  defp external_model_overrides(%__MODULE__{external_model_overrides: overrides})
+       when is_map(overrides),
+       do: overrides
+
+  defp anthropic_base_url(%__MODULE__{anthropic_base_url: nil}),
+    do: System.get_env(Env.anthropic_base_url())
+
+  defp anthropic_base_url(%__MODULE__{anthropic_base_url: value}), do: value
+
+  defp anthropic_auth_token(%__MODULE__{anthropic_auth_token: nil}),
+    do: System.get_env(Env.anthropic_auth_token())
+
+  defp anthropic_auth_token(%__MODULE__{anthropic_auth_token: value}), do: value
+
+  defp settings_patch(%__MODULE__{model_payload: payload}) do
+    Map.get(payload, :settings_patch, Map.get(payload, "settings_patch", %{}))
+  end
+
+  defp external_backend?(%__MODULE__{model_payload: payload}) do
+    case Map.get(payload, :model_source, Map.get(payload, "model_source")) do
+      :external -> true
+      "external" -> true
+      _ -> false
+    end
+  end
 
   # Thinking config takes precedence over raw max_thinking_tokens.
   # Resolution: thinking.type :enabled -> budget_tokens, :adaptive -> fallback or 32000,

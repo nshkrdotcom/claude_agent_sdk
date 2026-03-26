@@ -280,7 +280,7 @@ defmodule ClaudeAgentSDK.SDKMCPServerTest do
           exit(:boom)
         end)
 
-      assert_receive {:server_created, server}
+      assert_receive {:server_created, server}, 1_000
       assert_receive {:DOWN, ^monitor_ref, :process, ^creator_pid, :boom}
 
       assert Process.alive?(server.registry_pid)

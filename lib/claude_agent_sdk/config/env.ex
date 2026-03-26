@@ -14,6 +14,18 @@ defmodule ClaudeAgentSDK.Config.Env do
   @spec anthropic_api_key() :: String.t()
   def anthropic_api_key, do: "ANTHROPIC_API_KEY"
 
+  @doc "Anthropic auth token env var (`\"ANTHROPIC_AUTH_TOKEN\"`)."
+  @spec anthropic_auth_token() :: String.t()
+  def anthropic_auth_token, do: "ANTHROPIC_AUTH_TOKEN"
+
+  @doc "Anthropic-compatible base URL env var (`\"ANTHROPIC_BASE_URL\"`)."
+  @spec anthropic_base_url() :: String.t()
+  def anthropic_base_url, do: "ANTHROPIC_BASE_URL"
+
+  @doc "Anthropic model env var (`\"ANTHROPIC_MODEL\"`)."
+  @spec anthropic_model() :: String.t()
+  def anthropic_model, do: "ANTHROPIC_MODEL"
+
   @doc "OAuth token env var (`\"CLAUDE_AGENT_OAUTH_TOKEN\"`)."
   @spec oauth_token() :: String.t()
   def oauth_token, do: "CLAUDE_AGENT_OAUTH_TOKEN"
@@ -27,6 +39,14 @@ defmodule ClaudeAgentSDK.Config.Env do
   @doc "Vertex AI provider flag (`\"CLAUDE_AGENT_USE_VERTEX\"`)."
   @spec use_vertex() :: String.t()
   def use_vertex, do: "CLAUDE_AGENT_USE_VERTEX"
+
+  @doc "SDK model backend selector (`\"CLAUDE_AGENT_PROVIDER_BACKEND\"`)."
+  @spec provider_backend() :: String.t()
+  def provider_backend, do: "CLAUDE_AGENT_PROVIDER_BACKEND"
+
+  @doc "SDK external model overrides JSON (`\"CLAUDE_AGENT_EXTERNAL_MODEL_OVERRIDES\"`)."
+  @spec external_model_overrides() :: String.t()
+  def external_model_overrides, do: "CLAUDE_AGENT_EXTERNAL_MODEL_OVERRIDES"
 
   # -- SDK control -----------------------------------------------------------
 
@@ -93,6 +113,13 @@ defmodule ClaudeAgentSDK.Config.Env do
   """
   @spec passthrough_vars() :: [String.t()]
   def passthrough_vars do
-    [oauth_token(), anthropic_api_key(), "PATH", "HOME"]
+    [
+      oauth_token(),
+      anthropic_api_key(),
+      anthropic_auth_token(),
+      anthropic_base_url(),
+      "PATH",
+      "HOME"
+    ]
   end
 end

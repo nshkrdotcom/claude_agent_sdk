@@ -33,6 +33,28 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
     assert env_map["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] == "true"
   end
 
+  test "env builder applies model payload env overrides after option env" do
+    options = %Options{
+      env: %{"ANTHROPIC_BASE_URL" => "http://wrong"},
+      model_payload: %{
+        "env_overrides" => %{
+          "ANTHROPIC_AUTH_TOKEN" => "ollama",
+          "ANTHROPIC_API_KEY" => "",
+          "ANTHROPIC_BASE_URL" => "http://localhost:11434"
+        }
+      }
+    }
+
+    env_map =
+      options
+      |> Process.__env_vars__()
+      |> Map.new()
+
+    assert env_map["ANTHROPIC_AUTH_TOKEN"] == "ollama"
+    assert env_map["ANTHROPIC_API_KEY"] == ""
+    assert env_map["ANTHROPIC_BASE_URL"] == "http://localhost:11434"
+  end
+
   test "shell escaping preserves empty string arguments" do
     assert Process.__shell_escape__("") == "\"\""
   end

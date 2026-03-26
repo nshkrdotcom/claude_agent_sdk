@@ -109,50 +109,58 @@ defmodule ClaudeAgentSdk.MixProject do
       assets: %{"assets" => "assets"},
       logo: "assets/claude_agent_sdk.svg",
       extras: [
-        "README.md",
-        "guides/getting-started.md",
-        "guides/streaming.md",
-        "guides/hooks.md",
-        "guides/mcp-tools.md",
-        "guides/permissions.md",
-        "guides/configuration.md",
-        "guides/configuration-internals.md",
-        "guides/model-configuration.md",
-        "guides/agents.md",
-        "guides/sessions.md",
-        "docs/RUNTIME_CONTROL.md",
-        "guides/testing.md",
-        "guides/error-handling.md",
-        {"examples/README.md", filename: "examples"},
-        {"examples/mix_task_chat/README.md", filename: "mix-task-chat-example"},
-        {"examples/phoenix_chat/README.md", filename: "phoenix-chat-example"},
-        {"examples/document_generation/README.md", filename: "document-generation-example"},
-        {"examples/research_agent/README.md", filename: "research-agent-example"},
-        {"examples/skill_invocation/README.md", filename: "skill-invocation-example"},
-        {"examples/email_agent/README.md", filename: "email-agent-example"},
-        "CHANGELOG.md",
-        "LICENSE"
+        {"README.md", title: "Overview", filename: "readme"},
+        {"guides/getting-started.md", title: "Getting Started"},
+        {"guides/streaming.md", title: "Streaming"},
+        {"guides/hooks.md", title: "Hooks"},
+        {"guides/mcp-tools.md", title: "MCP Tools"},
+        {"guides/permissions.md", title: "Permissions"},
+        {"guides/configuration.md", title: "Configuration"},
+        {"guides/configuration-internals.md", title: "Configuration Internals"},
+        {"guides/model-configuration.md", title: "Model Configuration"},
+        {"guides/agents.md", title: "Agents"},
+        {"guides/sessions.md", title: "Sessions"},
+        {"docs/RUNTIME_CONTROL.md", title: "Runtime Control"},
+        {"guides/testing.md", title: "Testing"},
+        {"guides/error-handling.md", title: "Error Handling"},
+        {"examples/README.md", title: "Examples", filename: "examples"},
+        {"examples/mix_task_chat/README.md",
+         title: "Mix Task Chat Example", filename: "mix-task-chat-example"},
+        {"examples/phoenix_chat/README.md",
+         title: "Phoenix Chat Example", filename: "phoenix-chat-example"},
+        {"examples/document_generation/README.md",
+         title: "Document Generation Example", filename: "document-generation-example"},
+        {"examples/research_agent/README.md",
+         title: "Research Agent Example", filename: "research-agent-example"},
+        {"examples/skill_invocation/README.md",
+         title: "Skill Invocation Example", filename: "skill-invocation-example"},
+        {"examples/email_agent/README.md",
+         title: "Email Agent Example", filename: "email-agent-example"},
+        {"CHANGELOG.md", title: "Changelog"},
+        {"LICENSE", title: "License"}
       ],
       groups_for_extras: [
-        "Getting Started": [
-          "README.md",
-          "guides/getting-started.md"
-        ],
-        "Core Guides": [
+        "Project Overview": ["README.md"],
+        Foundations: [
+          "guides/getting-started.md",
           "guides/streaming.md",
+          "guides/sessions.md"
+        ],
+        Tooling: [
           "guides/hooks.md",
           "guides/mcp-tools.md",
           "guides/permissions.md"
         ],
-        "Advanced Topics": [
+        "Models & Configuration": [
           "guides/configuration.md",
           "guides/configuration-internals.md",
           "guides/model-configuration.md",
-          "guides/agents.md",
-          "guides/sessions.md",
+          "guides/agents.md"
+        ],
+        Operations: [
           "docs/RUNTIME_CONTROL.md"
         ],
-        "Testing & Errors": [
+        Quality: [
           "guides/testing.md",
           "guides/error-handling.md"
         ],
@@ -165,7 +173,7 @@ defmodule ClaudeAgentSdk.MixProject do
           "examples/skill_invocation/README.md",
           "examples/email_agent/README.md"
         ],
-        "Release Notes": ["CHANGELOG.md", "LICENSE"]
+        Reference: ["CHANGELOG.md", "LICENSE"]
       ],
       groups_for_modules: [
         "Core API": [

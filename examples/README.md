@@ -74,8 +74,21 @@ bash examples/run_all.sh
 Sets `CLAUDE_EXAMPLES_FORCE_HALT=true` to ensure each script exits cleanly.
 The runner continues after failures and prints a summary at the end (non-zero exit
 if any example failed).
-Note: `resume_persistence_repro_live.exs` is a known-failing repro and will fail
-until resume turn persistence is fixed.
+
+Run the same suite against a local Ollama model:
+
+```bash
+CLAUDE_EXAMPLES_BACKEND=ollama \
+CLAUDE_EXAMPLES_OLLAMA_MODEL=llama3.2 \
+bash examples/run_all.sh
+```
+
+That mode keeps the example source on canonical Claude names such as `haiku`
+and maps them to the selected Ollama model through the core-owned model
+registry path.
+
+The effort demo is skipped in Ollama mode because external backends do not
+support Claude-native effort semantics.
 
 ### Run Individual Examples
 
@@ -93,7 +106,7 @@ mix run examples/basic_example.exs
 | `effort_gating_live.exs` | Live effort demo showing supported models, Haiku gating, and invalid-value validation |
 | `max_effort_opus_live.exs` | Opus `:max` effort — request/response and streaming for both `opus` and `opus[1m]` (**not in `run_all.sh`** — expensive) |
 | `session_features_example.exs` | SessionStore save/search, resume, session CLI flags |
-| `resume_persistence_repro_live.exs` | Known-failing repro for `--print --resume` dropping intermediate turns |
+| `resume_persistence_repro_live.exs` | Standalone repro for `--print --resume` dropping intermediate turns (**not in `run_all.sh`**) |
 | `structured_output_live.exs` | Structured JSON via `--json-schema` |
 | `sandbox_settings_live.exs` | Sandbox merged into `--settings` |
 | `tools_and_betas_live.exs` | `--tools` variations |

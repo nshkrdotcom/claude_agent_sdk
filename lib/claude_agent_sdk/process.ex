@@ -228,10 +228,24 @@ defmodule ClaudeAgentSDK.Process do
         Map.put(acc, env_key, value)
       end)
 
+    payload_env =
+      options
+      |> model_payload_env_overrides()
+      |> Enum.reduce(%{}, fn {key, value}, acc ->
+        Map.put(acc, to_string(key), value)
+      end)
+
     merged =
-      Enum.reduce(overrides, base_env, fn
+      overrides
+      |> Enum.reduce(base_env, fn
         {key, nil}, acc -> Map.delete(acc, key)
         {key, value}, acc -> Map.put(acc, key, to_string(value))
+      end)
+      |> then(fn env ->
+        Enum.reduce(payload_env, env, fn
+          {key, nil}, acc -> Map.delete(acc, key)
+          {key, value}, acc -> Map.put(acc, key, to_string(value))
+        end)
       end)
       |> maybe_put_user_env(options.user)
       |> maybe_put_pwd_env(options.cwd)
@@ -245,6 +259,12 @@ defmodule ClaudeAgentSDK.Process do
   @doc false
   @spec __env_vars__(Options.t()) :: map()
   def __env_vars__(%Options{} = options), do: build_env_vars(options)
+
+  defp model_payload_env_overrides(%Options{model_payload: payload}) when is_map(payload) do
+    Map.get(payload, :env_overrides, Map.get(payload, "env_overrides", %{}))
+  end
+
+  defp model_payload_env_overrides(_options), do: %{}
 
   defp maybe_put_file_checkpointing_env(env_map, %Options{enable_file_checkpointing: true}) do
     Map.put(env_map, Env.file_checkpointing(), "true")

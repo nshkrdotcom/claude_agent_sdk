@@ -1,225 +1,165 @@
 # Model Configuration
 
-The SDK uses a **config-driven model registry** so that new Claude models can be
-added without recompiling application code.  All model validation, listing, and
-suggestion logic reads from `Application` config at runtime.
+`/home/home/p/g/n/claude_agent_sdk` does not own active model policy.
 
-## Default Configuration
+That authority lives in:
 
-The built-in defaults are set in `config/config.exs`:
+- `/home/home/p/g/n/cli_subprocess_core/lib/cli_subprocess_core/model_registry.ex`
+- `/home/home/p/g/n/cli_subprocess_core/priv/models/claude.json`
 
-```elixir
-config :claude_agent_sdk, :models, %{
-  short_forms: %{
-    "opus"       => "opus",
-    "sonnet"     => "sonnet",
-    "haiku"      => "haiku",
-    "opus[1m]"   => "opus[1m]",
-    "sonnet[1m]" => "sonnet[1m]"
-  },
-  full_ids: %{
-    "claude-opus-4-6"                => "claude-opus-4-6",
-    "claude-sonnet-4-6"              => "claude-sonnet-4-6",
-    "claude-haiku-4-5-20251001"      => "claude-haiku-4-5-20251001",
-    "claude-opus-4-6[1m]"            => "claude-opus-4-6[1m]",
-    "claude-sonnet-4-6[1m]"          => "claude-sonnet-4-6[1m]"
-  },
-  default: "opus"
-}
-```
+The Claude SDK consumes the resolved payload from core and only turns that
+payload into Claude CLI arguments and env.
 
-| Key | Description |
-|-----|-------------|
-| `short_forms` | CLI-friendly aliases (`"opus"`, `"sonnet"`, etc.) |
-| `full_ids` | Versioned model identifiers as published by Anthropic |
-| `default` | The model used when none is specified |
+## Core-Owned Resolution
 
-Both maps use `name => name` identity mappings because the Claude CLI
-accepts these strings directly and handles any internal resolution.
+The authoritative core surface is:
 
-## Using Models
+- `CliSubprocessCore.ModelRegistry.resolve/3`
+- `CliSubprocessCore.ModelRegistry.validate/2`
+- `CliSubprocessCore.ModelRegistry.default_model/2`
+- `CliSubprocessCore.ModelRegistry.build_arg_payload/3`
 
-### In Options
+`ClaudeAgentSDK.Options.new/1` calls the core payload builder automatically
+when `model_payload` is not provided explicitly.
+
+## Native Claude Backend
+
+The default backend is the normal Claude catalog path.
+
+Canonical Claude model names include:
+
+- `opus`
+- `sonnet`
+- `haiku`
+- `opus[1m]`
+- `sonnet[1m]`
+
+Example:
 
 ```elixir
-# Short form
-options = %ClaudeAgentSDK.Options{model: "opus"}
-
-# Full ID
-options = %ClaudeAgentSDK.Options{model: "claude-opus-4-6"}
+options =
+  ClaudeAgentSDK.Options.new(
+    model: "sonnet",
+    max_turns: 1
+  )
 ```
 
-### In Agents
+That resolves through `cli_subprocess_core` before the SDK emits `claude ...`.
+
+## Ollama Backend
+
+The SDK now supports an explicit Claude `:ollama` backend.
+
+This still runs the normal `claude` binary.
+
+The difference is that the core payload carries:
+
+- the resolved external model id
+- `ANTHROPIC_AUTH_TOKEN=ollama`
+- `ANTHROPIC_API_KEY=""`
+- `ANTHROPIC_BASE_URL=http://localhost:11434` or your override
+
+### Direct external model id
 
 ```elixir
-agent = ClaudeAgentSDK.Agent.new(
-  description: "Research specialist",
-  prompt: "You excel at research",
-  model: "sonnet"
-)
+options =
+  ClaudeAgentSDK.Options.new(
+    provider_backend: :ollama,
+    anthropic_base_url: "http://localhost:11434",
+    model: "llama3.2"
+  )
 ```
 
-### Validation
+### Canonical Claude name mapped to an Ollama model
 
 ```elixir
-{:ok, "opus"} = ClaudeAgentSDK.Model.validate("opus")
-{:error, :invalid_model} = ClaudeAgentSDK.Model.validate("gpt-5")
+options =
+  ClaudeAgentSDK.Options.new(
+    provider_backend: :ollama,
+    anthropic_base_url: "http://localhost:11434",
+    external_model_overrides: %{"haiku" => "llama3.2"},
+    model: "haiku"
+  )
 ```
 
-### Listing
+In that case:
 
-```elixir
-ClaudeAgentSDK.Model.list_models()
-# => ["claude-haiku-4-5-20251001", "claude-opus-4-6", "haiku", "opus", ...]
+- the requested Claude name stays `haiku`
+- the core payload resolves the transport model to `llama3.2`
+- the SDK emits `claude --model llama3.2`
 
-ClaudeAgentSDK.Model.short_forms()
-# => ["haiku", "opus", "sonnet", "sonnet[1m]"]
+## Environment-Driven Backend Selection
 
-ClaudeAgentSDK.Model.full_ids()
-# => ["claude-haiku-4-5-20251001", "claude-opus-4-6", ...]
+The same Ollama path can be configured from env.
+
+Relevant variables:
+
+- `CLAUDE_AGENT_PROVIDER_BACKEND`
+- `CLAUDE_AGENT_EXTERNAL_MODEL_OVERRIDES`
+- `ANTHROPIC_BASE_URL`
+- `ANTHROPIC_AUTH_TOKEN`
+- `ANTHROPIC_API_KEY`
+
+Example:
+
+```bash
+export CLAUDE_AGENT_PROVIDER_BACKEND=ollama
+export CLAUDE_AGENT_EXTERNAL_MODEL_OVERRIDES='{"haiku":"llama3.2","sonnet":"llama3.2","opus":"llama3.2"}'
+export ANTHROPIC_AUTH_TOKEN=ollama
+export ANTHROPIC_API_KEY=""
+export ANTHROPIC_BASE_URL=http://localhost:11434
 ```
 
-### Suggestions
+That is the path used by `/home/home/p/g/n/claude_agent_sdk/examples/run_all.sh`
+when you set `CLAUDE_EXAMPLES_BACKEND=ollama`.
 
-When a user provides an invalid model name the SDK can suggest corrections:
+## Effort Gating
 
-```elixir
-ClaudeAgentSDK.Model.suggest("opuss")
-# => ["opus"]
+Effort is still a Claude-native feature.
+
+For native Claude models:
+
+- `haiku` does not support effort
+- `sonnet` supports `:low`, `:medium`, `:high`
+- `opus` supports `:low`, `:medium`, `:high`, `:max`
+
+For external Claude/Ollama runs, the SDK does not emit `--effort`.
+
+That is deliberate. Once the resolved payload is an external backend model, the
+SDK stops pretending the external model supports Claude-native effort semantics.
+
+## Settings And Env From The Payload
+
+The SDK now reads these payload fields from core:
+
+- `resolved_model`
+- `env_overrides`
+- `settings_patch`
+- `model_source`
+- `provider_backend`
+
+That means:
+
+- model policy stays in core
+- backend env is merged in one place
+- future Claude backend settings can also be attached by the core payload
+
+## Examples
+
+Run the live example suite against the native Claude backend:
+
+```bash
+./examples/run_all.sh
 ```
 
-## Adding Custom Models at Runtime
+Run the live example suite against Ollama:
 
-If Anthropic ships a new model before the SDK publishes an update, add it
-at boot time without waiting for a library release:
-
-```elixir
-# In config/runtime.exs or Application.start callback:
-config = Application.get_env(:claude_agent_sdk, :models)
-
-updated =
-  config
-  |> Map.update!(:full_ids, &Map.put(&1, "claude-opus-5-20260301", "claude-opus-5-20260301"))
-  |> Map.update!(:short_forms, &Map.put(&1, "opus5", "opus5"))
-
-Application.put_env(:claude_agent_sdk, :models, updated)
+```bash
+CLAUDE_EXAMPLES_BACKEND=ollama \
+CLAUDE_EXAMPLES_OLLAMA_MODEL=llama3.2 \
+./examples/run_all.sh
 ```
 
-After this, `Model.validate("opus5")` and `Model.validate("claude-opus-5-20260301")`
-will both return `{:ok, ...}`.
-
-## Overriding the Default Model
-
-```elixir
-config = Application.get_env(:claude_agent_sdk, :models)
-Application.put_env(:claude_agent_sdk, :models, %{config | default: "opus"})
-```
-
-## Effort Level
-
-Control how much reasoning effort Claude applies:
-
-```elixir
-# Standard effort levels (all Opus and Sonnet models)
-options = %ClaudeAgentSDK.Options{
-  model: "sonnet",
-  effort: :high  # :low | :medium | :high | :max
-}
-
-# Maximum effort (Opus only)
-options = %ClaudeAgentSDK.Options{
-  model: "opus",
-  effort: :max
-}
-```
-
-This emits `--effort <level>` to the CLI.
-
-### Effort Levels
-
-| Level | Models | Description |
-|-------|--------|-------------|
-| `:low` | Opus, Sonnet | Minimal thinking, fewer tool calls, terse output |
-| `:medium` | Opus, Sonnet | Balanced cost/performance (recommended default for Sonnet) |
-| `:high` | Opus, Sonnet | Deep thinking, detailed responses (API default) |
-| `:max` | **Opus only** | Absolute maximum capability, no token constraints |
-
-### Model Gating
-
-- **Haiku**: Effort is not supported. The SDK logs a warning and silently omits the `--effort` flag.
-- **Sonnet**: Supports `:low`, `:medium`, `:high`. The SDK treats `:max` as unsupported, logs a warning, and omits the `--effort` flag.
-- **Opus**: Supports all four levels including `:max`.
-- **nil model**: The SDK resolves the configured default model first, then applies the same gating rules.
-- Invalid effort values raise `ArgumentError` when options are built or converted to CLI arguments.
-
-> See `examples/effort_gating_live.exs` for a runnable example covering supported and gated effort cases.
-> See `examples/max_effort_opus_live.exs` for a standalone `:max` effort demo with Opus and Opus[1m] (not in `run_all.sh` — expensive).
-
-## Thinking Configuration
-
-The `thinking` option provides structured control over extended thinking:
-
-```elixir
-# Adaptive (default budget 32000 tokens)
-options = %ClaudeAgentSDK.Options{thinking: %{type: :adaptive}}
-
-# Explicit budget
-options = %ClaudeAgentSDK.Options{thinking: %{type: :enabled, budget_tokens: 16_000}}
-
-# Disabled
-options = %ClaudeAgentSDK.Options{thinking: %{type: :disabled}}
-```
-
-Resolution rules:
-- `thinking` takes precedence over `max_thinking_tokens`
-- `:adaptive` uses `max_thinking_tokens` as fallback, or 32000 if nil
-- `:enabled` uses `budget_tokens` directly
-- `:disabled` emits `--max-thinking-tokens 0`
-- `nil` falls back to raw `max_thinking_tokens`
-
-The `max_thinking_tokens` field is still supported for backward compatibility:
-
-```elixir
-options = %ClaudeAgentSDK.Options{
-  model: "sonnet",
-  max_thinking_tokens: 8192
-}
-```
-
-## Testing
-
-Test code uses `ClaudeAgentSDK.Test.ModelFixtures` to avoid hardcoding model
-strings in assertions:
-
-```elixir
-import ClaudeAgentSDK.Test.ModelFixtures
-
-test "handles message start" do
-  event = %{"type" => "message_start", "message" => %{"model" => test_model()}}
-  # ...
-end
-```
-
-| Helper | Value | Purpose |
-|--------|-------|---------|
-| `test_model()` | `"test-model-alpha"` | Primary fixture model |
-| `test_model_alt()` | `"test-model-beta"` | When two distinct models are needed |
-| `real_default_model()` | Reads live config | Tests that need an actual registry entry |
-
-## Architecture
-
-```mermaid
-graph LR
-  Config["config/config.exs<br/>:models map"] --> Model["Model module<br/>known_models/0"]
-  Runtime["runtime.exs /<br/>Application.put_env"] --> Model
-  Model --> Validate["validate/1"]
-  Model --> List["list_models/0"]
-  Model --> Suggest["suggest/1"]
-  Model --> Default["default_model/0"]
-  Mock["Mock module"] --> Default
-  Options["Options struct"] --> Validate
-```
-
-The `Model` module never holds state of its own.  Every call reads from
-`Application.get_env(:claude_agent_sdk, :models)`, making the registry
-fully dynamic at runtime.
+The runner maps the common Claude names used by the examples onto the selected
+Ollama model. Claude-only effort examples are skipped in that mode because the
+external backend does not support Claude-native effort semantics.

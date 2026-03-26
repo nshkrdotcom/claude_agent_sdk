@@ -25,6 +25,8 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   The Claude CLI supports multiple authentication methods:
   - Anthropic API key via `claude login` or `ANTHROPIC_API_KEY` environment variable
+  - Anthropic-compatible local backends such as Ollama via `ANTHROPIC_BASE_URL`
+    and `ANTHROPIC_AUTH_TOKEN=ollama`
   - Amazon Bedrock via `CLAUDE_AGENT_USE_BEDROCK=1` and AWS credentials
   - Google Vertex AI via `CLAUDE_AGENT_USE_VERTEX=1` and GCP credentials
 
@@ -277,6 +279,9 @@ defmodule ClaudeAgentSDK.AuthChecker do
   @spec auth_method_available?(atom()) :: boolean()
   def auth_method_available?(method) do
     case method do
+      :ollama ->
+        check_ollama_auth()
+
       :anthropic ->
         check_anthropic_auth()
 
@@ -312,34 +317,16 @@ defmodule ClaudeAgentSDK.AuthChecker do
   """
   @spec get_api_key_source() :: {:ok, String.t()} | {:error, String.t()}
   def get_api_key_source do
-    case {
-      System.get_env(Env.anthropic_api_key()),
-      System.get_env(Env.use_bedrock()),
-      System.get_env(Env.use_vertex())
-    } do
-      {api_key, _, _} when is_binary(api_key) ->
-        {:ok, "environment variable ANTHROPIC_API_KEY"}
-
-      {_, "1", _} ->
-        if check_aws_credentials() do
-          {:ok, "AWS credentials for Bedrock"}
-        else
-          {:error, "CLAUDE_AGENT_USE_BEDROCK set but AWS credentials not found"}
-        end
-
-      {_, _, "1"} ->
-        if check_gcp_credentials() do
-          {:ok, "Google Cloud credentials for Vertex AI"}
-        else
-          {:error, "CLAUDE_AGENT_USE_VERTEX set but GCP credentials not found"}
-        end
-
-      _ ->
+    case api_key_source_from_env() do
+      nil ->
         if check_cli_session() do
           {:ok, "claude login session"}
         else
           {:error, "no authentication method found"}
         end
+
+      result ->
+        result
     end
   end
 
@@ -417,18 +404,22 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp check_detailed_auth(executable) do
     # Check different auth methods in order of preference
-    case {check_anthropic_auth(executable), check_bedrock_auth(), check_vertex_auth()} do
-      {true, _, _} ->
+    case {check_ollama_auth(), check_anthropic_auth(executable), check_bedrock_auth(),
+          check_vertex_auth()} do
+      {true, _, _, _} ->
+        {true, %{method: "Ollama", source: "anthropic_compatible"}}
+
+      {false, true, _, _} ->
         source = if System.get_env(Env.anthropic_api_key()), do: "env", else: "session"
         {true, %{method: "Anthropic API", source: source}}
 
-      {false, true, _} ->
+      {false, false, true, _} ->
         {true, %{method: "AWS Bedrock", source: "aws_credentials"}}
 
-      {false, false, true} ->
+      {false, false, false, true} ->
         {true, %{method: "Google Vertex AI", source: "gcp_credentials"}}
 
-      {false, false, false} ->
+      {false, false, false, false} ->
         {false, %{method: nil, source: nil}}
     end
   end
@@ -456,6 +447,67 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp check_vertex_auth do
     System.get_env(Env.use_vertex()) == "1" and check_gcp_credentials()
+  end
+
+  defp check_ollama_auth do
+    case {
+      System.get_env(Env.anthropic_auth_token()),
+      System.get_env(Env.anthropic_base_url())
+    } do
+      {"ollama", base_url} when is_binary(base_url) and base_url != "" ->
+        ollama_api_reachable?(base_url)
+
+      _ ->
+        false
+    end
+  end
+
+  defp api_key_source_from_env do
+    cond do
+      is_binary(System.get_env(Env.anthropic_api_key())) ->
+        {:ok, "environment variable ANTHROPIC_API_KEY"}
+
+      ollama_env_configured?() ->
+        ollama_api_source()
+
+      System.get_env(Env.use_bedrock()) == "1" ->
+        bedrock_api_source()
+
+      System.get_env(Env.use_vertex()) == "1" ->
+        vertex_api_source()
+
+      true ->
+        nil
+    end
+  end
+
+  defp ollama_env_configured? do
+    System.get_env(Env.anthropic_auth_token()) == "ollama" and
+      is_binary(System.get_env(Env.anthropic_base_url()))
+  end
+
+  defp ollama_api_source do
+    if check_ollama_auth() do
+      {:ok, "Ollama via ANTHROPIC_BASE_URL"}
+    else
+      {:error, "ANTHROPIC_BASE_URL is set for Ollama but the Ollama API is not reachable"}
+    end
+  end
+
+  defp bedrock_api_source do
+    if check_aws_credentials() do
+      {:ok, "AWS credentials for Bedrock"}
+    else
+      {:error, "CLAUDE_AGENT_USE_BEDROCK set but AWS credentials not found"}
+    end
+  end
+
+  defp vertex_api_source do
+    if check_gcp_credentials() do
+      {:ok, "Google Cloud credentials for Vertex AI"}
+    else
+      {:error, "CLAUDE_AGENT_USE_VERTEX set but GCP credentials not found"}
+    end
   end
 
   defp check_cli_session do
@@ -546,16 +598,48 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp get_provider_specific_recommendations do
-    case {System.get_env(Env.use_bedrock()), System.get_env(Env.use_vertex())} do
-      {"1", _} ->
+    case {
+      System.get_env(Env.anthropic_auth_token()),
+      System.get_env(Env.anthropic_base_url()),
+      System.get_env(Env.use_bedrock()),
+      System.get_env(Env.use_vertex())
+    } do
+      {"ollama", base_url, _, _} when is_binary(base_url) and base_url != "" ->
+        [
+          "Ensure the Ollama daemon is running and reachable at ANTHROPIC_BASE_URL",
+          "Ensure the requested local model is installed in Ollama"
+        ]
+
+      {_, _, "1", _} ->
         ["Ensure AWS credentials are configured", "Check AWS_PROFILE or AWS_ACCESS_KEY_ID"]
 
-      {_, "1"} ->
+      {_, _, _, "1"} ->
         ["Ensure GCP credentials are configured", "Check GOOGLE_APPLICATION_CREDENTIALS"]
 
       _ ->
         ["Or set ANTHROPIC_API_KEY environment variable"]
     end
+  end
+
+  defp ollama_api_reachable?(base_url) when is_binary(base_url) do
+    url = String.trim_trailing(base_url, "/") <> "/api/tags"
+
+    with {:ok, _} <- Application.ensure_all_started(:inets),
+         {:ok, _} <- Application.ensure_all_started(:ssl) do
+      case :httpc.request(:get, {String.to_charlist(url), []}, [{:timeout, 2_000}],
+             body_format: :binary
+           ) do
+        {:ok, {{_http_version, status, _reason_phrase}, _headers, _body}}
+        when status in 200..299 ->
+          true
+
+        _ ->
+          false
+      end
+    end
+  catch
+    _, _ ->
+      false
   end
 
   defp execute_cli_command(executable, args, timeout_ms)

@@ -117,6 +117,26 @@ Claude-side behavior:
 Do not treat repo-local config snapshots as authoritative model policy. The
 shared core registry is the source of truth.
 
+### Claude Ollama Backend
+
+`claude_agent_sdk` now supports an explicit Claude `:ollama` backend through
+the same core-owned payload path.
+
+Example:
+
+```elixir
+options =
+  ClaudeAgentSDK.Options.new(
+    provider_backend: :ollama,
+    anthropic_base_url: "http://localhost:11434",
+    external_model_overrides: %{"haiku" => "llama3.2"},
+    model: "haiku"
+  )
+```
+
+The SDK still runs the normal `claude` binary. The core payload resolves the
+actual transport model and injects the Anthropic-compatible Ollama env.
+
 ---
 
 ## Installation
@@ -154,7 +174,7 @@ claude --version
 ### CLI Compatibility
 
 - Minimum supported Claude CLI version: `2.1.0`
-- Recommended Claude CLI version: `2.1.74`
+- Recommended Claude CLI version: `2.1.84`
 - Compatibility policy: this SDK follows the Python SDK where practical, but the Claude CLI wire protocol is authoritative. CLI-native frames such as `:rate_limit_event` are surfaced here even if the current Python SDK skips unknown message types for forward compatibility.
 
 ---

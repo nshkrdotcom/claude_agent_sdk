@@ -731,8 +731,8 @@ end
 
 When using `startup_mode: :lazy` on transport/session start options,
 deterministic startup validation failures still return from `start_link`
-immediately. `ClaudeAgentSDK.Streaming.Session.start_link/2` is still a linked
-GenServer API, so direct callers should trap exits or run it under supervision.
+immediately. The streaming session start API is still a linked GenServer
+boundary, so direct callers should trap exits or run it under supervision.
 Once preflight passes, subprocess launch failures can still arrive after
 `start_link` succeeds. Handle those exits as part of normal supervision:
 

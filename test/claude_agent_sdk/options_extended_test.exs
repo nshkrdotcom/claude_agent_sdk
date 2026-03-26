@@ -52,6 +52,28 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
 
       assert flag_with_value?(args, "--setting-sources", "user,project,local")
     end
+
+    test "model payload settings patch merges into explicit settings" do
+      options = %Options{
+        settings: ~s({"hello":"world","sandbox":{"enabled":false}}),
+        model_payload: %{
+          "settings_patch" => %{
+            "sandbox" => %{"enabled" => true},
+            "backend" => %{"name" => "ollama"}
+          }
+        }
+      }
+
+      decoded =
+        options
+        |> Options.to_args()
+        |> value_for_flag("--settings")
+        |> Jason.decode!()
+
+      assert decoded["hello"] == "world"
+      assert decoded["sandbox"]["enabled"] == true
+      assert decoded["backend"]["name"] == "ollama"
+    end
   end
 
   describe "system prompt controls" do

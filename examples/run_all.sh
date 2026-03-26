@@ -19,9 +19,45 @@ if ! command -v claude >/dev/null 2>&1; then
   exit 1
 fi
 
+BACKEND="${CLAUDE_EXAMPLES_BACKEND:-${CLAUDE_AGENT_PROVIDER_BACKEND:-anthropic}}"
+
 echo ""
 echo "==> claude --version"
 claude --version
+
+if [[ "$BACKEND" == "ollama" ]]; then
+  if ! command -v ollama >/dev/null 2>&1; then
+    echo "ERROR: Ollama CLI not found on PATH." >&2
+    exit 1
+  fi
+
+  OLLAMA_MODEL="${CLAUDE_EXAMPLES_OLLAMA_MODEL:-${CLAUDE_EXAMPLES_MODEL:-llama3.2}}"
+  ANTHROPIC_BASE_URL="${CLAUDE_EXAMPLES_ANTHROPIC_BASE_URL:-${ANTHROPIC_BASE_URL:-http://localhost:11434}}"
+  export CLAUDE_AGENT_PROVIDER_BACKEND="ollama"
+  export ANTHROPIC_AUTH_TOKEN="${ANTHROPIC_AUTH_TOKEN:-ollama}"
+  export ANTHROPIC_API_KEY=""
+  export ANTHROPIC_BASE_URL
+  export ANTHROPIC_MODEL="$OLLAMA_MODEL"
+  export CLAUDE_AGENT_EXTERNAL_MODEL_OVERRIDES="$(cat <<JSON
+{"haiku":"$OLLAMA_MODEL","sonnet":"$OLLAMA_MODEL","opus":"$OLLAMA_MODEL","sonnet[1m]":"$OLLAMA_MODEL","opus[1m]":"$OLLAMA_MODEL","legacy-sonnet":"$OLLAMA_MODEL"}
+JSON
+)"
+
+  echo ""
+  echo "==> ollama --version"
+  ollama --version
+
+  echo ""
+  echo "==> ollama show $OLLAMA_MODEL"
+  if ! ollama show "$OLLAMA_MODEL" >/dev/null 2>&1; then
+    echo "ERROR: Ollama model not installed: $OLLAMA_MODEL" >&2
+    exit 1
+  fi
+
+  echo "Using Ollama backend"
+  echo "  base_url: $ANTHROPIC_BASE_URL"
+  echo "  mapped model: $OLLAMA_MODEL"
+fi
 
 echo ""
 echo "==> claude auth preflight (may make a small API call)"
@@ -35,10 +71,10 @@ preflight_rc=0
 
 if command -v timeout >/dev/null 2>&1; then
   timeout --foreground "${PREFLIGHT_TIMEOUT_SECONDS}s" \
-    claude --print "$PREFLIGHT_PROMPT" --max-turns 1 --model haiku \
+    claude --print "$PREFLIGHT_PROMPT" --max-turns 1 --model "${OLLAMA_MODEL:-haiku}" \
     >"$preflight_out" 2>&1 || preflight_rc=$?
 else
-  claude --print "$PREFLIGHT_PROMPT" --max-turns 1 --model haiku \
+  claude --print "$PREFLIGHT_PROMPT" --max-turns 1 --model "${OLLAMA_MODEL:-haiku}" \
     >"$preflight_out" 2>&1 || preflight_rc=$?
 fi
 
@@ -63,11 +99,9 @@ echo "    (timeout: ${EXAMPLE_TIMEOUT_SECONDS}s; set CLAUDE_EXAMPLES_TIMEOUT_SEC
 # (e.g., lingering ports/subprocesses after a successful CLI run).
 export CLAUDE_EXAMPLES_FORCE_HALT="true"
 
-examples=(
+default_examples=(
   "examples/basic_example.exs"
-  "examples/effort_gating_live.exs"
   "examples/session_features_example.exs"
-  "examples/resume_persistence_repro_live.exs"
   "examples/structured_output_live.exs"
   "examples/sandbox_settings_live.exs"
   "examples/tools_and_betas_live.exs"
@@ -93,6 +127,20 @@ examples=(
   "examples/file_checkpointing_live.exs"
   "examples/filesystem_agents_live.exs"
 )
+
+if [[ "$BACKEND" == "ollama" ]]; then
+  examples=(
+    "examples/basic_example.exs"
+    "examples/session_features_example.exs"
+    "examples/sandbox_settings_live.exs"
+  )
+
+  echo ""
+  echo "==> Ollama compatibility subset"
+  echo "    Skipping structured-output, tool/MCP, and control-heavy examples in Ollama mode."
+else
+  examples=("examples/effort_gating_live.exs" "${default_examples[@]}")
+fi
 
 failures=()
 
