@@ -78,6 +78,7 @@ end
 table = AuditHooks.table_name()
 audit_dir = Support.tmp_dir!("claude_agent_sdk_audit_demo")
 audit_file = Path.join(audit_dir, "audit_demo.txt")
+ollama_audit_file = Path.join(audit_dir, "audit_ollama_demo.txt")
 client = nil
 
 try do
@@ -87,6 +88,21 @@ try do
   end
 
   :ets.new(table, [:named_table, :public, :set])
+
+  {tool_names, first_prompt, read_target} =
+    if Support.ollama_backend?() do
+      {
+        ["Write", "Read"],
+        "Use the Write tool to write exactly 'hello from audit example' to #{ollama_audit_file}.",
+        ollama_audit_file
+      }
+    else
+      {
+        ["Bash", "Read"],
+        "Use the Bash tool to run this exact command: echo 'Hello from audit example'",
+        audit_file
+      }
+    end
 
   # Configure hooks for comprehensive logging
   hooks = %{
@@ -101,8 +117,8 @@ try do
   # Note: We don't set max_turns here to match Python SDK behavior.
   # With hooks enabled, the conversation needs multiple turns for tool use + response.
   options = %Options{
-    tools: ["Bash", "Read"],
-    allowed_tools: ["Bash", "Read"],
+    tools: tool_names,
+    allowed_tools: tool_names,
     hooks: hooks,
     model: "haiku",
     permission_mode: :default
@@ -143,20 +159,20 @@ try do
   IO.puts("Running prompts that should trigger tool usage (and therefore hooks)...\n")
 
   messages1 =
-    run_prompt.("Use the Bash tool to run this exact command: echo 'Hello from audit example'")
+    run_prompt.(first_prompt)
 
   messages2 =
-    run_prompt.("Use the Read tool to read #{audit_file} and repeat its contents exactly.")
+    run_prompt.("Use the Read tool to read #{read_target} and repeat its contents exactly.")
 
   case Enum.find(messages1, &(&1.type == :result)) do
     %Message{subtype: :success} ->
       :ok
 
     %Message{subtype: other} ->
-      raise "Bash audit run did not succeed (result subtype: #{inspect(other)})"
+      raise "First audit run did not succeed (result subtype: #{inspect(other)})"
 
     nil ->
-      raise "Bash audit run returned no result message."
+      raise "First audit run returned no result message."
   end
 
   case Enum.find(messages2, &(&1.type == :result)) do

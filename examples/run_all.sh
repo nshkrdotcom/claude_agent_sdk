@@ -100,6 +100,19 @@ JSON
 fi
 
 echo ""
+
+if [[ "$BACKEND" == "ollama" ]]; then
+  echo "Claude backend: Ollama via Anthropic-compatible API"
+  echo "Claude CLI model: $OLLAMA_MODEL"
+  echo "Claude route: claude --model $OLLAMA_MODEL"
+  echo "Backend env: ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL"
+  echo "Model slot mapping: haiku/sonnet/opus -> $OLLAMA_MODEL"
+else
+  echo "Claude backend: standard Anthropic Claude CLI"
+  echo "Claude CLI model: ${ANTHROPIC_MODEL:-haiku (preflight default unless examples override)}"
+fi
+
+echo ""
 echo "==> claude auth preflight (may make a small API call)"
 
 PREFLIGHT_PROMPT="Respond with exactly: OK"

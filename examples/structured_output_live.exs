@@ -93,6 +93,12 @@ defmodule StructuredOutputLiveExample do
 end
 
 Support.ensure_live!()
+
+Support.maybe_skip_for_ollama!(
+  "Structured Output Example",
+  "Strict structured output validation is not reliable under the Ollama-backed Claude path."
+)
+
 Support.header!("Structured Output Example (live)")
 StructuredOutputLiveExample.run()
 Support.halt_if_runner!()

@@ -59,10 +59,16 @@ end
 
 # Task: Ask Claude to write a small file
 prompt = """
-Use the Write tool to create a file with the exact path and content below.
+#{if Support.ollama_backend?() do
+  "Use the Write tool to write exactly 'hello from permissions example' to #{target_file}."
+else
+  """
+  Use the Write tool to create a file with the exact path and content below.
 
-file_path: #{target_file}
-content: hello from permissions example
+  file_path: #{target_file}
+  content: hello from permissions example
+  """
+end}
 """
 
 IO.puts("📤 Asking Claude to write a file...\n")
@@ -121,11 +127,16 @@ exit_code =
     end
 
     if not summary.saw_write do
-      case session_type do
-        :control_client ->
+      cond do
+        Support.ollama_backend?() ->
+          IO.puts(
+            "⚠️  No Write tool_use_start observed in stream; verifying the file on disk instead."
+          )
+
+        session_type == :control_client ->
           raise "No Write tool_use_start observed in stream."
 
-        :streaming_session ->
+        session_type == :streaming_session ->
           IO.puts("⚠️  No Write tool_use_start observed in stream.")
       end
     end
