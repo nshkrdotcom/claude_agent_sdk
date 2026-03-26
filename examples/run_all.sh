@@ -4,6 +4,46 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+usage() {
+  cat <<'EOF'
+Usage: bash examples/run_all.sh [--ollama] [--ollama-model MODEL] [--help]
+
+Options:
+  --ollama               Run the Ollama-compatible example subset.
+  --ollama-model MODEL   Override the Ollama model. Default: llama3.2
+  --help                 Show this help text.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ollama)
+      export CLAUDE_EXAMPLES_BACKEND="ollama"
+      shift
+      ;;
+    --ollama-model)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: --ollama-model requires a model name." >&2
+        exit 1
+      fi
+
+      export CLAUDE_EXAMPLES_BACKEND="ollama"
+      export CLAUDE_EXAMPLES_OLLAMA_MODEL="$2"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: unknown argument: $1" >&2
+      echo "" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
 if command -v stty >/dev/null 2>&1; then
   trap 'stty sane >/dev/null 2>&1 || true' EXIT
 fi
@@ -128,18 +168,13 @@ default_examples=(
   "examples/filesystem_agents_live.exs"
 )
 
-if [[ "$BACKEND" == "ollama" ]]; then
-  examples=(
-    "examples/basic_example.exs"
-    "examples/session_features_example.exs"
-    "examples/sandbox_settings_live.exs"
-  )
+examples=("examples/effort_gating_live.exs" "${default_examples[@]}")
 
+if [[ "$BACKEND" == "ollama" ]]; then
   echo ""
-  echo "==> Ollama compatibility subset"
-  echo "    Skipping structured-output, tool/MCP, and control-heavy examples in Ollama mode."
-else
-  examples=("examples/effort_gating_live.exs" "${default_examples[@]}")
+  echo "==> Ollama mode"
+  echo "    Running the full example list against the Ollama-backed Claude path."
+  echo "    Backend capability mismatches may still cause individual example failures."
 fi
 
 failures=()

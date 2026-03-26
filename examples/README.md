@@ -75,7 +75,24 @@ Sets `CLAUDE_EXAMPLES_FORCE_HALT=true` to ensure each script exits cleanly.
 The runner continues after failures and prints a summary at the end (non-zero exit
 if any example failed).
 
-Run the same suite against a local Ollama model:
+### Run with Ollama
+
+Fastest path:
+
+```bash
+bash examples/run_all.sh --ollama
+```
+
+This runs the full example list against the Ollama-backed Claude path and
+defaults to `llama3.2`.
+
+Pick a different Ollama model:
+
+```bash
+bash examples/run_all.sh --ollama --ollama-model qwen3.5:14b
+```
+
+Environment-variable form still works:
 
 ```bash
 CLAUDE_EXAMPLES_BACKEND=ollama \
@@ -83,12 +100,13 @@ CLAUDE_EXAMPLES_OLLAMA_MODEL=llama3.2 \
 bash examples/run_all.sh
 ```
 
-That mode keeps the example source on canonical Claude names such as `haiku`
-and maps them to the selected Ollama model through the core-owned model
-registry path.
+Ollama mode keeps the example source on canonical Claude names such as
+`haiku` and maps them to the selected Ollama model through the
+core-owned model registry path.
 
-The effort demo is skipped in Ollama mode because external backends do not
-support Claude-native effort semantics.
+Ollama mode does not filter the example list. Some examples may still fail if
+the local backend does not match Anthropic-hosted Claude behavior for
+structured output, tool use, MCP, or other advanced features.
 
 ### Run Individual Examples
 
