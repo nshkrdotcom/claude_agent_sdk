@@ -20,57 +20,54 @@ defmodule StopReasonProbeExample do
 
     IO.puts("\nThis example verifies message_delta.stop_reason emission per message.\n")
 
-    options = %Options{
+    base_options = %Options{
       model: "haiku",
       max_turns: 4,
-      tools: ["Bash"],
-      allowed_tools: ["Bash"],
       permission_mode: :bypass_permissions,
       preferred_transport: :control
     }
 
+    end_turn_summary =
+      run_probe(
+        base_options,
+        "Say hi in one short sentence.",
+        "End-turn prompt"
+      )
+
+    tool_summary =
+      run_probe(
+        %{base_options | tools: ["Bash"], allowed_tools: ["Bash"]},
+        "Use the Bash tool to run: echo 'tool check'. Then summarize the output.",
+        "Tool-use prompt"
+      )
+
+    assert_end_turn_prompt!(end_turn_summary)
+    assert_tool_use_prompt!(tool_summary)
+
+    IO.puts("\nDone.")
+  end
+
+  defp run_probe(options, prompt, label) do
     {:ok, session} = Streaming.start_session(options)
 
     if not match?({:control_client, _pid}, session) do
       raise "Expected control client session, got: #{inspect(session)}"
     end
 
-    IO.puts("Transport: control client (preferred_transport: :control)")
-
-    try do
-      end_turn_summary =
-        run_probe(
-          session,
-          "Say hi in one short sentence.",
-          "End-turn prompt"
-        )
-
-      tool_summary =
-        run_probe(
-          session,
-          "Use the Bash tool to run: echo 'tool check'. Then summarize the output.",
-          "Tool-use prompt"
-        )
-
-      assert_end_turn_prompt!(end_turn_summary)
-      assert_tool_use_prompt!(tool_summary)
-    after
-      Streaming.close_session(session)
-    end
-
-    IO.puts("\nDone.")
-  end
-
-  defp run_probe(session, prompt, label) do
     IO.puts("\n" <> String.duplicate("-", 70))
     IO.puts(label)
     IO.puts(String.duplicate("-", 70))
+    IO.puts("Transport: control client (preferred_transport: :control)")
     IO.puts("Prompt: #{prompt}\n")
 
     summary =
-      Streaming.send_message(session, prompt)
-      |> Enum.reduce(initial_state(), &handle_event/2)
-      |> finalize_summary()
+      try do
+        Streaming.send_message(session, prompt)
+        |> Enum.reduce(initial_state(), &handle_event/2)
+        |> finalize_summary()
+      after
+        Streaming.close_session(session)
+      end
 
     summary = %{summary | results: Enum.reverse(summary.results)}
 

@@ -113,6 +113,13 @@ end
 
 table = CompleteWorkflowHooks.table_name()
 sandbox_dir = Support.tmp_dir!("claude_agent_sdk_complete_workflow")
+
+outside_path =
+  Path.join(
+    System.tmp_dir!(),
+    "claude_agent_sdk_outside_#{System.unique_integer([:positive])}.txt"
+  )
+
 client = nil
 
 try do
@@ -181,32 +188,40 @@ try do
 
   IO.puts("Sandbox directory: #{sandbox_dir}\n")
 
-  IO.puts("Test 1: Safe bash command\n")
+  IO.puts("Test 1: Sandboxed file write (allowed)\n")
 
   messages1 =
-    run_prompt.(
-      "Use the Bash tool to run this exact command: echo 'hello from complete workflow'"
-    )
-
-  IO.puts("\nTest 2: Sandboxed file write\n")
-
-  messages2 =
     run_prompt.(
       "Use the Write tool to write exactly 'ok' to #{Path.join(sandbox_dir, "ok.txt")}."
     )
 
-  IO.puts("\nTest 3: Blocked bash command (should be denied by hook)\n")
+  IO.puts("\nTest 2: Write outside sandbox (denied by hook)\n")
+
+  messages2 =
+    run_prompt.("Use the Write tool to write exactly 'outside' to #{outside_path}.")
 
   messages3 =
-    run_prompt.(
-      "Run the bash command: ./blocked.sh --help. If the tool is denied, say it was denied."
-    )
+    if Support.ollama_backend?() do
+      IO.puts(
+        "\nTest 3: Skipping Bash demonstration under Ollama (tool payloads are unstable on some local models)\n"
+      )
 
-  for {label, msgs} <- [
-        {"safe bash", messages1},
-        {"sandbox write", messages2},
-        {"blocked bash", messages3}
-      ] do
+      []
+    else
+      IO.puts("\nTest 3: Safe bash demonstration\n")
+
+      run_prompt.(
+        "Use the Bash tool to run this exact command: echo 'hello from complete workflow'"
+      )
+    end
+
+  result_runs =
+    [
+      {"sandbox write", messages1},
+      {"outside write", messages2}
+    ] ++ if(messages3 == [], do: [], else: [{"safe bash", messages3}])
+
+  for {label, msgs} <- result_runs do
     case Enum.find(msgs, &(&1.type == :result)) do
       %Message{subtype: :success} ->
         :ok

@@ -20,6 +20,11 @@ alias Examples.Support
 
 Support.ensure_live!()
 
+Support.maybe_skip_for_ollama!(
+  "Subagent Streaming Example",
+  "Subagent streaming requires real Agent tool calls, which are not reliable under the Ollama-backed Claude path."
+)
+
 defmodule SubagentStreamingDemo do
   @moduledoc """
   Demonstrates parent_tool_use_id for distinguishing main vs subagent output.

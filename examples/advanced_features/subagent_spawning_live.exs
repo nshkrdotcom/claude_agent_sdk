@@ -16,6 +16,11 @@ alias Examples.Support
 
 Support.ensure_live!()
 
+Support.maybe_skip_for_ollama!(
+  "Subagent Spawning Example",
+  "Real Agent tool spawning is not reliable under the Ollama-backed Claude path."
+)
+
 Support.header!("Subagent Spawning Example (live)")
 
 IO.puts("""

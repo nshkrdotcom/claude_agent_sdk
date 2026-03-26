@@ -105,6 +105,12 @@ defmodule SDKMCPStreamingExample do
 
   def run do
     Support.ensure_live!()
+
+    Support.maybe_skip_for_ollama!(
+      "Streaming + SDK MCP Example",
+      "Streaming SDK MCP tool invocation is not reliable under the Ollama-backed Claude path."
+    )
+
     Support.header!("Streaming + SDK MCP Example (live)")
     IO.puts("\nThis example demonstrates streaming with SDK MCP servers.\n")
 

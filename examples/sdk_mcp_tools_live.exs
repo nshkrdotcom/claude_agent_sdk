@@ -22,6 +22,11 @@ alias Examples.Support
 
 Support.ensure_live!()
 
+Support.maybe_skip_for_ollama!(
+  "SDK MCP Tools Example",
+  "SDK MCP tool invocation is not reliable under the Ollama-backed Claude path."
+)
+
 # Define calculator tools using the deftool macro with simple_schema helper
 defmodule Examples.CalculatorTools do
   @moduledoc false

@@ -104,13 +104,23 @@ Ollama mode keeps the example source on canonical Claude names such as
 `haiku` and maps them to the selected Ollama model through the
 core-owned model registry path.
 
-Ollama mode does not filter the example list. Some examples may still fail if
-the local backend does not match Anthropic-hosted Claude behavior for
-structured output, tool use, MCP, or other advanced features.
+Examples that depend on unsupported Ollama features now self-skip by default.
+Set `CLAUDE_EXAMPLES_FORCE_UNSUPPORTED=true` if you want to force those runs.
 
 ### Run Individual Examples
 
 ```bash
+mix run examples/basic_example.exs
+```
+
+Run an individual example with Ollama:
+
+```bash
+CLAUDE_AGENT_PROVIDER_BACKEND=ollama \
+ANTHROPIC_AUTH_TOKEN=ollama \
+ANTHROPIC_API_KEY='' \
+ANTHROPIC_BASE_URL=http://localhost:11434 \
+CLAUDE_AGENT_EXTERNAL_MODEL_OVERRIDES='{"haiku":"llama3.2","sonnet":"llama3.2","opus":"llama3.2","sonnet[1m]":"llama3.2","opus[1m]":"llama3.2","legacy-sonnet":"llama3.2"}' \
 mix run examples/basic_example.exs
 ```
 

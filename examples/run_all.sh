@@ -173,8 +173,9 @@ examples=("examples/effort_gating_live.exs" "${default_examples[@]}")
 if [[ "$BACKEND" == "ollama" ]]; then
   echo ""
   echo "==> Ollama mode"
-  echo "    Running the full example list against the Ollama-backed Claude path."
-  echo "    Backend capability mismatches may still cause individual example failures."
+  echo "    Running the example list against the Ollama-backed Claude path."
+  echo "    Examples that require unsupported Ollama features may self-skip."
+  echo "    Set CLAUDE_EXAMPLES_FORCE_UNSUPPORTED=true to force those runs."
 fi
 
 failures=()

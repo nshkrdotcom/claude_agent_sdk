@@ -70,6 +70,12 @@ defmodule MathTools do
 end
 
 Support.ensure_live!()
+
+Support.maybe_skip_for_ollama!(
+  "SDK MCP Example",
+  "SDK MCP tool invocation is not reliable under the Ollama-backed Claude path."
+)
+
 Support.header!("SDK MCP Example (live)")
 
 # Create SDK MCP server with math tools

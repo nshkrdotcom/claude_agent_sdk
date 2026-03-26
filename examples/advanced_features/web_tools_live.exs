@@ -16,6 +16,11 @@ alias Examples.Support
 
 Support.ensure_live!()
 
+Support.maybe_skip_for_ollama!(
+  "Web Tools Example",
+  "WebSearch/WebFetch are not executed reliably under the Ollama-backed Claude path."
+)
+
 Support.header!("Web Tools Example (live)")
 
 IO.puts("""
@@ -117,7 +122,7 @@ end
 # Check result
 case Enum.find(messages, &(&1.type == :result)) do
   %{subtype: :success, data: %{total_cost_usd: cost}} when is_number(cost) ->
-    IO.puts("\n[ok] Query completed (cost: $#{:erlang.float_to_binary(cost, decimals: 6)})")
+    IO.puts("\n[ok] Query completed (cost: $#{Support.format_cost(cost)})")
 
   %{subtype: :success} ->
     IO.puts("\n[ok] Query completed successfully")
