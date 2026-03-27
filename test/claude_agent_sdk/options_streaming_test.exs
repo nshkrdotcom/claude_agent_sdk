@@ -10,19 +10,23 @@ defmodule ClaudeAgentSDK.OptionsStreamingTest do
 
   alias ClaudeAgentSDK.Options
 
+  defp new_options(opts \\ []) do
+    Options.new(Keyword.merge([model: "sonnet", provider_backend: :anthropic], opts))
+  end
+
   describe "include_partial_messages field" do
     test "creates options with include_partial_messages set to true" do
-      options = Options.new(include_partial_messages: true)
+      options = new_options(include_partial_messages: true)
       assert options.include_partial_messages == true
     end
 
     test "creates options with include_partial_messages set to false" do
-      options = Options.new(include_partial_messages: false)
+      options = new_options(include_partial_messages: false)
       assert options.include_partial_messages == false
     end
 
     test "defaults to nil when not specified" do
-      options = Options.new()
+      options = new_options()
       assert options.include_partial_messages == nil
     end
 
@@ -66,22 +70,22 @@ defmodule ClaudeAgentSDK.OptionsStreamingTest do
 
   describe "preferred_transport field" do
     test "creates options with preferred_transport :cli" do
-      options = Options.new(preferred_transport: :cli)
+      options = new_options(preferred_transport: :cli)
       assert options.preferred_transport == :cli
     end
 
     test "creates options with preferred_transport :control" do
-      options = Options.new(preferred_transport: :control)
+      options = new_options(preferred_transport: :control)
       assert options.preferred_transport == :control
     end
 
     test "creates options with preferred_transport :auto" do
-      options = Options.new(preferred_transport: :auto)
+      options = new_options(preferred_transport: :auto)
       assert options.preferred_transport == :auto
     end
 
     test "defaults to nil when not specified" do
-      options = Options.new()
+      options = new_options()
       assert options.preferred_transport == nil
     end
 
@@ -101,7 +105,7 @@ defmodule ClaudeAgentSDK.OptionsStreamingTest do
   describe "combined streaming features" do
     test "can set both streaming fields together" do
       options =
-        Options.new(
+        new_options(
           include_partial_messages: true,
           preferred_transport: :control
         )
@@ -112,7 +116,7 @@ defmodule ClaudeAgentSDK.OptionsStreamingTest do
 
     test "streaming fields work with other options" do
       options =
-        Options.new(
+        new_options(
           model: "sonnet",
           max_turns: 10,
           verbose: true,
@@ -173,18 +177,18 @@ defmodule ClaudeAgentSDK.OptionsStreamingTest do
 
   describe "Options.new/1 with streaming fields" do
     test "new/1 accepts include_partial_messages keyword" do
-      options = Options.new(include_partial_messages: true)
+      options = new_options(include_partial_messages: true)
       assert options.include_partial_messages == true
     end
 
     test "new/1 accepts preferred_transport keyword" do
-      options = Options.new(preferred_transport: :control)
+      options = new_options(preferred_transport: :control)
       assert options.preferred_transport == :control
     end
 
     test "new/1 accepts both streaming keywords" do
       options =
-        Options.new(
+        new_options(
           include_partial_messages: false,
           preferred_transport: :cli
         )

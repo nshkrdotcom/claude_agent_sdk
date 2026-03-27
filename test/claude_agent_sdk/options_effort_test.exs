@@ -3,31 +3,36 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
 
   import ExUnit.CaptureLog
 
-  alias ClaudeAgentSDK.Options
+  alias ClaudeAgentSDK.Config.Env
+  alias ClaudeAgentSDK.{Options, TestEnvHelpers}
+
+  defp new_options(opts) do
+    Options.new(Keyword.merge([model: "sonnet", provider_backend: :anthropic], opts))
+  end
 
   describe "effort option" do
     test "defaults to nil" do
-      opts = Options.new()
+      opts = new_options([])
       assert opts.effort == nil
     end
 
     test "accepts :low" do
-      opts = Options.new(effort: :low)
+      opts = new_options(effort: :low)
       assert opts.effort == :low
     end
 
     test "accepts :medium" do
-      opts = Options.new(effort: :medium)
+      opts = new_options(effort: :medium)
       assert opts.effort == :medium
     end
 
     test "accepts :high" do
-      opts = Options.new(effort: :high)
+      opts = new_options(effort: :high)
       assert opts.effort == :high
     end
 
     test "emits --effort flag when set" do
-      opts = Options.new(effort: :high)
+      opts = new_options(effort: :high)
       args = Options.to_args(opts)
       assert "--effort" in args
       idx = Enum.find_index(args, &(&1 == "--effort"))
@@ -35,18 +40,18 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
     end
 
     test "does not emit --effort when nil" do
-      opts = Options.new(effort: nil)
+      opts = new_options(effort: nil)
       args = Options.to_args(opts)
       refute "--effort" in args
     end
 
     test "accepts :max" do
-      opts = Options.new(effort: :max)
+      opts = new_options(effort: :max)
       assert opts.effort == :max
     end
 
     test "emits --effort max" do
-      opts = Options.new(effort: :max)
+      opts = new_options(effort: :max, model: "opus")
       args = Options.to_args(opts)
       assert "--effort" in args
       idx = Enum.find_index(args, &(&1 == "--effort"))
@@ -69,7 +74,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
 
   describe "effort + haiku gating" do
     test "strips effort when model is haiku short form" do
-      opts = Options.new(effort: :high, model: "haiku")
+      opts = new_options(effort: :high, model: "haiku")
 
       log =
         capture_log(fn ->
@@ -81,7 +86,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
     end
 
     test "strips effort when model is haiku full ID" do
-      opts = Options.new(effort: :medium, model: "claude-haiku-4-5-20251001")
+      opts = new_options(effort: :medium, model: "claude-haiku-4-5-20251001")
 
       log =
         capture_log(fn ->
@@ -100,7 +105,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
         Application.put_env(:claude_agent_sdk, :log_level, previous_level)
       end)
 
-      opts = Options.new(effort: :high, model: "haiku")
+      opts = new_options(effort: :high, model: "haiku")
 
       log =
         capture_log(fn ->
@@ -112,13 +117,13 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
     end
 
     test "allows effort on opus" do
-      opts = Options.new(effort: :high, model: "opus")
+      opts = new_options(effort: :high, model: "opus")
       args = Options.to_args(opts)
       assert "--effort" in args
     end
 
     test "allows :max effort on opus" do
-      opts = Options.new(effort: :max, model: "opus")
+      opts = new_options(effort: :max, model: "opus")
       args = Options.to_args(opts)
       assert "--effort" in args
       idx = Enum.find_index(args, &(&1 == "--effort"))
@@ -126,19 +131,19 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
     end
 
     test "allows :max effort on claude-opus-4-6" do
-      opts = Options.new(effort: :max, model: "claude-opus-4-6")
+      opts = new_options(effort: :max, model: "claude-opus-4-6")
       args = Options.to_args(opts)
       assert "--effort" in args
     end
 
     test "allows :max effort on opus[1m]" do
-      opts = Options.new(effort: :max, model: "opus[1m]")
+      opts = new_options(effort: :max, model: "opus[1m]")
       args = Options.to_args(opts)
       assert "--effort" in args
     end
 
     test "warns and strips :max effort on sonnet" do
-      opts = Options.new(effort: :max, model: "sonnet")
+      opts = new_options(effort: :max, model: "sonnet")
 
       log =
         capture_log(fn ->
@@ -150,26 +155,36 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
     end
 
     test "allows effort on sonnet" do
-      opts = Options.new(effort: :low, model: "sonnet")
+      opts = new_options(effort: :low, model: "sonnet")
       args = Options.to_args(opts)
       assert "--effort" in args
     end
 
     test "allows effort when model is nil and the default model supports it" do
-      opts = Options.new(effort: :high, model: nil)
-      args = Options.to_args(opts)
-      assert "--effort" in args
+      TestEnvHelpers.with_system_env(
+        [{Env.provider_backend(), "anthropic"}, {Env.anthropic_model(), "sonnet"}],
+        fn ->
+          opts = Options.new(effort: :high, model: nil)
+          args = Options.to_args(opts)
+          assert "--effort" in args
+        end
+      )
     end
 
     test "allows :max effort when model is nil and the default model is opus" do
-      opts = Options.new(effort: :max, model: nil)
-      args = Options.to_args(opts)
-      assert "--effort" in args
+      TestEnvHelpers.with_system_env(
+        [{Env.provider_backend(), "anthropic"}, {Env.anthropic_model(), "opus"}],
+        fn ->
+          opts = Options.new(effort: :max, model: nil)
+          args = Options.to_args(opts)
+          assert "--effort" in args
+        end
+      )
     end
 
     test "uses the resolved payload model when gating :max" do
       opts =
-        Options.new(
+        new_options(
           effort: :max,
           model: nil,
           model_payload: resolved_payload!("sonnet")
@@ -186,7 +201,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
 
     test "uses the resolved payload model when gating Haiku effort" do
       opts =
-        Options.new(
+        new_options(
           effort: :high,
           model: nil,
           model_payload: resolved_payload!("haiku")

@@ -4,7 +4,29 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
   """
   use ClaudeAgentSDK.SupertesterCase
 
-  alias ClaudeAgentSDK.Options
+  alias ClaudeAgentSDK.Config.Env
+  alias ClaudeAgentSDK.{Options, TestEnvHelpers}
+  alias CliSubprocessCore.ModelRegistry.Selection
+
+  setup do
+    lock_id = TestEnvHelpers.acquire_global_state_lock()
+
+    previous = %{
+      provider_backend: System.get_env(Env.provider_backend()),
+      anthropic_model: System.get_env(Env.anthropic_model())
+    }
+
+    System.put_env(Env.provider_backend(), "anthropic")
+    System.put_env(Env.anthropic_model(), "sonnet")
+
+    on_exit(fn ->
+      restore_env(Env.provider_backend(), previous.provider_backend)
+      restore_env(Env.anthropic_model(), previous.anthropic_model)
+      TestEnvHelpers.release_global_state_lock(lock_id)
+    end)
+
+    :ok
+  end
 
   describe "budget and session flags" do
     test "max_budget_usd sets --max-budget-usd" do
@@ -54,14 +76,23 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
     end
 
     test "model payload settings patch merges into explicit settings" do
-      options = %Options{
-        settings: ~s({"hello":"world","sandbox":{"enabled":false}}),
-        model_payload: %{
-          "settings_patch" => %{
+      payload =
+        Selection.new(
+          provider: :claude,
+          requested_model: "sonnet",
+          resolved_model: "sonnet",
+          resolution_source: :explicit,
+          provider_backend: :anthropic,
+          model_source: :catalog,
+          settings_patch: %{
             "sandbox" => %{"enabled" => true},
             "backend" => %{"name" => "ollama"}
           }
-        }
+        )
+
+      options = %Options{
+        settings: ~s({"hello":"world","sandbox":{"enabled":false}}),
+        model_payload: payload
       }
 
       decoded =
@@ -539,4 +570,7 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
       idx -> Enum.at(args, idx + 1)
     end
   end
+
+  defp restore_env(key, nil), do: System.delete_env(key)
+  defp restore_env(key, value), do: System.put_env(key, value)
 end

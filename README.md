@@ -104,15 +104,19 @@ Authoritative core surface:
 - `CliSubprocessCore.ModelRegistry.validate/2`
 - `CliSubprocessCore.ModelRegistry.default_model/2`
 - `CliSubprocessCore.ModelRegistry.build_arg_payload/3`
+- `CliSubprocessCore.ModelInput.normalize/3`
 
 Claude-side behavior:
 
-- `ClaudeAgentSDK.Options.new/1` ensures `model_payload` and `model` are
-  aligned from the shared core contract
+- `ClaudeAgentSDK.Options.new/1` routes mixed raw-versus-payload input through
+  `CliSubprocessCore.ModelInput.normalize/3`, then ensures `model_payload` and
+  `model` are aligned from the shared core contract
 - `ClaudeAgentSDK.Model.default_model/0` reads the shared core default instead
   of carrying a local fallback
 - effort gating runs against the resolved model, not mutable app config
 - provider CLI rendering only formats arguments from resolved values
+- repo-local env defaults remain fallback inputs only when `model_payload` was
+  not supplied explicitly
 
 Do not treat repo-local config snapshots as authoritative model policy. The
 shared core registry is the source of truth.

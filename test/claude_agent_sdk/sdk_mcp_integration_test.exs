@@ -11,6 +11,10 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
   alias ClaudeAgentSDK.{Options, Tool}
   alias ClaudeAgentSDK.TestSupport.CalculatorTools
 
+  defp new_options(opts) do
+    Options.new(Keyword.merge([model: "sonnet", provider_backend: :anthropic], opts))
+  end
+
   describe "SDK MCP server creation and configuration" do
     test "create_sdk_mcp_server returns correct structure" do
       server =
@@ -48,7 +52,7 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
           tools: []
         )
 
-      options = Options.new(mcp_servers: %{"test" => server})
+      options = new_options(mcp_servers: %{"test" => server})
 
       assert options.mcp_servers["test"].type == :sdk
       assert is_map(options.mcp_servers)
@@ -120,7 +124,7 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
           tools: []
         )
 
-      options = Options.new(mcp_servers: %{"test" => sdk_server})
+      options = new_options(mcp_servers: %{"test" => sdk_server})
       args = Options.to_args(options)
 
       # SDK servers ARE passed to CLI via --mcp-config (matching Python SDK)
@@ -146,7 +150,7 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
         args: ["mcp-server-time"]
       }
 
-      options = Options.new(mcp_servers: %{"time" => external_server})
+      options = new_options(mcp_servers: %{"time" => external_server})
       args = Options.to_args(options)
 
       # External servers should be passed to CLI via --mcp-config
@@ -177,7 +181,7 @@ defmodule ClaudeAgentSDK.SDKMCPIntegrationTest do
       }
 
       options =
-        Options.new(mcp_servers: %{"sdk" => sdk_server, "external" => external_server})
+        new_options(mcp_servers: %{"sdk" => sdk_server, "external" => external_server})
 
       args = Options.to_args(options)
 

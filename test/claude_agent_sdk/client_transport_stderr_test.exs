@@ -190,6 +190,9 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
             }
         }
         print(json.dumps(response), flush=True)
+
+        for _ in sys.stdin:
+            pass
         PY
         )"
         """)

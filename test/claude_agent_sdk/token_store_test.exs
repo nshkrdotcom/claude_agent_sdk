@@ -2,8 +2,11 @@ defmodule ClaudeAgentSDK.TokenStoreTest do
   use ExUnit.Case, async: true
 
   alias ClaudeAgentSDK.Auth.TokenStore
+  alias ClaudeAgentSDK.TestEnvHelpers
 
   setup do
+    lock_id = TestEnvHelpers.acquire_global_state_lock()
+
     path =
       Path.join(
         System.tmp_dir!(),
@@ -20,6 +23,7 @@ defmodule ClaudeAgentSDK.TokenStoreTest do
         Application.put_env(:claude_agent_sdk, :auth_file_path, original)
       end
 
+      TestEnvHelpers.release_global_state_lock(lock_id)
       File.rm(path)
     end)
 

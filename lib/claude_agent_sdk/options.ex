@@ -79,7 +79,7 @@ defmodule ClaudeAgentSDK.Options do
   alias ClaudeAgentSDK.Config.Env
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Model
-  alias CliSubprocessCore.ModelRegistry
+  alias CliSubprocessCore.ModelInput
 
   @valid_efforts [:low, :medium, :high, :max]
 
@@ -1008,14 +1008,14 @@ defmodule ClaudeAgentSDK.Options do
 
   @doc false
   @spec ensure_model_payload!(t()) :: t()
-  def ensure_model_payload!(%__MODULE__{model_payload: payload} = options) when is_map(payload) do
-    %{options | model: resolved_model(options) || options.model}
-  end
-
   def ensure_model_payload!(%__MODULE__{} = options) do
-    case ModelRegistry.build_arg_payload(:claude, options.model, registry_opts(options)) do
-      {:ok, payload} ->
-        %{options | model_payload: payload, model: payload.resolved_model}
+    case ModelInput.normalize(:claude, model_input_attrs(options)) do
+      {:ok, normalized} ->
+        %{
+          options
+          | model_payload: normalized.selection,
+            model: normalized.selection.resolved_model
+        }
 
       {:error, reason} ->
         raise ArgumentError, "model resolution failed for :claude: #{inspect(reason)}"
@@ -1026,23 +1026,25 @@ defmodule ClaudeAgentSDK.Options do
     Map.get(payload, :resolved_model, Map.get(payload, "resolved_model"))
   end
 
-  defp resolved_model(%__MODULE__{model: model}), do: model
+  defp model_input_attrs(%__MODULE__{model_payload: payload} = options) when is_map(payload),
+    do: Map.from_struct(options)
 
-  defp registry_opts(%__MODULE__{} = options) do
-    []
-    |> maybe_put_registry_opt(:env_model, env_model(options))
-    |> maybe_put_registry_opt(:provider_backend, provider_backend(options))
-    |> maybe_put_registry_opt(:external_model_overrides, external_model_overrides(options))
-    |> maybe_put_registry_opt(:anthropic_base_url, anthropic_base_url(options))
-    |> maybe_put_registry_opt(:anthropic_auth_token, anthropic_auth_token(options))
+  defp model_input_attrs(%__MODULE__{} = options) do
+    Map.from_struct(options)
+    |> maybe_put_model_input_attr(:env_model, env_model(options))
+    |> maybe_put_model_input_attr(:provider_backend, provider_backend(options))
+    |> maybe_put_model_input_attr(:external_model_overrides, external_model_overrides(options))
+    |> maybe_put_model_input_attr(:anthropic_base_url, anthropic_base_url(options))
+    |> maybe_put_model_input_attr(:anthropic_auth_token, anthropic_auth_token(options))
   end
 
-  defp maybe_put_registry_opt(opts, _key, nil), do: opts
+  defp maybe_put_model_input_attr(attrs, _key, nil), do: attrs
 
-  defp maybe_put_registry_opt(opts, _key, value) when is_map(value) and map_size(value) == 0,
-    do: opts
+  defp maybe_put_model_input_attr(attrs, _key, value)
+       when is_map(value) and map_size(value) == 0,
+       do: attrs
 
-  defp maybe_put_registry_opt(opts, key, value), do: Keyword.put(opts, key, value)
+  defp maybe_put_model_input_attr(attrs, key, value), do: Map.put(attrs, key, value)
 
   defp provider_backend(%__MODULE__{provider_backend: nil}) do
     case System.get_env(Env.provider_backend()) do

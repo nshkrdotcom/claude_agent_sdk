@@ -9,6 +9,10 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
 
   alias ClaudeAgentSDK.{Agent, Options}
 
+  defp new_options(opts) do
+    Options.new(Keyword.merge([model: "sonnet", provider_backend: :anthropic], opts))
+  end
+
   describe "Options with agents field" do
     test "creates options with single agent" do
       code_agent =
@@ -18,7 +22,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
           allowed_tools: ["Read", "Write"]
         )
 
-      options = Options.new(agents: %{code_expert: code_agent})
+      options = new_options(agents: %{code_expert: code_agent})
 
       assert options.agents == %{code_expert: code_agent}
     end
@@ -39,7 +43,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
         )
 
       options =
-        Options.new(
+        new_options(
           agents: %{
             code_expert: code_agent,
             doc_expert: doc_agent
@@ -58,7 +62,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
         )
 
       options =
-        Options.new(
+        new_options(
           agents: %{active: agent},
           agent: :active
         )
@@ -68,7 +72,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
     end
 
     test "creates options with nil agents" do
-      options = Options.new(agents: nil)
+      options = new_options(agents: nil)
       assert options.agents == nil
     end
   end
@@ -129,7 +133,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
         )
 
       options =
-        Options.new(
+        new_options(
           agents: %{test: agent},
           output_format: :stream_json
         )
@@ -147,7 +151,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
         )
 
       options =
-        Options.new(
+        new_options(
           agents: %{my_agent: agent},
           agent: :my_agent,
           output_format: :stream_json
@@ -165,7 +169,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
 
     test "omits --agent when agent is nil" do
       options =
-        Options.new(
+        new_options(
           agents: %{test: Agent.new(description: "Test", prompt: "Test")},
           agent: nil,
           output_format: :stream_json
@@ -185,7 +189,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
           prompt: "Valid prompt"
         )
 
-      options = Options.new(agents: %{valid: agent})
+      options = new_options(agents: %{valid: agent})
 
       assert :ok = Options.validate_agents(options)
     end
@@ -194,7 +198,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
       agent1 = Agent.new(description: "Agent 1", prompt: "Prompt 1")
       agent2 = Agent.new(description: "Agent 2", prompt: "Prompt 2")
 
-      options = Options.new(agents: %{a1: agent1, a2: agent2})
+      options = new_options(agents: %{a1: agent1, a2: agent2})
 
       assert :ok = Options.validate_agents(options)
     end
@@ -207,7 +211,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
           prompt: "Prompt"
         )
 
-      options = Options.new(agents: %{invalid: invalid_agent})
+      options = new_options(agents: %{invalid: invalid_agent})
 
       assert {:error, {:invalid_agent, :invalid, :description_required}} =
                Options.validate_agents(options)
@@ -217,7 +221,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
       agent = Agent.new(description: "Test", prompt: "Test")
 
       options =
-        Options.new(
+        new_options(
           agents: %{test: agent},
           agent: :nonexistent
         )
@@ -230,7 +234,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
       agent = Agent.new(description: "Test", prompt: "Test")
 
       options =
-        Options.new(
+        new_options(
           agents: %{test: agent},
           agent: :test
         )
@@ -239,7 +243,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
     end
 
     test "validates when agents is nil" do
-      options = Options.new(agents: nil)
+      options = new_options(agents: nil)
       assert :ok = Options.validate_agents(options)
     end
 
@@ -247,7 +251,7 @@ defmodule ClaudeAgentSDK.OptionsAgentsTest do
       agent = Agent.new(description: "Test", prompt: "Test")
 
       options =
-        Options.new(
+        new_options(
           agents: %{test: agent},
           agent: nil
         )

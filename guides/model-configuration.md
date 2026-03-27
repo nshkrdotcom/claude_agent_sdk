@@ -18,9 +18,16 @@ The authoritative core surface is:
 - `CliSubprocessCore.ModelRegistry.validate/2`
 - `CliSubprocessCore.ModelRegistry.default_model/2`
 - `CliSubprocessCore.ModelRegistry.build_arg_payload/3`
+- `CliSubprocessCore.ModelInput.normalize/3`
 
-`ClaudeAgentSDK.Options.new/1` calls the core payload builder automatically
-when `model_payload` is not provided explicitly.
+`ClaudeAgentSDK.Options.new/1` routes mixed raw input or explicit
+`model_payload` through `CliSubprocessCore.ModelInput.normalize/3`.
+
+That means:
+
+- explicit `model_payload` stays authoritative when supplied
+- conflicting raw attrs fail immediately
+- repo-local env defaults are only consulted when no payload was supplied
 
 ## Native Claude Backend
 

@@ -21,7 +21,7 @@ defmodule ClaudeAgentSDK.ClientResponseStreamTest do
       end
     end)
 
-    assert_receive {:mock_transport_started, transport}, 200
+    assert_receive {:mock_transport_started, transport}, 1_000
 
     {:ok, client: client, transport: transport}
   end

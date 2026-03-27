@@ -16,6 +16,8 @@ defmodule ClaudeAgentSDK.Streaming.SessionStderrCallbackTest do
 
     options = %Options{
       executable: script,
+      model: "sonnet",
+      provider_backend: :anthropic,
       stderr: fn line -> send(test_pid, {:stderr_line, line}) end
     }
 
@@ -46,6 +48,8 @@ defmodule ClaudeAgentSDK.Streaming.SessionStderrCallbackTest do
 
     options = %Options{
       executable: script,
+      model: "sonnet",
+      provider_backend: :anthropic,
       stderr: fn line -> send(test_pid, {:stderr_line, line}) end
     }
 

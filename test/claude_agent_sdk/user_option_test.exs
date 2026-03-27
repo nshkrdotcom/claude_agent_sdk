@@ -18,7 +18,14 @@ defmodule ClaudeAgentSDK.UserOptionTest do
     cat = System.find_executable("cat") || "cat"
 
     assert {:ok, %Command{} = command} =
-             RuntimeCLI.build_invocation(options: %Options{executable: cat, user: "runner"})
+             RuntimeCLI.build_invocation(
+               options: %Options{
+                 executable: cat,
+                 user: "runner",
+                 model: "sonnet",
+                 provider_backend: :anthropic
+               }
+             )
 
     assert command.command == cat
     assert command.user == "runner"
