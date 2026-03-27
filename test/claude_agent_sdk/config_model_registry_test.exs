@@ -1,50 +1,43 @@
 defmodule ClaudeAgentSDK.Config.ModelRegistryTest do
   use ClaudeAgentSDK.SupertesterCase
 
+  alias ClaudeAgentSDK.Model
+
   describe "model registry" do
     test "contains opus short form" do
-      models = Application.get_env(:claude_agent_sdk, :models)
-      assert models.short_forms["opus"] == "opus"
+      assert "opus" in Model.short_forms()
     end
 
     test "contains sonnet short form" do
-      models = Application.get_env(:claude_agent_sdk, :models)
-      assert models.short_forms["sonnet"] == "sonnet"
+      assert "sonnet" in Model.short_forms()
     end
 
     test "contains haiku short form" do
-      models = Application.get_env(:claude_agent_sdk, :models)
-      assert models.short_forms["haiku"] == "haiku"
+      assert "haiku" in Model.short_forms()
     end
 
     test "contains opus 1M short form" do
-      models = Application.get_env(:claude_agent_sdk, :models)
-      assert models.short_forms["opus[1m]"] == "opus[1m]"
+      assert "opus[1m]" in Model.short_forms()
     end
 
     test "contains sonnet 1M short form" do
-      models = Application.get_env(:claude_agent_sdk, :models)
-      assert models.short_forms["sonnet[1m]"] == "sonnet[1m]"
+      assert "sonnet[1m]" in Model.short_forms()
     end
 
     test "contains correct Sonnet 4.6 full ID" do
-      models = Application.get_env(:claude_agent_sdk, :models)
-      assert Map.has_key?(models.full_ids, "claude-sonnet-4-6")
+      assert "claude-sonnet-4-6" in Model.full_ids()
     end
 
     test "contains correct Opus 4.6 full ID" do
-      models = Application.get_env(:claude_agent_sdk, :models)
-      assert Map.has_key?(models.full_ids, "claude-opus-4-6")
+      assert "claude-opus-4-6" in Model.full_ids()
     end
 
     test "contains correct Haiku 4.5 full ID" do
-      models = Application.get_env(:claude_agent_sdk, :models)
-      assert Map.has_key?(models.full_ids, "claude-haiku-4-5-20251001")
+      assert "claude-haiku-4-5-20251001" in Model.full_ids()
     end
 
     test "default model matches the shared core default" do
-      models = Application.get_env(:claude_agent_sdk, :models)
-      assert models.default == ClaudeAgentSDK.Model.default_model()
+      assert Model.default_model() == "opus"
     end
   end
 end

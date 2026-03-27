@@ -1,4 +1,4 @@
-defmodule ClaudeAgentSDK.TransportTest do
+defmodule ClaudeAgentSDK.Transport.TransportTest do
   use ClaudeAgentSDK.SupertesterCase
 
   import ExUnit.CaptureLog
