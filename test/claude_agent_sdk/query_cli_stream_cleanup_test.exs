@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.QueryCLIStreamCleanupTest do
 
   alias ClaudeAgentSDK.{Message, Options}
   alias ClaudeAgentSDK.Query.CLIStream
-  alias ClaudeAgentSDK.Transport.Erlexec, as: ErlexecTransport
+  alias ClaudeAgentSDK.Transport
 
   test "cleanup force-stops stubborn subprocesses that ignore TERM/INT" do
     dir = tmp_dir!("cli_stream_stubborn_cleanup")
@@ -22,7 +22,7 @@ defmodule ClaudeAgentSDK.QueryCLIStreamCleanupTest do
         CLIStream.stream_args(
           [],
           options,
-          {ErlexecTransport, [command: script_path, args: []]},
+          {Transport, [command: script_path, args: []]},
           nil
         )
 

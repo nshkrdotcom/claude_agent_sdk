@@ -40,10 +40,10 @@ defmodule ClaudeAgentSDK.Streaming do
       ↓
   ClaudeAgentSDK.Client (SDK-local control family)
       ↓
-  ClaudeAgentSDK.Transport.Erlexec (when you explicitly select the Claude-named
+  ClaudeAgentSDK.Transport (when you explicitly select the SDK-local
   raw transport surface)
       ↓
-  CliSubprocessCore.Transport.Erlexec
+  CliSubprocessCore.Transport
   ```
 
   ## Quick Start

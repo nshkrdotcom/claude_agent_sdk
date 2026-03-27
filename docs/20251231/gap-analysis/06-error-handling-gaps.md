@@ -442,7 +442,7 @@ Elixir requires explicit pattern matching on each type.
 - `/lib/claude_agent_sdk/errors.ex` - All error type definitions
 - `/lib/claude_agent_sdk/assistant_error.ex` - AssistantMessageError types
 - `/lib/claude_agent_sdk/transport/port.ex` - Port transport error handling
-- `/lib/claude_agent_sdk/transport/erlexec.ex` - Erlexec transport error handling
+- `/lib/claude_agent_sdk/transport.ex` - Built-in transport transport error handling
 - `/lib/claude_agent_sdk/control_protocol/protocol.ex` - Control protocol error encoding
 - `/lib/claude_agent_sdk/cli.ex` - CLI discovery and version warnings
 - `/lib/claude_agent_sdk/client.ex` - Client error handling and control protocol

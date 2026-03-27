@@ -65,9 +65,9 @@ defmodule ClaudeAgentSDK.Client do
   `ClaudeAgentSDK.Client` remains SDK-local because it owns the advanced control
   protocol family: hooks, permission callbacks, SDK MCP routing, and related
   request/response state. The client now relies on the shared raw transport via
-  `CliSubprocessCore.Transport` by default. `ClaudeAgentSDK.Transport.Erlexec`
-  remains available as the Claude-named public transport entrypoint on top of
-  that core-backed transport.
+  `CliSubprocessCore.Transport` by default. `ClaudeAgentSDK.Transport` remains
+  available as the Claude-named public transport entrypoint on top of that
+  core-backed transport.
 
   `agent_session_manager` may optionally bridge into this module through
   `ASM.Extensions.ProviderSDK.Claude`, but the bridge does not redefine these
@@ -3389,9 +3389,8 @@ defmodule ClaudeAgentSDK.Client do
 
   defp built_in_transport_module?(module) do
     module in [
-      ClaudeAgentSDK.Transport.Erlexec,
-      CliSubprocessCore.Transport,
-      CliSubprocessCore.Transport.Erlexec
+      ClaudeAgentSDK.Transport,
+      CliSubprocessCore.Transport
     ]
   end
 

@@ -10,7 +10,7 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.TestSupport.MockTransport
-  alias ClaudeAgentSDK.Transport.Erlexec, as: ErlexecTransport
+  alias ClaudeAgentSDK.Transport
 
   describe "transport_stderr handling" do
     test "client survives text and non-UTF-8 {:transport_stderr, _} messages without crashing" do
@@ -111,7 +111,7 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
       assert log =~ "Ignoring unexpected client mailbox message"
     end
 
-    test "built-in erlexec transport delivers stderr callback exactly once via the client" do
+    test "built-in transport delivers stderr callback exactly once via the client" do
       test_pid = self()
 
       options = %Options{
@@ -148,7 +148,7 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
       {:ok, client} =
         Client.start_link(options,
-          transport: ErlexecTransport,
+          transport: Transport,
           transport_opts: [command: script, args: []]
         )
 
@@ -160,7 +160,7 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
       refute_receive {:stderr_line, "ERR_LINE"}, 100
     end
 
-    test "built-in erlexec preserves invalid UTF-8 stderr lines" do
+    test "built-in transport preserves invalid UTF-8 stderr lines" do
       test_pid = self()
 
       options = %Options{
@@ -199,7 +199,7 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
       {:ok, client} =
         Client.start_link(options,
-          transport: ErlexecTransport,
+          transport: Transport,
           transport_opts: [command: script, args: []]
         )
 
@@ -209,7 +209,7 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
       assert :ok = Client.await_initialized(client, 1_000)
     end
 
-    test "built-in erlexec flushes a partial stderr fragment on fast exit" do
+    test "built-in transport flushes a partial stderr fragment on fast exit" do
       test_pid = self()
 
       options = %Options{
@@ -244,7 +244,7 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
       {:ok, client} =
         Client.start_link(options,
-          transport: ErlexecTransport,
+          transport: Transport,
           transport_opts: [command: script, args: []]
         )
 
@@ -254,7 +254,7 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
       assert_receive {:DOWN, ^monitor, :process, ^client, :normal}, 1_000
     end
 
-    test "built-in erlexec surfaces stderr emitted after initialize" do
+    test "built-in transport surfaces stderr emitted after initialize" do
       test_pid = self()
 
       options = %Options{
@@ -292,7 +292,7 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
       {:ok, client} =
         Client.start_link(options,
-          transport: ErlexecTransport,
+          transport: Transport,
           transport_opts: [command: script, args: []]
         )
 

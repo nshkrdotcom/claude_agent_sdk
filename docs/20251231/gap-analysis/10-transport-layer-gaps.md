@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-The Elixir port provides a **robust and feature-complete** transport layer implementation that achieves **95%+ parity** with the Python SDK's `SubprocessCLITransport`. The Elixir implementation actually exceeds Python in several areas due to OTP's supervision model and offers two transport backends (Port and erlexec) compared to Python's single implementation.
+The Elixir port provides a **robust and feature-complete** transport layer implementation that achieves **95%+ parity** with the Python SDK's `SubprocessCLITransport`. The Elixir implementation actually exceeds Python in several areas due to OTP's supervision model and offers two transport backends (Port and built-in transport) compared to Python's single implementation.
 
 ### Key Findings
 
@@ -16,7 +16,7 @@ The Elixir port provides a **robust and feature-complete** transport layer imple
 | Transport Interface | Equivalent | Both define abstract interfaces with similar methods |
 | CLI Discovery | Full Parity | Both search bundled, PATH, and known locations |
 | Command Building | Full Parity | All 25+ CLI flags mapped correctly |
-| Process Management | Enhanced | Elixir has Port + erlexec backends; OS user support |
+| Process Management | Enhanced | Elixir has Port + built-in transport backends; OS user support |
 | JSON Buffering | Full Parity | Both implement speculative parsing with overflow protection |
 | Stderr Handling | Full Parity | Both support callback and stream modes |
 | Version Checking | Full Parity | Same minimum version (2.0.0) with skip env var |
@@ -26,7 +26,7 @@ The Elixir port provides a **robust and feature-complete** transport layer imple
 
 ### Priority Actions
 
-1. **LOW PRIORITY** - Add `end_input/0` to Transport behaviour (currently only in Erlexec)
+1. **LOW PRIORITY** - Add `end_input/0` to Transport behaviour (currently only in Built-in transport)
 2. **INFORMATIONAL** - Document Elixir-specific streaming router feature
 3. **INFORMATIONAL** - Consider exposing `recommended_version` in Python SDK
 
@@ -67,7 +67,7 @@ class Transport(ABC):
 | `connect()` | `start_link/1` | Elixir combines connection with process start |
 | `close()` | `close/1` | Both clean up resources and terminate |
 | `write(data)` | `send/2` | Both write JSON payloads to stdin |
-| `end_input()` | `end_input/1` (Erlexec only) | **Gap**: Missing from Port transport behaviour |
+| `end_input()` | `end_input/1` (Built-in transport only) | **Gap**: Missing from Port transport behaviour |
 | `read_messages()` | `subscribe/2` + message passing | Elixir uses OTP message passing pattern |
 | `is_ready()` | `status/1` | Elixir returns atom status vs boolean |
 
@@ -76,11 +76,11 @@ class Transport(ABC):
 | Feature | Python | Elixir | Status |
 |---------|--------|--------|--------|
 | Abstract interface defined | Yes | Yes | Parity |
-| Multiple implementations | 1 (subprocess) | 2 (Port, Erlexec) | Enhanced |
+| Multiple implementations | 1 (subprocess) | 2 (Port, Built-in transport) | Enhanced |
 | Async iterator for messages | Yes | No (uses pub/sub) | Different pattern |
-| `end_input` in interface | Yes | Partial (Erlexec only) | Minor gap |
+| `end_input` in interface | Yes | Partial (Built-in transport only) | Minor gap |
 
-**Recommendation:** Add `end_input/1` callback to the `Transport` behaviour for consistency. Currently only `Transport.Erlexec` implements it.
+**Recommendation:** Add `end_input/1` callback to the `Transport` behaviour for consistency. Currently only `ClaudeAgentSDK.Transport` implements it.
 
 ---
 
@@ -323,7 +323,7 @@ defp open_port(command, opts) do
 end
 ```
 
-**Erlexec Backend:**
+**Built-in transport Backend:**
 ```elixir
 defp build_exec_opts(%Options{} = options) do
   [:stdin, :stdout, :stderr, :monitor]
@@ -335,7 +335,7 @@ end
 
 ### Comparison Table
 
-| Feature | Python | Elixir Port | Elixir Erlexec |
+| Feature | Python | Elixir Port | Elixir Built-in transport |
 |---------|--------|-------------|----------------|
 | Stdin pipe | Yes | Yes | Yes |
 | Stdout pipe | Yes | Yes | Yes |
@@ -345,7 +345,7 @@ end
 | SDK version env | Yes | Yes | Yes |
 | Entrypoint env | `sdk-py` | `sdk-elixir` | `sdk-elixir` |
 | PWD env from cwd | Yes | Yes | Yes |
-| OS user support | Yes (anyio) | No | Yes (erlexec) |
+| OS user support | Yes (anyio) | No | Yes (built-in transport) |
 | File checkpointing env | Yes | Yes | Yes |
 | Line buffering | N/A | Configurable | N/A |
 | Exit status tracking | Yes | Yes | Yes |
@@ -354,7 +354,7 @@ end
 
 Elixir provides two transport backends:
 - **Port**: Native Erlang, no dependencies, limited OS user support
-- **Erlexec**: Full OS user support via `:user` option, matches Python's capability
+- **Built-in transport**: Full OS user support via `:user` option, matches Python's capability
 
 ---
 
@@ -469,7 +469,7 @@ defp handle_line(%__MODULE__{stderr_callback: stderr_callback} = state, line)
   end
 end
 
-# Erlexec transport - separate stderr stream
+# Built-in transport transport - separate stderr stream
 def handle_info({:stderr, _os_pid, data}, state) do
   lines = data |> String.split("\n") |> Enum.reject(&(&1 == ""))
   if is_function(state.stderr_callback, 1) do
@@ -479,7 +479,7 @@ def handle_info({:stderr, _os_pid, data}, state) do
 end
 ```
 
-**Location:** `/lib/claude_agent_sdk/transport/port.ex` (lines 428-443) and `/lib/claude_agent_sdk/transport/erlexec.ex` (lines 155-163)
+**Location:** `/lib/claude_agent_sdk/transport/port.ex` (lines 428-443) and `/lib/claude_agent_sdk/transport.ex` (lines 155-163)
 
 ### Comparison Table
 
@@ -487,7 +487,7 @@ end
 |---------|--------|--------|-------|
 | Callback mode | Yes | Yes | `stderr` option |
 | File object mode | Yes (deprecated) | No | Elixir skipped deprecated feature |
-| Async stderr reading | Yes (task) | Depends on backend | Port uses stdout merge, Erlexec has separate stream |
+| Async stderr reading | Yes (task) | Depends on backend | Port uses stdout merge, Built-in transport has separate stream |
 | JSON filtering | No | Yes (Port) | Port backend filters JSON vs stderr |
 
 ### Gap Status: **FULL PARITY**
@@ -805,7 +805,7 @@ This feature doesn't exist in the Python SDK but provides intelligent transport 
 ### P3 - Low Priority
 
 1. **Add `end_input/1` to Transport behaviour**
-   - Currently only implemented in Erlexec transport
+   - Currently only implemented in Built-in transport transport
    - Port transport handles stdin closure differently
    - Low impact since streaming mode handles this automatically
 

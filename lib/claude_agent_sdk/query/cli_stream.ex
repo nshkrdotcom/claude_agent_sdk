@@ -176,7 +176,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     unless function_exported?(module, :end_input, 1) do
       raise ArgumentError,
             "Streaming prompts require a transport with end_input/1. " <>
-              "Use CliSubprocessCore.Transport, ClaudeAgentSDK.Transport.Erlexec, or provide a compatible transport."
+              "Use CliSubprocessCore.Transport, ClaudeAgentSDK.Transport, or provide a compatible transport."
     end
 
     :ok
@@ -356,7 +356,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp close_transport_with_timeout(module, transport, timeout_ms) when is_pid(transport) do
     ref = Process.monitor(transport)
 
-    if module == ClaudeAgentSDK.Transport.Erlexec do
+    if module == ClaudeAgentSDK.Transport do
       case ProcessSupport.await_down(ref, transport, timeout_ms) do
         :down ->
           :ok
@@ -594,9 +594,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp built_in_transport_module?(module) do
     module in [
-      ClaudeAgentSDK.Transport.Erlexec,
-      CliSubprocessCore.Transport,
-      CliSubprocessCore.Transport.Erlexec
+      ClaudeAgentSDK.Transport,
+      CliSubprocessCore.Transport
     ]
   end
 

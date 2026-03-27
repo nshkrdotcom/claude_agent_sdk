@@ -207,7 +207,7 @@ AuthManager (01) → BLOCKS EVERYTHING
 Implementing these plans teaches:
 
 1. **Advanced GenServers** - State machines, timers, supervision
-2. **Subprocess Management** - erlexec, stdin/stdout, bidirectional I/O
+2. **Subprocess Management** - built-in transport, stdin/stdout, bidirectional I/O
 3. **Concurrency Patterns** - Task.async_stream, parallel execution
 4. **Resilience Patterns** - Circuit breakers, rate limiting, retries
 5. **Testing Strategies** - TDD, property-based, integration, E2E

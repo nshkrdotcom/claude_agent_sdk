@@ -194,7 +194,7 @@ Total:                      40 days (9 weeks with buffer)
 - [Claude Code CLI Docs](https://docs.claude.com/claude-code)
 - [Elixir GenServer Guide](https://hexdocs.pm/elixir/GenServer.html)
 - [OTP Design Principles](https://www.erlang.org/doc/design_principles/users_guide.html)
-- [erlexec Documentation](https://hexdocs.pm/erlexec)
+- [built-in transport Documentation](https://hexdocs.pm/built-in transport)
 
 ---
 
@@ -316,7 +316,7 @@ Use this in your project management tool:
 If you're new to implementing these patterns:
 
 - **GenServers**: Read plans 01, 03, 04, 05 for examples
-- **Subprocess Management**: See plan 06 (Streaming) for erlexec patterns
+- **Subprocess Management**: See plan 06 (Streaming) for built-in transport patterns
 - **Testing Strategies**: Read `TESTING_STRATEGY.md`
 - **Circuit Breakers**: See plan 04 for state machine implementation
 - **Rate Limiting**: See plan 04 for token bucket algorithm

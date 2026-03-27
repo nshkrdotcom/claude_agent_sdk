@@ -77,7 +77,7 @@ lib/claude_agent_sdk/streaming/event_parser.ex
 
 # Streaming.Session (CLI-only streaming) - NO CHANGES NEEDED
 lib/claude_agent_sdk/streaming/session.ex
-# Lines 1-550: GenServer with erlexec subprocess management
+# Lines 1-550: GenServer with built-in transport subprocess management
 # Lines 229-316: Subscriber queue (FIFO, single active)
 # Lines 445-461: build_streaming_args with --include-partial-messages
 

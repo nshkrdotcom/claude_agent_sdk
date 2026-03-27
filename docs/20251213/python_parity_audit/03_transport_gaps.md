@@ -161,12 +161,12 @@ self._process = await anyio.open_process(
 
 Elixir Status: Partial
 
-Elixir Location: `lib/claude_agent_sdk/process.ex:132-136` (supports `:user` via erlexec), `lib/claude_agent_sdk/transport/port.ex:334-338` (only sets `USER`/`LOGNAME` env)
+Elixir Location: `lib/claude_agent_sdk/process.ex:132-136` (supports `:user` via built-in transport), `lib/claude_agent_sdk/transport/port.ex:334-338` (only sets `USER`/`LOGNAME` env)
 
 Priority: Medium
 
 Suggested Implementation:
-If true setuid is desired for parity, implement `user` for the Port-based transport (may require switching streaming transport to erlexec or another mechanism that supports setuid).
+If true setuid is desired for parity, implement `user` for the Port-based transport (may require switching streaming transport to built-in transport or another mechanism that supports setuid).
 
 Complexity: Complex
 

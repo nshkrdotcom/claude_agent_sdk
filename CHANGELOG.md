@@ -80,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`max_thinking_tokens` pipeline replaced**: The `add_max_thinking_tokens_args/2` function is replaced by `add_thinking_args/2` which respects the new `thinking` config with proper fallback to `max_thinking_tokens`.
 - **JSON decoding simplified**: `ClaudeAgentSDK.JSON` now prefers OTP `:json` and falls back to `Jason`, and `Message.from_json/1` no longer accepts malformed JSON through a secondary regex parser.
 - **SDK MCP default lifecycle hardened**: `create_sdk_mcp_server/1` now starts unsupervised registries under an internal SDK MCP supervisor instead of linking them to the creating process.
-- **Shared subprocess framing/setup helpers reused**: stderr line framing and erlexec option/cwd validation paths are now shared across `Process`, `Streaming.Session`, and `Transport.Erlexec` where the audited drift existed.
+- **Shared subprocess framing/setup helpers reused**: stderr line framing and built-in transport option/cwd validation paths are now shared across `Process`, `Streaming.Session`, and `Transport` where the audited drift existed.
 
 ### Fixed
 
@@ -88,8 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SessionStore path safety and metadata preservation**: session save/load/delete now reject traversal-style IDs outside the storage root while preserving safe legacy IDs, and resaves keep the original `created_at`.
 - **Strict task supervisor failures no longer crash callers**: `Tool.Registry`, `AuthManager`, and `Client` now handle strict `TaskSupervisor` unavailability with structured errors/protocol replies instead of GenServer crashes.
 - **AuthChecker uses the resolved CLI executable everywhere**: diagnostics report the discovered path and auth probes execute through that resolved binary rather than hardcoded `/usr/bin/claude` or shell strings.
-- **Erlexec startup is OTP-correct**: `Transport.Erlexec.start_link/1` now uses `GenServer.start_link/3` while preserving typed startup errors for plain callers.
-- **Stderr callbacks now preserve split lines across chunk boundaries**: `Process`, `Streaming.Session`, and `Transport.Erlexec` buffer incomplete stderr fragments until a full trimmed line is available.
+- **Built-in transport startup is OTP-correct**: `Transport.start_link/1` now uses `GenServer.start_link/3` while preserving typed startup errors for plain callers.
+- **Stderr callbacks now preserve split lines across chunk boundaries**: `Process`, `Streaming.Session`, and `Transport` buffer incomplete stderr fragments until a full trimmed line is available.
 - **Session history directory filtering works as documented**: `Session.History.list_sessions/1` now honors the documented `:directory` option.
 - **Client entrypoint env no longer creates atoms at runtime**: the fixed `CLAUDE_CODE_ENTRYPOINT` key check keeps atom-key compatibility without `String.to_atom/1`.
 
@@ -97,11 +97,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `c:ClaudeAgentSDK.Transport.interrupt/1` callback implementation in the Erlexec transport for cooperative interruption of active subprocess execution.
+- `c:ClaudeAgentSDK.Transport.interrupt/1` callback implementation in the Built-in transport transport for cooperative interruption of active subprocess execution.
 
 ### Fixed
 
-- Erlexec transport framing now handles UTF-8 text split across chunk boundaries without data loss or mojibake.
+- Built-in transport transport framing now handles UTF-8 text split across chunk boundaries without data loss or mojibake.
 - Streaming parser now preserves incomplete multibyte UTF-8 suffix bytes between chunks until completion.
 - Streaming session stderr processing now treats chunk boundaries in a binary-safe way.
 - Added regression coverage for UTF-8 boundary handling and interrupt behavior in transport and streaming tests.
@@ -116,7 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Centralized Configuration System
 
-- **`Config.Timeouts`**: All timeout values (client init, streaming, query, transport, auth, hooks, session cleanup) consolidated into a single module with runtime-overridable accessors. Replaces `@default_*` module attributes and inline literals across `Client`, `Streaming.Session`, `CLIStream`, `ClientStream`, `AuthManager`, `AuthChecker`, `Tool.Registry`, `Orchestrator`, `Hooks.Matcher`, `Transport.Erlexec`, and `Process`.
+- **`Config.Timeouts`**: All timeout values (client init, streaming, query, transport, auth, hooks, session cleanup) consolidated into a single module with runtime-overridable accessors. Replaces `@default_*` module attributes and inline literals across `Client`, `Streaming.Session`, `CLIStream`, `ClientStream`, `AuthManager`, `AuthChecker`, `Tool.Registry`, `Orchestrator`, `Hooks.Matcher`, `Transport`, and `Process`.
 - **`Config.Buffers`**: Buffer sizes (`max_stdout_buffer_bytes`, `max_stderr_buffer_bytes`, `max_lines_per_batch`, `stream_buffer_limit`) and display truncation lengths (`error_preview_length`, `message_trim_length`, `error_truncation_length`, `summary_max_length`) centralized with runtime overrides.
 - **`Config.Auth`**: Auth file paths (`token_store_path`, `session_storage_dir`), TTLs (`token_ttl_days`, `session_max_age_days`), token prefixes (`oauth_token_prefix`, `api_key_prefix`), and cloud credential paths (`aws_credentials_path`, `gcp_credentials_path`).
 - **`Config.CLI`**: CLI version constraints (`minimum_version`, `recommended_version`), executable discovery (`executable_candidates`), install command, and shared streaming flag builders (`streaming_output_args`, `streaming_bidirectional_args`).
@@ -179,7 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Practical impact**: These changes affect internal transport plumbing. Users of the public API (`Client`, `CLIStream`, `Query`) are unaffected unless they directly referenced Transport modules or wrote custom transports.
 
-- **`Transport.Port` removed**: The Erlang Port-based transport has been removed. `Transport.Erlexec` is now the sole built-in transport for all subprocess communication. All code paths already defaulted to Erlexec since 0.11.0. Users who explicitly passed `Transport.Port` must switch to `Transport.Erlexec` (or omit the transport option to use the default).
+- **`Transport.Port` removed**: The Erlang Port-based transport has been removed. `Transport` is now the sole built-in transport for all subprocess communication. All code paths already defaulted to Built-in transport since 0.11.0. Users who explicitly passed `Transport.Port` must switch to `Transport` (or omit the transport option to use the default).
 - **`Transport.normalize_reason(:port_closed)` removed**: The `:port_closed` -> `:not_connected` normalization has been removed. Custom transports should return `:not_connected` directly.
 - **Transport error tuple shape updated**: low-level transport failures now use `{:error, {:transport, reason}}` instead of bare `{:error, reason}`.
 - **Stdin-based prompt delivery**: String prompts are now sent via stdin as `stream-json` user messages with `--input-format stream-json`, instead of the previous `-- prompt` CLI arg. This unifies the prompt delivery path for all query types.
@@ -189,7 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-#### Transport Hardening (Erlexec)
+#### Transport Hardening (Built-in transport)
 
 - **`subscribe/3` tagged subscriptions**: Transport consumers can subscribe with `:legacy | reference()` and receive namespaced events (`{:claude_agent_sdk_transport, ref, event}`).
 - **`force_close/1` transport callback**: Immediate shutdown API with low-level stop plus SIGKILL escalation and 500ms timeout via `safe_call`.
@@ -208,7 +208,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Split `start_link` into `start` + `Process.link`**: Cleaner error handling; catches `:badarg` from linking already-dead processes.
 - **Deterministic `safe_call` cleanup**: Replaced `Task.yield/Task.shutdown` with direct `receive` on task ref. Added `maybe_kill_task/1` helper.
 - **Bootstrap subscriber support**: `maybe_put_bootstrap_subscriber` in both Client and CLIStream pre-registers the caller before `start_link`, preventing message loss during subscribe race window.
-- **CLIStream graceful close**: Rewritten `close_transport_with_timeout` waits for natural exit before escalating to `force_close` for Erlexec, reducing unnecessary SIGKILL sends.
+- **CLIStream graceful close**: Rewritten `close_transport_with_timeout` waits for natural exit before escalating to `force_close` for Built-in transport, reducing unnecessary SIGKILL sends.
 - **ClientStream graceful close**: New `close_client_with_timeout` with monitor-based graceful shutdown replacing immediate `safe_stop`.
 
 #### Client Resilience
@@ -221,26 +221,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Erlexec terminate rewrite**: Cancels finalize and headless timers with message flush, demonitors all subscribers, replies to pending callers with `{:error, {:transport, :transport_stopped}}`, force-stops subprocess, wrapped in try/catch.
+- **Built-in transport terminate rewrite**: Cancels finalize and headless timers with message flush, demonitors all subscribers, replies to pending callers with `{:error, {:transport, :transport_stopped}}`, force-stops subprocess, wrapped in try/catch.
 - **Transport error normalization**: All bare `{:error, :send_failed}` and `{:error, :not_connected}` replaced with `{:error, {:transport, reason}}` via `transport_error/1` wrapper.
 - **Subscriber storage**: Changed from `%{pid => ref}` to `%{pid => %{monitor_ref: ref, tag: tag}}` for tagged dispatch support.
 - **CLIStream tagged dispatch**: Migrated to `make_ref()` subscription and `{:claude_agent_sdk_transport, ref, event}` pattern matching.
-- **CLIStream cleanup cascade**: 4-stage monitor-based: `safe_force_close` -> `await_down(250ms)` -> `Process.exit(:shutdown)` -> `await_down(250ms)` -> `Process.exit(:kill)` -> `await_down(250ms)` -> `demonitor`. For Erlexec, waits for natural exit first before escalating.
+- **CLIStream cleanup cascade**: 4-stage monitor-based: `safe_force_close` -> `await_down(250ms)` -> `Process.exit(:shutdown)` -> `await_down(250ms)` -> `Process.exit(:kill)` -> `await_down(250ms)` -> `demonitor`. For Built-in transport, waits for natural exit first before escalating.
 - **Streaming readability**: Extracted inline `Stream.resource` next-fn into named `next_control_client_stream_state/1`.
 
 ### Removed
 
 - **`Transport.Port` module** (661 lines), its test file, and Port-related test cases from `env_parity_test.exs`, `process_env_test.exs`, and `user_option_test.exs`.
 - **`Transport.normalize_reason(:port_closed)` clause**.
-- **Port references** from `default_transport_module/1`, `needs_cli_command?/2`, `normalize_transport/3`, `graceful_close?/1` in `cli_stream.ex`.
+- **Port references** from `default_transport_api/1`, `needs_cli_command?/2`, `normalize_transport/3`, `graceful_close?/1` in `cli_stream.ex`.
 
 ### Documentation
 
 - Updated CUSTOM_TRANSPORTS.md error contract from `{:error, {:transport_failed, reason}}` to `{:error, {:transport, reason}}`.
 - Updated CUSTOM_TRANSPORTS.md with new `subscribe/3`, `force_close/1`, `stderr/1` callbacks and Transport behaviour reference.
 - Updated RUNTIME_CONTROL.md with `{:error, {:transport, reason}}` shapes and removed Port references.
-- Updated README, getting-started, streaming, configuration, and error-handling guides to reference only Erlexec.
-- Added R1 collector and R2 red team review reports for erlexec consolidation.
+- Updated README, getting-started, streaming, configuration, and error-handling guides to reference only Built-in transport.
+- Added R1 collector and R2 red team review reports for built-in transport consolidation.
 
 ### Testing
 
@@ -255,10 +255,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added CLIStream cleanup test with signal-trapping stubborn subprocess.
 - Added finalize drain responsiveness test via `:sys.replace_state`.
 - Added `validate_command/1` error path test (nonexistent command).
-- Added Erlexec buffer overflow test (`CLIJSONDecodeError` on `max_buffer_size` exceeded).
+- Added Built-in transport buffer overflow test (`CLIJSONDecodeError` on `max_buffer_size` exceeded).
 - Added multiple concurrent subscriber broadcast test.
 - Added `start/1` callback to mock transports and test transport modules.
-- Migrated `stderr_callback_test.exs` from Port to Erlexec transport.
+- Migrated `stderr_callback_test.exs` from Port to Built-in transport transport.
 - Converted crash-on-missing-uuid/session_id tests to resilience tests.
 - Updated tagged/legacy subscriber tests to use stdin-driven scripts.
 - Updated options test for `--setting-sources` default change.
@@ -268,7 +268,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking Changes
 
-- **`--print` flag removed**: The `--print` CLI flag has been removed from all modules (`CLIStream`, `Query`, `Streaming.Session`, `Transport.Port`, `Transport.Erlexec`, `Process`). All queries now use `--output-format stream-json` exclusively. This aligns with Python SDK v0.1.24.
+- **`--print` flag removed**: The `--print` CLI flag has been removed from all modules (`CLIStream`, `Query`, `Streaming.Session`, `Transport.Port`, `Transport`, `Process`). All queries now use `--output-format stream-json` exclusively. This aligns with Python SDK v0.1.24.
 - **`--agents` CLI flag removed**: Agents are no longer passed via `--agents` CLI argument. They are now sent through the `initialize` control request. `Options.to_args/1` no longer emits `--agents`. Use `Options.agents_for_initialize/1` to get the agents map for the initialize request.
 - **`AgentsFile` module deleted**: `ClaudeAgentSDK.Transport.AgentsFile` has been removed along with all `temp_files` tracking across transports.
 - **Client state is now a defstruct**: `Client` state is a `%Client{}` struct instead of a bare map. Four deprecated fields removed: `current_model`, `pending_model_change`, `current_permission_mode`, `pending_inbound_count`.
@@ -293,7 +293,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Transport & Startup
 
-- **Lazy transport startup**: `Transport.Port`, `Transport.Erlexec`, and `Streaming.Session` support `startup_mode: :lazy` to defer subprocess startup to `handle_continue/2`. `start_link` returns before the subprocess is spawned; startup failures surface as process exit after init.
+- **Lazy transport startup**: `Transport.Port`, `Transport`, and `Streaming.Session` support `startup_mode: :lazy` to defer subprocess startup to `handle_continue/2`. `start_link` returns before the subprocess is spawned; startup failures surface as process exit after init.
 - **Transport reason normalization**: `Transport.normalize_reason/1` maps equivalent reasons to stable atoms (`:port_closed` → `:not_connected`, `{:command_not_found, "claude"}` → `:cli_not_found`).
 - **Immediate error surfacing**: Control-client startup/send failures surface as immediate `%{type: :error}` stream events instead of waiting for the 5-minute stream timeout. Input-stream worker crashes also surface immediately.
 
@@ -323,7 +323,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`encode_initialize_request/4`**: Now accepts an optional 4th `agents` parameter.
 - **SessionStore ETS access**: ETS table changed from `:public` to `:protected` for data isolation.
 - **SessionStore deferred hydration**: On-disk session cache is hydrated in `handle_continue/2` for faster startup.
-- **Transport `unsubscribe/2`**: New function on erlexec transport for explicit subscriber removal.
+- **Transport `unsubscribe/2`**: New function on built-in transport transport for explicit subscriber removal.
 
 ### Fixed
 
@@ -344,7 +344,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Resume turn persistence**: `resume/3` no longer uses `--print --resume` (one-shot mode) which dropped intermediate turns from the CLI session history. It now uses `--resume` with `--input-format stream-json` and sends the user prompt via stdin, preserving the full conversation across resume calls.
 - **Transport exit race**: `CLIStream` now defers halt on `:transport_exit` when the transport process is still alive, preventing premature stream termination before all messages are drained.
-- **Erlexec stdout flush on exit**: The erlexec transport now flushes any remaining `stdout_buffer` before broadcasting `:transport_exit`, ensuring no final message is lost.
+- **Built-in transport stdout flush on exit**: The built-in transport transport now flushes any remaining `stdout_buffer` before broadcasting `:transport_exit`, ensuring no final message is lost.
 - **Stale transport messages**: `CLIStream` drains leftover `:transport_message`, `:transport_error`, and `:transport_exit` messages from the caller's mailbox before starting a new transport, preventing cross-stream contamination.
 - **Graceful transport close**: Transport shutdown now waits briefly for the process to exit on its own before force-closing, avoiding premature kills that could drop in-flight data.
 
@@ -365,7 +365,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests
 
-- **Exec timeout regression test**: Added `AuthCheckerExecTimeoutTest` verifying that the erlexec call pattern does not produce `{:error, {:invalid_option, _}}`.
+- **Exec timeout regression test**: Added `AuthCheckerExecTimeoutTest` verifying that the built-in transport call pattern does not produce `{:error, {:invalid_option, _}}`.
 
 ## [0.9.1] - 2026-01-23
 
@@ -517,7 +517,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ExDoc Configuration**: Added examples/README.md and examples/mix_task_chat/README.md to documentation extras
 - **ExDoc Menu**: New "Examples" group in documentation sidebar with index and tutorial links
 - **Hex Package**: Added `examples/mix_task_chat` to package files for inclusion in hex package
-- **Dependencies**: Updated credo 1.7.12→1.7.15, dialyxir 1.4.5→1.4.7, erlexec 2.2.0→2.2.2, ex_doc 0.38.2→0.39.3, supertester 0.4.0→0.5.0
+- **Dependencies**: Updated credo 1.7.12→1.7.15, dialyxir 1.4.5→1.4.7, built-in transport 2.2.0→2.2.2, ex_doc 0.38.2→0.39.3, supertester 0.4.0→0.5.0
 - **Mix Config**: Fixed deprecated `preferred_cli_env` warning by migrating to `def cli` block
 
 ### Fixed
@@ -548,7 +548,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Transport behaviour `end_input/1` is now implemented by Transport.Port (previously only Erlexec)
+- Transport behaviour `end_input/1` is now implemented by Transport.Port (previously only Built-in transport)
 
 ## [0.7.3] - 2025-12-31
 
@@ -695,7 +695,7 @@ Features already present in Elixir SDK matching Python SDK:
 ### Added
 
 - Python parity audit implementations across options, control protocol, transports, message parsing, and error handling.
-- New erlexec-backed transport to support OS-level user execution when `Options.user` is set.
+- New built-in transport-backed transport to support OS-level user execution when `Options.user` is set.
 - Structured error structs for CLI discovery, connection/start failures, subprocess exits, JSON decode failures, and message parse errors.
 
 ### Fixed
@@ -750,7 +750,7 @@ Features already present in Elixir SDK matching Python SDK:
   - `Client.set_permission_mode/2` now issues control requests to the CLI and tracks acknowledgements.
   - `ClaudeAgentSDK.query/2` auto-selects the control client when hooks, permission callbacks, agents, or non-default permission modes are configured (not just SDK MCP servers).
   - `Client.stream_messages/1` forwards partial `stream_event` frames as `%{type: :stream_event, event: ...}` so typewriter UIs can consume deltas alongside messages.
-- Transport enhancements honor the `user` option across erlexec/streaming/port flows (env + user flag), enabling execution under an alternate OS account when permitted.
+- Transport enhancements honor the `user` option across built-in transport/streaming/port flows (env + user flag), enabling execution under an alternate OS account when permitted.
 - Documentation updates reflecting the 2025-11-29 gap analysis and the new control/streaming behaviors.
 
 ## [0.6.2] - 2025-11-29
@@ -790,7 +790,7 @@ Features already present in Elixir SDK matching Python SDK:
 ### Changed
 
 - **Transport.Port** now honors `Options.env`, `cwd`, buffer limits, and stamps `CLAUDE_AGENT_SDK_VERSION`/`CLAUDE_CODE_ENTRYPOINT`.
-- **Process** uses the same env overrides when spawning erlexec-based CLI runs.
+- **Process** uses the same env overrides when spawning built-in transport-based CLI runs.
 - **Streaming control adapter** now uses the new `Client.subscribe/1` contract for deterministic subscription handling (no sleeps).
 - **Tests** were hardened with Supertester helpers instead of `Process.sleep/1`.
 
@@ -902,17 +902,17 @@ Streaming.send_message(session, "Run command")
 
 ### Fixed - Process Timeout Configuration
 
-- **Fixed erlexec timeout propagation**
-  - Added `:timeout` option to erlexec base_options in `build_exec_options/1`
-  - Ensures configured timeout_ms is properly passed to erlexec subprocess
-  - Previously, timeout was only used in receive block, not in erlexec itself
+- **Fixed built-in transport timeout propagation**
+  - Added `:timeout` option to built-in transport base_options in `build_exec_options/1`
+  - Ensures configured timeout_ms is properly passed to built-in transport subprocess
+  - Previously, timeout was only used in receive block, not in built-in transport itself
   - Added debug logging to display configured timeout value
   - Prevents premature process termination for long-running operations
 
 ### Changed
 
 - Improved timeout debugging with runtime logging of configured timeout values
-- Better integration between Options.timeout_ms and erlexec process management
+- Better integration between Options.timeout_ms and built-in transport process management
 
 ## [0.5.2] - 2025-10-25
 
@@ -1372,7 +1372,7 @@ Five complete, working examples in `examples/hooks/`:
 ### Fixed
 - Event parser unwraps `stream_event` wrapper from Claude CLI output
 - Added required `--verbose` flag for `stream-json` output format
-- Proper `:DOWN` message handling for erlexec subprocess monitoring
+- Proper `:DOWN` message handling for built-in transport subprocess monitoring
 - Subscriber queue prevents message crosstalk in concurrent scenarios
 - Sequential message processing within single session (prevents race conditions)
 

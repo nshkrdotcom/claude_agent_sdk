@@ -62,7 +62,7 @@ The Claude Agent SDK for Elixir provides a comprehensive, production-ready inter
           +-------------------+----------+
                     |
               Transport Layer
-         (CLI subprocess via erlexec)
+         (CLI subprocess via built-in transport)
 ```
 
 ### Module Dependency Graph
@@ -344,7 +344,7 @@ The SDK provides two streaming approaches:
 
 **File**: `/home/home/p/g/n/claude_agent_sdk/lib/claude_agent_sdk/process.ex`
 
-Uses `erlexec` for subprocess management with synchronous output collection.
+Uses `legacy backend` for subprocess management with synchronous output collection.
 
 ```elixir
 # Simple query streaming

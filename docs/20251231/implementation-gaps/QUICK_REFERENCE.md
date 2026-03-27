@@ -50,7 +50,7 @@ def with_async_timeout(output, ms), do: Map.put(output, :asyncTimeout, ms)
 
 | Feature | Elixir Advantage |
 |---------|------------------|
-| Transport | Dual: Port + Erlexec |
+| Transport | Dual: Port + Built-in transport |
 | AbortSignal | Full atomic implementation |
 | Cancel Requests | Complete handling |
 | Agent Switching | `set_agent/2` API |

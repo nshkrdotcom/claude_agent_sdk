@@ -277,7 +277,7 @@ Day 1: CLI Verification (GATE)
 ### Dependencies
 
 **Unchanged**:
-- erlexec (existing)
+- built-in transport (existing)
 - jason (existing)
 - All test dependencies (existing)
 

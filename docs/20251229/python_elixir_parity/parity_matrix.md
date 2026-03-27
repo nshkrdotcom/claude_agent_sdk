@@ -35,7 +35,7 @@ agents | agents | Match | JSON encoding parity.
 plugins | plugins | Match | Local plugins only.
 max_thinking_tokens | max_thinking_tokens | Match | Same flag.
 enable_file_checkpointing | enable_file_checkpointing | Match | Env var set.
-user | user | Match | Supported via erlexec/port selection.
+user | user | Match | Supported via the built-in transport/port selection.
 
 Client API (ClaudeSDKClient vs Client)
 Python method | Elixir equivalent | Status | Notes

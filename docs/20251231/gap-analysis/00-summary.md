@@ -72,7 +72,7 @@ No critical gaps were identified. The SDK is production-ready.
 
 | Gap | Location | Recommendation |
 |-----|----------|----------------|
-| Add `end_input/1` to Transport behaviour | `transport.ex` | Currently only in Erlexec, not Port |
+| Add `end_input/1` to Transport behaviour | `transport.ex` | Currently only in Built-in transport, not Port |
 | Document timeout configuration | `client.ex` | Document `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` |
 | Add set_model validation tests | `client.ex` | Ensure model validation matches Python |
 | Protocol version negotiation | `control_protocol/protocol.ex` | Consider adding versioning |
@@ -84,7 +84,7 @@ No critical gaps were identified. The SDK is production-ready.
 The Elixir port includes several enhancements not present in the Python SDK:
 
 ### 1. Transport Layer
-- **Two backends**: Port (native) and Erlexec (full OS user support)
+- **Two backends**: Port (native) and Built-in transport (full OS user support)
 - **StreamingRouter**: Automatic transport selection based on features
 - **Recommended version**: Exposes both minimum and recommended CLI versions
 

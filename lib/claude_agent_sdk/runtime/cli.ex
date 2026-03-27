@@ -71,7 +71,6 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
           {:options, Options.t()}
           | {:subscriber, pid() | {pid(), reference() | :legacy}}
           | {:metadata, map()}
-          | {:transport_module, module()}
           | {:session_event_tag, atom()}
           | {:startup_mode, :eager | :lazy}
           | {:task_supervisor, pid() | atom()}
@@ -91,7 +90,6 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
         Keyword.take(opts, [
           :subscriber,
           :metadata,
-          :transport_module,
           :session_event_tag,
           :startup_mode,
           :task_supervisor,
@@ -218,7 +216,6 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
     base_opts = [
       provider: :claude,
       profile: Profile,
-      transport_module: Keyword.get(runtime_opts, :transport_module, CliSubprocessCore.Transport),
       subscriber: Keyword.get(runtime_opts, :subscriber),
       metadata: metadata,
       session_event_tag:

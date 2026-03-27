@@ -229,8 +229,8 @@ ClaudeAgentSDK.query(
 |> Enum.to_list()
 ```
 
-`ClaudeAgentSDK.Transport.Erlexec` remains available when you need the
-Claude-named compatibility transport over that same core lane.
+`ClaudeAgentSDK.Transport` remains available when you need the SDK-local raw
+transport over that same core lane.
 
 ### Using the OptionBuilder
 

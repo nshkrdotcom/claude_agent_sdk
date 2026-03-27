@@ -52,7 +52,7 @@ The Transport behaviour is well-designed:
 
 **Current Capabilities**:
 - Uses `--include-partial-messages` flag (line 452)
-- Erlexec subprocess management with bidirectional pipes
+- Built-in transport subprocess management with bidirectional pipes
 - Event-driven architecture with EventParser integration
 - Multi-subscriber queue management (lines 229, 296-316)
 - Session ID extraction and persistence

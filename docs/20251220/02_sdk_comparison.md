@@ -29,7 +29,7 @@
 | Custom settings | `settings` | `settings` | Full |
 | Agents | `agents` | `agents` | Full |
 | Env variables | `env` | `env` | Full |
-| User override | (n/a - Windows only) | `user` (via erlexec) | N/A |
+| User override | (n/a - Windows only) | `user` (via built-in transport) | N/A |
 | **Hooks** | | | |
 | Pre-tool-use | `pre_tool_use` | `:pre_tool_use` | Full |
 | Post-tool-use | `post_tool_use` | `:post_tool_use` | Full |
@@ -104,7 +104,7 @@ lib/claude_agent_sdk/
 ├── errors.ex             # Error structs
 ├── client.ex             # GenServer client
 ├── query.ex              # Query implementation
-├── process.ex            # Subprocess via erlexec
+├── process.ex            # Subprocess via built-in transport
 ├── streaming/
 │   ├── streaming.ex      # Streaming API
 │   ├── session.ex        # Session GenServer

@@ -147,7 +147,7 @@ Key findings:
 
 | Python Field | Elixir Field | CLI Flag | Status | Notes |
 |--------------|--------------|----------|--------|-------|
-| `user: str \| None` | `user: String.t()` | N/A | **MATCH** | Process user via erlexec/port |
+| `user: str \| None` | `user: String.t()` | N/A | **MATCH** | Process user via the built-in transport/port |
 
 ---
 

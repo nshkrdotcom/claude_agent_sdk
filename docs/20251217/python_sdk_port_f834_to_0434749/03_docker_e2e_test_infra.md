@@ -15,7 +15,7 @@ Python added Docker-based testing to catch container-only failures (notably issu
 
 ## Why This Matters For Elixir
 
-Elixir's transports (Port / erlexec / streaming control) depend on OS process semantics.
+Elixir's transports (Port / built-in transport / streaming control) depend on OS process semantics.
 Container environments surface edge cases:
 
 - PATH differences (CLI discovery)

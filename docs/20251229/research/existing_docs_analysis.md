@@ -65,7 +65,7 @@ The following markdown must be preserved at the top of README.md:
    - CONTRIBUTING.md
    - AGENTS.md
    - NAMING_CONVENTION.md
-   - ERLEXEC.md
+   - transport-runtime.md
    - LOGIN_DESIGN.md
    - LIVE_TESTING_INSTRUCTIONS.md
    - ELIXIR_SDK_COMPLETE_OVERVIEW.md
@@ -182,10 +182,10 @@ The following markdown must be preserved at the top of README.md:
 **Purpose:** Contribution guidelines
 **Content:**
 - Architecture overview
-- Core dependencies (erlexec)
+- Core dependencies (built-in transport)
 - Development setup
 - Code organization
-- Erlexec integration
+- Built-in transport integration
 - Testing strategy
 - Contributing guidelines
 - Release process
@@ -208,9 +208,9 @@ The following markdown must be preserved at the top of README.md:
 **Purpose:** Clarify Claude Code vs Claude Agent SDK naming
 **Quality:** Good - prevents confusion
 
-#### ERLEXEC.md (240 lines)
-**Purpose:** Erlexec integration design
-**Content:** Why erlexec, design details, migration
+#### transport-runtime.md (240 lines)
+**Purpose:** Built-in transport integration design
+**Content:** Why built-in transport, design details, migration
 **Quality:** Good technical document
 
 #### LOGIN_DESIGN.md (584 lines)
@@ -459,7 +459,7 @@ CHANGELOG.md
 COMPREHENSIVE_MANUAL.md
 CONTRIBUTING.md
 ELIXIR_SDK_COMPLETE_OVERVIEW.md
-ERLEXEC.md
+transport-runtime.md
 HOOKS_GUIDE.md
 LIVE_TESTING_INSTRUCTIONS.md
 LOGIN_DESIGN.md

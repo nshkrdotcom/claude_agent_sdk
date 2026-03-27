@@ -44,8 +44,8 @@ An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python]
 - `ClaudeAgentSDK.Client` remains SDK-local only for the advanced Claude
   control family: hooks, permission callbacks, SDK MCP routing, and control
   request/response state.
-- `ClaudeAgentSDK.Transport.Erlexec` remains available as the Claude-named
-  public transport entrypoint backed by the shared core transport.
+- `ClaudeAgentSDK.Transport` is the SDK-local raw transport surface backed by
+  the shared core transport.
 
 ## ASM Boundary
 
@@ -611,7 +611,7 @@ but it is deprecated and logs a warning once per legacy module.
 `SessionStore` now hydrates on-disk cache in a `handle_continue/2` step. Startup is faster,
 but `list/search` can be briefly incomplete immediately after boot while warmup finishes.
 
-`CliSubprocessCore.Transport`, `Transport.Erlexec`, and `Streaming.Session`
+`CliSubprocessCore.Transport`, `ClaudeAgentSDK.Transport`, and `Streaming.Session`
 support `startup_mode: :lazy`
 to defer subprocess startup to `handle_continue/2`. Deterministic startup
 validation still happens before `start_link` returns, so missing cwd/command
@@ -744,8 +744,8 @@ For breaking changes and migration notes, see `CHANGELOG.md`.
 
 **0.12.0 breaking changes:**
 - `Transport.Port` removed. The built-in common transport lane now runs through
-  `CliSubprocessCore.Transport`; `Transport.Erlexec` remains available as the
-  Claude-named public transport entrypoint.
+  `CliSubprocessCore.Transport`, and the SDK-local raw transport surface is
+  `ClaudeAgentSDK.Transport`.
 - `Transport.normalize_reason(:port_closed)` removed. Custom transports should return `:not_connected` directly.
 - Transport error tuple shape updated: low-level failures now use `{:error, {:transport, reason}}` instead of bare `{:error, reason}`.
 - String prompts now delivered via stdin (`--input-format stream-json`) instead of CLI arg (`-- prompt`).

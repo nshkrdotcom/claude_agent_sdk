@@ -68,7 +68,7 @@ Subscribers (Mixed events + messages)
 @type state :: %{
   port: port() | nil,
   transport: pid() | nil,
-  transport_module: module() | nil,
+  transport_api: module() | nil,
   transport_opts: keyword(),
   options: Options.t(),
   registry: Registry.t(),
@@ -493,7 +493,7 @@ defp do_init(options, opts) do
   state = %{
     port: nil,
     transport: nil,
-    transport_module: transport_module,
+    transport_api: transport_api,
     transport_opts: transport_opts,
     options: updated_options,
     registry: Registry.new(),
@@ -519,7 +519,7 @@ defp do_init(options, opts) do
   state = %{
     port: nil,
     transport: nil,
-    transport_module: transport_module,
+    transport_api: transport_api,
     transport_opts: transport_opts,
     options: updated_options,
     registry: Registry.new(),

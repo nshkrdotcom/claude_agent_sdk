@@ -29,7 +29,7 @@ The Claude Agent SDK provides two streaming approaches:
 - The common CLI streaming/session lane now runs on `cli_subprocess_core` through `ClaudeAgentSDK.Runtime.CLI`.
 - `ClaudeAgentSDK.Streaming.Session` stays SDK-local as the public session process and preserves the existing stream/subscriber contract.
 - The advanced control client family still lives in `ClaudeAgentSDK.Client` for hooks, permission callbacks, and SDK MCP features.
-- Both lanes share the same core-backed transport lane; `ClaudeAgentSDK.Transport.Erlexec` remains the Claude-named raw transport adapter over `CliSubprocessCore.Transport`.
+- Both lanes share the same core-backed transport lane; `ClaudeAgentSDK.Transport` is the SDK-local raw transport adapter over `CliSubprocessCore.Transport`.
 
 ### Key Differences
 
@@ -149,7 +149,7 @@ now emits an explicit `:error_during_execution` result message instead of waitin
 ### Custom Transport Injection
 
 Query flows already use the shared core transport by default. You can inject
-either `CliSubprocessCore.Transport` or the Claude-named compatibility adapter
+either `CliSubprocessCore.Transport` or the SDK-local raw transport surface
 when you need explicit transport control:
 
 ```elixir
@@ -168,8 +168,8 @@ ClaudeAgentSDK.query(
 |> Enum.to_list()
 ```
 
-`ClaudeAgentSDK.Transport.Erlexec` accepts the same options when existing code
-needs the Claude-named compatibility surface.
+`ClaudeAgentSDK.Transport` accepts the same options when existing code needs
+the SDK-local raw transport surface.
 
 In lazy mode, startup errors can happen after `start_link` succeeds and are delivered as process exits.
 

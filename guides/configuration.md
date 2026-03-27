@@ -1066,7 +1066,7 @@ The SDK automatically selects the appropriate transport based on configured feat
 
 ### Transport Startup Mode
 
-`CliSubprocessCore.Transport`, `ClaudeAgentSDK.Transport.Erlexec`, and
+`CliSubprocessCore.Transport`, `ClaudeAgentSDK.Transport`, and
 `Streaming.Session` support `startup_mode: :eager | :lazy` in their start
 options.
 
@@ -1082,8 +1082,8 @@ ClaudeAgentSDK.query(
 |> Enum.to_list()
 ```
 
-`ClaudeAgentSDK.Transport.Erlexec` remains the Claude-named compatibility
-adapter over the same transport lane.
+`ClaudeAgentSDK.Transport` remains the SDK-local raw transport adapter over the
+same transport lane.
 
 In lazy mode, `start_link` can return `{:ok, pid}` before subprocess creation.
 If startup later fails (for example invalid cwd/command), the process exits with the startup reason.

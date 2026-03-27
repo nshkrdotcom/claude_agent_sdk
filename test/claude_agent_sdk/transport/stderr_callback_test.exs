@@ -2,7 +2,7 @@ defmodule ClaudeAgentSDK.Transport.StderrCallbackTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Options
-  alias ClaudeAgentSDK.Transport.Erlexec, as: ErlexecTransport
+  alias ClaudeAgentSDK.Transport
 
   test "invokes Options.stderr callback for non-JSON stderr lines" do
     test_pid = self()
@@ -20,20 +20,20 @@ defmodule ClaudeAgentSDK.Transport.StderrCallbackTest do
     options = %Options{stderr: stderr_cb}
 
     {:ok, transport} =
-      ErlexecTransport.start_link(
+      Transport.start_link(
         command: script,
         args: [],
         options: options,
         subscriber: self()
       )
 
-    ErlexecTransport.subscribe(transport, self())
+    Transport.subscribe(transport, self())
 
     assert_receive {:stderr_line, "ERR_LINE"}, 1_000
     assert_receive {:transport_message, json_line}, 1_000
     assert json_line =~ ~s("type":"system")
 
-    ErlexecTransport.close(transport)
+    Transport.close(transport)
   end
 
   test "buffers split stderr chunks until a full line is available" do
@@ -54,20 +54,20 @@ defmodule ClaudeAgentSDK.Transport.StderrCallbackTest do
     options = %Options{stderr: stderr_cb}
 
     {:ok, transport} =
-      ErlexecTransport.start_link(
+      Transport.start_link(
         command: script,
         args: [],
         options: options,
         subscriber: self()
       )
 
-    ErlexecTransport.subscribe(transport, self())
+    Transport.subscribe(transport, self())
 
     assert_receive {:stderr_line, "ERR_LINE"}, 1_000
     refute_receive {:stderr_line, "ERR"}, 100
     refute_receive {:stderr_line, "_LINE"}, 100
 
-    ErlexecTransport.close(transport)
+    Transport.close(transport)
   end
 
   defp create_test_script(body) do

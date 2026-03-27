@@ -313,7 +313,6 @@ defmodule ClaudeAgentSDK.Streaming.Session do
             session_event_tag: runtime_event_tag,
             startup_mode: startup_mode
           ]
-          |> maybe_put(:transport_module, Keyword.get(start_opts, :transport_module))
           |> maybe_put(:task_supervisor, Keyword.get(start_opts, :task_supervisor))
           |> maybe_put(
             :headless_timeout_ms,

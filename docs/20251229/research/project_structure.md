@@ -31,7 +31,7 @@
 ```elixir
 defp deps do
   [
-    # historical note: the package previously depended on erlexec directly
+    # historical note: the package previously depended on built-in transport directly
     {:jason, "~> 1.4"},
     {:ex_doc, "~> 0.31", only: :dev, runtime: false},
     {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
@@ -46,7 +46,7 @@ end
 
 | Dependency | Version | Purpose | Environment |
 |------------|---------|---------|-------------|
-| `erlexec` | historical direct dependency | Subprocess management for Claude CLI | Conditional runtime |
+| `built-in transport` | historical direct dependency | Subprocess management for Claude CLI | Conditional runtime |
 | `jason` | ~> 1.4 | JSON encoding/decoding | Runtime |
 | `ex_doc` | ~> 0.31 | Documentation generation | Dev only |
 | `dialyxir` | ~> 1.0 | Static analysis (Dialyzer) | Dev only |
@@ -259,7 +259,7 @@ lib/
     │   └── registry.ex
     └── transport/
         ├── agents_file.ex
-        ├── erlexec.ex
+        ├── built-in transport.ex
         ├── port.ex
         └── streaming_router.ex
 
@@ -315,7 +315,7 @@ test/
 │   ├── transport/
 │   │   ├── agents_file_test.exs
 │   │   ├── env_parity_test.exs
-│   │   ├── erlexec_transport_test.exs
+│   │   ├── transport_test.exs
 │   │   ├── port_test.exs
 │   │   ├── stderr_callback_test.exs
 │   │   └── streaming_router_test.exs
@@ -406,7 +406,7 @@ docs/
 | `ARCHITECTURE.md` | Architecture overview | - |
 | `CONTRIBUTING.md` | Contribution guidelines | - |
 | `AGENTS.md` | Agent system documentation | - |
-| `ERLEXEC.md` | Erlexec usage documentation | - |
+| `transport-runtime.md` | Built-in transport usage documentation | - |
 | `LIVE_TESTING_INSTRUCTIONS.md` | Live testing guide | - |
 | `LOGIN_DESIGN.md` | Login system design | - |
 | `NAMING_CONVENTION.md` | Code naming conventions | - |
@@ -564,7 +564,7 @@ groups_for_modules: [
   Transport: [
     ClaudeAgentSDK.Transport,
     ClaudeAgentSDK.Transport.Port,
-    ClaudeAgentSDK.Transport.Erlexec,
+    ClaudeAgentSDK.Transport,
     ClaudeAgentSDK.Transport.StreamingRouter,
     ClaudeAgentSDK.Transport.AgentsFile
   ],

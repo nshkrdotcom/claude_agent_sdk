@@ -77,7 +77,7 @@ The Elixir port has achieved substantial parity with the Python SDK's streaming 
 │  │  └─────────────────┘    └────────────────────┘             ││
 │  └─────────────────────────────────────────────────────────────┘│
 ├─────────────────────────────────────────────────────────────────┤
-│                 Transport.Port / Transport.Erlexec              │
+│                 Transport.Port / ClaudeAgentSDK.Transport              │
 │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────────┐│
 │  │ Port stdin   │  │ Port stdout  │  │ stderr (callback)       ││
 │  │ send stdin   │  │ {:stdout,..} │  │                         ││
@@ -87,7 +87,7 @@ The Elixir port has achieved substantial parity with the Python SDK's streaming 
                               ▼
                     ┌─────────────────┐
                     │   Claude CLI    │
-                    │  Port/Erlexec   │
+                    │  Port/Built-in transport   │
                     └─────────────────┘
 ```
 
@@ -177,7 +177,7 @@ end
 | Write to stdin | `transport.write()` | `Transport.send/2` | Equivalent |
 | Read from stdout | `transport.read_messages()` | `handle_info/{:stdout,...}` | Equivalent |
 | Write Lock | `_write_lock: anyio.Lock` | GenServer serialization | Equivalent (different pattern) |
-| End Input | `transport.end_input()` | `Transport.Erlexec.end_input/1` | Partial - Port lacks |
+| End Input | `transport.end_input()` | `ClaudeAgentSDK.Transport.end_input/1` | Partial - Port lacks |
 
 **Status**: MOSTLY COMPLETE
 
@@ -196,7 +196,7 @@ async def end_input(self) -> None:
             self._stdin_stream = None
 ```
 
-**Elixir Implementation** (Transport.Erlexec:126-147):
+**Elixir Implementation** (ClaudeAgentSDK.Transport:126-147):
 ```elixir
 def handle_call({:send, message}, _from, %{subprocess: {pid, _os_pid}} = state) do
   payload = message |> normalize_payload() |> ensure_newline()
@@ -210,12 +210,12 @@ def handle_call(:end_input, _from, %{subprocess: {pid, _os_pid}} = state) do
 end
 ```
 
-**Gap**: `Transport.Port` module does not implement `end_input/1`. Only `Transport.Erlexec` supports it. This is why `CLIStream` always defaults to Erlexec:
+**Gap**: `Transport.Port` module does not implement `end_input/1`. Only `ClaudeAgentSDK.Transport` supports it. This is why `CLIStream` always defaults to Built-in transport:
 
 ```elixir
-# Always use Erlexec - Port transport can't close stdin independently
+# Always use Built-in transport - Port transport can't close stdin independently
 defp normalize_transport(nil, _options, _input) do
-  {ClaudeAgentSDK.Transport.Erlexec, []}
+  {ClaudeAgentSDK.Transport, []}
 end
 ```
 
@@ -245,7 +245,7 @@ async def close(self) -> None:
 
 **Elixir Implementation** (Client:1097-1163):
 ```elixir
-def terminate(reason, %{transport: transport, transport_module: module} = state)
+def terminate(reason, %{transport: transport, transport_api: module} = state)
     when is_pid(transport) do
   state = state |> cancel_init_timeout() |> cancel_pending_callbacks()
   try do
@@ -458,7 +458,7 @@ None - Core streaming functionality is complete.
    ```
 
 2. **Add `end_input/1` to Transport.Port**
-   - For consistency with Erlexec transport
+   - For consistency with Built-in transport transport
    - Would require platform-specific stdin closing via Port API
    - Location: `lib/claude_agent_sdk/transport/port.ex`
 
@@ -486,7 +486,7 @@ None - Core streaming functionality is complete.
 | Python SDK | Elixir Port | Purpose |
 |-----------|-------------|---------|
 | `_internal/query.py` | `lib/claude_agent_sdk/client.ex` | Control protocol handling |
-| `_internal/transport/subprocess_cli.py` | `lib/claude_agent_sdk/transport/erlexec.ex` | CLI subprocess management |
+| `_internal/transport/subprocess_cli.py` | `lib/claude_agent_sdk/transport.ex` | CLI subprocess management |
 | `types.py:StreamEvent` | Inline maps in `streaming/event_parser.ex` | Streaming event types |
 | N/A | `lib/claude_agent_sdk/streaming/session.ex` | GenServer for persistent sessions |
 | N/A | `lib/claude_agent_sdk/query/cli_stream.ex` | Unidirectional CLI queries |

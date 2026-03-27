@@ -111,7 +111,7 @@ defmodule ClaudeAgentSDK.Streaming do
     use GenServer
 
     defstruct [
-      :subprocess,        # erlexec process
+      :subprocess,        # built-in transport process
       :stdin_pipe,        # stdin port
       :stdout_pipe,       # stdout port
       :message_buffer,    # Accumulates partial messages

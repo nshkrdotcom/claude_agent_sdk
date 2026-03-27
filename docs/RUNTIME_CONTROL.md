@@ -14,9 +14,8 @@ This guide explains how to use the runtime control capabilities introduced in `c
   `cli_subprocess_core`.
 - `ClaudeAgentSDK.Client` stays SDK-local only for the Claude control family:
   hooks, permissions, SDK MCP routing, and control request state.
-- `ClaudeAgentSDK.Transport.Erlexec` remains the Claude-named public transport
-  entrypoint backed by the shared core transport. It no longer owns subprocess
-  lifecycle.
+- `ClaudeAgentSDK.Transport` is the SDK-local raw transport surface backed by
+  the shared core transport. It no longer owns subprocess lifecycle.
 
 ## ASM Extension Seam
 
@@ -108,8 +107,8 @@ end
 
 Every client now delegates IO to a transport module. The default built-in path
 uses `CliSubprocessCore.Transport` directly, while
-`ClaudeAgentSDK.Transport.Erlexec` remains available for callers that prefer
-the SDK-local module name.
+`ClaudeAgentSDK.Transport` remains available for callers that prefer the
+SDK-local module name.
 
 ```elixir
 {:ok, client} =

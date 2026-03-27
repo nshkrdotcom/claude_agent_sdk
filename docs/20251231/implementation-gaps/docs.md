@@ -35,7 +35,7 @@ The Elixir SDK provides additional features not present in Python:
 
 | Feature | Description |
 |---------|-------------|
-| Dual Transport | Port (default) + Erlexec (user switching) |
+| Dual Transport | Port (default) + Built-in transport (user switching) |
 | AbortSignal | Full implementation with atomics |
 | Cancel Requests | Complete handling vs Python TODO |
 | Agent Switching | `set_agent/2`, `get_agent/1`, `get_available_agents/1` |
@@ -930,8 +930,8 @@ Create ARCHITECTURE.md documenting:
 | AbortSignal | placeholder | Full | Elixir Better |
 | Timeouts | fixed 60s | configurable | Elixir Better |
 | **Transport** | | | |
-| Single impl | SubprocessCLI | Port + Erlexec | Elixir Better |
-| User execution | N/A | erlexec | Elixir Extra |
+| Single impl | SubprocessCLI | Port + Built-in transport | Elixir Better |
+| User execution | N/A | built-in transport | Elixir Extra |
 
 ---
 

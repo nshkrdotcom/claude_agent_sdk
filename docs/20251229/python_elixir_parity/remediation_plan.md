@@ -67,7 +67,7 @@ Target gaps: G-003, G-004, G-007, G-008, G-009, G-010, G-017, G-018, G-022, G-02
 - Tests: mock transport streaming input/output.
 
 9) Real-time streaming for non-control query
-- Replace erlexec sync buffering with streaming line-by-line parsing, or route query through Port transport when no control features are needed.
+- Replace built-in transport sync buffering with streaming line-by-line parsing, or route query through Port transport when no control features are needed.
 - Files: `lib/claude_agent_sdk/process.ex`, `lib/claude_agent_sdk/query.ex`
 - Tests: messages arrive before process exit.
 

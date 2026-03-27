@@ -62,7 +62,7 @@ The test suite contains **63 test files** organized as follows:
 ### Transport Tests (`transport/`)
 - `transport_test.exs` - Transport abstraction
 - `port_test.exs` - Port transport
-- `erlexec_transport_test.exs` - Erlexec transport
+- `transport_test.exs` - Built-in transport transport
 - `streaming_router_test.exs` - Transport routing decisions
 - `stderr_callback_test.exs` - stderr handling
 - `env_parity_test.exs` - Environment parity
@@ -498,7 +498,7 @@ assert StreamingRouter.requires_control_protocol?(opts_with_hooks)
 explanation = StreamingRouter.explain(opts)
 ```
 
-### Erlexec Transport (`transport/erlexec_transport_test.exs`)
+### Built-in transport Transport (`transport/transport_test.exs`)
 
 **Usage Patterns:**
 
@@ -507,20 +507,20 @@ explanation = StreamingRouter.explain(opts)
 stderr_cb = fn line -> send(test_pid, {:stderr_line, line}) end
 options = %Options{stderr: stderr_cb}
 
-{:ok, transport} = ErlexecTransport.start_link(
+{:ok, transport} = Transport.start_link(
   command: script,
   args: [],
   options: options
 )
 
 # Subscribe to stdout
-:ok = ErlexecTransport.subscribe(transport, self())
+:ok = Transport.subscribe(transport, self())
 
 # Send message
-:ok = ErlexecTransport.send(transport, "PING\n")
+:ok = Transport.send(transport, "PING\n")
 
 # Close transport
-ErlexecTransport.close(transport)
+Transport.close(transport)
 ```
 
 ---

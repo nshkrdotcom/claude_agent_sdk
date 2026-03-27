@@ -58,7 +58,7 @@ Implementation tasks
 3) Query streaming and AsyncIterable
 - Add `ClaudeAgentSDK.query/2` overload for `Enumerable` prompts that streams to CLI stdin and yields responses as they arrive (unidirectional streaming).
 - Add optional transport injection similar to Python `query(..., transport=...)` or document explicit alternative.
-- Remove full-buffer sync use for streaming mode; use Port transport or a streaming erlexec.
+- Remove full-buffer sync use for streaming mode; use Port transport or a streaming built-in transport.
 
 4) replay-user-messages flag
 - Only add `--replay-user-messages` when explicitly requested via `extra_args` or when needed for file checkpointing flows.
