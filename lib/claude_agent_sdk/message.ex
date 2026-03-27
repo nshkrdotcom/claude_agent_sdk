@@ -69,6 +69,7 @@ defmodule ClaudeAgentSDK.Message do
   """
 
   alias ClaudeAgentSDK.AssistantError
+  alias ClaudeAgentSDK.Schema.Message, as: MessageSchema
 
   defstruct [:type, :subtype, :data, :raw]
 
@@ -219,14 +220,20 @@ defmodule ClaudeAgentSDK.Message do
   defp maybe_put_error_details(data, nil, _error_struct), do: data
 
   defp parse_message(raw) do
-    type = safe_type(raw["type"])
+    case MessageSchema.parse(raw) do
+      {:ok, parsed} ->
+        type = safe_type(parsed["type"])
 
-    message = %__MODULE__{
-      type: type,
-      raw: raw
-    }
+        message = %__MODULE__{
+          type: type,
+          raw: raw
+        }
 
-    parse_by_type(message, type, raw)
+        parse_by_type(message, type, parsed)
+
+      {:error, {:invalid_message_frame, details}} ->
+        raise ArgumentError, details.message
+    end
   end
 
   defp parse_by_type(message, :assistant, raw) do
@@ -277,9 +284,9 @@ defmodule ClaudeAgentSDK.Message do
 
   defp parse_by_type(message, :stream_event, raw) do
     data = %{
-      uuid: Map.fetch!(raw, "uuid"),
-      session_id: Map.fetch!(raw, "session_id"),
-      event: Map.fetch!(raw, "event"),
+      uuid: Map.get(raw, "uuid"),
+      session_id: Map.get(raw, "session_id"),
+      event: Map.get(raw, "event", %{}),
       parent_tool_use_id: raw["parent_tool_use_id"]
     }
 

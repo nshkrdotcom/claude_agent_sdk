@@ -17,6 +17,15 @@ This guide explains how to use the runtime control capabilities introduced in `c
 - `ClaudeAgentSDK.Transport` is the SDK-local raw transport surface backed by
   the shared core transport. It no longer owns subprocess lifecycle.
 
+`Zoi` now backs the control-lane schema boundary here as well:
+
+- `ClaudeAgentSDK.Schema.ControlProtocol` owns control request/response
+  envelopes.
+- `ClaudeAgentSDK.Schema.Message` owns Claude-local frame adaptation for
+  SDK-facing message and `stream_event` payloads.
+- `%ClaudeAgentSDK.Message{}` and the permission structs remain the ergonomic
+  public layer after schema validation and projection.
+
 ## ASM Extension Seam
 
 `agent_session_manager` may offer an optional Claude extension seam under

@@ -20,6 +20,18 @@ This guide provides comprehensive documentation for configuring the Claude Agent
 
 The `ClaudeAgentSDK.Options` struct is the primary configuration mechanism for SDK requests. All fields are optional and will be omitted from the CLI command if not provided.
 
+`%ClaudeAgentSDK.Options{}` remains the ergonomic caller-facing surface. The
+new schema layer sits underneath it:
+
+- `Zoi` is the canonical boundary-schema layer for new dynamic option-adjacent
+  payloads such as initialize envelopes, structured output config, and agent
+  maps sent over the control lane.
+- `ClaudeAgentSDK.Schema.Options` owns wire-shape validation and normalization
+  in one place instead of repeating ad hoc `Map.get/2` chains across transport
+  code.
+- internal runtime state is not the target of this schema migration; the public
+  struct and existing option helpers remain the API boundary.
+
 ### Creating Options
 
 ```elixir

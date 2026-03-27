@@ -31,6 +31,19 @@ The Claude Agent SDK provides two streaming approaches:
 - The advanced control client family still lives in `ClaudeAgentSDK.Client` for hooks, permission callbacks, and SDK MCP features.
 - Both lanes share the same core-backed transport lane; `ClaudeAgentSDK.Transport` is the SDK-local raw transport adapter over `CliSubprocessCore.Transport`.
 
+### Schema Ownership
+
+- `Zoi` is the canonical validation layer for new streaming ingress work.
+- `ClaudeAgentSDK.Schema.Message` validates raw message frames and streaming
+  event families before they are projected into `%ClaudeAgentSDK.Message{}` or
+  public streaming maps.
+- `raw_event` remains attached to parsed streaming events so forward-compatible
+  fields survive even when the public event projection stays intentionally
+  small.
+- the common CLI streaming parser keeps the stricter `stream_event` wrapper
+  contract (`uuid` and `session_id` required), while the SDK-local control lane
+  may surface missing wrapper metadata as `nil`.
+
 ### Key Differences
 
 | Feature | `query/2` | Streaming API |

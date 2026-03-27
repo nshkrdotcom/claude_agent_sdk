@@ -17,16 +17,32 @@ defmodule ClaudeAgentSDK.Permission.RuleValue do
       RuleValue.new("Write", "/tmp/**")
   """
 
+  alias ClaudeAgentSDK.Schema
+  alias CliSubprocessCore.Schema.Conventions
+
   @typedoc """
   Permission rule value struct.
   """
   @type t :: %__MODULE__{
           tool_name: String.t(),
-          rule_content: String.t() | nil
+          rule_content: String.t() | nil,
+          extra: map()
         }
 
+  @known_fields ["toolName", "ruleContent"]
+  @schema Zoi.map(
+            %{
+              "toolName" => Conventions.trimmed_string() |> Zoi.min(1),
+              "ruleContent" => Conventions.optional_trimmed_string()
+            },
+            unrecognized_keys: :preserve
+          )
+
   @enforce_keys [:tool_name]
-  defstruct [:tool_name, :rule_content]
+  defstruct [:tool_name, :rule_content, extra: %{}]
+
+  @spec schema() :: Zoi.schema()
+  def schema, do: @schema
 
   @doc """
   Creates a new rule value.
@@ -46,9 +62,42 @@ defmodule ClaudeAgentSDK.Permission.RuleValue do
   """
   @spec new(String.t(), String.t() | nil) :: t()
   def new(tool_name, rule_content \\ nil) do
+    parse!(%{"toolName" => tool_name, "ruleContent" => rule_content})
+  end
+
+  @spec parse(map() | t()) ::
+          {:ok, t()}
+          | {:error, {:invalid_permission_rule_value, CliSubprocessCore.Schema.error_detail()}}
+  def parse(%__MODULE__{} = value), do: {:ok, value}
+
+  def parse(map) when is_map(map) do
+    case Schema.parse(@schema, normalize_keys(map), :invalid_permission_rule_value) do
+      {:ok, parsed} ->
+        {known, extra} = Schema.split_extra(parsed, @known_fields)
+
+        {:ok,
+         %__MODULE__{
+           tool_name: Map.fetch!(known, "toolName"),
+           rule_content: Map.get(known, "ruleContent"),
+           extra: extra
+         }}
+
+      {:error, {:invalid_permission_rule_value, details}} ->
+        {:error, {:invalid_permission_rule_value, details}}
+    end
+  end
+
+  @spec parse!(map() | t()) :: t()
+  def parse!(%__MODULE__{} = value), do: value
+
+  def parse!(map) when is_map(map) do
+    parsed = Schema.parse!(@schema, normalize_keys(map), :invalid_permission_rule_value)
+    {known, extra} = Schema.split_extra(parsed, @known_fields)
+
     %__MODULE__{
-      tool_name: tool_name,
-      rule_content: rule_content
+      tool_name: Map.fetch!(known, "toolName"),
+      rule_content: Map.get(known, "ruleContent"),
+      extra: extra
     }
   end
 
@@ -64,10 +113,24 @@ defmodule ClaudeAgentSDK.Permission.RuleValue do
       %{"toolName" => "Bash", "ruleContent" => nil}
   """
   @spec to_map(t()) :: map()
-  def to_map(%__MODULE__{tool_name: tool_name, rule_content: rule_content}) do
+  def to_map(%__MODULE__{tool_name: tool_name, rule_content: rule_content, extra: extra}) do
     %{
       "toolName" => tool_name,
       "ruleContent" => rule_content
     }
+    |> Map.merge(extra)
+  end
+
+  defp normalize_keys(map) do
+    Enum.reduce(map, %{}, fn
+      {:tool_name, value}, acc -> Map.put(acc, "toolName", value)
+      {"tool_name", value}, acc -> Map.put(acc, "toolName", value)
+      {:toolName, value}, acc -> Map.put(acc, "toolName", value)
+      {:rule_content, value}, acc -> Map.put(acc, "ruleContent", value)
+      {"rule_content", value}, acc -> Map.put(acc, "ruleContent", value)
+      {:ruleContent, value}, acc -> Map.put(acc, "ruleContent", value)
+      {key, value}, acc when is_atom(key) -> Map.put(acc, Atom.to_string(key), value)
+      {key, value}, acc -> Map.put(acc, key, value)
+    end)
   end
 end

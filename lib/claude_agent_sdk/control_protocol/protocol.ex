@@ -26,6 +26,8 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   See: https://docs.anthropic.com/en/docs/claude-code/sdk
   """
 
+  alias ClaudeAgentSDK.Schema.ControlProtocol, as: ProtocolSchema
+
   @typedoc """
   Request ID for tracking control protocol requests.
   """
@@ -108,6 +110,7 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
       "request" => request_data
     }
 
+    ProtocolSchema.validate_initialize_request!(request)
     json = Jason.encode!(request)
     {req_id, json}
   end
@@ -321,6 +324,7 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
       }
     }
 
+    ProtocolSchema.validate_hook_response!(response)
     Jason.encode!(response)
   end
 
@@ -334,6 +338,7 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
       }
     }
 
+    ProtocolSchema.validate_hook_response!(response)
     Jason.encode!(response)
   end
 
@@ -411,8 +416,14 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   def decode_message(json_string) when is_binary(json_string) do
     case Jason.decode(json_string) do
       {:ok, data} when is_map(data) ->
-        type = classify_message(data)
-        {:ok, {type, data}}
+        case ProtocolSchema.parse_message(data) do
+          {:ok, validated} ->
+            type = classify_message(validated)
+            {:ok, {type, validated}}
+
+          {:error, _reason} ->
+            {:error, :invalid_message_format}
+        end
 
       {:ok, _non_map} ->
         {:error, :invalid_message_format}

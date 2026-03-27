@@ -93,6 +93,23 @@ Phase 4 finalizes the Claude release boundary:
   `claude_agent_sdk`, then
   `agent_session_manager`
 
+## Schema Boundary
+
+`Zoi` is now the canonical boundary-schema layer for new dynamic boundary work
+inside `claude_agent_sdk`.
+
+- `cli_subprocess_core` owns the shared common-lane event and payload shapes.
+- `claude_agent_sdk` owns Claude-local control-protocol envelopes, permission
+  update payloads, and Claude-native message-frame adaptation.
+- public structs such as `%ClaudeAgentSDK.Message{}`,
+  `%ClaudeAgentSDK.Permission.Update{}`, and
+  `%ClaudeAgentSDK.Permission.RuleValue{}` remain the ergonomic caller-facing
+  layer.
+- forward-compatible wire surfaces use `Zoi.map(..., unrecognized_keys: :preserve)`
+  plus projection instead of direct `Zoi.struct/3`.
+- closed local payloads still use schema validation, but unknown-field
+  preservation is only enabled where the wire surface can legitimately expand.
+
 ## Centralized Model Selection
 
 `claude_agent_sdk` no longer owns active model defaulting or fallback policy.
@@ -764,6 +781,11 @@ For breaking changes and migration notes, see `CHANGELOG.md`.
 **0.9.0 breaking change (streaming):**
 - Stream event wrappers now require `uuid` and `session_id`. Missing keys raise and terminate the streaming client.
 - If you emit or mock `stream_event` wrappers, include both fields (custom transports, fixtures, tests).
+
+That strict requirement applies to the common CLI streaming parser. The
+SDK-local control lane still accepts incomplete `stream_event` wrappers and
+surfaces missing metadata as `nil`, which keeps control-client transports
+forward-compatible without weakening the core streaming contract.
 
 **Additional Resources:**
 - [CHANGELOG.md](CHANGELOG.md) - Version history and release notes

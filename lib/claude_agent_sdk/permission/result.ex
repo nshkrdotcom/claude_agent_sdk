@@ -196,6 +196,8 @@ defmodule ClaudeAgentSDK.Permission.Result do
 
         m when is_map(m) ->
           m
+          |> Update.parse!()
+          |> Update.to_map()
       end)
 
     Map.put(map, "updatedPermissions", serialized)

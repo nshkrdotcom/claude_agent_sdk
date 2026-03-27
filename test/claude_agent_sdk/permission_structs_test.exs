@@ -21,4 +21,34 @@ defmodule ClaudeAgentSDK.PermissionStructsTest do
     assert %Update{type: :add_rules, behavior: :allow} = update
     assert [%RuleValue{tool_name: "Bash", rule_content: "echo *"}] = update.rules
   end
+
+  test "RuleValue preserves unknown wire fields for forward-compatible projections" do
+    assert {:ok, rule} =
+             RuleValue.parse(%{
+               "toolName" => "Bash",
+               "ruleContent" => "echo *",
+               "futureFlag" => true
+             })
+
+    assert rule.extra == %{"futureFlag" => true}
+    assert RuleValue.to_map(rule)["futureFlag"] == true
+  end
+
+  test "Update parses raw maps, normalizes wire enums, and preserves unknown fields" do
+    assert {:ok, update} =
+             Update.parse(%{
+               "type" => "addRules",
+               "rules" => [%{"toolName" => "Bash", "ruleContent" => "echo *"}],
+               "behavior" => "allow",
+               "destination" => "session",
+               "futureFlag" => "kept"
+             })
+
+    assert update.type == :add_rules
+    assert update.behavior == :allow
+    assert update.destination == :session
+    assert [%RuleValue{tool_name: "Bash"}] = update.rules
+    assert update.extra == %{"futureFlag" => "kept"}
+    assert Update.to_map(update)["futureFlag"] == "kept"
+  end
 end

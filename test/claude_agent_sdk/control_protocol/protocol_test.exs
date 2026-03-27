@@ -137,6 +137,21 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
     test "returns error for empty string" do
       assert {:error, _reason} = Protocol.decode_message("")
     end
+
+    test "keeps control-lane stream_event wrappers permissive about missing metadata" do
+      json = ~s({"type":"stream_event","session_id":"sess_123","event":{"type":"message_stop"}})
+
+      assert {:ok, {:stream_event, data}} = Protocol.decode_message(json)
+      assert data["session_id"] == "sess_123"
+      assert is_nil(data["uuid"])
+      assert data["event"]["type"] == "message_stop"
+    end
+
+    test "rejects malformed control envelopes" do
+      json = ~s({"type":"control_request","request":{"subtype":"hook_callback"}})
+
+      assert {:error, :invalid_message_format} = Protocol.decode_message(json)
+    end
   end
 
   describe "generate_request_id/0" do

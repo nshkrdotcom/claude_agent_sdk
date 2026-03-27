@@ -98,4 +98,18 @@ defmodule ClaudeAgentSDK.MessageParityTest do
     assert {:ok, %Message{type: :result, subtype: subtype}} = Message.from_json(json)
     assert subtype == "error_future"
   end
+
+  test "stream_event wrappers keep control-lane metadata optional" do
+    json =
+      Jason.encode!(%{
+        "type" => "stream_event",
+        "session_id" => "sess-123",
+        "event" => %{"type" => "message_stop"}
+      })
+
+    assert {:ok, %Message{type: :stream_event, data: data}} = Message.from_json(json)
+    assert data.session_id == "sess-123"
+    assert data.uuid == nil
+    assert data.event["type"] == "message_stop"
+  end
 end

@@ -37,6 +37,8 @@ defmodule ClaudeAgentSDK.Permission.Update do
   """
 
   alias ClaudeAgentSDK.Permission.RuleValue
+  alias ClaudeAgentSDK.Schema
+  alias CliSubprocessCore.Schema.Conventions
 
   @typedoc """
   Destination for permission updates.
@@ -68,11 +70,41 @@ defmodule ClaudeAgentSDK.Permission.Update do
           behavior: behavior() | nil,
           mode: ClaudeAgentSDK.Permission.permission_mode() | nil,
           directories: [String.t()] | nil,
-          destination: destination() | nil
+          destination: destination() | nil,
+          extra: map()
         }
 
+  @known_fields ["type", "rules", "behavior", "mode", "directories", "destination"]
+  @schema Zoi.map(
+            %{
+              "type" => Zoi.any() |> Zoi.transform({__MODULE__, :normalize_update_type, []}),
+              "rules" => Zoi.optional(Zoi.nullish(Zoi.array(Zoi.any()))),
+              "behavior" =>
+                Zoi.optional(
+                  Zoi.nullish(Zoi.any() |> Zoi.transform({__MODULE__, :normalize_behavior, []}))
+                ),
+              "mode" =>
+                Zoi.optional(
+                  Zoi.nullish(Zoi.any() |> Zoi.transform({__MODULE__, :normalize_mode, []}))
+                ),
+              "directories" =>
+                Zoi.optional(Zoi.nullish(Zoi.array(Conventions.trimmed_string() |> Zoi.min(1)))),
+              "destination" =>
+                Zoi.optional(
+                  Zoi.nullish(
+                    Zoi.any()
+                    |> Zoi.transform({__MODULE__, :normalize_destination, []})
+                  )
+                )
+            },
+            unrecognized_keys: :preserve
+          )
+
   @enforce_keys [:type]
-  defstruct [:type, :rules, :behavior, :mode, :directories, :destination]
+  defstruct [:type, :rules, :behavior, :mode, :directories, :destination, extra: %{}]
+
+  @spec schema() :: Zoi.schema()
+  def schema, do: @schema
 
   @doc """
   Creates a new permission update.
@@ -92,14 +124,12 @@ defmodule ClaudeAgentSDK.Permission.Update do
   """
   @spec new(update_type(), keyword()) :: t()
   def new(type, opts \\ []) do
-    %__MODULE__{
-      type: type,
-      rules: Keyword.get(opts, :rules),
-      behavior: Keyword.get(opts, :behavior),
-      mode: Keyword.get(opts, :mode),
-      directories: Keyword.get(opts, :directories),
-      destination: Keyword.get(opts, :destination)
-    }
+    attrs =
+      opts
+      |> Enum.into(%{})
+      |> Map.put("type", type)
+
+    parse!(attrs)
   end
 
   @doc """
@@ -172,6 +202,60 @@ defmodule ClaudeAgentSDK.Permission.Update do
     |> maybe_add_behavior(update)
     |> maybe_add_mode(update)
     |> maybe_add_directories(update)
+    |> Map.merge(update.extra)
+  end
+
+  @spec parse(map() | t()) ::
+          {:ok, t()}
+          | {:error, {:invalid_permission_update, CliSubprocessCore.Schema.error_detail()}}
+  def parse(%__MODULE__{} = update), do: {:ok, update}
+
+  def parse(map) when is_map(map) do
+    case Schema.parse(@schema, normalize_keys(map), :invalid_permission_update) do
+      {:ok, parsed} ->
+        {known, extra} = Schema.split_extra(parsed, @known_fields)
+
+        {:ok,
+         %__MODULE__{
+           type: Map.fetch!(known, "type"),
+           rules: parse_rules(Map.get(known, "rules")),
+           behavior: Map.get(known, "behavior"),
+           mode: Map.get(known, "mode"),
+           directories: Map.get(known, "directories"),
+           destination: Map.get(known, "destination"),
+           extra: extra
+         }}
+
+      {:error, {:invalid_permission_update, details}} ->
+        {:error, {:invalid_permission_update, details}}
+    end
+  rescue
+    error in [ArgumentError] ->
+      {:error,
+       {:invalid_permission_update,
+        %{
+          message: Exception.message(error),
+          errors: %{},
+          issues: [%{code: :invalid, message: Exception.message(error), path: []}]
+        }}}
+  end
+
+  @spec parse!(map() | t()) :: t()
+  def parse!(%__MODULE__{} = update), do: update
+
+  def parse!(map) when is_map(map) do
+    parsed = Schema.parse!(@schema, normalize_keys(map), :invalid_permission_update)
+    {known, extra} = Schema.split_extra(parsed, @known_fields)
+
+    %__MODULE__{
+      type: Map.fetch!(known, "type"),
+      rules: parse_rules(Map.get(known, "rules")),
+      behavior: Map.get(known, "behavior"),
+      mode: Map.get(known, "mode"),
+      directories: Map.get(known, "directories"),
+      destination: Map.get(known, "destination"),
+      extra: extra
+    }
   end
 
   defp type_to_string(:add_rules), do: "addRules"
@@ -219,4 +303,116 @@ defmodule ClaudeAgentSDK.Permission.Update do
   end
 
   defp maybe_add_directories(map, _), do: map
+
+  @doc false
+  def normalize_update_type(value, opts), do: normalize_update_type(value, [], opts)
+
+  @doc false
+  def normalize_update_type(value, _args, _opts) do
+    case value do
+      :add_rules -> {:ok, :add_rules}
+      :replace_rules -> {:ok, :replace_rules}
+      :remove_rules -> {:ok, :remove_rules}
+      :set_mode -> {:ok, :set_mode}
+      :add_directories -> {:ok, :add_directories}
+      :remove_directories -> {:ok, :remove_directories}
+      "addRules" -> {:ok, :add_rules}
+      "replaceRules" -> {:ok, :replace_rules}
+      "removeRules" -> {:ok, :remove_rules}
+      "setMode" -> {:ok, :set_mode}
+      "addDirectories" -> {:ok, :add_directories}
+      "removeDirectories" -> {:ok, :remove_directories}
+      "add_rules" -> {:ok, :add_rules}
+      "replace_rules" -> {:ok, :replace_rules}
+      "remove_rules" -> {:ok, :remove_rules}
+      "set_mode" -> {:ok, :set_mode}
+      "add_directories" -> {:ok, :add_directories}
+      "remove_directories" -> {:ok, :remove_directories}
+      other -> {:error, "invalid permission update type: #{inspect(other)}"}
+    end
+  end
+
+  @doc false
+  def normalize_behavior(value, opts), do: normalize_behavior(value, [], opts)
+
+  @doc false
+  def normalize_behavior(value, _args, _opts) do
+    case value do
+      :allow -> {:ok, :allow}
+      :deny -> {:ok, :deny}
+      :ask -> {:ok, :ask}
+      "allow" -> {:ok, :allow}
+      "deny" -> {:ok, :deny}
+      "ask" -> {:ok, :ask}
+      other -> {:error, "invalid permission behavior: #{inspect(other)}"}
+    end
+  end
+
+  @doc false
+  def normalize_destination(value, opts), do: normalize_destination(value, [], opts)
+
+  @doc false
+  def normalize_destination(value, _args, _opts) do
+    case value do
+      :user_settings -> {:ok, :user_settings}
+      :project_settings -> {:ok, :project_settings}
+      :local_settings -> {:ok, :local_settings}
+      :session -> {:ok, :session}
+      "userSettings" -> {:ok, :user_settings}
+      "projectSettings" -> {:ok, :project_settings}
+      "localSettings" -> {:ok, :local_settings}
+      "session" -> {:ok, :session}
+      "user_settings" -> {:ok, :user_settings}
+      "project_settings" -> {:ok, :project_settings}
+      "local_settings" -> {:ok, :local_settings}
+      other -> {:error, "invalid permission destination: #{inspect(other)}"}
+    end
+  end
+
+  @doc false
+  def normalize_mode(value, opts), do: normalize_mode(value, [], opts)
+
+  @doc false
+  def normalize_mode(value, _args, _opts) do
+    cond do
+      ClaudeAgentSDK.Permission.valid_mode?(value) ->
+        {:ok, value}
+
+      is_binary(value) ->
+        case ClaudeAgentSDK.Permission.string_to_mode(value) do
+          nil -> {:error, "invalid permission mode: #{inspect(value)}"}
+          mode -> {:ok, mode}
+        end
+
+      true ->
+        {:error, "invalid permission mode: #{inspect(value)}"}
+    end
+  end
+
+  defp parse_rules(nil), do: nil
+
+  defp parse_rules(rules) when is_list(rules) do
+    Enum.map(rules, fn rule ->
+      case RuleValue.parse(rule) do
+        {:ok, parsed} ->
+          parsed
+
+        {:error, {:invalid_permission_rule_value, details}} ->
+          raise ArgumentError, details.message
+      end
+    end)
+  end
+
+  defp normalize_keys(map) do
+    Enum.reduce(map, %{}, fn
+      {:type, value}, acc -> Map.put(acc, "type", value)
+      {:rules, value}, acc -> Map.put(acc, "rules", value)
+      {:behavior, value}, acc -> Map.put(acc, "behavior", value)
+      {:mode, value}, acc -> Map.put(acc, "mode", value)
+      {:directories, value}, acc -> Map.put(acc, "directories", value)
+      {:destination, value}, acc -> Map.put(acc, "destination", value)
+      {key, value}, acc when is_atom(key) -> Map.put(acc, Atom.to_string(key), value)
+      {key, value}, acc -> Map.put(acc, key, value)
+    end)
+  end
 end

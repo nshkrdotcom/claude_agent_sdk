@@ -18,6 +18,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
   """
 
   alias ClaudeAgentSDK.AssistantError
+  alias ClaudeAgentSDK.Schema.Message, as: MessageSchema
 
   @type event :: map()
   @type accumulated_text :: String.t()
@@ -70,7 +71,18 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
         EventParser.parse_event(%{"type" => "unknown_event"}, "existing text")
   """
   @spec parse_event(map(), accumulated_text()) :: {:ok, [event()], accumulated_text()}
-  def parse_event(%{"type" => "message_start"} = event, accumulated_text) do
+  def parse_event(raw_event, accumulated_text)
+      when is_map(raw_event) and is_binary(accumulated_text) do
+    case MessageSchema.parse_stream_event(raw_event) do
+      {:ok, event} ->
+        do_parse_event(event, accumulated_text)
+
+      {:error, _details} ->
+        {:ok, [], accumulated_text}
+    end
+  end
+
+  defp do_parse_event(%{"type" => "message_start"} = event, accumulated_text) do
     model = get_in(event, ["message", "model"])
     role = get_in(event, ["message", "role"])
     usage = get_in(event, ["message", "usage"])
@@ -87,7 +99,10 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     {:ok, events, accumulated_text}
   end
 
-  def parse_event(%{"type" => "content_block_start", "content_block" => block}, accumulated_text) do
+  defp do_parse_event(
+         %{"type" => "content_block_start", "content_block" => block},
+         accumulated_text
+       ) do
     event =
       case block["type"] do
         "text" ->
@@ -110,7 +125,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     {:ok, [event], accumulated_text}
   end
 
-  def parse_event(%{"type" => "content_block_delta", "delta" => delta}, accumulated_text) do
+  defp do_parse_event(%{"type" => "content_block_delta", "delta" => delta}, accumulated_text) do
     # THE CORE STREAMING EVENT - incremental content updates
     case delta["type"] do
       "text_delta" ->
@@ -160,7 +175,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     end
   end
 
-  def parse_event(%{"type" => "content_block_stop"}, accumulated_text) do
+  defp do_parse_event(%{"type" => "content_block_stop"}, accumulated_text) do
     # Content block complete
     events = [
       %{
@@ -173,7 +188,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     {:ok, events, ""}
   end
 
-  def parse_event(%{"type" => "message_delta", "delta" => delta}, accumulated_text) do
+  defp do_parse_event(%{"type" => "message_delta", "delta" => delta}, accumulated_text) do
     # Message-level metadata updates
     events = [
       %{
@@ -186,7 +201,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     {:ok, events, accumulated_text}
   end
 
-  def parse_event(%{"type" => "message_stop"} = event, accumulated_text) do
+  defp do_parse_event(%{"type" => "message_stop"} = event, accumulated_text) do
     # Message complete - final event
     structured_output =
       Map.get(event, "structured_output") || get_in(event, ["message", "structured_output"])
@@ -210,7 +225,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     {:ok, events, ""}
   end
 
-  def parse_event(%{"type" => "error"} = event, accumulated_text) do
+  defp do_parse_event(%{"type" => "error"} = event, accumulated_text) do
     # Error event from Claude
     error_data = event["error"] || %{}
 
@@ -225,7 +240,7 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
     {:ok, events, accumulated_text}
   end
 
-  def parse_event(_unknown_event, accumulated_text) do
+  defp do_parse_event(_unknown_event, accumulated_text) do
     # Unknown event type - ignore gracefully
     # This allows forward compatibility with new event types
     {:ok, [], accumulated_text}
