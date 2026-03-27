@@ -1,5 +1,7 @@
 defmodule ClaudeAgentSDK.Schema.Message do
-  @moduledoc false
+  @moduledoc """
+  Claude-owned schema validation for raw message frames and streaming events.
+  """
 
   alias ClaudeAgentSDK.Schema
   alias ClaudeAgentSDK.Schema.Options, as: OptionSchema

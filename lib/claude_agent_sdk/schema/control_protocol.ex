@@ -1,5 +1,8 @@
 defmodule ClaudeAgentSDK.Schema.ControlProtocol do
-  @moduledoc false
+  @moduledoc """
+  Claude-owned schema validation for control protocol request and response
+  frames.
+  """
 
   alias ClaudeAgentSDK.Schema
   alias ClaudeAgentSDK.Schema.Message, as: MessageSchema

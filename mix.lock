@@ -15,4 +15,5 @@
   "stream_data": {:hex, :stream_data, "1.2.0", "58dd3f9e88afe27dc38bef26fce0c84a9e7a96772b2925c7b32cd2435697a52b", [:mix], [], "hexpm", "eb5c546ee3466920314643edf68943a5b14b32d1da9fe01698dc92b73f89a9ed"},
   "supertester": {:hex, :supertester, "0.5.1", "46bf71bba41f9bcf9109e51ef77d16854a5ca730914a14b3c30790ff3795c2a4", [:mix], [{:stream_data, "~> 1.0", [hex: :stream_data, repo: "hexpm", optional: false]}, {:telemetry, "~> 1.0", [hex: :telemetry, repo: "hexpm", optional: false]}], "hexpm", "cf945653651e9f121dc23024f1548b704de9a3e1ce9a2afcb060e93736ad3375"},
   "telemetry": {:hex, :telemetry, "1.3.0", "fedebbae410d715cf8e7062c96a1ef32ec22e764197f70cda73d82778d61e7a2", [:rebar3], [], "hexpm", "7015fc8919dbe63764f4b4b87a95b7c0996bd539e0d499be6ec9d7f3875b79e6"},
+  "zoi": {:hex, :zoi, "0.17.3", "bbfed611880f8912346f5213e2ad901f77bc7ad052c1859e60d43d1867e0ead1", [:mix], [{:decimal, "~> 2.0", [hex: :decimal, repo: "hexpm", optional: true]}, {:phoenix_html, "~> 2.14.2 or ~> 3.0 or ~> 4.1", [hex: :phoenix_html, repo: "hexpm", optional: true]}], "hexpm", "48a63dc6eac0eaf30fb9d94edf55f71011cda21812028c9bb283242252f6ab6f"},
 }

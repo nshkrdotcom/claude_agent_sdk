@@ -8,7 +8,9 @@ defmodule ClaudeAgentSDK.OptionsStreamingTest do
   """
   use ClaudeAgentSDK.SupertesterCase
 
+  alias ClaudeAgentSDK.Config.Env
   alias ClaudeAgentSDK.Options
+  alias ClaudeAgentSDK.TestEnvHelpers
 
   defp new_options(opts \\ []) do
     Options.new(Keyword.merge([model: "sonnet", provider_backend: :anthropic], opts))
@@ -46,6 +48,25 @@ defmodule ClaudeAgentSDK.OptionsStreamingTest do
       options = %Options{include_partial_messages: nil}
       args = Options.to_args(options)
       refute "--include-partial-messages" in args
+    end
+
+    test "streaming-only raw structs do not require ambient model resolution" do
+      TestEnvHelpers.with_system_env(
+        [
+          {Env.provider_backend(), "ollama"},
+          {Env.anthropic_model(), nil},
+          {Env.external_model_overrides(), nil},
+          {Env.anthropic_base_url(), nil},
+          {Env.anthropic_auth_token(), nil}
+        ],
+        fn ->
+          options = %Options{include_partial_messages: nil}
+          args = Options.to_args(options)
+
+          refute "--include-partial-messages" in args
+          refute "--model" in args
+        end
+      )
     end
 
     test "includes flag at end of arguments pipeline" do

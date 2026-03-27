@@ -378,7 +378,7 @@ defmodule ClaudeAgentSDK.Options do
   @spec to_args(t()) :: [String.t()]
   def to_args(%__MODULE__{} = options) do
     validate_effort!(options.effort)
-    options = ensure_model_payload!(options)
+    options = maybe_ensure_model_payload!(options)
 
     []
     |> add_output_format_args(options)
@@ -1009,22 +1009,66 @@ defmodule ClaudeAgentSDK.Options do
   @doc false
   @spec ensure_model_payload!(t()) :: t()
   def ensure_model_payload!(%__MODULE__{} = options) do
-    case ModelInput.normalize(:claude, model_input_attrs(options)) do
+    case normalize_model_payload(options) do
       {:ok, normalized} ->
-        %{
-          options
-          | model_payload: normalized.selection,
-            model: normalized.selection.resolved_model
-        }
+        normalized
 
       {:error, reason} ->
         raise ArgumentError, "model resolution failed for :claude: #{inspect(reason)}"
     end
   end
 
+  defp maybe_ensure_model_payload!(%__MODULE__{} = options) do
+    case normalize_model_payload(options) do
+      {:ok, normalized} ->
+        normalized
+
+      {:error, reason} ->
+        if explicit_model_resolution?(options) do
+          raise ArgumentError, "model resolution failed for :claude: #{inspect(reason)}"
+        else
+          options
+        end
+    end
+  end
+
+  defp normalize_model_payload(%__MODULE__{} = options) do
+    case ModelInput.normalize(:claude, model_input_attrs(options)) do
+      {:ok, normalized} ->
+        {:ok, put_model_payload(options, normalized.selection)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp put_model_payload(%__MODULE__{} = options, selection) do
+    %{
+      options
+      | model_payload: selection,
+        model: selection.resolved_model
+    }
+  end
+
+  defp explicit_model_resolution?(%__MODULE__{} = options) do
+    present?(options.model_payload) or
+      present?(options.model) or
+      present?(options.provider_backend) or
+      present?(options.external_model_overrides) or
+      present?(options.anthropic_base_url) or
+      present?(options.anthropic_auth_token)
+  end
+
+  defp present?(nil), do: false
+  defp present?(value) when is_map(value), do: map_size(value) > 0
+  defp present?(value) when is_binary(value), do: String.trim(value) != ""
+  defp present?(_value), do: true
+
   defp resolved_model(%__MODULE__{model_payload: payload}) when is_map(payload) do
     Map.get(payload, :resolved_model, Map.get(payload, "resolved_model"))
   end
+
+  defp resolved_model(%__MODULE__{}), do: nil
 
   defp model_input_attrs(%__MODULE__{model_payload: payload} = options) when is_map(payload),
     do: Map.from_struct(options)
@@ -1097,17 +1141,21 @@ defmodule ClaudeAgentSDK.Options do
 
   defp anthropic_auth_token(%__MODULE__{anthropic_auth_token: value}), do: value
 
-  defp settings_patch(%__MODULE__{model_payload: payload}) do
+  defp settings_patch(%__MODULE__{model_payload: payload}) when is_map(payload) do
     Map.get(payload, :settings_patch, Map.get(payload, "settings_patch", %{}))
   end
 
-  defp external_backend?(%__MODULE__{model_payload: payload}) do
+  defp settings_patch(%__MODULE__{}), do: %{}
+
+  defp external_backend?(%__MODULE__{model_payload: payload}) when is_map(payload) do
     case Map.get(payload, :model_source, Map.get(payload, "model_source")) do
       :external -> true
       "external" -> true
       _ -> false
     end
   end
+
+  defp external_backend?(%__MODULE__{}), do: false
 
   # Thinking config takes precedence over raw max_thinking_tokens.
   # Resolution: thinking.type :enabled -> budget_tokens, :adaptive -> fallback or 32000,

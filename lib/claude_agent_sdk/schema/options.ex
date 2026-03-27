@@ -1,10 +1,13 @@
 defmodule ClaudeAgentSDK.Schema.Options do
-  @moduledoc false
+  @moduledoc """
+  Reusable Claude option schemas for JSON object registries and structured
+  output payloads.
+  """
 
   alias CliSubprocessCore.Schema.Conventions
 
   @spec any_json_map() :: Zoi.schema()
-  def any_json_map, do: Zoi.map(Zoi.any(), Zoi.any())
+  def any_json_map, do: Zoi.map(%{}, unrecognized_keys: :preserve)
 
   @spec optional_json_map() :: Zoi.schema()
   def optional_json_map, do: Zoi.optional(Zoi.nullish(any_json_map()))
@@ -15,7 +18,8 @@ defmodule ClaudeAgentSDK.Schema.Options do
       Zoi.nullish(
         Zoi.map(
           Conventions.trimmed_string() |> Zoi.min(1),
-          any_json_map()
+          any_json_map(),
+          []
         )
       )
     )

@@ -40,6 +40,40 @@ defmodule ClaudeAgentSDK.Permission.Update do
   alias ClaudeAgentSDK.Schema
   alias CliSubprocessCore.Schema.Conventions
 
+  @update_type_aliases %{
+    :add_rules => :add_rules,
+    :replace_rules => :replace_rules,
+    :remove_rules => :remove_rules,
+    :set_mode => :set_mode,
+    :add_directories => :add_directories,
+    :remove_directories => :remove_directories,
+    "addRules" => :add_rules,
+    "replaceRules" => :replace_rules,
+    "removeRules" => :remove_rules,
+    "setMode" => :set_mode,
+    "addDirectories" => :add_directories,
+    "removeDirectories" => :remove_directories,
+    "add_rules" => :add_rules,
+    "replace_rules" => :replace_rules,
+    "remove_rules" => :remove_rules,
+    "set_mode" => :set_mode,
+    "add_directories" => :add_directories,
+    "remove_directories" => :remove_directories
+  }
+  @destination_aliases %{
+    :user_settings => :user_settings,
+    :project_settings => :project_settings,
+    :local_settings => :local_settings,
+    :session => :session,
+    "userSettings" => :user_settings,
+    "projectSettings" => :project_settings,
+    "localSettings" => :local_settings,
+    "session" => :session,
+    "user_settings" => :user_settings,
+    "project_settings" => :project_settings,
+    "local_settings" => :local_settings
+  }
+
   @typedoc """
   Destination for permission updates.
   """
@@ -309,27 +343,7 @@ defmodule ClaudeAgentSDK.Permission.Update do
 
   @doc false
   def normalize_update_type(value, _args, _opts) do
-    case value do
-      :add_rules -> {:ok, :add_rules}
-      :replace_rules -> {:ok, :replace_rules}
-      :remove_rules -> {:ok, :remove_rules}
-      :set_mode -> {:ok, :set_mode}
-      :add_directories -> {:ok, :add_directories}
-      :remove_directories -> {:ok, :remove_directories}
-      "addRules" -> {:ok, :add_rules}
-      "replaceRules" -> {:ok, :replace_rules}
-      "removeRules" -> {:ok, :remove_rules}
-      "setMode" -> {:ok, :set_mode}
-      "addDirectories" -> {:ok, :add_directories}
-      "removeDirectories" -> {:ok, :remove_directories}
-      "add_rules" -> {:ok, :add_rules}
-      "replace_rules" -> {:ok, :replace_rules}
-      "remove_rules" -> {:ok, :remove_rules}
-      "set_mode" -> {:ok, :set_mode}
-      "add_directories" -> {:ok, :add_directories}
-      "remove_directories" -> {:ok, :remove_directories}
-      other -> {:error, "invalid permission update type: #{inspect(other)}"}
-    end
+    normalize_alias(value, @update_type_aliases, "invalid permission update type")
   end
 
   @doc false
@@ -353,20 +367,7 @@ defmodule ClaudeAgentSDK.Permission.Update do
 
   @doc false
   def normalize_destination(value, _args, _opts) do
-    case value do
-      :user_settings -> {:ok, :user_settings}
-      :project_settings -> {:ok, :project_settings}
-      :local_settings -> {:ok, :local_settings}
-      :session -> {:ok, :session}
-      "userSettings" -> {:ok, :user_settings}
-      "projectSettings" -> {:ok, :project_settings}
-      "localSettings" -> {:ok, :local_settings}
-      "session" -> {:ok, :session}
-      "user_settings" -> {:ok, :user_settings}
-      "project_settings" -> {:ok, :project_settings}
-      "local_settings" -> {:ok, :local_settings}
-      other -> {:error, "invalid permission destination: #{inspect(other)}"}
-    end
+    normalize_alias(value, @destination_aliases, "invalid permission destination")
   end
 
   @doc false
@@ -386,6 +387,13 @@ defmodule ClaudeAgentSDK.Permission.Update do
 
       true ->
         {:error, "invalid permission mode: #{inspect(value)}"}
+    end
+  end
+
+  defp normalize_alias(value, aliases, message) do
+    case Map.fetch(aliases, value) do
+      {:ok, normalized} -> {:ok, normalized}
+      :error -> {:error, "#{message}: #{inspect(value)}"}
     end
   end
 
