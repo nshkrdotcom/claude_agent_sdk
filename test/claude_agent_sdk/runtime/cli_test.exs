@@ -29,6 +29,7 @@ defmodule ClaudeAgentSDK.Runtime.CLITest do
       options = %Options{
         executable: stub_path,
         model: "sonnet",
+        provider_backend: :anthropic,
         max_turns: 4,
         system_prompt: "Be precise.",
         append_system_prompt: "Stay brief.",

@@ -104,6 +104,7 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
         capture_log(fn ->
           send(client, {:unexpected_transport_shape, %{raw: true}})
           _ = :sys.get_state(client)
+          Process.sleep(50)
           Logger.flush()
         end)
 
