@@ -145,7 +145,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp needs_cli_command?(module, transport_opts) do
-    built_in_transport_module?(module) and Keyword.get(transport_opts, :command) == nil
+    built_in_transport_api?(module) and Keyword.get(transport_opts, :command) == nil
   end
 
   defp normalize_transport(nil, _options, input) do
@@ -504,7 +504,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp maybe_put_bootstrap_subscriber(module, transport_opts, transport_ref) do
-    if built_in_transport_module?(module) and is_reference(transport_ref) do
+    if built_in_transport_api?(module) and is_reference(transport_ref) do
       Keyword.put_new(transport_opts, :subscriber, {self(), transport_ref})
     else
       transport_opts
@@ -513,7 +513,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp maybe_put_event_tag(transport_opts, module)
        when is_list(transport_opts) and is_atom(module) do
-    if built_in_transport_module?(module) do
+    if built_in_transport_api?(module) do
       Keyword.put_new(transport_opts, :event_tag, @transport_event_tag)
     else
       transport_opts
@@ -592,7 +592,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     end
   end
 
-  defp built_in_transport_module?(module) do
+  defp built_in_transport_api?(module) do
     module in [
       ClaudeAgentSDK.Transport,
       CliSubprocessCore.Transport

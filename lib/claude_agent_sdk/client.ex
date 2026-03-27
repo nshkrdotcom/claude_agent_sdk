@@ -104,7 +104,7 @@ defmodule ClaudeAgentSDK.Client do
   defstruct port: nil,
             transport: nil,
             transport_ref: nil,
-            transport_module: nil,
+            transport_api: nil,
             transport_opts: [],
             options: nil,
             registry: nil,
@@ -141,6 +141,7 @@ defmodule ClaudeAgentSDK.Client do
   Fields:
   - `port` - Port to Claude CLI process
   - `transport_ref` - Tagged transport subscriber reference for built-in transports
+  - `transport_api` - Active transport module for built-in or custom control transports
   - `options` - Configuration options
   - `registry` - Hook callback registry
   - `hook_callback_timeouts` - Map of callback_id => timeout_ms
@@ -166,7 +167,7 @@ defmodule ClaudeAgentSDK.Client do
           port: port() | nil,
           transport: pid() | nil,
           transport_ref: reference() | nil,
-          transport_module: module() | nil,
+          transport_api: module() | nil,
           transport_opts: keyword(),
           options: Options.t(),
           registry: Registry.t(),
@@ -677,7 +678,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp do_init(options, opts) do
-    transport_module = Keyword.get(opts, :transport) || default_transport_module(options)
+    transport_api = Keyword.get(opts, :transport) || default_transport_api(options)
     transport_opts = Keyword.get(opts, :transport_opts, [])
     control_timeout_ms = resolve_control_request_timeout_ms(opts)
 
@@ -700,7 +701,7 @@ defmodule ClaudeAgentSDK.Client do
       state = %__MODULE__{
         port: nil,
         transport: nil,
-        transport_module: transport_module,
+        transport_api: transport_api,
         transport_opts: transport_opts,
         options: updated_options,
         registry: Registry.new(),
@@ -746,7 +747,7 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  defp default_transport_module(_options), do: CliSubprocessCore.Transport
+  defp default_transport_api(_options), do: CliSubprocessCore.Transport
 
   @impl true
   def handle_continue(:start_cli, state) do
@@ -1332,7 +1333,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @impl true
-  def terminate(reason, %{transport: transport, transport_module: module} = state)
+  def terminate(reason, %{transport: transport, transport_api: module} = state)
       when is_pid(transport) do
     state =
       state
@@ -1796,7 +1797,7 @@ defmodule ClaudeAgentSDK.Client do
 
   defp cancel_init_timeout(state), do: state
 
-  defp start_cli_process(%{transport_module: module} = state) when not is_nil(module) do
+  defp start_cli_process(%{transport_api: module} = state) when not is_nil(module) do
     registry = register_hooks(state.registry, state.options.hooks)
     hook_callback_timeouts = build_hook_timeout_map(registry, state.options.hooks)
     hooks_config = build_hooks_config(registry, state.options.hooks)
@@ -3347,7 +3348,7 @@ defmodule ClaudeAgentSDK.Client do
 
   defp maybe_put_bootstrap_subscriber(transport_opts, module, transport_ref)
        when is_list(transport_opts) and is_atom(module) do
-    if built_in_transport_module?(module) and is_reference(transport_ref) do
+    if built_in_transport_api?(module) and is_reference(transport_ref) do
       Keyword.put_new(transport_opts, :subscriber, {self(), transport_ref})
     else
       transport_opts
@@ -3356,7 +3357,7 @@ defmodule ClaudeAgentSDK.Client do
 
   defp maybe_put_transport_event_tag(transport_opts, module)
        when is_list(transport_opts) and is_atom(module) do
-    if built_in_transport_module?(module) do
+    if built_in_transport_api?(module) do
       Keyword.put_new(transport_opts, :event_tag, @transport_event_tag)
     else
       transport_opts
@@ -3365,7 +3366,7 @@ defmodule ClaudeAgentSDK.Client do
 
   defp maybe_disable_transport_stderr_callback(transport_opts, module)
        when is_list(transport_opts) and is_atom(module) do
-    if built_in_transport_module?(module) do
+    if built_in_transport_api?(module) do
       Keyword.put(transport_opts, :stderr_callback, nil)
     else
       transport_opts
@@ -3374,7 +3375,7 @@ defmodule ClaudeAgentSDK.Client do
 
   defp maybe_put_transport_command(module, transport_opts, %Options{} = options)
        when is_list(transport_opts) and is_atom(module) do
-    if built_in_transport_module?(module) and Keyword.get(transport_opts, :command) == nil do
+    if built_in_transport_api?(module) and Keyword.get(transport_opts, :command) == nil do
       case RuntimeCLI.build_invocation(options: options) do
         {:ok, command} ->
           {:ok, Keyword.put_new(transport_opts, :command, command)}
@@ -3387,7 +3388,7 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  defp built_in_transport_module?(module) do
+  defp built_in_transport_api?(module) do
     module in [
       ClaudeAgentSDK.Transport,
       CliSubprocessCore.Transport
@@ -3395,7 +3396,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp transport_subscription_ref(module) when is_atom(module) do
-    if built_in_transport_module?(module), do: make_ref(), else: nil
+    if built_in_transport_api?(module), do: make_ref(), else: nil
   end
 
   defp subscribe_transport(module, transport, transport_ref)
@@ -3412,7 +3413,7 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  defp send_payload(%{transport: transport, transport_module: module}, payload)
+  defp send_payload(%{transport: transport, transport_api: module}, payload)
        when is_pid(transport) do
     case module.send(transport, ensure_newline(payload)) do
       {:error, {:transport, reason}} ->

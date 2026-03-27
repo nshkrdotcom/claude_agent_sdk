@@ -87,7 +87,7 @@ defmodule FileCheckpointingDebug do
 
     IO.puts("enable_file_checkpointing: #{options.enable_file_checkpointing}")
 
-    {:ok, client} = Client.start_link(options, transport: ClaudeAgentSDK.Transport.Erlexec)
+    {:ok, client} = Client.start_link(options, transport: ClaudeAgentSDK.Transport)
     IO.puts("Client started successfully")
 
     file_path = Path.join(demo_dir, "demo.txt")
