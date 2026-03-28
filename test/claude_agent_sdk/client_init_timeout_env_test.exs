@@ -2,7 +2,7 @@ defmodule ClaudeAgentSDK.ClientInitTimeoutEnvTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.{Client, Options}
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   setup do
     Process.flag(:trap_exit, true)
@@ -45,17 +45,19 @@ defmodule ClaudeAgentSDK.ClientInitTimeoutEnvTest do
     test "uses env-derived timeout when waiting for initialize response" do
       System.put_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "120000")
 
+      fake_cli = FakeCLI.new!()
+
       {:ok, client} =
-        Client.start_link(%Options{},
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
+        Client.start_link(FakeCLI.options(fake_cli, %Options{}))
 
-      on_exit(fn -> safe_stop(client) end)
+      on_exit(fn ->
+        safe_stop(client)
+        FakeCLI.cleanup(fake_cli)
+      end)
 
-      assert_receive {:mock_transport_started, _transport}, 1_000
+      assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
       assert {:ok, _request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
+      assert :ok = FakeCLI.wait_for_request_count(fake_cli, 1, 1_000)
 
       state = :sys.get_state(client)
 

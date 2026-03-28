@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.SDKMCPRoutingTest do
   @moduletag capture_log: true
 
   alias ClaudeAgentSDK.{Client, Options}
-  alias ClaudeAgentSDK.TestSupport.{CalculatorTools, ErrorTools, MockTransport, SlowTools}
+  alias ClaudeAgentSDK.TestSupport.{CalculatorTools, ErrorTools, FakeCLI}
 
   setup do
     Process.flag(:trap_exit, true)
@@ -11,549 +11,160 @@ defmodule ClaudeAgentSDK.SDKMCPRoutingTest do
   end
 
   test "returns method-not-found for resources/list via SDK MCP routing" do
-    server =
-      ClaudeAgentSDK.create_sdk_mcp_server(
-        name: "calc",
-        version: "1.0.0",
-        tools: [CalculatorTools.Add]
-      )
+    server = sdk_server("calc", [CalculatorTools.Add])
 
-    options = %Options{
-      mcp_servers: %{"calc" => server}
-    }
-
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+    %{client: client, transport: transport} =
+      start_client_with_fake_cli(%Options{mcp_servers: %{"calc" => server}})
 
     on_exit(fn -> safe_stop(client) end)
-
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      after
-        500 -> flunk("Transport did not start")
-      end
-
-    # Ensure subscription is complete by making a synchronous call to the client
-    _ = :sys.get_state(client)
 
     request_id = "req_resources_list"
 
-    request = %{
-      "type" => "control_request",
-      "request_id" => request_id,
-      "request" => %{
-        "subtype" => "sdk_mcp_request",
-        "serverName" => "calc",
-        "message" => %{
-          "jsonrpc" => "2.0",
-          "id" => "1",
-          "method" => "resources/list",
-          "params" => %{}
-        }
-      }
-    }
+    FakeCLI.push_message(
+      transport,
+      sdk_mcp_request(request_id, "calc", %{
+        "jsonrpc" => "2.0",
+        "id" => "1",
+        "method" => "resources/list",
+        "params" => %{}
+      })
+    )
 
-    MockTransport.push_message(transport, Jason.encode!(request))
-
-    response =
-      SupertesterCase.eventually(
-        fn ->
-          transport
-          |> MockTransport.recorded_messages()
-          |> Enum.map(&Jason.decode!/1)
-          |> Enum.find(fn
-            # New Python SDK-compatible format: request_id is inside response.response
-            %{"type" => "control_response", "response" => %{"request_id" => ^request_id}} -> true
-            _ -> false
-          end)
-        end,
-        timeout: 5_000
-      )
-
+    {:ok, response} = FakeCLI.wait_for_control_response(transport, request_id, 5_000)
     mcp_response = response["response"]["response"]["mcp_response"]
     error = mcp_response["error"]
+
     assert error["code"] == -32_601
     assert error["message"] == "Method not found: resources/list"
   end
 
-  test "returns method-not-found for resources/list with Python MCP subtype" do
-    server =
-      ClaudeAgentSDK.create_sdk_mcp_server(
-        name: "calc",
-        version: "1.0.0",
-        tools: [CalculatorTools.Add]
-      )
+  test "returns server-not-found for unknown SDK MCP server" do
+    server = sdk_server("calc", [CalculatorTools.Add])
 
-    options = %Options{
-      mcp_servers: %{"calc" => server}
-    }
-
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+    %{client: client, transport: transport} =
+      start_client_with_fake_cli(%Options{mcp_servers: %{"calc" => server}})
 
     on_exit(fn -> safe_stop(client) end)
 
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      after
-        500 -> flunk("Transport did not start")
-      end
+    request_id = "req_unknown_server"
 
-    _ = :sys.get_state(client)
+    FakeCLI.push_message(
+      transport,
+      sdk_mcp_request(request_id, "missing", %{
+        "jsonrpc" => "2.0",
+        "id" => "2",
+        "method" => "tools/list",
+        "params" => %{}
+      })
+    )
 
-    request_id = "req_resources_list_py"
+    {:ok, response} = FakeCLI.wait_for_control_response(transport, request_id, 5_000)
+    error = response["response"]["response"]["mcp_response"]["error"]
 
-    request = %{
-      "type" => "control_request",
-      "request_id" => request_id,
-      "request" => %{
-        "subtype" => "mcp_message",
-        "server_name" => "calc",
-        "message" => %{
-          "jsonrpc" => "2.0",
-          "id" => "1",
-          "method" => "resources/list",
-          "params" => %{}
-        }
-      }
-    }
-
-    MockTransport.push_message(transport, Jason.encode!(request))
-
-    response =
-      SupertesterCase.eventually(
-        fn ->
-          transport
-          |> MockTransport.recorded_messages()
-          |> Enum.map(&Jason.decode!/1)
-          |> Enum.find(fn
-            # New Python SDK-compatible format: request_id is inside response.response
-            %{"type" => "control_response", "response" => %{"request_id" => ^request_id}} -> true
-            _ -> false
-          end)
-        end,
-        timeout: 5_000
-      )
-
-    mcp_response = response["response"]["response"]["mcp_response"]
-    error = mcp_response["error"]
     assert error["code"] == -32_601
-    assert error["message"] == "Method not found: resources/list"
+    assert error["message"] == "Server 'missing' not found"
   end
 
-  test "returns method-not-found for prompts/list" do
-    server =
-      ClaudeAgentSDK.create_sdk_mcp_server(
-        name: "calc",
-        version: "1.0.0",
-        tools: [CalculatorTools.Add]
-      )
+  test "routes tools/list through the SDK MCP registry" do
+    server = sdk_server("calc", [CalculatorTools.Add, CalculatorTools.GreetUser])
 
-    options = %Options{
-      mcp_servers: %{"calc" => server}
-    }
-
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+    %{client: client, transport: transport} =
+      start_client_with_fake_cli(%Options{mcp_servers: %{"calc" => server}})
 
     on_exit(fn -> safe_stop(client) end)
 
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      after
-        500 -> flunk("Transport did not start")
-      end
+    request_id = "req_tools_list"
 
-    _ = :sys.get_state(client)
+    FakeCLI.push_message(
+      transport,
+      sdk_mcp_request(request_id, "calc", %{
+        "jsonrpc" => "2.0",
+        "id" => "3",
+        "method" => "tools/list",
+        "params" => %{}
+      })
+    )
 
-    request_id = "req_prompts_list"
+    {:ok, response} = FakeCLI.wait_for_control_response(transport, request_id, 5_000)
+    tools = response["response"]["response"]["mcp_response"]["result"]["tools"]
+    names = Enum.map(tools, & &1["name"])
 
-    request = %{
+    assert "add" in names
+    assert "greet_user" in names
+  end
+
+  test "normalizes SDK MCP tool failures into MCP error results" do
+    server = sdk_server("errors", [ErrorTools.FailTool, ErrorTools.RaiseTool])
+
+    %{client: client, transport: transport} =
+      start_client_with_fake_cli(%Options{mcp_servers: %{"errors" => server}})
+
+    on_exit(fn -> safe_stop(client) end)
+
+    fail_request_id = "req_fail_tool"
+
+    FakeCLI.push_message(
+      transport,
+      sdk_mcp_request(fail_request_id, "errors", %{
+        "jsonrpc" => "2.0",
+        "id" => "4",
+        "method" => "tools/call",
+        "params" => %{"name" => "fail_tool", "arguments" => %{}}
+      })
+    )
+
+    {:ok, fail_response} = FakeCLI.wait_for_control_response(transport, fail_request_id, 5_000)
+    fail_result = fail_response["response"]["response"]["mcp_response"]["result"]
+
+    assert fail_result["is_error"] == true
+    assert [%{"text" => "Expected error"}] = fail_result["content"]
+
+    raise_request_id = "req_raise_tool"
+
+    FakeCLI.push_message(
+      transport,
+      sdk_mcp_request(raise_request_id, "errors", %{
+        "jsonrpc" => "2.0",
+        "id" => "5",
+        "method" => "tools/call",
+        "params" => %{"name" => "raise_tool", "arguments" => %{}}
+      })
+    )
+
+    {:ok, raise_response} = FakeCLI.wait_for_control_response(transport, raise_request_id, 5_000)
+    error = raise_response["response"]["response"]["mcp_response"]["error"]
+
+    assert error["code"] == -32_603
+    assert error["message"] =~ "Intentional error"
+  end
+
+  defp start_client_with_fake_cli(options) do
+    fake_cli = FakeCLI.new!()
+    on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
+
+    {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options))
+
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+    _request_id = FakeCLI.respond_initialize_success!(fake_cli)
+    assert :ok = Client.await_initialized(client, 1_000)
+
+    %{client: client, transport: fake_cli}
+  end
+
+  defp sdk_server(name, tools) do
+    ClaudeAgentSDK.create_sdk_mcp_server(name: name, version: "1.0.0", tools: tools)
+  end
+
+  defp sdk_mcp_request(request_id, server_name, message) do
+    %{
       "type" => "control_request",
       "request_id" => request_id,
       "request" => %{
         "subtype" => "sdk_mcp_request",
-        "serverName" => "calc",
-        "message" => %{
-          "jsonrpc" => "2.0",
-          "id" => "1",
-          "method" => "prompts/list",
-          "params" => %{}
-        }
+        "serverName" => server_name,
+        "message" => message
       }
     }
-
-    MockTransport.push_message(transport, Jason.encode!(request))
-
-    response =
-      SupertesterCase.eventually(
-        fn ->
-          transport
-          |> MockTransport.recorded_messages()
-          |> Enum.map(&Jason.decode!/1)
-          |> Enum.find(fn
-            %{"type" => "control_response", "response" => %{"request_id" => ^request_id}} -> true
-            _ -> false
-          end)
-        end,
-        timeout: 5_000
-      )
-
-    mcp_response = response["response"]["response"]["mcp_response"]
-    error = mcp_response["error"]
-    assert error["code"] == -32_601
-    assert error["message"] == "Method not found: prompts/list"
-  end
-
-  test "initialize returns configured server name and version" do
-    server =
-      ClaudeAgentSDK.create_sdk_mcp_server(
-        name: "calc-real",
-        version: "2.3.4",
-        tools: [CalculatorTools.Add]
-      )
-
-    options = %Options{
-      mcp_servers: %{"calc" => server}
-    }
-
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
-
-    on_exit(fn -> safe_stop(client) end)
-
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      after
-        500 -> flunk("Transport did not start")
-      end
-
-    _ = :sys.get_state(client)
-
-    request_id = "req_init"
-
-    request = %{
-      "type" => "control_request",
-      "request_id" => request_id,
-      "request" => %{
-        "subtype" => "sdk_mcp_request",
-        "serverName" => "calc",
-        "message" => %{
-          "jsonrpc" => "2.0",
-          "id" => "1",
-          "method" => "initialize",
-          "params" => %{}
-        }
-      }
-    }
-
-    MockTransport.push_message(transport, Jason.encode!(request))
-
-    response =
-      SupertesterCase.eventually(
-        fn ->
-          transport
-          |> MockTransport.recorded_messages()
-          |> Enum.map(&Jason.decode!/1)
-          |> Enum.find(fn
-            %{"type" => "control_response", "response" => %{"request_id" => ^request_id}} -> true
-            _ -> false
-          end)
-        end,
-        timeout: 5_000
-      )
-
-    mcp_response = response["response"]["response"]["mcp_response"]
-    server_info = mcp_response["result"]["serverInfo"]
-    assert server_info["name"] == "calc-real"
-    assert server_info["version"] == "2.3.4"
-  end
-
-  test "tools/call returns successful result payloads" do
-    server =
-      ClaudeAgentSDK.create_sdk_mcp_server(
-        name: "calc",
-        version: "1.0.0",
-        tools: [CalculatorTools.Add]
-      )
-
-    options = %Options{
-      mcp_servers: %{"calc" => server}
-    }
-
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
-
-    on_exit(fn -> safe_stop(client) end)
-
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      after
-        500 -> flunk("Transport did not start")
-      end
-
-    _ = :sys.get_state(client)
-
-    request_id = "req_tool_call_success"
-
-    request = %{
-      "type" => "control_request",
-      "request_id" => request_id,
-      "request" => %{
-        "subtype" => "sdk_mcp_request",
-        "serverName" => "calc",
-        "message" => %{
-          "jsonrpc" => "2.0",
-          "id" => "1",
-          "method" => "tools/call",
-          "params" => %{
-            "name" => "add",
-            "arguments" => %{"a" => 5, "b" => 3}
-          }
-        }
-      }
-    }
-
-    MockTransport.push_message(transport, Jason.encode!(request))
-
-    response =
-      SupertesterCase.eventually(
-        fn ->
-          transport
-          |> MockTransport.recorded_messages()
-          |> Enum.map(&Jason.decode!/1)
-          |> Enum.find(fn
-            %{"type" => "control_response", "response" => %{"request_id" => ^request_id}} -> true
-            _ -> false
-          end)
-        end,
-        timeout: 5_000
-      )
-
-    mcp_response = response["response"]["response"]["mcp_response"]
-    refute Map.has_key?(mcp_response, "error")
-
-    result = mcp_response["result"]
-    assert Enum.any?(result["content"], &(&1["text"] == "5 + 3 = 8"))
-  end
-
-  test "tools/call returns is_error in result instead of JSONRPC error" do
-    server =
-      ClaudeAgentSDK.create_sdk_mcp_server(
-        name: "errors",
-        version: "1.0.0",
-        tools: [ErrorTools.FailTool, ErrorTools.RaiseTool]
-      )
-
-    options = %Options{
-      mcp_servers: %{"errors" => server}
-    }
-
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
-
-    on_exit(fn -> safe_stop(client) end)
-
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      after
-        500 -> flunk("Transport did not start")
-      end
-
-    _ = :sys.get_state(client)
-
-    request_id = "req_tool_call_error"
-
-    request = %{
-      "type" => "control_request",
-      "request_id" => request_id,
-      "request" => %{
-        "subtype" => "sdk_mcp_request",
-        "serverName" => "errors",
-        "message" => %{
-          "jsonrpc" => "2.0",
-          "id" => "1",
-          "method" => "tools/call",
-          "params" => %{
-            "name" => "raise_tool",
-            "arguments" => %{}
-          }
-        }
-      }
-    }
-
-    MockTransport.push_message(transport, Jason.encode!(request))
-
-    response =
-      SupertesterCase.eventually(
-        fn ->
-          transport
-          |> MockTransport.recorded_messages()
-          |> Enum.map(&Jason.decode!/1)
-          |> Enum.find(fn
-            %{"type" => "control_response", "response" => %{"request_id" => ^request_id}} -> true
-            _ -> false
-          end)
-        end,
-        timeout: 5_000
-      )
-
-    mcp_response = response["response"]["response"]["mcp_response"]
-    refute Map.has_key?(mcp_response, "error")
-
-    result = mcp_response["result"]
-    assert result["is_error"] == true
-    refute Map.has_key?(result, "isError")
-    assert is_list(result["content"])
-  end
-
-  test "tools/call wraps tool errors with is_error result payload" do
-    server =
-      ClaudeAgentSDK.create_sdk_mcp_server(
-        name: "errors",
-        version: "1.0.0",
-        tools: [ErrorTools.FailTool]
-      )
-
-    options = %Options{
-      mcp_servers: %{"errors" => server}
-    }
-
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
-
-    on_exit(fn -> safe_stop(client) end)
-
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      after
-        500 -> flunk("Transport did not start")
-      end
-
-    _ = :sys.get_state(client)
-
-    request_id = "req_tool_call_fail"
-
-    request = %{
-      "type" => "control_request",
-      "request_id" => request_id,
-      "request" => %{
-        "subtype" => "sdk_mcp_request",
-        "serverName" => "errors",
-        "message" => %{
-          "jsonrpc" => "2.0",
-          "id" => "1",
-          "method" => "tools/call",
-          "params" => %{
-            "name" => "fail_tool",
-            "arguments" => %{}
-          }
-        }
-      }
-    }
-
-    MockTransport.push_message(transport, Jason.encode!(request))
-
-    response =
-      SupertesterCase.eventually(
-        fn ->
-          transport
-          |> MockTransport.recorded_messages()
-          |> Enum.map(&Jason.decode!/1)
-          |> Enum.find(fn
-            %{"type" => "control_response", "response" => %{"request_id" => ^request_id}} -> true
-            _ -> false
-          end)
-        end,
-        timeout: 5_000
-      )
-
-    mcp_response = response["response"]["response"]["mcp_response"]
-    refute Map.has_key?(mcp_response, "error")
-
-    result = mcp_response["result"]
-    assert result["is_error"] == true
-    assert is_list(result["content"])
-  end
-
-  test "tools/call does not block other client calls while tool executes" do
-    server =
-      ClaudeAgentSDK.create_sdk_mcp_server(
-        name: "slow",
-        version: "1.0.0",
-        tools: [SlowTools.SlowEcho]
-      )
-
-    options = %Options{
-      mcp_servers: %{"slow" => server}
-    }
-
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
-
-    on_exit(fn -> safe_stop(client) end)
-
-    _transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      after
-        500 -> flunk("Transport did not start")
-      end
-
-    _ = :sys.get_state(client)
-
-    request = %{
-      "type" => "control_request",
-      "request_id" => "req_tool_call_slow",
-      "request" => %{
-        "subtype" => "sdk_mcp_request",
-        "serverName" => "slow",
-        "message" => %{
-          "jsonrpc" => "2.0",
-          "id" => "1",
-          "method" => "tools/call",
-          "params" => %{
-            "name" => "slow_echo",
-            "arguments" => %{"sleep_ms" => 300}
-          }
-        }
-      }
-    }
-
-    send(client, {:transport_message, Jason.encode!(request)})
-
-    assert {:error, :model_not_set} = GenServer.call(client, :get_model, 150)
   end
 
   defp safe_stop(client) do

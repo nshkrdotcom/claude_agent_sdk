@@ -16,7 +16,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
   alias ClaudeAgentSDK.Hooks.{Matcher, Registry}
   alias ClaudeAgentSDK.SupertesterCase
   alias ClaudeAgentSDK.TestEnvHelpers
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   @hook_input %{
     "hook_event_name" => "PreToolUse",
@@ -44,25 +44,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
         }
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      on_exit(fn -> safe_stop(client) end)
-
-      transport =
-        receive do
-          {:mock_transport_started, pid} -> pid
-        end
-
-      # Wait for init message
-      receive do
-        {:mock_transport_send, _} -> :ok
-      after
-        500 -> flunk("Did not receive initialize payload")
-      end
+      {client, transport} = start_client_with_fake_cli(options)
 
       state = :sys.get_state(client)
       callback_id = Registry.get_id(state.registry, callback)
@@ -100,24 +82,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
         }
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      on_exit(fn -> safe_stop(client) end)
-
-      transport =
-        receive do
-          {:mock_transport_started, pid} -> pid
-        end
-
-      receive do
-        {:mock_transport_send, _} -> :ok
-      after
-        500 -> flunk("Did not receive initialize payload")
-      end
+      {client, transport} = start_client_with_fake_cli(options)
 
       state = :sys.get_state(client)
       callback_id = Registry.get_id(state.registry, callback)
@@ -158,24 +123,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
         }
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      on_exit(fn -> safe_stop(client) end)
-
-      transport =
-        receive do
-          {:mock_transport_started, pid} -> pid
-        end
-
-      receive do
-        {:mock_transport_send, _} -> :ok
-      after
-        500 -> flunk("Did not receive initialize payload")
-      end
+      {client, transport} = start_client_with_fake_cli(options)
 
       state = :sys.get_state(client)
       crash_callback_id = Registry.get_id(state.registry, crash_callback)
@@ -221,24 +169,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
         permission_mode: :default
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      on_exit(fn -> safe_stop(client) end)
-
-      transport =
-        receive do
-          {:mock_transport_started, pid} -> pid
-        end
-
-      receive do
-        {:mock_transport_send, _} -> :ok
-      after
-        500 -> flunk("Did not receive initialize payload")
-      end
+      {client, transport} = start_client_with_fake_cli(options)
 
       request_id = "req_perm_crash"
       send_permission_request(transport, request_id)
@@ -274,16 +205,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
           }
         }
 
-        {:ok, client} =
-          Client.start_link(options,
-            transport: MockTransport,
-            transport_opts: [test_pid: self()]
-          )
-
-        on_exit(fn -> safe_stop(client) end)
-
-        assert_receive {:mock_transport_started, transport}, 1_000
-        assert_receive {:mock_transport_send, _}, 1_000
+        {client, transport} = start_client_with_fake_cli(options)
 
         state = :sys.get_state(client)
         callback_id = Registry.get_id(state.registry, callback)
@@ -313,16 +235,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
           permission_mode: :default
         }
 
-        {:ok, client} =
-          Client.start_link(options,
-            transport: MockTransport,
-            transport_opts: [test_pid: self()]
-          )
-
-        on_exit(fn -> safe_stop(client) end)
-
-        assert_receive {:mock_transport_started, transport}, 1_000
-        assert_receive {:mock_transport_send, _}, 1_000
+        {client, transport} = start_client_with_fake_cli(options)
 
         request_id = "req_permission_strict_mode"
         send_permission_request(transport, request_id)
@@ -355,24 +268,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
         }
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      on_exit(fn -> safe_stop(client) end)
-
-      transport =
-        receive do
-          {:mock_transport_started, pid} -> pid
-        end
-
-      receive do
-        {:mock_transport_send, _} -> :ok
-      after
-        500 -> flunk("Did not receive initialize payload")
-      end
+      {client, transport} = start_client_with_fake_cli(options)
 
       state = :sys.get_state(client)
       callback_id = Registry.get_id(state.registry, callback)
@@ -406,24 +302,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
         }
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      on_exit(fn -> safe_stop(client) end)
-
-      transport =
-        receive do
-          {:mock_transport_started, pid} -> pid
-        end
-
-      receive do
-        {:mock_transport_send, _} -> :ok
-      after
-        500 -> flunk("Did not receive initialize payload")
-      end
+      {client, transport} = start_client_with_fake_cli(options)
 
       state = :sys.get_state(client)
       callback_id = Registry.get_id(state.registry, callback)
@@ -474,24 +353,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
         }
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      on_exit(fn -> safe_stop(client) end)
-
-      transport =
-        receive do
-          {:mock_transport_started, pid} -> pid
-        end
-
-      receive do
-        {:mock_transport_send, _} -> :ok
-      after
-        500 -> flunk("Did not receive initialize payload")
-      end
+      {client, transport} = start_client_with_fake_cli(options)
 
       state = :sys.get_state(client)
       callback_id = Registry.get_id(state.registry, callback)
@@ -549,7 +411,7 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
       }
     }
 
-    MockTransport.push_message(transport, Jason.encode!(request))
+    FakeCLI.push_message(transport, request)
   end
 
   defp send_permission_request(transport, request_id) do
@@ -564,37 +426,31 @@ defmodule ClaudeAgentSDK.ClientCallbackCrashTest do
       }
     }
 
-    MockTransport.push_message(transport, Jason.encode!(request))
+    FakeCLI.push_message(transport, request)
   end
 
   defp find_response(transport, request_id) do
-    MockTransport.recorded_messages(transport)
-    |> Enum.map(&Jason.decode!/1)
-    |> Enum.find(fn
-      %{
-        "type" => "control_response",
-        "response" => %{"request_id" => ^request_id}
-      } ->
-        true
-
-      _ ->
-        false
-    end)
+    case FakeCLI.wait_for_control_response(transport, request_id, 0) do
+      {:ok, response} -> response
+      {:error, :timeout} -> nil
+    end
   end
 
   defp find_permission_response(transport, request_id) do
-    MockTransport.recorded_messages(transport)
-    |> Enum.map(&Jason.decode!/1)
-    |> Enum.find(fn
-      %{
-        "type" => "control_response",
-        "response" => %{"request_id" => ^request_id}
-      } ->
-        true
+    find_response(transport, request_id)
+  end
 
-      _ ->
-        false
-    end)
+  defp start_client_with_fake_cli(options, client_opts \\ []) do
+    fake_cli = FakeCLI.new!()
+    on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
+
+    {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options), client_opts)
+    on_exit(fn -> safe_stop(client) end)
+
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+    assert :ok = FakeCLI.wait_for_request_count(fake_cli, 1, 1_000)
+
+    {client, fake_cli}
   end
 
   defp safe_stop(client) do

@@ -4,7 +4,7 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
 
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.Hooks.{Matcher, Output, Registry}
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   @hook_input %{
     "hook_event_name" => "PreToolUse",
@@ -28,25 +28,9 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
       }
     }
 
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+    {client, transport} = start_client_with_fake_cli(options)
 
-    on_exit(fn -> safe_stop(client) end)
-
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      end
-
-    init_request =
-      receive do
-        {:mock_transport_send, json} -> Jason.decode!(json)
-      after
-        500 -> flunk("Did not receive initialize payload")
-      end
+    [init_request] = FakeCLI.decoded_messages(transport)
 
     state = :sys.get_state(client)
     callback_id = Registry.get_id(state.registry, callback)
@@ -59,8 +43,7 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
     # Ensure the transport captured the same payload for later assertions
     recorded =
       transport
-      |> MockTransport.recorded_messages()
-      |> Enum.map(&Jason.decode!/1)
+      |> FakeCLI.decoded_messages()
 
     assert Enum.any?(recorded, fn msg ->
              msg["request"]["hooks"]["PreToolUse"]
@@ -85,18 +68,7 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
       }
     }
 
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
-
-    on_exit(fn -> safe_stop(client) end)
-
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      end
+    {client, transport} = start_client_with_fake_cli(options)
 
     state = :sys.get_state(client)
     callback_id = Registry.get_id(state.registry, callback)
@@ -133,18 +105,7 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
       }
     }
 
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
-
-    on_exit(fn -> safe_stop(client) end)
-
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      end
+    {client, transport} = start_client_with_fake_cli(options)
 
     state = :sys.get_state(client)
     callback_id = Registry.get_id(state.registry, callback)
@@ -176,17 +137,7 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
       }
     }
 
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
-
-    on_exit(fn -> safe_stop(client) end)
-
-    receive do
-      {:mock_transport_started, _} -> :ok
-    end
+    {client, _transport} = start_client_with_fake_cli(options)
 
     state = :sys.get_state(client)
     callback_id = Registry.get_id(state.registry, callback)
@@ -206,22 +157,27 @@ defmodule ClaudeAgentSDK.ClientHookTimeoutTest do
       }
     }
 
-    MockTransport.push_message(transport, Jason.encode!(request))
+    FakeCLI.push_message(transport, request)
   end
 
   defp find_response(transport, request_id) do
-    MockTransport.recorded_messages(transport)
-    |> Enum.map(&Jason.decode!/1)
-    |> Enum.find(fn
-      %{
-        "type" => "control_response",
-        "response" => %{"request_id" => ^request_id}
-      } ->
-        true
+    case FakeCLI.wait_for_control_response(transport, request_id, 0) do
+      {:ok, response} -> response
+      {:error, :timeout} -> nil
+    end
+  end
 
-      _ ->
-        false
-    end)
+  defp start_client_with_fake_cli(options) do
+    fake_cli = FakeCLI.new!()
+    on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
+
+    {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options))
+    on_exit(fn -> safe_stop(client) end)
+
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+    assert :ok = FakeCLI.wait_for_request_count(fake_cli, 1, 1_000)
+
+    {client, fake_cli}
   end
 
   defp safe_stop(client) do

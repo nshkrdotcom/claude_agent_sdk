@@ -3,6 +3,7 @@ defmodule ClaudeAgentSDK.ClientTest do
 
   alias ClaudeAgentSDK.{Client, Hooks, Options}
   alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   @moduletag :client
   @moduletag :requires_cli
@@ -302,53 +303,21 @@ defmodule ClaudeAgentSDK.ClientTest do
   end
 
   describe "transport integration" do
-    alias ClaudeAgentSDK.TestSupport.MockTransport
-
     setup do
       Process.flag(:trap_exit, true)
       %{options: %Options{}}
     end
 
     test "uses provided transport module for initialization messages", %{options: options} do
-      assert {:ok, client} =
-               Client.start_link(options,
-                 transport: MockTransport,
-                 transport_opts: [test_pid: self()]
-               )
+      %{transport: transport} = start_client_with_fake_cli(options)
 
-      on_exit(fn ->
-        try do
-          Client.stop(client)
-        catch
-          :exit, _ -> :ok
-        end
-      end)
-
-      assert_receive {:mock_transport_started, transport_pid}, 200
-      assert is_pid(transport_pid)
-
-      assert_receive {:mock_transport_send, json}, 200
-      decoded = Jason.decode!(json)
+      decoded = wait_for_request(transport, 1)
       assert decoded["type"] == "control_request"
       assert decoded["request"]["subtype"] == "initialize"
     end
 
     test "delivers messages from transport to subscribers", %{options: options} do
-      assert {:ok, client} =
-               Client.start_link(options,
-                 transport: MockTransport,
-                 transport_opts: [test_pid: self()]
-               )
-
-      on_exit(fn ->
-        try do
-          Client.stop(client)
-        catch
-          :exit, _ -> :ok
-        end
-      end)
-
-      assert_receive {:mock_transport_started, transport_pid}, 200
+      %{client: client, transport: transport} = start_initialized_client_with_fake_cli(options)
 
       :ok = GenServer.call(client, {:subscribe})
 
@@ -358,7 +327,7 @@ defmodule ClaudeAgentSDK.ClientTest do
         "session_id" => "test-session"
       }
 
-      MockTransport.push_message(transport_pid, payload)
+      FakeCLI.push_message(transport, payload)
 
       message =
         SupertesterCase.eventually(fn ->
@@ -376,30 +345,11 @@ defmodule ClaudeAgentSDK.ClientTest do
 
   describe "model switching" do
     alias ClaudeAgentSDK.Model
-    alias ClaudeAgentSDK.TestSupport.MockTransport
 
     setup do
       Process.flag(:trap_exit, true)
 
-      assert {:ok, client} =
-               Client.start_link(%Options{},
-                 transport: MockTransport,
-                 transport_opts: [test_pid: self()]
-               )
-
-      on_exit(fn ->
-        try do
-          Client.stop(client)
-        catch
-          :exit, _ -> :ok
-        end
-      end)
-
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, _request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      {:ok, %{client: client, transport: transport_pid}}
+      {:ok, start_initialized_client_with_fake_cli(%Options{})}
     end
 
     test "set_model sends control request and updates current model", %{
@@ -408,10 +358,9 @@ defmodule ClaudeAgentSDK.ClientTest do
     } do
       task = Task.async(fn -> Client.set_model(client, "opus") end)
 
-      assert_receive {:mock_transport_send, json}, 200
-      decoded = Jason.decode!(json)
-      assert decoded["request"]["subtype"] == "set_model"
-      request_id = decoded["request_id"]
+      request = wait_for_request(transport, 2)
+      assert request["request"]["subtype"] == "set_model"
+      request_id = request["request_id"]
 
       {:ok, normalized} = Model.validate("opus")
 
@@ -424,7 +373,7 @@ defmodule ClaudeAgentSDK.ClientTest do
         }
       }
 
-      MockTransport.push_message(transport, Jason.encode!(response))
+      FakeCLI.push_message(transport, response)
 
       assert :ok = Task.await(task, 1_000)
       assert {:ok, ^normalized} = Client.get_model(client)
@@ -442,8 +391,8 @@ defmodule ClaudeAgentSDK.ClientTest do
     } do
       task = Task.async(fn -> Client.set_model(client, "opus") end)
 
-      assert_receive {:mock_transport_send, json}, 200
-      request_id = Jason.decode!(json)["request_id"]
+      request = wait_for_request(transport, 2)
+      request_id = request["request_id"]
 
       assert {:error, :model_change_in_progress} = Client.set_model(client, "sonnet")
 
@@ -458,89 +407,54 @@ defmodule ClaudeAgentSDK.ClientTest do
         }
       }
 
-      MockTransport.push_message(transport, Jason.encode!(response))
+      FakeCLI.push_message(transport, response)
 
       assert :ok = Task.await(task, 1_000)
     end
   end
 
   describe "runtime control APIs" do
-    alias ClaudeAgentSDK.TestSupport.MockTransport
-
     setup do
       Process.flag(:trap_exit, true)
 
-      assert {:ok, client} =
-               Client.start_link(%Options{},
-                 transport: MockTransport,
-                 transport_opts: [test_pid: self()]
-               )
-
-      on_exit(fn ->
-        try do
-          Client.stop(client)
-        catch
-          :exit, _ -> :ok
-        end
-      end)
-
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "request_id" => init_request_id,
-          "subtype" => "success",
-          "response" => %{
-            "commands" => [%{"name" => "plan"}],
-            "outputStyle" => %{"current" => "default"}
-          }
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
-
-      {:ok, %{client: client, transport: transport_pid}}
+      {:ok,
+       start_initialized_client_with_fake_cli(%Options{}, init_response: server_info_response())}
     end
 
     test "interrupt sends control request", %{client: client, transport: transport} do
       task = Task.async(fn -> Client.interrupt(client) end)
 
-      assert_receive {:mock_transport_send, json}, 200
-      decoded = Jason.decode!(json)
-      assert decoded["request"]["subtype"] == "interrupt"
+      request = wait_for_request(transport, 2)
+      assert request["request"]["subtype"] == "interrupt"
 
       response = %{
         "type" => "control_response",
         "response" => %{
-          "request_id" => decoded["request_id"],
+          "request_id" => request["request_id"],
           "subtype" => "success",
           "response" => %{}
         }
       }
 
-      MockTransport.push_message(transport, Jason.encode!(response))
+      FakeCLI.push_message(transport, response)
       assert :ok = Task.await(task, 1_000)
     end
 
     test "interrupt forwards CLI error", %{client: client, transport: transport} do
       task = Task.async(fn -> Client.interrupt(client) end)
 
-      assert_receive {:mock_transport_send, json}, 200
-      decoded = Jason.decode!(json)
+      request = wait_for_request(transport, 2)
 
       response = %{
         "type" => "control_response",
         "response" => %{
-          "request_id" => decoded["request_id"],
+          "request_id" => request["request_id"],
           "subtype" => "error",
           "error" => "blocked"
         }
       }
 
-      MockTransport.push_message(transport, Jason.encode!(response))
+      FakeCLI.push_message(transport, response)
       assert {:error, "blocked"} = Task.await(task, 1_000)
     end
 
@@ -557,22 +471,9 @@ defmodule ClaudeAgentSDK.ClientTest do
     end
 
     test "get_server_info errors before initialization" do
-      assert {:ok, client} =
-               Client.start_link(%Options{},
-                 transport: MockTransport,
-                 transport_opts: [test_pid: self()]
-               )
+      %{client: client, transport: transport} = start_client_with_fake_cli(%Options{})
 
-      on_exit(fn ->
-        try do
-          Client.stop(client)
-        catch
-          :exit, _ -> :ok
-        end
-      end)
-
-      assert_receive {:mock_transport_started, _} = _msg = {:mock_transport_started, _transport},
-                     200
+      assert wait_for_request(transport, 1)["request"]["subtype"] == "initialize"
 
       assert {:error, :not_initialized} = Client.get_server_info(client)
     end
@@ -605,8 +506,8 @@ defmodule ClaudeAgentSDK.ClientTest do
         "is_error" => false
       }
 
-      MockTransport.push_message(transport, Jason.encode!(assistant))
-      MockTransport.push_message(transport, Jason.encode!(result))
+      FakeCLI.push_message(transport, assistant)
+      FakeCLI.push_message(transport, result)
 
       assert {:ok, messages} = Task.await(task, 1_000)
       assert length(messages) == 2
@@ -616,44 +517,13 @@ defmodule ClaudeAgentSDK.ClientTest do
   end
 
   describe "file checkpointing control" do
-    alias ClaudeAgentSDK.TestSupport.MockTransport
-
     setup do
       Process.flag(:trap_exit, true)
 
-      assert {:ok, client} =
-               Client.start_link(%Options{enable_file_checkpointing: true},
-                 transport: MockTransport,
-                 transport_opts: [test_pid: self()]
-               )
-
-      on_exit(fn ->
-        try do
-          Client.stop(client)
-        catch
-          :exit, _ -> :ok
-        end
-      end)
-
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "request_id" => init_request_id,
-          "subtype" => "success",
-          "response" => %{
-            "commands" => [%{"name" => "plan"}],
-            "outputStyle" => %{"current" => "default"}
-          }
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
-
-      {:ok, %{client: client, transport: transport_pid}}
+      {:ok,
+       start_initialized_client_with_fake_cli(%Options{enable_file_checkpointing: true},
+         init_response: server_info_response()
+       )}
     end
 
     test "rewind_files sends control request and waits for success", %{
@@ -662,90 +532,117 @@ defmodule ClaudeAgentSDK.ClientTest do
     } do
       task = Task.async(fn -> Client.rewind_files(client, "user_msg_123") end)
 
-      assert_receive {:mock_transport_send, json}, 200
-      decoded = Jason.decode!(json)
-      assert decoded["request"]["subtype"] == "rewind_files"
-      assert decoded["request"]["user_message_id"] == "user_msg_123"
+      request = wait_for_request(transport, 2)
+      assert request["request"]["subtype"] == "rewind_files"
+      assert request["request"]["user_message_id"] == "user_msg_123"
 
       response = %{
         "type" => "control_response",
         "response" => %{
-          "request_id" => decoded["request_id"],
+          "request_id" => request["request_id"],
           "subtype" => "success",
           "response" => %{}
         }
       }
 
-      MockTransport.push_message(transport, Jason.encode!(response))
+      FakeCLI.push_message(transport, response)
       assert :ok = Task.await(task, 1_000)
     end
 
     test "rewind_files forwards CLI error", %{client: client, transport: transport} do
       task = Task.async(fn -> Client.rewind_files(client, "user_msg_456") end)
 
-      assert_receive {:mock_transport_send, json}, 200
-      decoded = Jason.decode!(json)
+      request = wait_for_request(transport, 2)
 
       response = %{
         "type" => "control_response",
         "response" => %{
-          "request_id" => decoded["request_id"],
+          "request_id" => request["request_id"],
           "subtype" => "error",
           "error" => "blocked"
         }
       }
 
-      MockTransport.push_message(transport, Jason.encode!(response))
+      FakeCLI.push_message(transport, response)
       assert {:error, "blocked"} = Task.await(task, 1_000)
     end
   end
 
   describe "rewind_files requires file checkpointing option" do
-    alias ClaudeAgentSDK.TestSupport.MockTransport
-
     setup do
       Process.flag(:trap_exit, true)
 
-      assert {:ok, client} =
-               Client.start_link(%Options{},
-                 transport: MockTransport,
-                 transport_opts: [test_pid: self()]
-               )
-
-      on_exit(fn ->
-        try do
-          Client.stop(client)
-        catch
-          :exit, _ -> :ok
-        end
-      end)
-
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "request_id" => init_request_id,
-          "subtype" => "success",
-          "response" => %{
-            "commands" => [%{"name" => "plan"}],
-            "outputStyle" => %{"current" => "default"}
-          }
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
-
-      {:ok, %{client: client}}
+      {:ok,
+       start_initialized_client_with_fake_cli(%Options{}, init_response: server_info_response())}
     end
 
-    test "returns error without sending control request when disabled", %{client: client} do
+    test "returns error without sending control request when disabled", %{
+      client: client,
+      transport: transport
+    } do
       assert {:error, :file_checkpointing_not_enabled} =
                Client.rewind_files(client, "user_msg_123")
 
-      refute_receive {:mock_transport_send, _json}, 50
+      Process.sleep(50)
+      assert length(FakeCLI.decoded_messages(transport)) == 1
     end
+  end
+
+  defp start_client_with_fake_cli(options, client_opts \\ []) do
+    fake_cli = FakeCLI.new!()
+    on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
+
+    {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options), client_opts)
+    on_exit(fn -> safe_stop(client) end)
+
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+
+    %{client: client, transport: fake_cli}
+  end
+
+  defp start_initialized_client_with_fake_cli(options, opts \\ []) do
+    init_response = Keyword.get(opts, :init_response, %{})
+    client_opts = Keyword.get(opts, :client_opts, [])
+    %{client: client, transport: transport} = start_client_with_fake_cli(options, client_opts)
+
+    {:ok, init_request} = FakeCLI.initialize_request(transport)
+
+    FakeCLI.push_message(
+      transport,
+      control_success_response(init_request["request_id"], init_response)
+    )
+
+    assert :ok = Client.await_initialized(client, 1_000)
+
+    %{client: client, transport: transport, init_request: init_request}
+  end
+
+  defp wait_for_request(fake_cli, count, timeout_ms \\ 1_000) do
+    assert :ok = FakeCLI.wait_for_request_count(fake_cli, count, timeout_ms)
+    Enum.at(FakeCLI.decoded_messages(fake_cli), count - 1)
+  end
+
+  defp control_success_response(request_id, response) do
+    %{
+      "type" => "control_response",
+      "response" => %{
+        "request_id" => request_id,
+        "subtype" => "success",
+        "response" => response
+      }
+    }
+  end
+
+  defp server_info_response do
+    %{
+      "commands" => [%{"name" => "plan"}],
+      "outputStyle" => %{"current" => "default"}
+    }
+  end
+
+  defp safe_stop(client) do
+    Client.stop(client)
+  catch
+    :exit, _ -> :ok
   end
 end

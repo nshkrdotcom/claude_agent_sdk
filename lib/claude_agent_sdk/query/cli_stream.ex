@@ -1,11 +1,11 @@
 defmodule ClaudeAgentSDK.Query.CLIStream do
   @moduledoc """
-  Streams CLI-only query responses over a transport.
+  Streams CLI-only query responses over the shared core transport lane.
 
   This module is used for unidirectional, non-control queries. It supports:
   - String prompts (sent as stream-json user messages via stdin)
   - Enumerable prompts (streamed via stdin)
-  - Optional transport injection
+  - Execution-surface routing via `Options.execution_surface`
   """
 
   alias ClaudeAgentSDK.{
@@ -15,40 +15,42 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     Options,
     ProcessSupport,
     Runtime,
-    TaskSupervisor,
-    Transport
+    TaskSupervisor
   }
 
   alias ClaudeAgentSDK.Config.{Buffers, Timeouts}
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias CliSubprocessCore.Command, as: CoreCommand
+  alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.Transport, as: CoreTransport
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
   @transport_event_tag :claude_agent_sdk_transport
-  @type transport_spec :: module() | {module(), keyword()} | nil
 
   @doc """
   Streams messages for a single query prompt.
   """
-  @spec stream(String.t() | Enumerable.t(), Options.t(), transport_spec()) ::
+  @spec stream(String.t() | Enumerable.t(), Options.t(), term()) ::
           Enumerable.t(Message.t())
   def stream(prompt, %Options{} = options, transport \\ nil) do
     {args, input} = build_prompt_args(prompt, options)
+    validate_no_transport_override!(transport)
 
-    if should_use_mock?(transport, options) do
+    if should_use_mock?(options) do
       mock_prompt = mock_prompt_from(prompt)
       ClaudeAgentSDK.Mock.Process.stream(args, options, mock_prompt)
     else
-      stream_args(args, options, transport, input)
+      stream_args(args, options, nil, input)
     end
   end
 
   @doc false
-  @spec stream_args([String.t()], Options.t(), transport_spec(), Enumerable.t() | nil) ::
+  @spec stream_args([String.t()], Options.t(), term(), Enumerable.t() | nil) ::
           Enumerable.t(Message.t())
   def stream_args(args, %Options{} = options, transport \\ nil, input \\ nil) do
-    if should_use_mock?(transport, options) do
+    validate_no_transport_override!(transport)
+
+    if should_use_mock?(options) do
       mock_prompt =
         cond do
           is_binary(input) -> input
@@ -59,7 +61,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       ClaudeAgentSDK.Mock.Process.stream(args, options, mock_prompt)
     else
       Stream.resource(
-        fn -> start_transport(args, options, transport, input) end,
+        fn -> start_transport(args, options, input) end,
         &receive_next/1,
         &cleanup/1
       )
@@ -94,26 +96,24 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     CLIConfig.streaming_output_args() ++ Options.to_stream_json_args(options)
   end
 
-  defp start_transport(args, %Options{} = options, transport, input) do
+  defp start_transport(args, %Options{} = options, input) do
     drain_stale_transport_messages()
+    transport_ref = make_ref()
 
-    {module, transport_opts} = normalize_transport(transport, options, input)
-
-    transport_opts =
-      transport_opts
-      |> Keyword.put_new(:args, args)
-      |> Keyword.put_new(:options, options)
-      |> maybe_put_event_tag(module)
-
-    transport_ref = transport_subscription_ref(module)
-    transport_opts = maybe_put_bootstrap_subscriber(module, transport_opts, transport_ref)
-
-    with {:ok, transport_opts} <- maybe_put_cli_command(module, transport_opts, options),
-         {:ok, transport_pid} <- module.start_link(transport_opts),
-         :ok <- subscribe_transport(module, transport_pid, transport_ref),
-         {:ok, input_task} <- maybe_stream_input(module, transport_pid, input) do
+    with {:ok, command} <- build_transport_command(options, args),
+         {:ok, transport_pid} <-
+           CoreTransport.start_link(
+             [
+               command: command,
+               subscriber: {self(), transport_ref},
+               event_tag: @transport_event_tag,
+               stderr_callback: nil
+             ] ++
+               Options.execution_surface_options(options)
+           ),
+         :ok <- CoreTransport.subscribe(transport_pid, self(), transport_ref),
+         {:ok, input_task} <- maybe_stream_input(transport_pid, input) do
       %{
-        module: module,
         transport: transport_pid,
         transport_ref: transport_ref,
         input_task: input_task,
@@ -132,91 +132,37 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     end
   end
 
-  defp maybe_put_cli_command(module, transport_opts, options) do
-    if needs_cli_command?(module, transport_opts) do
-      with {:ok, command} <-
-             build_transport_command(options, Keyword.get(transport_opts, :args, [])) do
-        _ = CLI.warn_if_outdated()
-        {:ok, Keyword.put_new(transport_opts, :command, command)}
-      end
-    else
-      {:ok, transport_opts}
-    end
-  end
-
-  defp needs_cli_command?(module, transport_opts) do
-    built_in_transport_api?(module) and Keyword.get(transport_opts, :command) == nil
-  end
-
-  defp normalize_transport(nil, _options, input) do
-    module = CliSubprocessCore.Transport
-    ensure_streaming_transport!(module, input)
-    {module, []}
-  end
-
-  defp normalize_transport({module, opts}, _options, input) when is_atom(module) do
-    ensure_streaming_transport!(module, input)
-    {module, opts}
-  end
-
-  defp normalize_transport(module, _options, input) when is_atom(module) do
-    ensure_streaming_transport!(module, input)
-    {module, []}
-  end
-
-  defp normalize_transport(other, _options, _input) do
-    raise ArgumentError, "Unsupported transport spec: #{inspect(other)}"
-  end
-
-  defp ensure_streaming_transport!(_module, nil), do: :ok
-
-  defp ensure_streaming_transport!(module, _input) do
-    _ = Code.ensure_loaded(module)
-
-    unless function_exported?(module, :end_input, 1) do
-      raise ArgumentError,
-            "Streaming prompts require a transport with end_input/1. " <>
-              "Use CliSubprocessCore.Transport, ClaudeAgentSDK.Transport, or provide a compatible transport."
-    end
-
-    :ok
-  end
-
   # For non-streaming queries (nil input), close stdin immediately so the CLI starts processing
-  defp maybe_stream_input(module, transport, nil) do
-    if function_exported?(module, :end_input, 1) do
-      case module.end_input(transport) do
-        :ok -> {:ok, nil}
-        {:error, reason} -> {:error, {:end_input_failed, Transport.normalize_reason(reason)}}
-      end
-    else
-      {:ok, nil}
+  defp maybe_stream_input(transport, nil) do
+    case CoreTransport.end_input(transport) do
+      :ok -> {:ok, nil}
+      {:error, reason} -> {:error, {:end_input_failed, normalize_transport_reason(reason)}}
     end
   end
 
-  defp maybe_stream_input(module, transport, input) do
+  defp maybe_stream_input(transport, input) do
     with {:ok, pid} <-
-           TaskSupervisor.start_child(fn -> stream_input_messages(module, transport, input) end) do
+           TaskSupervisor.start_child(fn -> stream_input_messages(transport, input) end) do
       {:ok, %{pid: pid, monitor_ref: Process.monitor(pid)}}
     end
   end
 
-  defp stream_input_messages(module, transport, input) do
+  defp stream_input_messages(transport, input) do
     send_result =
       Enum.reduce_while(input, :ok, fn message, _acc ->
-        case module.send(transport, message) do
+        case CoreTransport.send(transport, message) do
           :ok ->
             {:cont, :ok}
 
           {:error, reason} ->
-            {:halt, {:error, {:send_failed, Transport.normalize_reason(reason)}}}
+            {:halt, {:error, {:send_failed, normalize_transport_reason(reason)}}}
         end
       end)
 
     end_result =
-      case module.end_input(transport) do
+      case CoreTransport.end_input(transport) do
         :ok -> :ok
-        {:error, reason} -> {:error, Transport.normalize_reason(reason)}
+        {:error, reason} -> {:error, normalize_transport_reason(reason)}
       end
 
     case {send_result, end_result} do
@@ -330,14 +276,9 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     receive_next(state)
   end
 
-  defp cleanup(%{
-         module: module,
-         transport: transport,
-         transport_ref: transport_ref,
-         input_task: task
-       }) do
+  defp cleanup(%{transport: transport, transport_ref: transport_ref, input_task: task}) do
     cleanup_input_task(task)
-    close_transport_with_timeout(module, transport, Timeouts.transport_close_grace_ms())
+    close_transport_with_timeout(transport, Timeouts.transport_close_grace_ms())
     flush_transport_messages(transport_ref)
 
     :ok
@@ -353,25 +294,14 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp cleanup_input_task(_), do: :ok
 
-  defp close_transport_with_timeout(module, transport, timeout_ms) when is_pid(transport) do
+  defp close_transport_with_timeout(transport, timeout_ms) when is_pid(transport) do
     ref = Process.monitor(transport)
 
-    if module == ClaudeAgentSDK.Transport do
-      case ProcessSupport.await_down(ref, transport, timeout_ms) do
-        :down ->
-          :ok
-
-        :timeout ->
-          _ = safe_force_close(module, transport)
-          await_down_or_shutdown(ref, transport, 250)
-      end
-    else
-      _ = safe_force_close(module, transport)
-      await_down_or_shutdown(ref, transport, timeout_ms)
-    end
+    _ = safe_force_close(transport)
+    await_down_or_shutdown(ref, transport, timeout_ms)
   end
 
-  defp close_transport_with_timeout(_module, _transport, _timeout_ms), do: :ok
+  defp close_transport_with_timeout(_transport, _timeout_ms), do: :ok
 
   defp drain_stale_transport_messages do
     receive do
@@ -466,12 +396,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     end
   end
 
-  defp safe_force_close(module, transport) when is_pid(transport) do
-    if function_exported?(module, :force_close, 1) do
-      module.force_close(transport)
-    else
-      module.close(transport)
-    end
+  defp safe_force_close(transport) when is_pid(transport) do
+    CoreTransport.force_close(transport)
   catch
     :exit, _ -> {:error, {:transport, :not_connected}}
   end
@@ -490,42 +416,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     :exit, _ -> :ok
   end
 
-  defp subscribe_transport(module, transport_pid, transport_ref) do
-    cond do
-      is_reference(transport_ref) and function_exported?(module, :subscribe, 3) ->
-        module.subscribe(transport_pid, self(), transport_ref)
-
-      function_exported?(module, :subscribe, 2) ->
-        module.subscribe(transport_pid, self())
-
-      true ->
-        {:error, :subscribe_not_supported}
-    end
-  end
-
-  defp maybe_put_bootstrap_subscriber(module, transport_opts, transport_ref) do
-    if built_in_transport_api?(module) and is_reference(transport_ref) do
-      Keyword.put_new(transport_opts, :subscriber, {self(), transport_ref})
-    else
-      transport_opts
-    end
-  end
-
-  defp maybe_put_event_tag(transport_opts, module)
-       when is_list(transport_opts) and is_atom(module) do
-    if built_in_transport_api?(module) do
-      Keyword.put_new(transport_opts, :event_tag, @transport_event_tag)
-    else
-      transport_opts
-    end
-  end
-
   defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
   defp process_running?(_pid), do: false
-
-  defp transport_subscription_ref(module) when is_atom(module) do
-    if function_exported?(module, :subscribe, 3), do: make_ref(), else: nil
-  end
 
   defp extract_transport_event(message, transport_ref) when is_reference(transport_ref) do
     CoreTransport.extract_event(message, transport_ref)
@@ -552,7 +444,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp transport_error_struct(%Errors.ClaudeSDKError{} = error), do: error
 
   defp transport_error_struct(%CoreTransportError{} = error) do
-    case Transport.normalize_reason(error) do
+    case normalize_transport_reason(error) do
       %Errors.CLIJSONDecodeError{} = normalized ->
         normalized
 
@@ -578,10 +470,10 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp build_transport_command(%Options{} = options, args) when is_list(args) do
-    case CLI.resolve_executable(options) do
-      {:ok, executable} ->
+    case CLI.resolve_command_spec(options) do
+      {:ok, %CommandSpec{} = command_spec} ->
         {:ok,
-         CoreCommand.new(executable, args,
+         CoreCommand.new(command_spec, args,
            cwd: options.cwd,
            env: ClaudeAgentSDK.Process.__env_vars__(options),
            user: options.user
@@ -592,19 +484,46 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     end
   end
 
-  defp built_in_transport_api?(module) do
-    module in [
-      ClaudeAgentSDK.Transport,
-      CliSubprocessCore.Transport
-    ]
-  end
-
   defp transport_error_mode(%Options{transport_error_mode: :raise}), do: :raise
   defp transport_error_mode(_options), do: :result
 
-  defp should_use_mock?(transport, %Options{} = options) do
-    Runtime.use_mock?() and is_nil(transport) and not Runtime.force_real?(options)
+  defp should_use_mock?(%Options{} = options) do
+    Runtime.use_mock?() and not Runtime.force_real?(options)
   end
+
+  defp validate_no_transport_override!(nil), do: :ok
+
+  defp validate_no_transport_override!(other) do
+    raise ArgumentError,
+          "custom transport injection has been removed; use execution_surface instead: #{inspect(other)}"
+  end
+
+  defp normalize_transport_reason(%CoreTransportError{
+         reason: {:buffer_overflow, actual_size, max_size},
+         context: context
+       }) do
+    %Errors.CLIJSONDecodeError{
+      message: "JSON message exceeded maximum buffer size of #{max_size} bytes",
+      line: Map.get(context, :preview, ""),
+      original_error: {:buffer_overflow, actual_size, max_size}
+    }
+  end
+
+  defp normalize_transport_reason(%CoreTransportError{reason: {:command_not_found, command}})
+       when command in ["claude", "claude-code"],
+       do: :cli_not_found
+
+  defp normalize_transport_reason(%CoreTransportError{reason: reason}),
+    do: normalize_transport_reason(reason)
+
+  defp normalize_transport_reason({:command_not_found, command})
+       when command in ["claude", "claude-code"],
+       do: :cli_not_found
+
+  defp normalize_transport_reason(:noproc), do: :not_connected
+  defp normalize_transport_reason({:call_exit, :noproc}), do: :not_connected
+  defp normalize_transport_reason({:transport, :noproc}), do: :not_connected
+  defp normalize_transport_reason(reason), do: reason
 
   defp mock_prompt_from(prompt) when is_binary(prompt), do: prompt
 

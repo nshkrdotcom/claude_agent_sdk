@@ -195,16 +195,9 @@ defmodule ClaudeAgentSDK.Query.ClientStream do
 
   defp client_start_opts(nil), do: []
 
-  defp client_start_opts({module, opts}) when is_atom(module) and is_list(opts) do
-    [transport: module, transport_opts: opts]
-  end
-
-  defp client_start_opts(module) when is_atom(module) do
-    [transport: module]
-  end
-
   defp client_start_opts(other) do
-    raise ArgumentError, "Unsupported transport spec: #{inspect(other)}"
+    raise ArgumentError,
+          "custom transport injection has been removed; use execution_surface instead: #{inspect(other)}"
   end
 
   defp send_prompt(client_pid, prompt) when is_binary(prompt) do

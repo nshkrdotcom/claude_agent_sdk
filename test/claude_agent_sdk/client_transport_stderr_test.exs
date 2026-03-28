@@ -9,23 +9,24 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
   @moduletag capture_log: true
 
   alias ClaudeAgentSDK.{Client, Options}
-  alias ClaudeAgentSDK.TestSupport.MockTransport
-  alias ClaudeAgentSDK.Transport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   describe "transport_stderr handling" do
     test "client survives text and non-UTF-8 {:transport_stderr, _} messages without crashing" do
+      fake_cli = FakeCLI.new!()
+
       {:ok, client} =
-        Client.start_link(%Options{},
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
+        Client.start_link(FakeCLI.options(fake_cli, %Options{}))
 
-      on_exit(fn -> safe_stop(client) end)
+      on_exit(fn ->
+        safe_stop(client)
+        FakeCLI.cleanup(fake_cli)
+      end)
 
-      assert_receive {:mock_transport_started, _transport_pid}, 1_000
+      assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
 
-      send(client, {:transport_stderr, "Error: something went wrong on stderr\n"})
-      send(client, {:transport_stderr, <<255, "\n">>})
+      send(client, {:protocol_stderr, "Error: something went wrong on stderr\n"})
+      send(client, {:protocol_stderr, <<255, "\n">>})
       state = :sys.get_state(client)
 
       assert state.stderr_buffer == ""
@@ -34,28 +35,29 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
     test "buffers split stderr chunks and invokes callback once per completed line" do
       test_pid = self()
+      fake_cli = FakeCLI.new!()
 
       options = %Options{
         stderr: fn line -> send(test_pid, {:stderr_line, line}) end
       }
 
       {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
+        Client.start_link(FakeCLI.options(fake_cli, options))
 
-      on_exit(fn -> safe_stop(client) end)
+      on_exit(fn ->
+        safe_stop(client)
+        FakeCLI.cleanup(fake_cli)
+      end)
 
-      assert_receive {:mock_transport_started, _transport_pid}, 1_000
+      assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
 
-      send(client, {:transport_stderr, "ERR"})
+      send(client, {:protocol_stderr, "ERR"})
       state = :sys.get_state(client)
 
       assert state.stderr_buffer == "ERR"
       refute_receive {:stderr_line, _}, 50
 
-      send(client, {:transport_stderr, "_LINE\n"})
+      send(client, {:protocol_stderr, "_LINE\n"})
       state = :sys.get_state(client)
 
       assert state.stderr_buffer == ""
@@ -65,40 +67,45 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
     test "flushes a buffered stderr line before transport shutdown" do
       test_pid = self()
+      fake_cli = FakeCLI.new!()
 
       options = %Options{
         stderr: fn line -> send(test_pid, {:stderr_line, line}) end
       }
 
       {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
+        Client.start_link(FakeCLI.options(fake_cli, options))
 
-      assert_receive {:mock_transport_started, _transport_pid}, 1_000
+      on_exit(fn ->
+        safe_stop(client)
+        FakeCLI.cleanup(fake_cli)
+      end)
 
-      send(client, {:transport_stderr, "partial stderr"})
+      assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+
+      send(client, {:protocol_stderr, "partial stderr"})
       state = :sys.get_state(client)
       assert state.stderr_buffer == "partial stderr"
 
       monitor = Process.monitor(client)
-      send(client, {:transport_exit, :test_disconnect})
+      Process.exit(state.protocol_session, :test_disconnect)
 
       assert_receive {:stderr_line, "partial stderr"}, 1_000
       assert_receive {:DOWN, ^monitor, :process, ^client, :normal}, 1_000
     end
 
     test "ignores unexpected mailbox messages without crashing" do
+      fake_cli = FakeCLI.new!()
+
       {:ok, client} =
-        Client.start_link(%Options{},
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
+        Client.start_link(FakeCLI.options(fake_cli, %Options{}))
 
-      on_exit(fn -> safe_stop(client) end)
+      on_exit(fn ->
+        safe_stop(client)
+        FakeCLI.cleanup(fake_cli)
+      end)
 
-      assert_receive {:mock_transport_started, _transport_pid}, 1_000
+      assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
 
       log =
         capture_log(fn ->
@@ -114,48 +121,24 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
     test "built-in transport delivers stderr callback exactly once via the client" do
       test_pid = self()
+      fake_cli = FakeCLI.new!()
 
       options = %Options{
         stderr: fn line -> send(test_pid, {:stderr_line, line}) end
       }
 
-      script =
-        create_test_script("""
-        python3 -c "$(cat <<'PY'
-        import json
-        import sys
+      {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options))
 
-        line = sys.stdin.readline()
-        if not line:
-            raise SystemExit(1)
+      on_exit(fn ->
+        safe_stop(client)
+        FakeCLI.cleanup(fake_cli)
+      end)
 
-        print("ERR_LINE", file=sys.stderr, flush=True)
-        request = json.loads(line)
-        response = {
-            "type": "control_response",
-            "response": {
-                "subtype": "success",
-                "request_id": request["request_id"],
-                "response": {}
-            }
-        }
-        print(json.dumps(response), flush=True)
+      assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+      request_id = FakeCLI.respond_initialize_success!(fake_cli)
+      assert is_binary(request_id)
+      FakeCLI.push_stderr(fake_cli, "ERR_LINE")
 
-        for _ in sys.stdin:
-            pass
-        PY
-        )"
-        """)
-
-      {:ok, client} =
-        Client.start_link(options,
-          transport: Transport,
-          transport_opts: [command: script, args: []]
-        )
-
-      on_exit(fn -> safe_stop(client) end)
-
-      assert is_reference(:sys.get_state(client).transport_ref)
       assert_receive {:stderr_line, "ERR_LINE"}, 1_000
       assert :ok = Client.await_initialized(client, 1_000)
       refute_receive {:stderr_line, "ERR_LINE"}, 100
@@ -163,93 +146,46 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
     test "built-in transport preserves invalid UTF-8 stderr lines" do
       test_pid = self()
+      fake_cli = FakeCLI.new!()
 
       options = %Options{
         stderr: fn line -> send(test_pid, {:stderr_line, line}) end
       }
 
-      script =
-        create_test_script("""
-        python3 -c "$(cat <<'PY'
-        import json
-        import sys
+      {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options))
 
-        line = sys.stdin.readline()
-        if not line:
-            raise SystemExit(1)
+      on_exit(fn ->
+        safe_stop(client)
+        FakeCLI.cleanup(fake_cli)
+      end)
 
-        sys.stderr.buffer.write(b"\\xff\\n")
-        sys.stderr.flush()
-
-        request = json.loads(line)
-        response = {
-            "type": "control_response",
-            "response": {
-                "subtype": "success",
-                "request_id": request["request_id"],
-                "response": {}
-            }
-        }
-        print(json.dumps(response), flush=True)
-
-        for _ in sys.stdin:
-            pass
-        PY
-        )"
-        """)
-
-      {:ok, client} =
-        Client.start_link(options,
-          transport: Transport,
-          transport_opts: [command: script, args: []]
-        )
-
-      on_exit(fn -> safe_stop(client) end)
-
+      assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+      _request_id = FakeCLI.respond_initialize_success!(fake_cli)
+      FakeCLI.push_stderr(fake_cli, <<255>>)
       assert_receive {:stderr_line, <<255>>}, 1_000
       assert :ok = Client.await_initialized(client, 1_000)
     end
 
     test "built-in transport flushes a partial stderr fragment on fast exit" do
       test_pid = self()
+      fake_cli = FakeCLI.new!()
 
       options = %Options{
         stderr: fn line -> send(test_pid, {:stderr_line, line}) end
       }
 
-      script =
-        create_test_script("""
-        python3 -c "$(cat <<'PY'
-        import json
-        import sys
+      {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options))
 
-        line = sys.stdin.readline()
-        if not line:
-            raise SystemExit(1)
-
-        request = json.loads(line)
-        response = {
-            "type": "control_response",
-            "response": {
-                "subtype": "success",
-                "request_id": request["request_id"],
-                "response": {}
-            }
-        }
-        print(json.dumps(response), flush=True)
-        sys.stderr.write("TAIL_FRAGMENT")
-        sys.stderr.flush()
-        PY
-        )"
-        """)
-
-      {:ok, client} =
-        Client.start_link(options,
-          transport: Transport,
-          transport_opts: [command: script, args: []]
-        )
+      on_exit(fn ->
+        safe_stop(client)
+        FakeCLI.cleanup(fake_cli)
+      end)
 
       monitor = Process.monitor(client)
+      assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+      state = :sys.get_state(client)
+      send(client, {:protocol_stderr, "TAIL_FRAGMENT"})
+      Process.exit(state.protocol_session, :test_disconnect)
 
       assert_receive {:stderr_line, "TAIL_FRAGMENT"}, 1_000
       assert_receive {:DOWN, ^monitor, :process, ^client, :normal}, 1_000
@@ -257,50 +193,25 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
 
     test "built-in transport surfaces stderr emitted after initialize" do
       test_pid = self()
+      fake_cli = FakeCLI.new!()
 
       options = %Options{
         stderr: fn line -> send(test_pid, {:stderr_line, line}) end
       }
 
-      script =
-        create_test_script("""
-        python3 -c "$(cat <<'PY'
-        import json
-        import sys
+      {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options))
 
-        line = sys.stdin.readline()
-        if not line:
-            raise SystemExit(1)
+      on_exit(fn ->
+        safe_stop(client)
+        FakeCLI.cleanup(fake_cli)
+      end)
 
-        request = json.loads(line)
-        response = {
-            "type": "control_response",
-            "response": {
-                "subtype": "success",
-                "request_id": request["request_id"],
-                "response": {}
-            }
-        }
-        print(json.dumps(response), flush=True)
-
-        for line in sys.stdin:
-            if not line:
-                break
-            print("ERR_AFTER_INIT", file=sys.stderr, flush=True)
-        PY
-        )"
-        """)
-
-      {:ok, client} =
-        Client.start_link(options,
-          transport: Transport,
-          transport_opts: [command: script, args: []]
-        )
-
-      on_exit(fn -> safe_stop(client) end)
-
+      assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+      _request_id = FakeCLI.respond_initialize_success!(fake_cli)
       assert :ok = Client.await_initialized(client, 1_000)
       assert :ok = Client.query(client, "hi")
+      assert :ok = FakeCLI.wait_for_request_count(fake_cli, 2, 1_000)
+      FakeCLI.push_stderr(fake_cli, "ERR_AFTER_INIT")
       assert_receive {:stderr_line, "ERR_AFTER_INIT"}, 1_000
     end
   end
@@ -309,28 +220,5 @@ defmodule ClaudeAgentSDK.ClientTransportStderrTest do
     if Process.alive?(pid), do: Client.stop(pid)
   catch
     :exit, _ -> :ok
-  end
-
-  defp create_test_script(body) do
-    dir =
-      Path.join(
-        System.tmp_dir!(),
-        "client_transport_stderr_#{System.unique_integer([:positive])}"
-      )
-
-    File.mkdir_p!(dir)
-    path = Path.join(dir, "client_transport_stderr_test.sh")
-
-    File.write!(path, """
-    #!/usr/bin/env bash
-    set -euo pipefail
-    #{body}
-    """)
-
-    File.chmod!(path, 0o755)
-
-    ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(dir) end)
-
-    path
   end
 end

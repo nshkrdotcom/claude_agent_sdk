@@ -50,10 +50,10 @@ defmodule ClaudeAgentSdk.MixProject do
         {:jason, "~> 1.4"},
         {:zoi, "~> 0.17"},
         {:ex_doc, "~> 0.40", only: :dev, runtime: false},
-        {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
-        {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
+        {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
+        {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
         {:supertester, "~> 0.5.1", only: :test},
-        {:stream_data, "~> 1.0", only: :test}
+        {:stream_data, "~> 1.1", only: :test}
       ]
   end
 

@@ -40,10 +40,9 @@ defmodule ClaudeAgentSDK.Streaming do
       ↓
   ClaudeAgentSDK.Client (SDK-local control family)
       ↓
-  ClaudeAgentSDK.Transport (when you explicitly select the SDK-local
-  raw transport surface)
+  CliSubprocessCore.ProtocolSession
       ↓
-  CliSubprocessCore.Transport
+  CliSubprocessCore.Channel / CliSubprocessCore.Transport
   ```
 
   ## Quick Start

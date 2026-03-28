@@ -2,16 +2,15 @@ defmodule Integration.ModelSwitchingLiveTest do
   use ClaudeAgentSDK.SupertesterCase, isolation: :basic
 
   alias ClaudeAgentSDK.{Client, Model, Options}
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   @moduletag :integration
 
   test "should preserve context when switching models" do
+    fake_cli = FakeCLI.new!()
+
     {:ok, client} =
-      Client.start_link(%Options{model: "sonnet"},
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+      Client.start_link(FakeCLI.options(fake_cli, %Options{model: "sonnet"}))
 
     on_exit(fn ->
       try do
@@ -19,11 +18,12 @@ defmodule Integration.ModelSwitchingLiveTest do
       catch
         :exit, _ -> :ok
       end
+
+      FakeCLI.cleanup(fake_cli)
     end)
 
-    assert_receive {:mock_transport_started, transport_pid}, 1_000
-    assert {:ok, _request_id} = Client.await_init_sent(client, 1_000)
-    assert_receive {:mock_transport_send, _init_json}, 1_000
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+    _init_request_id = FakeCLI.respond_initialize_success!(fake_cli)
 
     stream_task =
       Task.async(fn ->
@@ -31,8 +31,6 @@ defmodule Integration.ModelSwitchingLiveTest do
         |> Enum.take(3)
       end)
 
-    # Ensure the transport subscription is active and our stream subscriber is registered
-    assert_receive {:mock_transport_subscribed, _pid}, 200
     wait_for_stream_subscriber(client)
 
     initial_message = %{
@@ -41,11 +39,12 @@ defmodule Integration.ModelSwitchingLiveTest do
       "session_id" => "integration-session"
     }
 
-    MockTransport.push_message(transport_pid, Jason.encode!(initial_message))
+    FakeCLI.push_message(fake_cli, initial_message)
 
     set_model_task = Task.async(fn -> Client.set_model(client, "opus") end)
 
-    assert_receive {:mock_transport_send, set_model_json}, 200
+    assert :ok = FakeCLI.wait_for_request_count(fake_cli, 2, 1_000)
+    [_init_json, set_model_json | _rest] = FakeCLI.recorded_messages(fake_cli)
     decoded = Jason.decode!(set_model_json)
     assert decoded["request"]["subtype"] == "set_model"
     request_id = decoded["request_id"]
@@ -57,11 +56,11 @@ defmodule Integration.ModelSwitchingLiveTest do
       "response" => %{
         "request_id" => request_id,
         "subtype" => "success",
-        "result" => %{"model" => normalized}
+        "response" => %{"model" => normalized}
       }
     }
 
-    MockTransport.push_message(transport_pid, Jason.encode!(response))
+    FakeCLI.push_message(fake_cli, response)
     assert :ok = Task.await(set_model_task, 1_000)
 
     follow_up = %{
@@ -70,7 +69,7 @@ defmodule Integration.ModelSwitchingLiveTest do
       "session_id" => "integration-session"
     }
 
-    MockTransport.push_message(transport_pid, Jason.encode!(follow_up))
+    FakeCLI.push_message(fake_cli, follow_up)
 
     final_message = %{
       "type" => "result",
@@ -79,7 +78,7 @@ defmodule Integration.ModelSwitchingLiveTest do
       "total_cost_usd" => 0.002
     }
 
-    MockTransport.push_message(transport_pid, Jason.encode!(final_message))
+    FakeCLI.push_message(fake_cli, final_message)
 
     streamed = Task.await(stream_task, 1_500)
 

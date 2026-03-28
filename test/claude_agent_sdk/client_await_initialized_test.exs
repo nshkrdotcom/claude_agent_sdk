@@ -2,18 +2,20 @@ defmodule ClaudeAgentSDK.ClientAwaitInitializedTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.{Client, Options}
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   test "await_initialized queues waiter and resolves on initialize success" do
+    fake_cli = FakeCLI.new!()
+
     {:ok, client} =
-      Client.start_link(%Options{},
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+      Client.start_link(FakeCLI.options(fake_cli, %Options{}))
 
-    on_exit(fn -> safe_stop(client) end)
+    on_exit(fn ->
+      safe_stop(client)
+      FakeCLI.cleanup(fake_cli)
+    end)
 
-    assert_receive {:mock_transport_started, transport_pid}, 1_000
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
     assert {:ok, request_id} = Client.await_init_sent(client, 1_000)
 
     waiter = Task.async(fn -> Client.await_initialized(client, 1_000) end)
@@ -29,7 +31,7 @@ defmodule ClaudeAgentSDK.ClientAwaitInitializedTest do
       }
     }
 
-    MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+    FakeCLI.push_message(fake_cli, init_response)
 
     assert :ok = Task.await(waiter, 1_000)
 
@@ -39,15 +41,17 @@ defmodule ClaudeAgentSDK.ClientAwaitInitializedTest do
   end
 
   test "await_initialized returns timeout when initialize does not complete" do
+    fake_cli = FakeCLI.new!()
+
     {:ok, client} =
-      Client.start_link(%Options{},
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+      Client.start_link(FakeCLI.options(fake_cli, %Options{}))
 
-    on_exit(fn -> safe_stop(client) end)
+    on_exit(fn ->
+      safe_stop(client)
+      FakeCLI.cleanup(fake_cli)
+    end)
 
-    assert_receive {:mock_transport_started, _transport_pid}, 1_000
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
     assert {:ok, _request_id} = Client.await_init_sent(client, 1_000)
 
     assert {:error, :timeout} = Client.await_initialized(client, 50)

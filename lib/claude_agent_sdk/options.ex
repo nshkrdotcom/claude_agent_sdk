@@ -24,6 +24,7 @@ defmodule ClaudeAgentSDK.Options do
   - `executable` - Custom executable to run (string)
   - `executable_args` - Arguments for custom executable (list of strings)
   - `path_to_claude_code_executable` - Path to Claude Code CLI (string)
+  - `execution_surface` - Core execution surface selection for local subprocess or SSH lanes
   - `abort_ref` - Reference for aborting requests (reference)
   - `hooks` - Hook configurations (see `t:ClaudeAgentSDK.Hooks.hook_config/0`)
   - `timeout_ms` - Command execution timeout in milliseconds (integer, default: 4_500_000)
@@ -79,7 +80,7 @@ defmodule ClaudeAgentSDK.Options do
   alias ClaudeAgentSDK.Config.Env
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Model
-  alias CliSubprocessCore.ModelInput
+  alias CliSubprocessCore.{ExecutionSurface, ModelInput}
 
   @valid_efforts [:low, :medium, :high, :max]
 
@@ -168,7 +169,8 @@ defmodule ClaudeAgentSDK.Options do
     add_dirs: [],
     extra_args: %{},
     env: %{},
-    stderr: nil
+    stderr: nil,
+    execution_surface: nil
   ]
 
   @type structured_output_format ::
@@ -292,6 +294,7 @@ defmodule ClaudeAgentSDK.Options do
           executable: String.t() | nil,
           executable_args: [String.t()] | nil,
           path_to_claude_code_executable: String.t() | nil,
+          execution_surface: ExecutionSurface.t() | map() | keyword() | nil,
           abort_ref: reference() | nil,
           model_payload: CliSubprocessCore.ModelRegistry.selection() | nil,
           model: model_name() | nil,
@@ -355,6 +358,53 @@ defmodule ClaudeAgentSDK.Options do
 
     struct(__MODULE__, attrs)
     |> ensure_model_payload!()
+  end
+
+  @doc false
+  @spec normalize_execution_surface(term()) :: {:ok, ExecutionSurface.t()} | {:error, term()}
+  def normalize_execution_surface(nil), do: ExecutionSurface.new([])
+
+  def normalize_execution_surface(execution_surface) when is_list(execution_surface) do
+    ExecutionSurface.new(execution_surface)
+  end
+
+  def normalize_execution_surface(%{} = execution_surface) do
+    if Map.get(execution_surface, :__struct__) == ExecutionSurface do
+      {:ok, execution_surface}
+    else
+      execution_surface
+      |> Map.new()
+      |> Enum.into([])
+      |> ExecutionSurface.new()
+    end
+  end
+
+  def normalize_execution_surface(other), do: {:error, {:invalid_execution_surface, other}}
+
+  @doc false
+  @spec execution_surface_options(t() | ExecutionSurface.t() | nil) :: keyword()
+  def execution_surface_options(%__MODULE__{execution_surface: execution_surface}) do
+    execution_surface_options(execution_surface)
+  end
+
+  def execution_surface_options(execution_surface)
+      when is_map(execution_surface) and map_size(execution_surface) > 0 do
+    if Map.get(execution_surface, :__struct__) == ExecutionSurface do
+      execution_surface
+      |> ExecutionSurface.surface_metadata()
+      |> Keyword.put(:transport_options, execution_surface.transport_options)
+    else
+      []
+    end
+  end
+
+  def execution_surface_options(nil), do: []
+
+  def execution_surface_options(other) do
+    case normalize_execution_surface(other) do
+      {:ok, execution_surface} -> execution_surface_options(execution_surface)
+      {:error, _reason} -> []
+    end
   end
 
   @doc """

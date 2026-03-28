@@ -6,7 +6,6 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
 
   import Kernel, except: [send: 2]
 
-  @behaviour ClaudeAgentSDK.Transport
   @event_tag :claude_agent_sdk_transport
 
   defstruct subscribers: %{},
@@ -26,42 +25,34 @@ defmodule ClaudeAgentSDK.TestSupport.MockTransport do
 
   ## Transport behaviour callbacks
 
-  @impl ClaudeAgentSDK.Transport
   def start(opts) do
     GenServer.start(__MODULE__, opts)
   end
 
-  @impl ClaudeAgentSDK.Transport
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
 
-  @impl ClaudeAgentSDK.Transport
   def send(transport, message) do
     GenServer.call(transport, {:send, message})
   end
 
-  @impl ClaudeAgentSDK.Transport
   def subscribe(transport, pid) do
     GenServer.call(transport, {:subscribe, pid})
   end
 
-  @impl ClaudeAgentSDK.Transport
   def subscribe(transport, pid, tag) do
     GenServer.call(transport, {:subscribe, pid, tag})
   end
 
-  @impl ClaudeAgentSDK.Transport
   def close(transport) do
     GenServer.stop(transport, :normal)
   end
 
-  @impl ClaudeAgentSDK.Transport
   def end_input(transport) do
     GenServer.call(transport, :end_input)
   end
 
-  @impl ClaudeAgentSDK.Transport
   def status(transport) do
     GenServer.call(transport, :status)
   end

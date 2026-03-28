@@ -2,16 +2,15 @@ defmodule ClaudeAgentSDK.ClientResponseStreamTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.{Client, Message, Options}
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   setup do
     Process.flag(:trap_exit, true)
 
+    fake_cli = FakeCLI.new!()
+
     {:ok, client} =
-      Client.start_link(%Options{},
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+      Client.start_link(FakeCLI.options(fake_cli, %Options{}))
 
     on_exit(fn ->
       try do
@@ -19,11 +18,13 @@ defmodule ClaudeAgentSDK.ClientResponseStreamTest do
       catch
         :exit, _ -> :ok
       end
+
+      FakeCLI.cleanup(fake_cli)
     end)
 
-    assert_receive {:mock_transport_started, transport}, 1_000
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
 
-    {:ok, client: client, transport: transport}
+    {:ok, client: client, transport: fake_cli}
   end
 
   test "receive_response_stream yields messages until result", %{
@@ -55,8 +56,8 @@ defmodule ClaudeAgentSDK.ClientResponseStreamTest do
       "is_error" => false
     }
 
-    MockTransport.push_message(transport, Jason.encode!(assistant))
-    MockTransport.push_message(transport, Jason.encode!(result))
+    FakeCLI.push_message(transport, assistant)
+    FakeCLI.push_message(transport, result)
 
     assert [%Message{type: :assistant}, %Message{type: :result}] = Task.await(task, 1_000)
   end
@@ -69,10 +70,11 @@ defmodule ClaudeAgentSDK.ClientResponseStreamTest do
   end
 
   test "client preserves explicit atom-key entrypoint env overrides" do
+    fake_cli = FakeCLI.new!()
+
     {:ok, client} =
-      Client.start_link(%Options{env: %{:CLAUDE_CODE_ENTRYPOINT => "custom-entrypoint"}},
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
+      Client.start_link(
+        FakeCLI.options(fake_cli, %Options{env: %{:CLAUDE_CODE_ENTRYPOINT => "custom-entrypoint"}})
       )
 
     try do
@@ -87,6 +89,8 @@ defmodule ClaudeAgentSDK.ClientResponseStreamTest do
       catch
         :exit, _ -> :ok
       end
+
+      FakeCLI.cleanup(fake_cli)
     end
   end
 end

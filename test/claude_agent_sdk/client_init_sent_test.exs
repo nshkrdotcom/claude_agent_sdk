@@ -2,21 +2,21 @@ defmodule ClaudeAgentSDK.ClientInitSentTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.{Client, Options}
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   test "await_init_sent returns request id after initialize request is sent" do
-    {:ok, client} =
-      Client.start_link(%Options{},
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+    fake_cli = FakeCLI.new!()
+    on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
 
-    assert_receive {:mock_transport_started, transport_pid}, 1_000
+    {:ok, client} =
+      Client.start_link(FakeCLI.options(fake_cli, %Options{}))
+
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
 
     assert {:ok, request_id} = Client.await_init_sent(client, 1_000)
     assert is_binary(request_id)
 
-    [init_json | _] = MockTransport.recorded_messages(transport_pid)
+    [init_json | _] = FakeCLI.recorded_messages(fake_cli)
     decoded = Jason.decode!(String.trim(init_json))
 
     assert decoded["type"] == "control_request"
@@ -26,13 +26,13 @@ defmodule ClaudeAgentSDK.ClientInitSentTest do
   end
 
   test "client runtime state is a Client struct" do
-    {:ok, client} =
-      Client.start_link(%Options{},
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+    fake_cli = FakeCLI.new!()
+    on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
 
-    assert_receive {:mock_transport_started, _transport_pid}, 1_000
+    {:ok, client} =
+      Client.start_link(FakeCLI.options(fake_cli, %Options{}))
+
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
 
     state = :sys.get_state(client)
     assert %Client{} = state

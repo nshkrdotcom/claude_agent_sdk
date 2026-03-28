@@ -31,8 +31,8 @@ defmodule DocumentGeneration.MixProject do
       {:claude_agent_sdk, path: "../.."},
 
       # Development and testing
-      {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
-      {:credo, "~> 1.6", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 

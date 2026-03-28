@@ -59,6 +59,8 @@ defmodule ClaudeAgentSDK.DebugMode do
   alias ClaudeAgentSDK.{AuthChecker, BuildEnv, ContentExtractor, Message, Options, Runtime}
   alias ClaudeAgentSDK.Config.Buffers
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
+  alias CliSubprocessCore.{Command, CommandSpec}
+  alias CliSubprocessCore.Transport.RunResult
 
   @doc """
   Executes a query in debug mode with detailed logging and timing.
@@ -667,17 +669,34 @@ defmodule ClaudeAgentSDK.DebugMode do
   end
 
   defp perform_connectivity_test do
-    # Simple echo test
-    case System.cmd("claude", ["--print", "test", "--output-format", "json"],
-           stderr_to_stdout: true,
-           env: []
-         ) do
-      {output, 0} ->
-        check_connectivity_output(output)
+    case ClaudeAgentSDK.CLI.find_executable() do
+      {:ok, executable} ->
+        invocation =
+          executable
+          |> CommandSpec.new()
+          |> Command.new(["--print", "test", "--output-format", "json"], env: [])
 
-      {error, code} ->
-        IO.puts("   ❌ Connectivity test failed (exit #{code})")
-        IO.puts("   Error: #{String.trim(error)}")
+        case Command.run(invocation, stderr: :separate) do
+          {:ok, %RunResult{} = result} ->
+            handle_connectivity_result(result)
+
+          {:error, reason} ->
+            IO.puts("   ❌ Connectivity test error: #{inspect(reason)}")
+        end
+
+      {:error, :not_found} ->
+        IO.puts("   ❌ Connectivity test failed (CLI not found)")
+    end
+  end
+
+  defp handle_connectivity_result(%RunResult{} = result) do
+    output = result.stdout <> result.stderr
+
+    if RunResult.success?(result) do
+      check_connectivity_output(output)
+    else
+      IO.puts("   ❌ Connectivity test failed (exit #{result.exit.code})")
+      IO.puts("   Error: #{String.trim(output)}")
     end
   end
 

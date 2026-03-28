@@ -44,8 +44,9 @@ An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python]
 - `ClaudeAgentSDK.Client` remains SDK-local only for the advanced Claude
   control family: hooks, permission callbacks, SDK MCP routing, and control
   request/response state.
-- `ClaudeAgentSDK.Transport` is the SDK-local raw transport surface backed by
-  the shared core transport.
+- `ClaudeAgentSDK.Client` now runs its control lane through
+  `CliSubprocessCore.ProtocolSession`; custom transport injection has been
+  removed. Use `Options.execution_surface` for SSH/local routing.
 
 ## ASM Boundary
 
@@ -345,17 +346,19 @@ prompts = [
 
 ClaudeAgentSDK.query(prompts, opts) |> Enum.to_list()
 
-# Custom transport injection
-ClaudeAgentSDK.query("Hello", opts, {CliSubprocessCore.Transport, []})
-|> Enum.to_list()
+# Execution-surface routing
+opts = %ClaudeAgentSDK.Options{
+  execution_surface: [
+    surface_kind: :static_ssh,
+    transport_options: [
+      destination: "claude.example",
+      user: "sdk",
+      port: 22
+    ]
+  ]
+}
 
-# Lazy transport startup (defer subprocess spawn to handle_continue)
-ClaudeAgentSDK.query(
-  "Hello",
-  opts,
-  {CliSubprocessCore.Transport, [startup_mode: :lazy]}
-)
-|> Enum.to_list()
+ClaudeAgentSDK.query("Hello", opts) |> Enum.to_list()
 
 # Continue a conversation
 ClaudeAgentSDK.continue("Can you give an example?") |> Enum.to_list()
@@ -628,8 +631,7 @@ but it is deprecated and logs a warning once per legacy module.
 `SessionStore` now hydrates on-disk cache in a `handle_continue/2` step. Startup is faster,
 but `list/search` can be briefly incomplete immediately after boot while warmup finishes.
 
-`CliSubprocessCore.Transport`, `ClaudeAgentSDK.Transport`, and `Streaming.Session`
-support `startup_mode: :lazy`
+`CliSubprocessCore.Transport` and `Streaming.Session` support `startup_mode: :lazy`
 to defer subprocess startup to `handle_continue/2`. Deterministic startup
 validation still happens before `start_link` returns, so missing cwd/command
 style failures surface immediately. Once preflight passes, lazy mode can still
@@ -761,9 +763,9 @@ For breaking changes and migration notes, see `CHANGELOG.md`.
 
 **0.12.0 breaking changes:**
 - `Transport.Port` removed. The built-in common transport lane now runs through
-  `CliSubprocessCore.Transport`, and the SDK-local raw transport surface is
-  `ClaudeAgentSDK.Transport`.
-- `Transport.normalize_reason(:port_closed)` removed. Custom transports should return `:not_connected` directly.
+  `CliSubprocessCore.Transport`.
+- Custom transport injection removed from `Client`, `Query`, and common CLI lanes.
+  Use `Options.execution_surface` for SSH/local routing instead.
 - Transport error tuple shape updated: low-level failures now use `{:error, {:transport, reason}}` instead of bare `{:error, reason}`.
 - String prompts now delivered via stdin (`--input-format stream-json`) instead of CLI arg (`-- prompt`).
 

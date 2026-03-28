@@ -2,7 +2,7 @@ defmodule ClaudeAgentSDK.ClientPermissionValidationTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.{Client, Options}
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   test "rejects permission_prompt_tool when can_use_tool is set" do
     Process.flag(:trap_exit, true)
@@ -13,20 +13,15 @@ defmodule ClaudeAgentSDK.ClientPermissionValidationTest do
     }
 
     assert {:error, {:validation_failed, :permission_prompt_tool_conflict}} =
-             Client.start_link(options,
-               transport: MockTransport,
-               transport_opts: [test_pid: self()]
-             )
+             Client.start_link(options)
   end
 
   test "auto-sets permission_prompt_tool when can_use_tool is set" do
     options = %Options{can_use_tool: fn _ -> :ok end}
+    fake_cli = FakeCLI.new!()
 
     {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+      Client.start_link(FakeCLI.options(fake_cli, options))
 
     on_exit(fn ->
       try do
@@ -34,6 +29,8 @@ defmodule ClaudeAgentSDK.ClientPermissionValidationTest do
       catch
         :exit, _ -> :ok
       end
+
+      FakeCLI.cleanup(fake_cli)
     end)
 
     state = :sys.get_state(client)

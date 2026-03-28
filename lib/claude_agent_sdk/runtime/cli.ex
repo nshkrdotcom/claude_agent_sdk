@@ -12,6 +12,7 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
   alias ClaudeAgentSDK.Process, as: SDKProcess
   alias ClaudeAgentSDK.Streaming.EventParser
   alias CliSubprocessCore.Command
+  alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.Event, as: CoreEvent
   alias CliSubprocessCore.Payload
   alias CliSubprocessCore.ProviderProfiles.Claude, as: CoreClaude
@@ -69,6 +70,7 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
 
   @type start_option ::
           {:options, Options.t()}
+          | {:execution_surface, CliSubprocessCore.ExecutionSurface.t() | map() | keyword()}
           | {:subscriber, pid() | {pid(), reference() | :legacy}}
           | {:metadata, map()}
           | {:session_event_tag, atom()}
@@ -82,7 +84,11 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
           {:ok, pid(), %{info: map(), projection_state: ProjectionState.t()}}
           | {:error, term()}
   def start_session(opts) when is_list(opts) do
-    options = opts |> Keyword.get(:options, %Options{}) |> force_partial_messages()
+    options =
+      opts
+      |> Keyword.get(:options, %Options{})
+      |> maybe_override_execution_surface(Keyword.get(opts, :execution_surface))
+      |> force_partial_messages()
 
     session_opts =
       build_session_options(
@@ -190,14 +196,18 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
 
   @spec build_invocation(keyword()) :: {:ok, Command.t()} | {:error, term()}
   def build_invocation(opts) when is_list(opts) do
-    options = opts |> Keyword.get(:options, %Options{}) |> force_partial_messages()
+    options =
+      opts
+      |> Keyword.get(:options, %Options{})
+      |> maybe_override_execution_surface(Keyword.get(opts, :execution_surface))
+      |> force_partial_messages()
 
-    case CLI.resolve_executable(options) do
-      {:ok, executable} ->
+    case CLI.resolve_command_spec(options) do
+      {:ok, %CommandSpec{} = command_spec} ->
         args = CLIConfig.streaming_bidirectional_args() ++ Options.to_stream_json_args(options)
 
         {:ok,
-         Command.new(executable, args,
+         Command.new(command_spec, args,
            cwd: options.cwd,
            env: SDKProcess.__env_vars__(options),
            user: options.user
@@ -213,28 +223,35 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
       @runtime_metadata
       |> Map.merge(Keyword.get(runtime_opts, :metadata, %{}))
 
-    base_opts = [
-      provider: :claude,
-      profile: Profile,
-      subscriber: Keyword.get(runtime_opts, :subscriber),
-      metadata: metadata,
-      session_event_tag:
-        Keyword.get(runtime_opts, :session_event_tag, @default_session_event_tag),
-      options: options,
-      cwd: options.cwd,
-      env: SDKProcess.__env_vars__(options),
-      startup_mode: Keyword.get(runtime_opts, :startup_mode, :eager),
-      task_supervisor: Keyword.get(runtime_opts, :task_supervisor),
-      headless_timeout_ms: Keyword.get(runtime_opts, :headless_timeout_ms, :infinity),
-      max_buffer_size: Keyword.get(runtime_opts, :max_buffer_size, options.max_buffer_size),
-      max_stderr_buffer_size: Keyword.get(runtime_opts, :max_stderr_buffer_size),
-      stderr_callback: options.stderr
-    ]
+    base_opts =
+      [
+        provider: :claude,
+        profile: Profile,
+        subscriber: Keyword.get(runtime_opts, :subscriber),
+        metadata: metadata,
+        session_event_tag:
+          Keyword.get(runtime_opts, :session_event_tag, @default_session_event_tag),
+        options: options,
+        cwd: options.cwd,
+        env: SDKProcess.__env_vars__(options),
+        startup_mode: Keyword.get(runtime_opts, :startup_mode, :eager),
+        task_supervisor: Keyword.get(runtime_opts, :task_supervisor),
+        headless_timeout_ms: Keyword.get(runtime_opts, :headless_timeout_ms, :infinity),
+        max_buffer_size: Keyword.get(runtime_opts, :max_buffer_size, options.max_buffer_size),
+        max_stderr_buffer_size: Keyword.get(runtime_opts, :max_stderr_buffer_size),
+        stderr_callback: options.stderr
+      ] ++ Options.execution_surface_options(options)
 
     Enum.reject(base_opts, fn
       {_key, nil} -> true
       _pair -> false
     end)
+  end
+
+  defp maybe_override_execution_surface(%Options{} = options, nil), do: options
+
+  defp maybe_override_execution_surface(%Options{} = options, execution_surface) do
+    %{options | execution_surface: execution_surface}
   end
 
   defp force_partial_messages(%Options{} = options) do

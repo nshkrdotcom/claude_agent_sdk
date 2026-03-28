@@ -5,49 +5,26 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
 
   alias ClaudeAgentSDK.{Client, Options, Streaming}
   alias ClaudeAgentSDK.Streaming.Session
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   describe "control client path" do
     setup do
       options = %Options{include_partial_messages: true}
+      fake_cli = FakeCLI.new!()
+      on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
+      {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options))
+      on_exit(fn -> safe_stop(client) end)
 
-      transport =
-        receive do
-          {:mock_transport_started, t} -> t
-        end
-
-      assert_receive {:mock_transport_subscribed, _pid}, 1_000
-
-      init_request =
-        receive do
-          {:mock_transport_send, json} -> Jason.decode!(String.trim(json))
-        after
-          1_000 -> flunk("Did not receive initialize request")
-        end
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => init_request["request_id"],
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport, init_response)
+      assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+      _request_id = FakeCLI.respond_initialize_success!(fake_cli)
 
       eventually(
         fn -> :sys.get_state(client).initialized end,
         timeout: 1_000
       )
 
-      %{session: {:control_client, client}, transport: transport, client: client}
+      %{session: {:control_client, client}, transport: fake_cli, client: client}
     end
 
     test "continues streaming after tool_use message_stop", %{
@@ -81,7 +58,7 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
       ]
 
       Enum.each(events_turn_1, fn event ->
-        MockTransport.push_message(transport, Jason.encode!(event))
+        FakeCLI.push_message(transport, event)
         Process.sleep(5)
       end)
 
@@ -97,7 +74,7 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
       ]
 
       Enum.each(events_turn_2, fn event ->
-        MockTransport.push_message(transport, Jason.encode!(event))
+        FakeCLI.push_message(transport, event)
         Process.sleep(5)
       end)
 
@@ -173,5 +150,11 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
       assert text =~ "Running..."
       assert text =~ "Done."
     end
+  end
+
+  defp safe_stop(client) do
+    Client.stop(client)
+  catch
+    :exit, _ -> :ok
   end
 end

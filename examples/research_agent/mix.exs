@@ -42,7 +42,7 @@ defmodule ResearchAgent.MixProject do
       {:claude_agent_sdk, path: "../.."},
 
       # Testing
-      {:mox, "~> 1.0", only: :test},
+      {:mox, "~> 1.2", only: :test},
 
       # Development and quality tools
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

@@ -3,7 +3,6 @@ defmodule ClaudeAgentSDK.QueryCLIStreamCleanupTest do
 
   alias ClaudeAgentSDK.{Message, Options}
   alias ClaudeAgentSDK.Query.CLIStream
-  alias ClaudeAgentSDK.Transport
 
   test "cleanup force-stops stubborn subprocesses that ignore TERM/INT" do
     dir = tmp_dir!("cli_stream_stubborn_cleanup")
@@ -13,18 +12,13 @@ defmodule ClaudeAgentSDK.QueryCLIStreamCleanupTest do
       script_path = write_stubborn_stream_stub!(dir)
 
       options = %Options{
+        path_to_claude_code_executable: script_path,
         env: %{
           "CLAUDE_SDK_TEST_PID_FILE" => pid_file
         }
       }
 
-      stream =
-        CLIStream.stream_args(
-          [],
-          options,
-          {Transport, [command: script_path, args: []]},
-          nil
-        )
+      stream = CLIStream.stream_args([], options, nil, nil)
 
       assert [%Message{type: :assistant}] = Enum.take(stream, 1)
 

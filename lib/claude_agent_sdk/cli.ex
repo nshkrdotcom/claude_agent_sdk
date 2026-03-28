@@ -1,51 +1,58 @@
 defmodule ClaudeAgentSDK.CLI do
   @moduledoc """
-  Centralized Claude CLI discovery and version tracking.
-
-  This module consolidates executable lookup logic and provides helpers
-  for checking installation status, parsing the installed version, and
-  warning when the detected version is below the supported minimum.
+  Claude CLI resolution and version helpers backed by the shared core policy.
   """
 
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Config.Env
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Options
+  alias CliSubprocessCore.{Command, CommandSpec, ProviderCLI}
+  alias CliSubprocessCore.Transport.RunResult
+
+  @doc false
+  @spec find_command_spec() :: {:ok, CommandSpec.t()} | {:error, :not_found}
+  def find_command_spec, do: resolve_command_spec(nil)
 
   @doc """
   Attempts to find the Claude CLI executable.
-
-  Tries candidates in order (`claude-code`, then `claude`) and returns
-  `{:ok, path}` when found or `{:error, :not_found}` otherwise.
   """
   @spec find_executable() :: {:ok, String.t()} | {:error, :not_found}
   def find_executable do
-    with nil <- find_bundled_executable(),
-         nil <- find_on_path(CLIConfig.executable_candidates()),
-         nil <- find_in_known_locations() do
-      {:error, :not_found}
-    else
-      path when is_binary(path) -> {:ok, path}
+    with {:ok, %CommandSpec{program: program}} <- find_command_spec() do
+      {:ok, program}
+    end
+  end
+
+  @doc false
+  @spec resolve_command_spec(Options.t() | nil) :: {:ok, CommandSpec.t()} | {:error, :not_found}
+  def resolve_command_spec(options) do
+    provider_opts =
+      options
+      |> option_overrides()
+      |> maybe_put_bundled_override()
+
+    case ProviderCLI.resolve(:claude, provider_opts, provider_cli_opts()) do
+      {:ok, %CommandSpec{} = spec} ->
+        {:ok, spec}
+
+      {:error, %ProviderCLI.Error{kind: :cli_not_found}} ->
+        {:error, :not_found}
+
+      {:error, _reason} ->
+        {:error, :not_found}
     end
   end
 
   @doc """
   Resolves the CLI executable, honoring option overrides.
-
-  When `path_to_claude_code_executable` or `executable` is set on the options,
-  that value is used directly. Otherwise falls back to normal discovery.
   """
   @spec resolve_executable(Options.t() | nil) :: {:ok, String.t()} | {:error, :not_found}
-  def resolve_executable(%Options{path_to_claude_code_executable: path})
-      when is_binary(path) do
-    {:ok, path}
+  def resolve_executable(options) do
+    with {:ok, %CommandSpec{program: program}} <- resolve_command_spec(options) do
+      {:ok, program}
+    end
   end
-
-  def resolve_executable(%Options{executable: executable}) when is_binary(executable) do
-    {:ok, executable}
-  end
-
-  def resolve_executable(_), do: find_executable()
 
   @doc """
   Like `resolve_executable/1` but raises when the CLI is not available.
@@ -55,6 +62,19 @@ defmodule ClaudeAgentSDK.CLI do
     case resolve_executable(options) do
       {:ok, path} ->
         path
+
+      {:error, :not_found} ->
+        raise ClaudeAgentSDK.Errors.CLINotFoundError,
+          message: "Claude CLI not found. Please install with: #{CLIConfig.install_command()}"
+    end
+  end
+
+  @doc false
+  @spec resolve_command_spec!(Options.t() | nil) :: CommandSpec.t()
+  def resolve_command_spec!(options) do
+    case resolve_command_spec(options) do
+      {:ok, %CommandSpec{} = spec} ->
+        spec
 
       {:error, :not_found} ->
         raise ClaudeAgentSDK.Errors.CLINotFoundError,
@@ -81,29 +101,29 @@ defmodule ClaudeAgentSDK.CLI do
   Returns true if the Claude CLI is installed and discoverable.
   """
   @spec installed?() :: boolean()
-  def installed?, do: match?({:ok, _}, find_executable())
+  def installed?, do: match?({:ok, _}, find_command_spec())
 
   @doc """
   Returns the installed Claude CLI version as a string.
   """
   @spec version() :: {:ok, String.t()} | {:error, term()}
   def version do
-    with {:ok, executable} <- find_executable(),
-         {output, 0} <- System.cmd(executable, ["--version"], stderr_to_stdout: true),
-         {:ok, parsed} <- parse_version(output) do
+    with {:ok, %CommandSpec{} = spec} <- find_command_spec(),
+         {:ok, %RunResult{} = result} <- run_version(spec),
+         {:ok, parsed} <- parse_version(result.stdout) do
       {:ok, parsed}
     else
       {:error, :not_found} = error ->
         error
 
-      {_output, status} when is_integer(status) ->
+      {:error, {:exit_status, status}} ->
         {:error, {:exit_status, status}}
 
       {:error, :parse_failed} ->
         {:error, :parse_failed}
 
-      _ ->
-        {:error, :parse_failed}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -115,9 +135,6 @@ defmodule ClaudeAgentSDK.CLI do
 
   @doc """
   Returns the recommended Claude CLI version for this SDK release.
-
-  This version is tested and known to work with all SDK features including
-  file checkpointing, streaming control protocol, and partial messages.
   """
   @spec recommended_version() :: String.t()
   def recommended_version, do: CLIConfig.recommended_version()
@@ -167,14 +184,49 @@ defmodule ClaudeAgentSDK.CLI do
     :ok
   end
 
-  defp find_bundled_executable do
+  defp provider_cli_opts do
+    [
+      extra_keys: [:path_to_claude_code_executable],
+      known_locations: known_locations(),
+      path_candidates: CLIConfig.executable_candidates()
+    ]
+  end
+
+  defp option_overrides(%Options{} = options) do
+    []
+    |> maybe_put_option(:path_to_claude_code_executable, options.path_to_claude_code_executable)
+    |> maybe_put_option(:executable, options.executable)
+  end
+
+  defp option_overrides(_other), do: []
+
+  defp maybe_put_option(opts, _key, nil), do: opts
+  defp maybe_put_option(opts, _key, ""), do: opts
+  defp maybe_put_option(opts, key, value), do: Keyword.put(opts, key, value)
+
+  defp maybe_put_bundled_override([]) do
+    case bundled_path() do
+      nil -> []
+      path -> [command: path]
+    end
+  end
+
+  defp maybe_put_bundled_override(opts), do: opts
+
+  defp bundled_path do
     case Application.get_env(:claude_agent_sdk, :cli_bundled_path) do
-      path when is_binary(path) ->
+      path when is_binary(path) and path != "" ->
         if File.regular?(path), do: path, else: nil
 
       _ ->
-        bundled_path = default_bundled_path()
-        if is_binary(bundled_path) and File.regular?(bundled_path), do: bundled_path, else: nil
+        default_bundled_path()
+        |> case do
+          path when is_binary(path) ->
+            if File.regular?(path), do: path, else: nil
+
+          _ ->
+            nil
+        end
     end
   end
 
@@ -198,22 +250,11 @@ defmodule ClaudeAgentSDK.CLI do
     end
   end
 
-  defp find_on_path(candidates) when is_list(candidates) do
-    Enum.find_value(candidates, fn candidate ->
-      System.find_executable(candidate)
-    end)
-  end
-
-  defp find_in_known_locations do
-    known =
-      case Application.get_env(:claude_agent_sdk, :cli_known_locations) do
-        paths when is_list(paths) -> paths
-        _ -> default_known_locations()
-      end
-
-    Enum.find_value(known, fn path ->
-      if is_binary(path) and File.regular?(path), do: path, else: nil
-    end)
+  defp known_locations do
+    case Application.get_env(:claude_agent_sdk, :cli_known_locations) do
+      paths when is_list(paths) -> paths
+      _ -> default_known_locations()
+    end
   end
 
   defp default_known_locations do
@@ -227,6 +268,22 @@ defmodule ClaudeAgentSDK.CLI do
       Path.join([home, ".yarn", "bin", "claude"]),
       Path.join([home, ".claude", "local", "claude"])
     ]
+  end
+
+  defp run_version(%CommandSpec{} = spec) do
+    invocation = Command.new(spec, ["--version"])
+
+    case CliSubprocessCore.Command.run(invocation, stderr: :separate) do
+      {:ok, %RunResult{} = result} ->
+        if RunResult.success?(result) do
+          {:ok, result}
+        else
+          {:error, {:exit_status, result.exit.code}}
+        end
+
+      {:error, _reason} ->
+        {:error, :parse_failed}
+    end
   end
 
   defp warn_for_installed_version(installed) do

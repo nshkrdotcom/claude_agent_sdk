@@ -54,7 +54,7 @@ defmodule EmailAgent.MixProject do
       # Development & Testing
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:mox, "~> 1.1", only: :test},
+      {:mox, "~> 1.2", only: :test},
       {:excoveralls, "~> 0.18", only: :test}
     ]
   end

@@ -13,6 +13,7 @@ defmodule ClaudeAgentSDK.Process do
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Errors
   alias CliSubprocessCore.Command, as: CoreCommand
+  alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.Command.Error, as: CoreCommandError
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
   alias CliSubprocessCore.Transport.RunResult
@@ -73,12 +74,12 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp build_claude_invocation(args, %Options{} = options) do
-    case CLI.resolve_executable(options) do
-      {:ok, executable} ->
+    case CLI.resolve_command_spec(options) do
+      {:ok, %CommandSpec{} = command_spec} ->
         _ = CLI.warn_if_outdated()
 
         {:ok,
-         CoreCommand.new(executable, ensure_json_flags(args),
+         CoreCommand.new(command_spec, ensure_json_flags(args),
            cwd: options.cwd,
            env: __env_vars__(options),
            user: options.user
@@ -100,6 +101,7 @@ defmodule ClaudeAgentSDK.Process do
     run_opts =
       [timeout: timeout_ms, stderr: :separate]
       |> maybe_put_stdin(stdin_input)
+      |> Kernel.++(Options.execution_surface_options(options))
 
     CoreCommand.run(invocation, run_opts)
   end
@@ -113,7 +115,7 @@ defmodule ClaudeAgentSDK.Process do
          %CoreCommandError{reason: {:transport, %CoreTransportError{} = error}},
          %Options{} = options
        ) do
-    case ClaudeAgentSDK.Transport.normalize_reason(error) do
+    case normalize_transport_reason(error) do
       :timeout ->
         timeout_state(options)
 
@@ -142,6 +144,41 @@ defmodule ClaudeAgentSDK.Process do
   defp command_error_state(%CoreCommandError{} = error, _options) do
     sdk_error = %Errors.ClaudeSDKError{message: Exception.message(error), cause: error}
     error_state(Exception.message(sdk_error), sdk_error)
+  end
+
+  defp normalize_transport_reason(%CoreTransportError{
+         reason: {:buffer_overflow, actual_size, max_size},
+         context: context
+       }) do
+    %Errors.CLIJSONDecodeError{
+      message: "JSON message exceeded maximum buffer size of #{max_size} bytes",
+      line: Map.get(context, :preview, "") |> truncate_preview(),
+      original_error: {:buffer_overflow, actual_size, max_size}
+    }
+  end
+
+  defp normalize_transport_reason(%CoreTransportError{reason: {:command_not_found, command}})
+       when command in ["claude", "claude-code"],
+       do: :cli_not_found
+
+  defp normalize_transport_reason(%CoreTransportError{reason: reason}),
+    do: normalize_transport_reason(reason)
+
+  defp normalize_transport_reason({:command_not_found, command})
+       when command in ["claude", "claude-code"],
+       do: :cli_not_found
+
+  defp normalize_transport_reason(:noproc), do: :not_connected
+  defp normalize_transport_reason({:call_exit, :noproc}), do: :not_connected
+  defp normalize_transport_reason({:transport, :noproc}), do: :not_connected
+  defp normalize_transport_reason(reason), do: reason
+
+  defp truncate_preview(preview) when is_binary(preview) do
+    if byte_size(preview) > Buffers.error_preview_length() do
+      binary_part(preview, 0, Buffers.error_preview_length()) <> "..."
+    else
+      preview
+    end
   end
 
   defp exit_result_state(%RunResult{} = result, %Options{} = options) do

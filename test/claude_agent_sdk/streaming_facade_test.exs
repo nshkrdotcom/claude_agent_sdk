@@ -7,7 +7,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.{Client, Options, Streaming}
-  alias ClaudeAgentSDK.TestSupport.{MockTransport, TestFixtures}
+  alias ClaudeAgentSDK.TestSupport.{FakeCLI, TestFixtures}
 
   describe "start_session/1 with router integration" do
     @tag :live_cli
@@ -225,18 +225,15 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
 
   ## Test Helpers
 
-  # Start session with MockTransport to avoid real CLI
+  # Start session with a fake CLI process to avoid real Claude invocations.
   defp start_session_with_mock(options) do
-    # For control client sessions, we need to bypass start_session
-    # and directly start Client with MockTransport
-    Client.start_link(
-      %{options | include_partial_messages: true},
-      transport: MockTransport,
-      transport_opts: [test_pid: self()]
-    )
+    fake_cli = FakeCLI.new!()
+    on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
+
+    Client.start_link(FakeCLI.options(fake_cli, %{options | include_partial_messages: true}))
     |> case do
       {:ok, client} ->
-        initialize_control_client(client)
+        initialize_control_client(client, fake_cli)
         {:ok, {:control_client, client}}
 
       error ->
@@ -244,22 +241,9 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
     end
   end
 
-  defp initialize_control_client(client) do
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      after
-        1_000 -> flunk("Did not receive mock transport start")
-      end
-
-    assert_receive {:mock_transport_subscribed, _pid}, 1_000
-
-    init_request =
-      receive do
-        {:mock_transport_send, json} -> Jason.decode!(String.trim(json))
-      after
-        1_000 -> flunk("Did not receive initialize request")
-      end
+  defp initialize_control_client(client, fake_cli) do
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+    {:ok, init_request} = FakeCLI.initialize_request(fake_cli)
 
     init_response = %{
       "type" => "control_response",
@@ -270,7 +254,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
       }
     }
 
-    MockTransport.push_message(transport, init_response)
+    FakeCLI.push_message(fake_cli, init_response)
 
     ClaudeAgentSDK.SupertesterCase.eventually(
       fn -> :sys.get_state(client).initialized end,

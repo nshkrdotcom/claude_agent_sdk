@@ -5,16 +5,25 @@ defmodule ClaudeAgentSDK.SubscriberLifecycleTest do
 
   alias ClaudeAgentSDK.{Client, Message, Options}
   alias ClaudeAgentSDK.Streaming.Session
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   test "client prunes dead subscribers and allows queue progression" do
-    {:ok, client} =
-      Client.start_link(%Options{include_partial_messages: true},
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+    fake_cli = FakeCLI.new!()
 
-    assert_receive {:mock_transport_started, transport}, 1_000
+    {:ok, client} =
+      Client.start_link(FakeCLI.options(fake_cli, %Options{include_partial_messages: true}))
+
+    on_exit(fn ->
+      try do
+        Client.stop(client)
+      catch
+        :exit, _ -> :ok
+      end
+
+      FakeCLI.cleanup(fake_cli)
+    end)
+
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
 
     subscriber1 =
       spawn(fn ->
@@ -62,7 +71,7 @@ defmodule ClaudeAgentSDK.SubscriberLifecycleTest do
       "session_id" => "subscriber-lifecycle"
     }
 
-    MockTransport.push_message(transport, Jason.encode!(assistant))
+    FakeCLI.push_message(fake_cli, assistant)
 
     assert [%Message{type: :assistant}] = Task.await(task2, 1_000)
   end

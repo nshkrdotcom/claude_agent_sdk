@@ -683,18 +683,21 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp cli_version(path) when is_binary(path) do
-    case System.cmd(path, ["--version"], stderr_to_stdout: true) do
-      {output, 0} ->
-        case Regex.run(~r/(\d+\.\d+\.\d+)/, output) do
-          [_, version] -> {:ok, version}
-          _ -> {:error, :parse_failed}
+    invocation = CoreCommand.new(path, ["--version"])
+
+    case CoreCommand.run(invocation, stderr: :separate) do
+      {:ok, %RunResult{} = result} ->
+        if RunResult.success?(result) do
+          case Regex.run(~r/(\d+\.\d+\.\d+)/, result.stdout) do
+            [_, version] -> {:ok, version}
+            _ -> {:error, :parse_failed}
+          end
+        else
+          {:error, {:exit_status, result.exit.code}}
         end
 
-      {_output, status} when is_integer(status) ->
-        {:error, {:exit_status, status}}
+      {:error, %CoreCommandError{} = error} ->
+        {:error, error}
     end
-  rescue
-    error ->
-      {:error, error}
   end
 end

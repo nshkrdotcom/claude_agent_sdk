@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.ClientPermissionHookBridgeTest do
 
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.Permission.Result
-  alias ClaudeAgentSDK.TestSupport.MockTransport
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   setup do
     Process.flag(:trap_exit, true)
@@ -21,7 +21,7 @@ defmodule ClaudeAgentSDK.ClientPermissionHookBridgeTest do
     options = %Options{can_use_tool: callback, permission_mode: :default}
 
     %{client: client, transport: transport, init_request: init_request} =
-      start_client_with_mock_transport(options)
+      start_client_with_fake_cli(options)
 
     on_exit(fn -> stop_client(client) end)
 
@@ -60,7 +60,7 @@ defmodule ClaudeAgentSDK.ClientPermissionHookBridgeTest do
     options = %Options{can_use_tool: callback, permission_mode: :default}
 
     %{client: client, transport: transport, init_request: init_request} =
-      start_client_with_mock_transport(options)
+      start_client_with_fake_cli(options)
 
     on_exit(fn -> stop_client(client) end)
 
@@ -97,7 +97,7 @@ defmodule ClaudeAgentSDK.ClientPermissionHookBridgeTest do
     options = %Options{can_use_tool: callback, permission_mode: :bypass_permissions}
 
     %{client: client, transport: transport, init_request: init_request} =
-      start_client_with_mock_transport(options)
+      start_client_with_fake_cli(options)
 
     on_exit(fn -> stop_client(client) end)
 
@@ -119,26 +119,14 @@ defmodule ClaudeAgentSDK.ClientPermissionHookBridgeTest do
     assert hook_output["permissionDecision"] == "allow"
   end
 
-  defp start_client_with_mock_transport(options) do
-    {:ok, client} =
-      Client.start_link(options,
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
+  defp start_client_with_fake_cli(options) do
+    fake_cli = FakeCLI.new!()
+    on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
 
-    transport =
-      receive do
-        {:mock_transport_started, pid} -> pid
-      after
-        500 -> flunk("Did not receive mock transport start")
-      end
+    {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options))
 
-    init_request =
-      receive do
-        {:mock_transport_send, json} -> Jason.decode!(String.trim(json))
-      after
-        500 -> flunk("Did not receive initialize request")
-      end
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+    {:ok, init_request} = FakeCLI.initialize_request(fake_cli)
 
     init_response = %{
       "type" => "control_response",
@@ -149,9 +137,9 @@ defmodule ClaudeAgentSDK.ClientPermissionHookBridgeTest do
       }
     }
 
-    MockTransport.push_message(transport, init_response)
+    FakeCLI.push_message(fake_cli, init_response)
 
-    %{client: client, transport: transport, init_request: init_request}
+    %{client: client, transport: fake_cli, init_request: init_request}
   end
 
   defp hook_callback_id(init_request) do
@@ -181,7 +169,7 @@ defmodule ClaudeAgentSDK.ClientPermissionHookBridgeTest do
       }
     }
 
-    MockTransport.push_message(transport, request)
+    FakeCLI.push_message(transport, request)
   end
 
   defp send_can_use_tool_request(transport, request_id, tool_name, tool_input) do
@@ -196,19 +184,14 @@ defmodule ClaudeAgentSDK.ClientPermissionHookBridgeTest do
       }
     }
 
-    MockTransport.push_message(transport, request)
+    FakeCLI.push_message(transport, request)
   end
 
   defp find_control_response(transport, request_id) do
-    MockTransport.recorded_messages(transport)
-    |> Enum.map(&Jason.decode!/1)
-    |> Enum.find(fn
-      %{"type" => "control_response", "response" => %{"request_id" => ^request_id}} ->
-        true
-
-      _ ->
-        false
-    end)
+    case FakeCLI.wait_for_control_response(transport, request_id, 0) do
+      {:ok, response} -> response
+      {:error, :timeout} -> nil
+    end
   end
 
   defp stop_client(client) do

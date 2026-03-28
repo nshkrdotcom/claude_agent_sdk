@@ -27,6 +27,7 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   """
 
   alias ClaudeAgentSDK.Schema.ControlProtocol, as: ProtocolSchema
+  alias ClaudeAgentSDK.Permission.Result
 
   @typedoc """
   Request ID for tracking control protocol requests.
@@ -339,6 +340,77 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
     }
 
     ProtocolSchema.validate_hook_response!(response)
+    Jason.encode!(response)
+  end
+
+  @doc """
+  Encodes a permission callback response.
+  """
+  @spec encode_permission_response(request_id(), :allow | :deny, Result.t() | nil, map()) ::
+          String.t()
+  def encode_permission_response(request_id, :allow, result, original_input) do
+    original_input = if is_map(original_input), do: original_input, else: %{}
+
+    response = %{
+      "type" => "control_response",
+      "response" => %{
+        "request_id" => request_id,
+        "subtype" => "success",
+        "response" =>
+          result
+          |> then(&(&1 || Result.allow()))
+          |> Result.to_json_map()
+          |> Map.put_new("updatedInput", original_input)
+      }
+    }
+
+    Jason.encode!(response)
+  end
+
+  def encode_permission_response(request_id, :deny, result, _original_input) do
+    response = %{
+      "type" => "control_response",
+      "response" => %{
+        "request_id" => request_id,
+        "subtype" => "success",
+        "response" => Result.to_json_map(result)
+      }
+    }
+
+    Jason.encode!(response)
+  end
+
+  @doc """
+  Encodes a permission callback error response.
+  """
+  @spec encode_permission_error_response(request_id(), String.t()) :: String.t()
+  def encode_permission_error_response(request_id, error_message) when is_binary(error_message) do
+    response = %{
+      "type" => "control_response",
+      "response" => %{
+        "request_id" => request_id,
+        "subtype" => "error",
+        "error" => error_message
+      }
+    }
+
+    Jason.encode!(response)
+  end
+
+  @doc """
+  Encodes an SDK MCP response.
+  """
+  @spec encode_sdk_mcp_response(request_id(), map()) :: String.t()
+  def encode_sdk_mcp_response(request_id, jsonrpc_response) when is_binary(request_id) do
+    response = %{
+      "type" => "control_response",
+      "response" => %{
+        "subtype" => "success",
+        "request_id" => request_id,
+        "response" => %{"mcp_response" => jsonrpc_response}
+      }
+    }
+
     Jason.encode!(response)
   end
 

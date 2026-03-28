@@ -17,6 +17,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
 
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.Permission.Result
+  alias ClaudeAgentSDK.TestSupport.FakeCLI
 
   describe "Client with permission callbacks" do
     test "Client starts with can_use_tool callback in options" do
@@ -111,8 +112,6 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
   end
 
   describe "Client.set_permission_mode/2" do
-    alias ClaudeAgentSDK.TestSupport.MockTransport
-
     test "set_permission_mode/2 updates permission mode at runtime" do
       callback = fn _context -> Result.allow() end
 
@@ -121,152 +120,66 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         permission_mode: :default
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
+      %{client: client, transport: transport} = start_initialized_client_with_fake_cli(options)
+
+      _request_count =
+        Enum.reduce(
+          [:plan, :accept_edits, :bypass_permissions, :default, :auto, :dont_ask],
+          1,
+          fn mode, request_count ->
+            task = Task.async(fn -> Client.set_permission_mode(client, mode) end)
+            request = wait_for_request(transport, request_count + 1)
+
+            assert request["request"]["subtype"] == "set_permission_mode"
+            assert request["request"]["mode"] == Atom.to_string(mode)
+
+            FakeCLI.push_message(transport, success_response(request["request_id"]))
+            assert :ok = Task.await(task, 500)
+
+            state = :sys.get_state(client)
+            assert state.options.permission_mode == mode
+
+            request_count + 1
+          end
         )
-
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => init_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
-
-      for mode <- [:plan, :accept_edits, :bypass_permissions, :default, :auto, :dont_ask] do
-        task = Task.async(fn -> Client.set_permission_mode(client, mode) end)
-
-        assert_receive {:mock_transport_send, set_mode_json}, 200
-        set_request_id = Jason.decode!(String.trim(set_mode_json))["request_id"]
-
-        response = %{
-          "type" => "control_response",
-          "response" => %{
-            "subtype" => "success",
-            "request_id" => set_request_id,
-            "response" => %{}
-          }
-        }
-
-        MockTransport.push_message(transport_pid, Jason.encode!(response))
-        assert :ok = Task.await(task, 500)
-
-        state = :sys.get_state(client)
-        assert state.options.permission_mode == mode
-      end
-
-      Client.stop(client)
     end
 
     test "set_permission_mode/2 sends control request and applies CLI response" do
       options = %Options{permission_mode: :default}
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      # Capture initialize request and respond
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => init_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+      %{client: client, transport: transport} = start_initialized_client_with_fake_cli(options)
 
       task = Task.async(fn -> Client.set_permission_mode(client, :plan) end)
+      request = wait_for_request(transport, 2)
 
-      assert_receive {:mock_transport_send, set_mode_json}, 200
-      decoded = Jason.decode!(String.trim(set_mode_json))
-      assert decoded["request"]["subtype"] == "set_permission_mode"
-      assert decoded["request"]["mode"] == "plan"
+      assert request["request"]["subtype"] == "set_permission_mode"
+      assert request["request"]["mode"] == "plan"
 
-      set_request_id = decoded["request_id"]
-
-      # Respond with success
-      response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => set_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(response))
+      FakeCLI.push_message(transport, success_response(request["request_id"]))
 
       assert :ok = Task.await(task, 500)
 
       state = :sys.get_state(client)
       assert state.options.permission_mode == :plan
-      Client.stop(client)
     end
 
     test "set_permission_mode/2 surfaces CLI error responses" do
       options = %Options{permission_mode: :default}
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      # Handle initialize handshake
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => init_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+      %{client: client, transport: transport} = start_initialized_client_with_fake_cli(options)
 
       task = Task.async(fn -> Client.set_permission_mode(client, :accept_edits) end)
+      request = wait_for_request(transport, 2)
 
-      assert_receive {:mock_transport_send, set_mode_json}, 200
-      decoded = Jason.decode!(String.trim(set_mode_json))
-      set_request_id = decoded["request_id"]
-
-      error_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "error",
-          "request_id" => set_request_id,
-          "error" => "permission mode rejected"
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(error_response))
+      FakeCLI.push_message(
+        transport,
+        error_response(request["request_id"], "permission mode rejected")
+      )
 
       assert {:error, "permission mode rejected"} = Task.await(task, 500)
 
       state = :sys.get_state(client)
       assert state.options.permission_mode == :default
-      Client.stop(client)
     end
 
     test "set_permission_mode/2 validates mode value" do
@@ -303,8 +216,6 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
   end
 
   describe "can_use_tool response encoding" do
-    alias ClaudeAgentSDK.TestSupport.MockTransport
-
     test "allow response includes updatedInput defaulting to original input" do
       callback = fn _context -> Result.allow() end
 
@@ -313,26 +224,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         permission_mode: :default
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => init_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+      %{transport: transport} = start_initialized_client_with_fake_cli(options)
 
       request_id = "perm_req_1"
 
@@ -347,10 +239,9 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         }
       }
 
-      MockTransport.push_message(transport_pid, Jason.encode!(can_use_tool_request))
+      FakeCLI.push_message(transport, can_use_tool_request)
 
-      assert_receive {:mock_transport_send, response_json}, 500
-      decoded = Jason.decode!(String.trim(response_json))
+      {:ok, decoded} = FakeCLI.wait_for_control_response(transport, request_id, 1_000)
 
       assert decoded["type"] == "control_response"
       assert decoded["response"]["subtype"] == "success"
@@ -358,8 +249,6 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
       assert decoded["response"]["response"]["behavior"] == "allow"
       assert decoded["response"]["response"]["updatedInput"] == %{"command" => "ls"}
       refute Map.has_key?(decoded["response"]["response"], "updated_input")
-
-      Client.stop(client)
     end
 
     test "allow response uses camelCase updatedPermissions" do
@@ -372,26 +261,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         permission_mode: :default
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => init_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+      %{transport: transport} = start_initialized_client_with_fake_cli(options)
 
       request_id = "perm_req_2"
 
@@ -406,18 +276,15 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         }
       }
 
-      MockTransport.push_message(transport_pid, Jason.encode!(can_use_tool_request))
+      FakeCLI.push_message(transport, can_use_tool_request)
 
-      assert_receive {:mock_transport_send, response_json}, 500
-      decoded = Jason.decode!(String.trim(response_json))
+      {:ok, decoded} = FakeCLI.wait_for_control_response(transport, request_id, 1_000)
 
       assert decoded["response"]["response"]["updatedPermissions"] == [
                %{"type" => "setMode", "mode" => "plan"}
              ]
 
       refute Map.has_key?(decoded["response"]["response"], "updated_permissions")
-
-      Client.stop(client)
     end
 
     test "can_use_tool context includes blocked_path when provided by CLI" do
@@ -433,26 +300,7 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         permission_mode: :default
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => init_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+      %{transport: transport} = start_initialized_client_with_fake_cli(options)
 
       request_id = "perm_req_blocked"
 
@@ -468,11 +316,9 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         }
       }
 
-      MockTransport.push_message(transport_pid, Jason.encode!(can_use_tool_request))
+      FakeCLI.push_message(transport, can_use_tool_request)
 
       assert_receive {:blocked_path, "/tmp/blocked.txt"}, 500
-
-      Client.stop(client)
     end
   end
 
@@ -782,8 +628,6 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
   end
 
   describe "mode switching during execution" do
-    alias ClaudeAgentSDK.TestSupport.MockTransport
-
     test "switching from default to bypass_permissions" do
       callback = fn _context -> Result.allow() end
 
@@ -792,47 +636,15 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         permission_mode: :default
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => init_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+      %{client: client, transport: transport} = start_initialized_client_with_fake_cli(options)
 
       task = Task.async(fn -> Client.set_permission_mode(client, :bypass_permissions) end)
+      request = wait_for_request(transport, 2)
 
-      assert_receive {:mock_transport_send, set_mode_json}, 200
-      set_request_id = Jason.decode!(String.trim(set_mode_json))["request_id"]
-
-      response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => set_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(response))
+      FakeCLI.push_message(transport, success_response(request["request_id"]))
 
       assert :ok = Task.await(task, 500)
       assert :sys.get_state(client).options.permission_mode == :bypass_permissions
-
-      Client.stop(client)
     end
 
     test "switching from plan to accept_edits" do
@@ -843,47 +655,64 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
         permission_mode: :plan
       }
 
-      {:ok, client} =
-        Client.start_link(options,
-          transport: MockTransport,
-          transport_opts: [test_pid: self()]
-        )
-
-      assert_receive {:mock_transport_started, transport_pid}, 1_000
-      assert {:ok, init_request_id} = Client.await_init_sent(client, 1_000)
-      assert_receive {:mock_transport_send, _init_json}, 1_000
-
-      init_response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => init_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(init_response))
+      %{client: client, transport: transport} = start_initialized_client_with_fake_cli(options)
 
       task = Task.async(fn -> Client.set_permission_mode(client, :accept_edits) end)
+      request = wait_for_request(transport, 2)
 
-      assert_receive {:mock_transport_send, set_mode_json}, 200
-      set_request_id = Jason.decode!(String.trim(set_mode_json))["request_id"]
-
-      response = %{
-        "type" => "control_response",
-        "response" => %{
-          "subtype" => "success",
-          "request_id" => set_request_id,
-          "response" => %{}
-        }
-      }
-
-      MockTransport.push_message(transport_pid, Jason.encode!(response))
+      FakeCLI.push_message(transport, success_response(request["request_id"]))
 
       assert :ok = Task.await(task, 500)
       assert :sys.get_state(client).options.permission_mode == :accept_edits
-
-      Client.stop(client)
     end
+  end
+
+  defp start_initialized_client_with_fake_cli(options) do
+    fake_cli = FakeCLI.new!()
+    on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
+
+    {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, options))
+    on_exit(fn -> stop_client(client) end)
+
+    assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+    {:ok, init_request} = FakeCLI.initialize_request(fake_cli)
+
+    FakeCLI.push_message(fake_cli, success_response(init_request["request_id"]))
+    assert :ok = Client.await_initialized(client, 1_000)
+
+    %{client: client, transport: fake_cli}
+  end
+
+  defp wait_for_request(fake_cli, count, timeout_ms \\ 1_000) do
+    assert :ok = FakeCLI.wait_for_request_count(fake_cli, count, timeout_ms)
+    Enum.at(FakeCLI.decoded_messages(fake_cli), count - 1)
+  end
+
+  defp success_response(request_id, response \\ %{}) do
+    %{
+      "type" => "control_response",
+      "response" => %{
+        "subtype" => "success",
+        "request_id" => request_id,
+        "response" => response
+      }
+    }
+  end
+
+  defp error_response(request_id, error) do
+    %{
+      "type" => "control_response",
+      "response" => %{
+        "subtype" => "error",
+        "request_id" => request_id,
+        "error" => error
+      }
+    }
+  end
+
+  defp stop_client(client) do
+    Client.stop(client)
+  catch
+    :exit, _ -> :ok
   end
 end
