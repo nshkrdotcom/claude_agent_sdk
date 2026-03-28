@@ -155,7 +155,8 @@ defmodule ClaudeAgentSDK.ClientCancelTest do
     on_exit(fn -> safe_stop(client) end)
 
     assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
-    assert :ok = FakeCLI.wait_for_request_count(fake_cli, 1, 1_000)
+    _request_id = FakeCLI.respond_initialize_success!(fake_cli)
+    assert :ok = Client.await_initialized(client, 1_000)
 
     {client, fake_cli}
   end

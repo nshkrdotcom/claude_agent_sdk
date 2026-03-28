@@ -35,6 +35,7 @@ defmodule ClaudeAgentSDK.ClientControlRequestTimeoutTest do
     }
 
     FakeCLI.push_message(fake_cli, init_response)
+    assert :ok = Client.await_initialized(client, 1_000)
 
     task = Task.async(fn -> Client.set_permission_mode(client, :plan) end)
 
@@ -78,6 +79,7 @@ defmodule ClaudeAgentSDK.ClientControlRequestTimeoutTest do
     }
 
     FakeCLI.push_message(fake_cli, init_response)
+    assert :ok = Client.await_initialized(client, 1_000)
 
     task = Task.async(fn -> Client.set_permission_mode(client, :plan) end)
     assert :ok = FakeCLI.wait_for_request_count(fake_cli, 2, 1_000)

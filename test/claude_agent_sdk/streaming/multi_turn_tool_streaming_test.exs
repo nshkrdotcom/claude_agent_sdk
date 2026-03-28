@@ -32,9 +32,12 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
       transport: transport,
       client: client
     } do
+      parent = self()
+
       collector =
         Task.async(fn ->
           Streaming.send_message(session, "Run a tool")
+          |> Stream.each(&send(parent, {:collected_stream_event, &1}))
           |> Enum.to_list()
         end)
 
@@ -57,10 +60,16 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
         %{"type" => "message_stop"}
       ]
 
-      Enum.each(events_turn_1, fn event ->
-        FakeCLI.push_message(transport, event)
-        Process.sleep(5)
-      end)
+      Enum.each(events_turn_1, &FakeCLI.push_message(transport, &1))
+
+      assert_receive {:collected_stream_event, %{type: :message_start}}, 1_000
+      assert_receive {:collected_stream_event, %{type: :text_delta, text: "Running..."}}, 1_000
+
+      assert_receive {:collected_stream_event, %{type: :message_delta, stop_reason: "tool_use"}},
+                     1_000
+
+      assert_receive {:collected_stream_event, %{type: :message_stop, final_text: "Running..."}},
+                     1_000
 
       events_turn_2 = [
         %{"type" => "message_start", "message" => %{"role" => "assistant"}},
@@ -73,10 +82,19 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
         %{"type" => "message_stop"}
       ]
 
-      Enum.each(events_turn_2, fn event ->
-        FakeCLI.push_message(transport, event)
-        Process.sleep(5)
-      end)
+      Enum.each(events_turn_2, &FakeCLI.push_message(transport, &1))
+
+      assert_receive {:collected_stream_event, %{type: :message_start}}, 1_000
+
+      assert_receive {:collected_stream_event, %{type: :text_delta, text: "Here are the files."}},
+                     1_000
+
+      assert_receive {:collected_stream_event, %{type: :message_delta, stop_reason: "end_turn"}},
+                     1_000
+
+      assert_receive {:collected_stream_event,
+                      %{type: :message_stop, final_text: "Here are the files."}},
+                     1_000
 
       events = Task.await(collector, 2_000)
 
