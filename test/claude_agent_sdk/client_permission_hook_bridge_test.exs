@@ -70,6 +70,9 @@ defmodule ClaudeAgentSDK.ClientPermissionHookBridgeTest do
 
     assert_receive {:permission_callback, "Write"}, 1_000
 
+    {:ok, _permission_response} =
+      FakeCLI.wait_for_control_response(transport, "req_perm_1", 1_000)
+
     send_pre_tool_use_hook(transport, callback_id, "req_hook_2", "Write", %{
       "file_path" => "/tmp/foo"
     })
