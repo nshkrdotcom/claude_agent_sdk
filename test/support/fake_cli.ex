@@ -21,7 +21,9 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
             stdout_dir: nil,
             stderr_dir: nil,
             started_path: nil,
-            stdin_closed_path: nil
+            stdin_closed_path: nil,
+            shutdown_path: nil,
+            shutdown_ack_path: nil
 
   @type t :: %__MODULE__{
           root_dir: String.t(),
@@ -30,7 +32,9 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
           stdout_dir: String.t(),
           stderr_dir: String.t(),
           started_path: String.t(),
-          stdin_closed_path: String.t()
+          stdin_closed_path: String.t(),
+          shutdown_path: String.t(),
+          shutdown_ack_path: String.t()
         }
 
   @spec new!(keyword()) :: t()
@@ -41,6 +45,8 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
     requests_path = Path.join(root_dir, "requests.log")
     started_path = Path.join(root_dir, "started")
     stdin_closed_path = Path.join(root_dir, "stdin_closed")
+    shutdown_path = Path.join(root_dir, "shutdown")
+    shutdown_ack_path = Path.join(root_dir, "shutdown_ack")
     script_path = Path.join(root_dir, "fake_claude")
 
     File.mkdir_p!(stdout_dir)
@@ -55,13 +61,25 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
       stdout_dir: stdout_dir,
       stderr_dir: stderr_dir,
       started_path: started_path,
-      stdin_closed_path: stdin_closed_path
+      stdin_closed_path: stdin_closed_path,
+      shutdown_path: shutdown_path,
+      shutdown_ack_path: shutdown_ack_path
     }
   end
 
   @spec cleanup(t()) :: :ok
-  def cleanup(%__MODULE__{root_dir: root_dir}) when is_binary(root_dir) do
-    File.rm_rf!(root_dir)
+  def cleanup(%__MODULE__{
+        root_dir: root_dir,
+        shutdown_path: shutdown_path,
+        shutdown_ack_path: shutdown_ack_path
+      })
+      when is_binary(root_dir) do
+    if File.dir?(root_dir) do
+      _ = File.write(shutdown_path, "")
+      _ = wait_until(fn -> File.exists?(shutdown_ack_path) or not File.dir?(root_dir) end, 250)
+      remove_root_dir!(root_dir)
+    end
+
     :ok
   end
 
@@ -170,12 +188,7 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
   def initialize_request(%__MODULE__{} = fake_cli, timeout_ms \\ 1_000)
       when is_integer(timeout_ms) and timeout_ms >= 0 do
     case wait_until(
-           fn ->
-             Enum.find(decoded_messages(fake_cli), fn
-               %{"type" => "control_request", "request" => %{"subtype" => "initialize"}} -> true
-               _ -> false
-             end)
-           end,
+           fn -> Enum.find(decoded_messages(fake_cli), &initialize_request?/1) end,
            timeout_ms
          ) do
       {:ok, %{} = request} -> {:ok, request}
@@ -230,7 +243,12 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
         _ -> ".frame"
       end
 
-    path = Path.join(queue_dir, "#{System.unique_integer([:positive])}#{suffix}")
+    sequence =
+      System.unique_integer([:positive, :monotonic])
+      |> Integer.to_string()
+      |> String.pad_leading(20, "0")
+
+    path = Path.join(queue_dir, "#{sequence}#{suffix}")
     File.write!(path, payload)
     :ok
   end
@@ -246,6 +264,14 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
     |> Enum.reject(&(&1 == ""))
   end
 
+  defp initialize_request?(%{
+         "type" => "control_request",
+         "request" => %{"subtype" => "initialize"}
+       }),
+       do: true
+
+  defp initialize_request?(_message), do: false
+
   defp script_contents(root_dir) do
     """
     #!/usr/bin/env python3
@@ -259,15 +285,26 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
     REQUESTS_PATH = os.path.join(ROOT, "requests.log")
     STARTED_PATH = os.path.join(ROOT, "started")
     STDIN_CLOSED_PATH = os.path.join(ROOT, "stdin_closed")
+    SHUTDOWN_PATH = os.path.join(ROOT, "shutdown")
+    SHUTDOWN_ACK_PATH = os.path.join(ROOT, "shutdown_ack")
     STDOUT_DIR = os.path.join(ROOT, "stdout_queue")
     STDERR_DIR = os.path.join(ROOT, "stderr_queue")
 
-    pathlib.Path(STARTED_PATH).touch()
+    try:
+        pathlib.Path(STARTED_PATH).touch()
+    except FileNotFoundError:
+        sys.exit(0)
 
     def flush_queue(queue_dir, stream):
         processed = False
+        exists = True
 
-        for name in sorted(os.listdir(queue_dir)):
+        try:
+            entries = sorted(os.listdir(queue_dir))
+        except FileNotFoundError:
+            return processed, False
+
+        for name in entries:
             path = os.path.join(queue_dir, name)
 
             if not os.path.isfile(path):
@@ -285,7 +322,7 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
             stream.flush()
             processed = True
 
-        return processed
+        return processed, exists
 
     stdin_open = True
     idle_cycles_after_eof = 0
@@ -293,10 +330,23 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
     while True:
         processed = False
 
-        if flush_queue(STDOUT_DIR, sys.stdout.buffer):
+        if os.path.exists(SHUTDOWN_PATH):
+            break
+
+        stdout_processed, stdout_exists = flush_queue(STDOUT_DIR, sys.stdout.buffer)
+
+        if not stdout_exists:
+            break
+
+        if stdout_processed:
             processed = True
 
-        if flush_queue(STDERR_DIR, sys.stderr.buffer):
+        stderr_processed, stderr_exists = flush_queue(STDERR_DIR, sys.stderr.buffer)
+
+        if not stderr_exists:
+            break
+
+        if stderr_processed:
             processed = True
 
         if stdin_open:
@@ -307,14 +357,22 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
 
                 if line == b"":
                     stdin_open = False
-                    pathlib.Path(STDIN_CLOSED_PATH).touch()
+
+                    try:
+                        pathlib.Path(STDIN_CLOSED_PATH).touch()
+                    except FileNotFoundError:
+                        break
+
                     processed = True
                 else:
-                    with open(REQUESTS_PATH, "ab") as handle:
-                        if line.endswith(b"\\n"):
-                            handle.write(line)
-                        else:
-                            handle.write(line + b"\\n")
+                    try:
+                        with open(REQUESTS_PATH, "ab") as handle:
+                            if line.endswith(b"\\n"):
+                                handle.write(line)
+                            else:
+                                handle.write(line + b"\\n")
+                    except FileNotFoundError:
+                        break
 
                     processed = True
         else:
@@ -328,6 +386,11 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
 
         if not processed:
             time.sleep(0.02)
+
+    try:
+        pathlib.Path(SHUTDOWN_ACK_PATH).touch()
+    except FileNotFoundError:
+        pass
     """
   end
 
@@ -340,6 +403,26 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
   defp wait_until(fun, timeout_ms) when is_function(fun, 0) and is_integer(timeout_ms) do
     deadline_ms = System.monotonic_time(:millisecond) + timeout_ms
     do_wait_until(fun, deadline_ms)
+  end
+
+  defp remove_root_dir!(root_dir, attempts \\ 5)
+
+  defp remove_root_dir!(root_dir, attempts) when attempts > 0 do
+    case File.rm_rf(root_dir) do
+      {:ok, _removed} ->
+        :ok
+
+      {:error, reason, _path} ->
+        if attempts == 1 do
+          raise File.Error,
+            reason: reason,
+            action: "remove files and directories recursively from",
+            path: root_dir
+        else
+          Process.sleep(25)
+          remove_root_dir!(root_dir, attempts - 1)
+        end
+    end
   end
 
   defp do_wait_until(fun, deadline_ms) do

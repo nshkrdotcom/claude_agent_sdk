@@ -687,13 +687,12 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
     case CoreCommand.run(invocation, stderr: :separate) do
       {:ok, %RunResult{} = result} ->
-        if RunResult.success?(result) do
-          case Regex.run(~r/(\d+\.\d+\.\d+)/, result.stdout) do
-            [_, version] -> {:ok, version}
-            _ -> {:error, :parse_failed}
-          end
+        with true <- RunResult.success?(result),
+             [_, version] <- Regex.run(~r/(\d+\.\d+\.\d+)/, result.stdout) do
+          {:ok, version}
         else
-          {:error, {:exit_status, result.exit.code}}
+          false -> {:error, {:exit_status, result.exit.code}}
+          _ -> {:error, :parse_failed}
         end
 
       {:error, %CoreCommandError{} = error} ->

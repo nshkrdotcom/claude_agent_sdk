@@ -37,7 +37,7 @@ Sessions are managed by the Claude CLI and are separate from your application's 
 - Query history and transcript helpers remain unchanged at the public SDK surface.
 - Common streaming sessions now run through `ClaudeAgentSDK.Runtime.CLI` on the shared `cli_subprocess_core` session API.
 - The advanced control client family stays SDK-local in `ClaudeAgentSDK.Client` for hooks, permission callbacks, and SDK MCP routing.
-- Both paths share the same core-backed subprocess lane; `ClaudeAgentSDK.Transport` is the SDK-local raw transport surface when you need direct transport access.
+- Both paths share the same core-backed subprocess lane. Select local vs SSH execution with `Options.execution_surface`.
 
 ### Key Concepts
 

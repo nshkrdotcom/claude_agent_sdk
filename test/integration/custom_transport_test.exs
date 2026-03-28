@@ -4,6 +4,9 @@ defmodule Integration.CustomTransportTest do
   alias ClaudeAgentSDK.{Client, Options}
 
   test "rejects removed custom transport injection" do
+    original = Process.flag(:trap_exit, true)
+    on_exit(fn -> Process.flag(:trap_exit, original) end)
+
     assert {:error,
             {:validation_failed,
              {:unsupported_runtime_override, :transport,

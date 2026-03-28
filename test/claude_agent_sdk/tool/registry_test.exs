@@ -208,7 +208,7 @@ defmodule ClaudeAgentSDK.Tool.RegistryTest do
 
       Registry.register_tool(registry, tool)
 
-      assert {:error, %{"is_error" => true, "content" => [%{"text" => message}]}} =
+      assert {:error, {:execution_failed, message}} =
                Registry.execute_tool(registry, "timeout_tool", %{})
 
       assert message =~ "timed out"
@@ -230,7 +230,7 @@ defmodule ClaudeAgentSDK.Tool.RegistryTest do
 
         Registry.register_tool(registry, tool)
 
-        assert {:error, %{"is_error" => true, "content" => [%{"text" => message}]}} =
+        assert {:error, {:execution_failed, message}} =
                  Registry.execute_tool(registry, "strict_tool", %{"a" => 1, "b" => 2})
 
         assert message =~ "task supervisor"

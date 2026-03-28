@@ -244,7 +244,7 @@ defmodule ClaudeAgentSDK.Tool.Registry do
       {execution, state} ->
         cleanup_execution(execution)
         Process.exit(execution.pid, :kill)
-        GenServer.reply(execution.from, tool_error("Tool execution timed out"))
+        GenServer.reply(execution.from, execution_failed("Tool execution timed out"))
         {:noreply, state}
     end
   end
@@ -264,7 +264,7 @@ defmodule ClaudeAgentSDK.Tool.Registry do
 
           GenServer.reply(
             execution.from,
-            tool_error("Tool execution crashed: #{inspect(reason)}")
+            execution_failed("Tool execution crashed: #{inspect(reason)}")
           )
 
           {:noreply, state}
@@ -306,7 +306,7 @@ defmodule ClaudeAgentSDK.Tool.Registry do
         {:noreply, %{state | pending_executions: pending_executions}}
 
       {:error, reason} ->
-        {:reply, tool_error(task_start_error_message(reason)), state}
+        {:reply, execution_failed(task_start_error_message(reason)), state}
     end
   end
 
@@ -345,17 +345,8 @@ defmodule ClaudeAgentSDK.Tool.Registry do
 
   defp execution_timeout_ms, do: Timeouts.tool_execution_ms()
 
-  defp tool_error(message) when is_binary(message) do
-    {:error,
-     %{
-       "content" => [
-         %{
-           "type" => "text",
-           "text" => message
-         }
-       ],
-       "is_error" => true
-     }}
+  defp execution_failed(message) when is_binary(message) do
+    {:error, {:execution_failed, message}}
   end
 
   defp task_start_error_message({:task_supervisor_unavailable, supervisor}) do
@@ -367,7 +358,7 @@ defmodule ClaudeAgentSDK.Tool.Registry do
   rescue
     error ->
       Logger.error("Tool execution error: #{inspect(error)}")
-      tool_error("Error executing tool: #{Exception.message(error)}")
+      execution_failed("Error executing tool: #{Exception.message(error)}")
   end
 
   defp normalize_tool_name(name) when is_binary(name), do: name

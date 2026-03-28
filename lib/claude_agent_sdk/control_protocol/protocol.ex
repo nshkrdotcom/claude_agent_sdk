@@ -26,8 +26,8 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
   See: https://docs.anthropic.com/en/docs/claude-code/sdk
   """
 
-  alias ClaudeAgentSDK.Schema.ControlProtocol, as: ProtocolSchema
   alias ClaudeAgentSDK.Permission.Result
+  alias ClaudeAgentSDK.Schema.ControlProtocol, as: ProtocolSchema
 
   @typedoc """
   Request ID for tracking control protocol requests.

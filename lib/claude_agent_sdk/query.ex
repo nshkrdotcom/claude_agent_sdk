@@ -53,6 +53,7 @@ defmodule ClaudeAgentSDK.Query do
   @spec run(String.t() | Enumerable.t(), Options.t(), term() | nil) ::
           Enumerable.t(ClaudeAgentSDK.Message.t())
   def run(prompt, %Options{} = options, transport \\ nil) do
+    validate_no_transport_override!(transport)
     options = validate_permission_settings!(prompt, options)
 
     if control_client_required?(options) do
@@ -213,6 +214,13 @@ defmodule ClaudeAgentSDK.Query do
   end
 
   defp maybe_enable_partial_messages(options), do: options
+
+  defp validate_no_transport_override!(nil), do: :ok
+
+  defp validate_no_transport_override!(other) do
+    raise ArgumentError,
+          "custom transport injection has been removed; use execution_surface instead: #{inspect(other)}"
+  end
 
   defp resume_input(nil, _session_id), do: nil
 

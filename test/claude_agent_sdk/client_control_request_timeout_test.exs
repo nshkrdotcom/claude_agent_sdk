@@ -52,7 +52,7 @@ defmodule ClaudeAgentSDK.ClientControlRequestTimeoutTest do
     fake_cli = FakeCLI.new!()
 
     {:ok, client} =
-      Client.start_link(FakeCLI.options(fake_cli, options), control_request_timeout_ms: 50)
+      Client.start_link(FakeCLI.options(fake_cli, options), control_request_timeout_ms: 5_000)
 
     on_exit(fn ->
       try do
@@ -82,9 +82,11 @@ defmodule ClaudeAgentSDK.ClientControlRequestTimeoutTest do
     task = Task.async(fn -> Client.set_permission_mode(client, :plan) end)
     assert :ok = FakeCLI.wait_for_request_count(fake_cli, 2, 1_000)
 
+    monitor_ref = Process.monitor(client)
     state = :sys.get_state(client)
     Process.exit(state.protocol_session, :test_disconnect)
 
     assert {:error, {:protocol_session_down, :test_disconnect}} = Task.await(task, 500)
+    assert_receive {:DOWN, ^monitor_ref, :process, ^client, :normal}, 500
   end
 end

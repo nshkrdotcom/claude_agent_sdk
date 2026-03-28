@@ -13,8 +13,8 @@ defmodule ClaudeAgentSDK.Process do
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Errors
   alias CliSubprocessCore.Command, as: CoreCommand
-  alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.Command.Error, as: CoreCommandError
+  alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
   alias CliSubprocessCore.Transport.RunResult
 

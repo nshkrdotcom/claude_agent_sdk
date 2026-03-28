@@ -217,20 +217,23 @@ ClaudeAgentSDK.query("What is Elixir best known for?", options)
 end)
 ```
 
-Query already defaults to the shared core-backed subprocess lane. For advanced
-transport lifecycle control, you can inject the core transport directly:
+Query already defaults to the shared core-backed subprocess lane. To route it
+over SSH, configure `Options.execution_surface`:
 
 ```elixir
-ClaudeAgentSDK.query(
-  "Hello",
-  options,
-  {CliSubprocessCore.Transport, [startup_mode: :lazy]}
-)
-|> Enum.to_list()
-```
+ssh_options = %Options{
+  execution_surface: [
+    surface_kind: :static_ssh,
+    transport_options: [
+      destination: "claude.example",
+      user: "sdk",
+      port: 22
+    ]
+  ]
+}
 
-`ClaudeAgentSDK.Transport` remains available when you need the SDK-local raw
-transport over that same core lane.
+ClaudeAgentSDK.query("Hello", ssh_options) |> Enum.to_list()
+```
 
 ### Using the OptionBuilder
 

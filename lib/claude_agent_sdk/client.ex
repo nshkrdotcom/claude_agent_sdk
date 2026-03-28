@@ -861,24 +861,13 @@ defmodule ClaudeAgentSDK.Client do
         mode_string = to_cli_permission_mode(mode)
         {request_id, json} = Protocol.encode_set_permission_mode_request(mode_string)
 
-        case start_request_task(
-               state,
-               request_id,
-               fn task_ref -> {:set_permission_mode, from, mode, task_ref} end,
-               fn ->
-                 ProtocolSession.request(
-                   state.protocol_session,
-                   %{request_id: request_id, frame: json},
-                   timeout_ms: state.control_request_timeout_ms
-                 )
-               end
-             ) do
-          {:ok, next_state} ->
-            {:noreply, %{next_state | pending_permission_change: request_id}}
-
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
-        end
+        start_protocol_request_task(
+          state,
+          request_id,
+          json,
+          fn task_ref -> {:set_permission_mode, from, mode, task_ref} end,
+          fn next_state -> {:noreply, %{next_state | pending_permission_change: request_id}} end
+        )
     end
   end
 
@@ -923,24 +912,13 @@ defmodule ClaudeAgentSDK.Client do
   def handle_call(:interrupt, from, state) do
     {request_id, json} = Protocol.encode_interrupt_request()
 
-    case start_request_task(
-           state,
-           request_id,
-           fn task_ref -> {:interrupt, from, task_ref} end,
-           fn ->
-             ProtocolSession.request(
-               state.protocol_session,
-               %{request_id: request_id, frame: json},
-               timeout_ms: state.control_request_timeout_ms
-             )
-           end
-         ) do
-      {:ok, next_state} ->
-        {:noreply, next_state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
+    start_protocol_request_task(
+      state,
+      request_id,
+      json,
+      fn task_ref -> {:interrupt, from, task_ref} end,
+      fn next_state -> {:noreply, next_state} end
+    )
   end
 
   def handle_call({:rewind_files, user_message_id}, from, state)
@@ -955,24 +933,13 @@ defmodule ClaudeAgentSDK.Client do
       true ->
         {request_id, json} = Protocol.encode_rewind_files_request(user_message_id)
 
-        case start_request_task(
-               state,
-               request_id,
-               fn task_ref -> {:rewind_files, from, task_ref} end,
-               fn ->
-                 ProtocolSession.request(
-                   state.protocol_session,
-                   %{request_id: request_id, frame: json},
-                   timeout_ms: state.control_request_timeout_ms
-                 )
-               end
-             ) do
-          {:ok, next_state} ->
-            {:noreply, next_state}
-
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
-        end
+        start_protocol_request_task(
+          state,
+          request_id,
+          json,
+          fn task_ref -> {:rewind_files, from, task_ref} end,
+          fn next_state -> {:noreply, next_state} end
+        )
     end
   end
 
@@ -1195,38 +1162,10 @@ defmodule ClaudeAgentSDK.Client do
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, reason}, state) when is_reference(ref) do
-    cond do
-      ref == state.protocol_session_monitor_ref ->
-        handle_protocol_session_down(reason, state)
-
-      true ->
-        case find_subscriber_ref_by_monitor(state, ref) do
-          nil ->
-            case find_callback_by_monitor_ref(state.pending_callbacks, ref) do
-              nil ->
-                case pop_pending_request_by_task_ref(state, ref) do
-                  {nil, next_state} ->
-                    {:noreply, next_state}
-
-                  {request_id, pending_entry, next_state} ->
-                    handle_pending_request_result(
-                      request_id,
-                      pending_entry,
-                      {:error, {:task_exit, reason}},
-                      next_state
-                    )
-                end
-
-              {_request_id, _entry} when reason == :normal ->
-                {:noreply, state}
-
-              {request_id, entry} ->
-                handle_callback_down(state, request_id, entry, reason)
-            end
-
-          subscriber_ref ->
-            {:noreply, drop_subscriber(state, subscriber_ref, skip_demonitor: true)}
-        end
+    if ref == state.protocol_session_monitor_ref do
+      handle_protocol_session_down(reason, state)
+    else
+      handle_non_session_down(ref, reason, state)
     end
   end
 
@@ -1775,6 +1714,35 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
+  defp start_protocol_request_task(
+         state,
+         request_id,
+         json,
+         build_pending_entry,
+         on_success
+       )
+       when is_binary(request_id) and is_binary(json) and is_function(build_pending_entry, 1) and
+              is_function(on_success, 1) do
+    case start_request_task(
+           state,
+           request_id,
+           build_pending_entry,
+           fn ->
+             ProtocolSession.request(
+               state.protocol_session,
+               %{request_id: request_id, frame: json},
+               timeout_ms: state.control_request_timeout_ms
+             )
+           end
+         ) do
+      {:ok, next_state} ->
+        on_success.(next_state)
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
   defp pop_pending_request_by_task_ref(state, task_ref) when is_reference(task_ref) do
     Enum.reduce_while(state.pending_requests, {nil, state}, fn {request_id, pending_entry},
                                                                _acc ->
@@ -1817,30 +1785,14 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  defp dispatch_request_result(request_id, pending_entry, result, state) do
-    response_data =
-      case result do
-        {:ok, response} ->
-          %{"response" => response}
-
-        {:error, reason} ->
-          %{
-            "response" => %{
-              "request_id" => request_id,
-              "subtype" => "error",
-              "error" => request_error_message(reason)
-            }
-          }
-      end
-
-    response = response_data["response"]
+  defp dispatch_request_result(request_id, pending_entry, {:ok, response}, state) do
+    response_data = %{"response" => response}
     dispatch_control_response(pending_entry, response_data, response, request_id, state)
   end
 
-  defp request_error_message(:timeout), do: "timeout"
-  defp request_error_message({:task_exit, reason}), do: format_exit_reason(reason)
-  defp request_error_message(reason) when is_binary(reason), do: reason
-  defp request_error_message(reason), do: inspect(reason)
+  defp dispatch_request_result(request_id, pending_entry, {:error, reason}, state) do
+    dispatch_control_request_failure(pending_entry, reason, request_id, state)
+  end
 
   defp handle_initialize_response(response, request_id, state) do
     case response["subtype"] do
@@ -1867,6 +1819,95 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
+  defp dispatch_control_request_failure(
+         {:set_model, from, _requested_model, _task_ref},
+         reason,
+         request_id,
+         state
+       ) do
+    Logger.error("Model change request failed", request_id: request_id, error: inspect(reason))
+    GenServer.reply(from, {:error, reason})
+    state
+  end
+
+  defp dispatch_control_request_failure(
+         {:set_permission_mode, from, _requested_mode, _task_ref},
+         reason,
+         request_id,
+         state
+       ) do
+    Logger.error("Permission mode change rejected",
+      request_id: request_id,
+      error: inspect(reason)
+    )
+
+    GenServer.reply(from, {:error, reason})
+    %{state | pending_permission_change: nil}
+  end
+
+  defp dispatch_control_request_failure(
+         {action, from, _task_ref},
+         reason,
+         request_id,
+         state
+       )
+       when action in [:interrupt, :rewind_files] do
+    Logger.error("#{action} request failed", request_id: request_id, error: inspect(reason))
+    GenServer.reply(from, {:error, reason})
+    state
+  end
+
+  defp dispatch_control_request_failure(
+         {:mcp_status, from, _task_ref},
+         reason,
+         request_id,
+         state
+       ) do
+    Logger.error("mcp_status request failed", request_id: request_id, error: inspect(reason))
+    GenServer.reply(from, {:error, reason})
+    state
+  end
+
+  defp dispatch_control_request_failure(nil, _reason, _request_id, state), do: state
+
+  defp handle_non_session_down(ref, reason, state) do
+    case find_subscriber_ref_by_monitor(state, ref) do
+      nil ->
+        handle_non_subscriber_down(ref, reason, state)
+
+      subscriber_ref ->
+        {:noreply, drop_subscriber(state, subscriber_ref, skip_demonitor: true)}
+    end
+  end
+
+  defp handle_non_subscriber_down(ref, reason, state) do
+    case find_callback_by_monitor_ref(state.pending_callbacks, ref) do
+      nil ->
+        handle_pending_request_down(ref, reason, state)
+
+      {_request_id, _entry} when reason == :normal ->
+        {:noreply, state}
+
+      {request_id, entry} ->
+        handle_callback_down(state, request_id, entry, reason)
+    end
+  end
+
+  defp handle_pending_request_down(ref, reason, state) do
+    case pop_pending_request_by_task_ref(state, ref) do
+      {nil, next_state} ->
+        {:noreply, next_state}
+
+      {request_id, pending_entry, next_state} ->
+        handle_pending_request_result(
+          request_id,
+          pending_entry,
+          {:error, {:task_exit, reason}},
+          next_state
+        )
+    end
+  end
+
   defp handle_protocol_session_down(reason, state) do
     Logger.info("Protocol session terminated", reason: inspect(reason))
 
@@ -1890,14 +1931,12 @@ defmodule ClaudeAgentSDK.Client do
         original_error: reason
       }
 
-    cond do
-      transport_error_mode?(state, :raise) ->
-        broadcast_transport_error(state, error)
-        fail_pending_control_requests(state, {:decode_error, error})
-
-      true ->
-        Logger.warning("Failed to decode protocol message", reason: inspect(reason))
-        state
+    if transport_error_mode?(state, :raise) do
+      broadcast_transport_error(state, error)
+      fail_pending_control_requests(state, {:decode_error, error})
+    else
+      Logger.warning("Failed to decode protocol message", reason: inspect(reason))
+      state
     end
   end
 
@@ -2321,18 +2360,16 @@ defmodule ClaudeAgentSDK.Client do
         {:reply, {:ok, {:permission_response, :allow, nil, tool_input}}, state}
 
       callback when is_function(callback, 1) ->
+        permission_request = %{
+          tool_name: tool_name,
+          tool_input: tool_input,
+          suggestions: suggestions,
+          blocked_path: blocked_path,
+          session_id: session_id
+        }
+
         {:noreply,
-         start_permission_callback_task(
-           state,
-           request_id,
-           from,
-           callback,
-           tool_name,
-           tool_input,
-           suggestions,
-           blocked_path,
-           session_id
-         )}
+         start_permission_callback_task(state, request_id, from, callback, permission_request)}
     end
   end
 
@@ -2353,32 +2390,22 @@ defmodule ClaudeAgentSDK.Client do
     end)
   end
 
-  defp start_permission_callback_task(
-         state,
-         request_id,
-         from,
-         callback,
-         tool_name,
-         tool_input,
-         suggestions,
-         blocked_path,
-         session_id
-       ) do
+  defp start_permission_callback_task(state, request_id, from, callback, permission_request) do
     start_callback_task(state, request_id, :permission, from, fn signal, server ->
       result =
         execute_permission_callback(
           callback,
-          tool_name,
-          tool_input,
-          suggestions,
-          blocked_path,
-          session_id,
+          permission_request.tool_name,
+          permission_request.tool_input,
+          permission_request.suggestions,
+          permission_request.blocked_path,
+          permission_request.session_id,
           signal
         )
 
       send(
         server,
-        {:callback_result, request_id, :permission, signal, tool_input, result}
+        {:callback_result, request_id, :permission, signal, permission_request.tool_input, result}
       )
     end)
   end
@@ -2905,10 +2932,13 @@ defmodule ClaudeAgentSDK.Client do
       "id" => message_id,
       "error" => %{
         "code" => -32_603,
-        "message" => "Internal error: #{inspect(reason)}"
+        "message" => "Internal error: #{format_sdk_mcp_internal_reason(reason)}"
       }
     }
   end
+
+  defp format_sdk_mcp_internal_reason(reason) when is_binary(reason), do: reason
+  defp format_sdk_mcp_internal_reason(reason), do: inspect(reason)
 
   @doc false
   @spec handle_sdk_mcp_jsonrpc(pid(), String.t(), map(), map()) :: map()
@@ -2998,6 +3028,9 @@ defmodule ClaudeAgentSDK.Client do
           "id" => message_id,
           "result" => normalize_tool_result(result)
         }
+
+      {:error, {:execution_failed, message}} ->
+        sdk_mcp_internal_error_response(message_id, message)
 
       {:error, reason} ->
         %{

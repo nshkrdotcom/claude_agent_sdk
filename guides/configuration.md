@@ -1078,24 +1078,20 @@ The SDK automatically selects the appropriate transport based on configured feat
 
 ### Transport Startup Mode
 
-`CliSubprocessCore.Transport`, `ClaudeAgentSDK.Transport`, and
-`Streaming.Session` support `startup_mode: :eager | :lazy` in their start
-options.
+`Streaming.Session` and the shared core transport lane support
+`startup_mode: :eager | :lazy`.
 
 - `:eager` (default): subprocess startup happens in `init/1`
 - `:lazy`: subprocess startup is deferred to `handle_continue/2`
 
 ```elixir
-ClaudeAgentSDK.query(
-  "Hello",
-  %Options{},
-  {CliSubprocessCore.Transport, [startup_mode: :lazy]}
-)
-|> Enum.to_list()
+%Options{
+  execution_surface: [
+    surface_kind: :local,
+    transport_options: [startup_mode: :lazy]
+  ]
+}
 ```
-
-`ClaudeAgentSDK.Transport` remains the SDK-local raw transport adapter over the
-same transport lane.
 
 In lazy mode, `start_link` can return `{:ok, pid}` before subprocess creation.
 If startup later fails (for example invalid cwd/command), the process exits with the startup reason.

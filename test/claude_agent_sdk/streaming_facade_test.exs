@@ -119,7 +119,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
       {:ok, {:control_client, client} = session} = start_session_with_mock(options)
 
       :sys.replace_state(client, fn state ->
-        %{state | transport: nil}
+        %{state | protocol_session: nil}
       end)
 
       task =

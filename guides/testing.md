@@ -646,44 +646,32 @@ test "eventually receives expected message" do
 end
 ```
 
-### Using Mock Transport
+### Using The Fake CLI Harness
 
-For testing the control protocol client:
+For testing the control protocol client on the finished Stage 3 boundary:
 
 ```elixir
 alias ClaudeAgentSDK.Client
-alias ClaudeAgentSDK.TestSupport.MockTransport
+alias ClaudeAgentSDK.TestSupport.FakeCLI
 
 test "client handles messages correctly" do
-  test_pid = self()
+  fake_cli = FakeCLI.new!()
+  on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
 
-  # Start client with mock transport
-  {:ok, client} = Client.start_link(%Options{},
-    transport: MockTransport,
-    transport_opts: [test_pid: test_pid]
-  )
+  {:ok, client} = Client.start_link(FakeCLI.options(fake_cli, %Options{}))
+  on_exit(fn -> Client.stop(client) end)
 
-  # Receive transport start notification
-  assert_receive {:mock_transport_started, transport_pid}
+  assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+  _request_id = FakeCLI.respond_initialize_success!(fake_cli)
+  assert :ok = Client.await_initialized(client, 1_000)
 
-  # Subscribe to get messages
-  assert_receive {:mock_transport_subscribed, {_pid, :legacy}}
-
-  # Push a message to the client
-  response = %{
+  FakeCLI.push_message(fake_cli, %{
     "type" => "assistant",
     "message" => %{"content" => "Hello"}
-  }
-  MockTransport.push_message(transport_pid, Jason.encode!(response))
+  })
 
-  # Verify message was processed
-  # ...
-
-  # Get recorded outbound messages
-  messages = MockTransport.recorded_messages(transport_pid)
-  assert length(messages) > 0
-
-  Client.stop(client)
+  assert {:ok, [%ClaudeAgentSDK.Message{type: :assistant} | _]} =
+           Client.receive_response(client)
 end
 ```
 

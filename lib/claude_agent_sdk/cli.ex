@@ -108,22 +108,18 @@ defmodule ClaudeAgentSDK.CLI do
   """
   @spec version() :: {:ok, String.t()} | {:error, term()}
   def version do
-    with {:ok, %CommandSpec{} = spec} <- find_command_spec(),
-         {:ok, %RunResult{} = result} <- run_version(spec),
-         {:ok, parsed} <- parse_version(result.stdout) do
-      {:ok, parsed}
-    else
-      {:error, :not_found} = error ->
+    case find_command_spec() do
+      {:ok, %CommandSpec{} = spec} ->
+        case run_version(spec) do
+          {:ok, %RunResult{} = result} ->
+            parse_version(result.stdout)
+
+          {:error, _reason} = error ->
+            error
+        end
+
+      {:error, _reason} = error ->
         error
-
-      {:error, {:exit_status, status}} ->
-        {:error, {:exit_status, status}}
-
-      {:error, :parse_failed} ->
-        {:error, :parse_failed}
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
@@ -216,19 +212,19 @@ defmodule ClaudeAgentSDK.CLI do
   defp bundled_path do
     case Application.get_env(:claude_agent_sdk, :cli_bundled_path) do
       path when is_binary(path) and path != "" ->
-        if File.regular?(path), do: path, else: nil
+        existing_file(path)
 
       _ ->
         default_bundled_path()
-        |> case do
-          path when is_binary(path) ->
-            if File.regular?(path), do: path, else: nil
-
-          _ ->
-            nil
-        end
+        |> existing_file()
     end
   end
+
+  defp existing_file(path) when is_binary(path) do
+    if File.regular?(path), do: path, else: nil
+  end
+
+  defp existing_file(_path), do: nil
 
   defp default_bundled_path do
     cli_name =

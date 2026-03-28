@@ -29,7 +29,7 @@ The Claude Agent SDK provides two streaming approaches:
 - The common CLI streaming/session lane now runs on `cli_subprocess_core` through `ClaudeAgentSDK.Runtime.CLI`.
 - `ClaudeAgentSDK.Streaming.Session` stays SDK-local as the public session process and preserves the existing stream/subscriber contract.
 - The advanced control client family still lives in `ClaudeAgentSDK.Client` for hooks, permission callbacks, and SDK MCP features.
-- Both lanes share the same core-backed transport lane; `ClaudeAgentSDK.Transport` is the SDK-local raw transport adapter over `CliSubprocessCore.Transport`.
+- Both lanes share the same core-backed subprocess lane. Use `Options.execution_surface` to route work over local or SSH execution surfaces.
 
 ### Schema Ownership
 
@@ -159,32 +159,30 @@ ClaudeAgentSDK.query(prompts, %Options{})
 If the internal input-stream worker crashes (or EOF signaling fails), the query
 now emits an explicit `:error_during_execution` result message instead of waiting indefinitely.
 
-### Custom Transport Injection
+### Execution Surface Routing
 
-Query flows already use the shared core transport by default. You can inject
-either `CliSubprocessCore.Transport` or the SDK-local raw transport surface
-when you need explicit transport control:
+Query flows already use the shared core runtime by default. Route them over SSH
+or other core-owned surfaces with `Options.execution_surface`:
 
 ```elixir
-ClaudeAgentSDK.query("Hello", %Options{}, {CliSubprocessCore.Transport, []})
+opts = %Options{
+  execution_surface: [
+    surface_kind: :static_ssh,
+    transport_options: [
+      destination: "claude.example",
+      user: "sdk",
+      port: 22
+    ]
+  ]
+}
+
+ClaudeAgentSDK.query("Hello", opts)
 |> Enum.to_list()
 ```
 
-You can also defer subprocess startup with lazy mode:
-
-```elixir
-ClaudeAgentSDK.query(
-  "Hello",
-  %Options{},
-  {CliSubprocessCore.Transport, [startup_mode: :lazy]}
-)
-|> Enum.to_list()
-```
-
-`ClaudeAgentSDK.Transport` accepts the same options when existing code needs
-the SDK-local raw transport surface.
-
-In lazy mode, startup errors can happen after `start_link` succeeds and are delivered as process exits.
+Custom transport injection has been removed from `Query`, `Client`, and the
+common CLI lane. Add new transport families in `cli_subprocess_core`, then
+select them through `execution_surface`.
 
 ### Query Streaming Module Configuration
 

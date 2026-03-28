@@ -15,6 +15,7 @@ defmodule ClaudeAgentSDK.ClientInitSentTest do
 
     assert {:ok, request_id} = Client.await_init_sent(client, 1_000)
     assert is_binary(request_id)
+    assert :ok = FakeCLI.wait_for_request_count(fake_cli, 1, 1_000)
 
     [init_json | _] = FakeCLI.recorded_messages(fake_cli)
     decoded = Jason.decode!(String.trim(init_json))

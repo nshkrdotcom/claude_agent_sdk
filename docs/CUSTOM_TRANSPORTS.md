@@ -1,133 +1,41 @@
 # Custom Transport Guide
 
-The new transport abstraction lets you decide where the SDK sends control frames. This guide shows how to build, configure, and test a custom transport module.
+Custom transport injection has been removed from `ClaudeAgentSDK.Client`,
+`ClaudeAgentSDK.Query`, and the common CLI lane.
 
-## Boundary Note
+## What To Use Instead
 
-- Common CLI transport ownership lives in `cli_subprocess_core`.
-- `ClaudeAgentSDK.Transport` is the SDK-local raw transport surface backed by
-  `cli_subprocess_core`.
-- Build a custom `ClaudeAgentSDK.Transport` implementation only when you need a
-  non-common transport family or a deliberate transport override.
+- Use `ClaudeAgentSDK.Options.execution_surface` to select where Claude runs
+  (local subprocess, static SSH, or other core-owned execution surfaces).
+- Keep provider-specific Claude behavior in `claude_agent_sdk`.
+- Add new transport or execution-surface families in `cli_subprocess_core`,
+  then select them from the SDK through `execution_surface`.
 
-## 1. Implement the Behaviour
-
-Create a module that implements `ClaudeAgentSDK.Transport`:
-
-```elixir
-defmodule MyApp.Transport.WebSocket do
-  @behaviour ClaudeAgentSDK.Transport
-
-  alias MyApp.Transport.WebSocket.State
-
-  def start(opts) do
-    WebSockex.start(__MODULE__, opts[:url], %State{subscribers: MapSet.new(), opts: opts})
-  end
-
-  def start_link(opts) do
-    WebSockex.start_link(opts[:url], __MODULE__, %State{subscribers: MapSet.new(), opts: opts})
-  end
-
-  def send(pid, message) do
-    WebSockex.send_frame(pid, {:text, append_newline(message)})
-  end
-
-  def subscribe(pid, subscriber) do
-    GenServer.call(pid, {:subscribe, subscriber})
-  end
-
-  def subscribe(pid, subscriber, _tag) do
-    subscribe(pid, subscriber)
-  end
-
-  def close(pid), do: WebSockex.close(pid)
-  def force_close(pid), do: close(pid)
-
-  def status(pid), do: GenServer.call(pid, :status)
-  def stderr(_pid), do: ""
-
-  defp append_newline(message) when is_binary(message) do
-    if String.ends_with?(message, \"\\n\"), do: message, else: message <> \"\\n\"
-  end
-end
-```
-
-The callbacks should:
-
-- **start_link/1** – boot whatever process manages your connection
-- **start/1** – optional unlinked startup path (recommended for stream/resource usage)
-- **send/2** – forward newline-terminated JSON strings to Claude (or your proxy)
-- **subscribe/2** – register calling processes so they receive `{:transport_message, payload}` messages
-- **subscribe/3** – optional tagged subscription (`:legacy | reference()`) for namespaced events
-- **close/1** – shut down gracefully
-- **force_close/1** – optional fast shutdown path (terminate transport immediately)
-- **status/1** – expose a health indicator (connected/disconnected/error)
-- **stderr/1** – optional stderr buffer accessor; return `""` on unavailable/error
-
-When supporting tagged subscriptions (`subscribe/3`), emit:
-- `{:claude_agent_sdk_transport, ref, {:message, line}}`
-- `{:claude_agent_sdk_transport, ref, {:error, reason}}`
-- `{:claude_agent_sdk_transport, ref, {:stderr, data}}`
-- `{:claude_agent_sdk_transport, ref, {:exit, reason}}`
-
-Transport failures should use the typed shape: `{:error, {:transport, reason}}`.
-
-## 2. Start the Client with Your Transport
+## Example
 
 ```elixir
-{:ok, client} =
-  ClaudeAgentSDK.Client.start_link(%ClaudeAgentSDK.Options{},
-    transport: MyApp.Transport.WebSocket,
-    transport_opts: [
-      url: \"wss://my-edge.example.com/claude\",
-      headers: [{\"authorization\", \"Bearer ...\"}]
+opts = %ClaudeAgentSDK.Options{
+  execution_surface: [
+    surface_kind: :static_ssh,
+    transport_options: [
+      destination: "claude.example",
+      user: "sdk",
+      port: 22
     ]
-  )
+  ]
+}
+
+ClaudeAgentSDK.query("Hello", opts) |> Enum.to_list()
 ```
 
-`transport_opts` is opaque to the SDK and is passed directly to your transport's `start_link/1`.
+## Control Client Boundary
 
-## 3. Testing Strategy
+`ClaudeAgentSDK.Client` now owns only Claude-specific control semantics:
 
-Use the provided mock transport for unit tests and your real transport for an integration smoke test. The `examples/runtime_control/transport_swap.exs` script showcases this pattern end-to-end with both fast and delayed transport configurations.
+- hooks
+- permission callbacks
+- SDK MCP routing
+- provider-native message projection
 
-```elixir
-defmodule MyApp.Transport.WebSocketTest do
-  use ClaudeAgentSDK.SupertesterCase
-
-  alias ClaudeAgentSDK.TestSupport.MockTransport
-
-  test \"falls back to mock transport in test env\" do
-    {:ok, client} =
-      Client.start_link(%Options{},
-        transport: MockTransport,
-        transport_opts: [test_pid: self()]
-      )
-
-    :ok = GenServer.call(client, {:subscribe})
-    MockTransport.push_message(self(), %{\"type\" => \"assistant\", \"message\" => %{\"content\" => \"hi\"}})
-    assert_receive {:claude_message, %ClaudeAgentSDK.Message{type: :assistant}}
-  end
-```
-
-For your WebSocket transport write a focused integration test that uses a local echo server or a controllable fake.
-
-## 4. Pitfalls & Tips
-
-- Always append a newline to outbound JSON to mirror the CLI protocol.
-- When broadcasting inbound messages, send them as raw binaries; the client handles decoding.
-- Make sure to handle `{:DOWN, _, :process, subscriber, _}` messages so dead subscribers are removed.
-- Return `{:error, {:transport, reason}}` from `start_link/1` if you cannot initialise the connection. This keeps transport failures on the documented typed contract.
-- Use the new `ClaudeAgentSDK.SupertesterCase.eventually/2` helper in tests to avoid `Process.sleep/1`.
-
-## 5. Reference Implementation
-
-See `CliSubprocessCore.Transport` for the shared built-in runtime lane and
-`ClaudeAgentSDK.Transport` for the SDK-local raw transport surface on top of
-that core. The core
-transport owns:
-
-- subprocess lifecycle management
-- subscriber broadcasting
-- connection status
-- shutdown and interrupt semantics
+The underlying session and channel lifecycle live in
+`CliSubprocessCore.ProtocolSession`.
