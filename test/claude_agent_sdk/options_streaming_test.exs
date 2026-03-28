@@ -153,22 +153,32 @@ defmodule ClaudeAgentSDK.OptionsStreamingTest do
     end
 
     test "generates correct CLI args with streaming and standard options" do
-      options = %Options{
-        model: "opus",
-        max_turns: 5,
-        verbose: true,
-        include_partial_messages: true
-      }
+      TestEnvHelpers.with_system_env(
+        [
+          {Env.provider_backend(), "ollama"},
+          {Env.external_model_overrides(), nil},
+          {Env.anthropic_base_url(), nil},
+          {Env.anthropic_auth_token(), nil}
+        ],
+        fn ->
+          options = %Options{
+            model: "opus",
+            max_turns: 5,
+            verbose: true,
+            include_partial_messages: true
+          }
 
-      args = Options.to_args(options)
+          args = Options.to_args(options)
 
-      # Should have all expected flags
-      assert "--model" in args
-      assert "opus" in args
-      assert "--max-turns" in args
-      assert "5" in args
-      assert "--verbose" in args
-      assert "--include-partial-messages" in args
+          # Should have all expected flags
+          assert "--model" in args
+          assert "opus" in args
+          assert "--max-turns" in args
+          assert "5" in args
+          assert "--verbose" in args
+          assert "--include-partial-messages" in args
+        end
+      )
     end
   end
 

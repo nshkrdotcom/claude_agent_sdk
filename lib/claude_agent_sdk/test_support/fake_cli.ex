@@ -1,16 +1,5 @@
 defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
-  @moduledoc """
-  File-backed fake Claude CLI harness for exercising the real stdio/session path.
-
-  The harness materializes an executable stub that:
-
-  - records every stdin line the SDK sends
-  - replays queued stdout/stderr frames written by the test
-  - marks startup and stdin-closed lifecycle checkpoints on disk
-
-  This keeps tests on the Stage 1 core boundary while preserving deterministic
-  control over protocol traffic.
-  """
+  @moduledoc false
 
   alias ClaudeAgentSDK.Options
   alias CliSubprocessCore.TestSupport.FakeSSH

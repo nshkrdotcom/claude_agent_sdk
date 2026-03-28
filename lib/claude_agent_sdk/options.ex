@@ -361,6 +361,20 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   @doc false
+  @spec replace_model(t(), model_name() | nil) :: t()
+  def replace_model(%__MODULE__{} = options, model) when is_nil(model) or is_binary(model) do
+    %{options | model: model, model_payload: nil}
+  end
+
+  @doc false
+  @spec replace_model(t(), model_name() | nil, model_name() | nil) :: t()
+  def replace_model(%__MODULE__{} = options, model, fallback_model)
+      when (is_nil(model) or is_binary(model)) and
+             (is_nil(fallback_model) or is_binary(fallback_model)) do
+    %{options | model: model, fallback_model: fallback_model, model_payload: nil}
+  end
+
+  @doc false
   @spec normalize_execution_surface(term()) :: {:ok, ExecutionSurface.t()} | {:error, term()}
   def normalize_execution_surface(nil), do: ExecutionSurface.new([])
 
@@ -1074,7 +1088,7 @@ defmodule ClaudeAgentSDK.Options do
         normalized
 
       {:error, reason} ->
-        if explicit_model_resolution?(options) do
+        if strict_model_resolution?(options) do
           raise ArgumentError, "model resolution failed for :claude: #{inspect(reason)}"
         else
           options
@@ -1100,9 +1114,8 @@ defmodule ClaudeAgentSDK.Options do
     }
   end
 
-  defp explicit_model_resolution?(%__MODULE__{} = options) do
+  defp strict_model_resolution?(%__MODULE__{} = options) do
     present?(options.model_payload) or
-      present?(options.model) or
       present?(options.provider_backend) or
       present?(options.external_model_overrides) or
       present?(options.anthropic_base_url) or
@@ -1118,6 +1131,7 @@ defmodule ClaudeAgentSDK.Options do
     Map.get(payload, :resolved_model, Map.get(payload, "resolved_model"))
   end
 
+  defp resolved_model(%__MODULE__{model: model}) when is_binary(model) and model != "", do: model
   defp resolved_model(%__MODULE__{}), do: nil
 
   defp model_input_attrs(%__MODULE__{model_payload: payload} = options) when is_map(payload),

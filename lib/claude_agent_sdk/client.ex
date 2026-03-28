@@ -106,6 +106,7 @@ defmodule ClaudeAgentSDK.Client do
             subscribers: %{},
             subscriber_monitors: %{},
             pending_requests: %{},
+            pending_outbound: :queue.new(),
             pending_callbacks: %{},
             initialized: false,
             stderr_buffer: "",
@@ -139,6 +140,7 @@ defmodule ClaudeAgentSDK.Client do
   - `subscribers` - Map of ref => pid for streaming subscriptions
   - `subscriber_monitors` - Map of ref => monitor_ref for subscriber lifecycle cleanup
   - `pending_requests` - Map of request_id => request task tracking entries
+  - `pending_outbound` - FIFO queue of outbound payloads accepted before initialize completes
   - `pending_callbacks` - Map of request_id => %{pid, monitor_ref, signal, type} for in-flight control callbacks
   - `initialized` - Whether initialization handshake completed
   - `sdk_mcp_servers` - Map of server_name => registry_pid for SDK MCP servers
@@ -162,6 +164,7 @@ defmodule ClaudeAgentSDK.Client do
           subscribers: %{reference() => pid()},
           subscriber_monitors: %{reference() => reference()},
           pending_requests: %{String.t() => pending_request_entry()},
+          pending_outbound: :queue.queue(binary()),
           pending_callbacks: %{
             String.t() => %{
               pid: pid(),
@@ -702,6 +705,7 @@ defmodule ClaudeAgentSDK.Client do
         subscribers: %{},
         subscriber_monitors: %{},
         pending_requests: %{},
+        pending_outbound: :queue.new(),
         pending_callbacks: %{},
         initialized: false,
         stderr_buffer: "",
@@ -754,16 +758,20 @@ defmodule ClaudeAgentSDK.Client do
   def handle_call({:send_message, message}, _from, state) do
     json = encode_outgoing_message(message)
 
-    case send_payload(state, json) do
-      :ok ->
-        {:reply, :ok, state}
+    if state.initialized do
+      case send_payload(state, json) do
+        :ok ->
+          {:reply, :ok, state}
 
-      {:error, :not_connected} ->
-        {:reply, {:error, :not_connected}, state}
+        {:error, :not_connected} ->
+          {:reply, {:error, :not_connected}, state}
 
-      {:error, reason} ->
-        Logger.error("Failed to send message", reason: inspect(reason))
-        {:reply, {:error, :send_failed}, state}
+        {:error, reason} ->
+          Logger.error("Failed to send message", reason: inspect(reason))
+          {:reply, {:error, :send_failed}, state}
+      end
+    else
+      {:reply, :ok, enqueue_pending_outbound(state, json)}
     end
   end
 
@@ -1244,13 +1252,11 @@ defmodule ClaudeAgentSDK.Client do
         # Validate the agent
         case ClaudeAgentSDK.Agent.validate(agent) do
           :ok ->
-            # Apply agent's settings to options
-            updated_options = %{
+            updated_options =
               options
-              | system_prompt: agent.prompt,
-                allowed_tools: agent.allowed_tools,
-                model: agent.model
-            }
+              |> maybe_replace_agent_model(agent.model)
+              |> Map.put(:system_prompt, agent.prompt)
+              |> Map.put(:allowed_tools, agent.allowed_tools)
 
             {:ok, updated_options}
 
@@ -1261,6 +1267,12 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp apply_agent_settings(options), do: {:ok, options}
+
+  defp maybe_replace_agent_model(%Options{} = options, model) when is_binary(model) do
+    Options.replace_model(options, model)
+  end
+
+  defp maybe_replace_agent_model(%Options{} = options, _model), do: options
 
   defp apply_permission_mode(%Options{permission_mode: nil} = options), do: {:ok, options}
 
@@ -1583,6 +1595,30 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp cancel_init_timeout(state), do: state
+
+  defp enqueue_pending_outbound(%{pending_outbound: pending_outbound} = state, payload)
+       when is_binary(payload) do
+    %{state | pending_outbound: :queue.in(payload, pending_outbound)}
+  end
+
+  defp flush_pending_outbound(%{pending_outbound: pending_outbound} = state) do
+    case :queue.out(pending_outbound) do
+      {:empty, _queue} ->
+        state
+
+      {{:value, payload}, rest} ->
+        next_state = %{state | pending_outbound: rest}
+
+        case send_payload(next_state, payload) do
+          :ok ->
+            flush_pending_outbound(next_state)
+
+          {:error, reason} ->
+            Logger.error("Failed to flush buffered outbound payload", reason: inspect(reason))
+            %{next_state | pending_outbound: :queue.in_r(payload, rest)}
+        end
+    end
+  end
 
   defp start_cli_process(state) do
     owner = self()
@@ -2163,7 +2199,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp put_current_model(%{options: %Options{} = options} = state, model) when is_binary(model) do
-    %{state | options: %{options | model: model}}
+    %{state | options: Options.replace_model(options, model)}
   end
 
   defp handle_set_permission_mode_response(from, requested_mode, response, request_id, state) do
@@ -2265,6 +2301,7 @@ defmodule ClaudeAgentSDK.Client do
 
           state_with_info
           |> Map.put(:initialized, true)
+          |> flush_pending_outbound()
           |> notify_initialized_waiters()
         end
 

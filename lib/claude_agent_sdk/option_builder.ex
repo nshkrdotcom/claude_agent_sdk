@@ -728,7 +728,7 @@ defmodule ClaudeAgentSDK.OptionBuilder do
   """
   @spec with_model(Options.t(), String.t(), String.t() | nil) :: Options.t()
   def with_model(options, model_name, fallback \\ nil) do
-    %{options | model: model_name, fallback_model: fallback}
+    Options.replace_model(options, model_name, fallback)
   end
 
   @doc """
