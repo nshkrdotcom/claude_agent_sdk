@@ -10,6 +10,8 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
     @enforce_keys [:argv]
     defstruct argv: [],
               execution_surface: nil,
+              example_cwd: nil,
+              example_danger_full_access: false,
               ssh_host: nil,
               ssh_user: nil,
               ssh_port: nil,
@@ -18,6 +20,8 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
     @type t :: %__MODULE__{
             argv: [String.t()],
             execution_surface: ExecutionSurface.t() | nil,
+            example_cwd: String.t() | nil,
+            example_danger_full_access: boolean(),
             ssh_host: String.t() | nil,
             ssh_user: String.t() | nil,
             ssh_port: pos_integer() | nil,
@@ -27,6 +31,8 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
 
   @context_key {__MODULE__, :ssh_context}
   @ssh_switches [
+    cwd: :string,
+    danger_full_access: :boolean,
     ssh_host: :string,
     ssh_identity_file: :string,
     ssh_port: :integer,
@@ -77,15 +83,18 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   @spec ssh_enabled?() :: boolean()
   def ssh_enabled?, do: match?(%SSHContext{execution_surface: %ExecutionSurface{}}, context())
 
+  @spec danger_full_access?() :: boolean()
+  def danger_full_access?, do: context().example_danger_full_access == true
+
   @spec execution_surface() :: ExecutionSurface.t() | nil
   def execution_surface, do: context().execution_surface
 
   @spec with_execution_surface(struct() | map()) :: struct() | map()
   def with_execution_surface(options) when is_map(options) do
-    case execution_surface() do
-      %ExecutionSurface{} = surface -> Map.put(options, :execution_surface, surface)
-      nil -> options
-    end
+    options
+    |> maybe_put_execution_surface()
+    |> maybe_put_example_cwd()
+    |> maybe_put_danger_full_access()
   end
 
   @spec cli_resolution_options() :: Options.t()
@@ -95,6 +104,8 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   end
 
   defp build_context(parsed, argv) do
+    example_cwd = Keyword.get(parsed, :cwd)
+    example_danger_full_access = Keyword.get(parsed, :danger_full_access, false)
     ssh_host = Keyword.get(parsed, :ssh_host)
     ssh_user = Keyword.get(parsed, :ssh_user)
     ssh_port = Keyword.get(parsed, :ssh_port)
@@ -104,8 +115,16 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
       is_nil(ssh_host) and Enum.any?([ssh_user, ssh_port, ssh_identity_file], &present?/1) ->
         {:error, "SSH example flags require --ssh-host when any other --ssh-* flag is set."}
 
+      invalid_example_cwd?(example_cwd) ->
+        {:error, "--cwd must be a non-empty path"}
+
       is_nil(ssh_host) ->
-        {:ok, %SSHContext{argv: argv}}
+        {:ok,
+         %SSHContext{
+           argv: argv,
+           example_cwd: normalize_example_cwd(example_cwd),
+           example_danger_full_access: example_danger_full_access
+         }}
 
       true ->
         with {:ok, {destination, parsed_user}} <- split_host(ssh_host),
@@ -125,6 +144,8 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
            %SSHContext{
              argv: argv,
              execution_surface: execution_surface,
+             example_cwd: normalize_example_cwd(example_cwd),
+             example_danger_full_access: example_danger_full_access,
              ssh_host: destination,
              ssh_user: effective_user,
              ssh_port: ssh_port,
@@ -202,9 +223,37 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
         {name, value} -> "--#{name}=#{value}"
       end)
 
-    "invalid example SSH flags: #{rendered}. Supported flags: --ssh-host, --ssh-user, --ssh-port, --ssh-identity-file"
+    "invalid example flags: #{rendered}. Supported flags: --cwd, --danger-full-access, --ssh-host, --ssh-user, --ssh-port, --ssh-identity-file"
   end
 
   defp maybe_put(opts, _key, nil), do: opts
   defp maybe_put(opts, key, value), do: Keyword.put(opts, key, value)
+
+  defp maybe_put_execution_surface(options) when is_map(options) do
+    case execution_surface() do
+      %ExecutionSurface{} = surface -> Map.put(options, :execution_surface, surface)
+      nil -> options
+    end
+  end
+
+  defp maybe_put_example_cwd(options) when is_map(options) do
+    case normalize_example_cwd(context().example_cwd) do
+      cwd when is_binary(cwd) -> Map.put(options, :cwd, cwd)
+      _ -> options
+    end
+  end
+
+  defp maybe_put_danger_full_access(options) when is_map(options) do
+    if danger_full_access?() do
+      Map.put(options, :permission_mode, :bypass_permissions)
+    else
+      options
+    end
+  end
+
+  defp invalid_example_cwd?(nil), do: false
+  defp invalid_example_cwd?(path) when is_binary(path), do: String.trim(path) == ""
+
+  defp normalize_example_cwd(nil), do: nil
+  defp normalize_example_cwd(path) when is_binary(path), do: String.trim(path)
 end

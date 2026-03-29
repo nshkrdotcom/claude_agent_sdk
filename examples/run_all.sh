@@ -6,11 +6,13 @@ cd "$ROOT"
 
 usage() {
   cat <<'EOF'
-Usage: bash examples/run_all.sh [--ollama] [--ollama-model MODEL] [--ssh-host HOST] [--ssh-user USER] [--ssh-port PORT] [--ssh-identity-file PATH] [--help]
+Usage: bash examples/run_all.sh [--ollama] [--ollama-model MODEL] [--cwd PATH] [--danger-full-access] [--ssh-host HOST] [--ssh-user USER] [--ssh-port PORT] [--ssh-identity-file PATH] [--help]
 
 Options:
   --ollama               Run the Ollama-compatible example subset.
   --ollama-model MODEL   Override the Ollama model. Default: llama3.2
+  --cwd PATH             Optional working directory passed through to the examples.
+  --danger-full-access   Run examples with permission_mode=:bypass_permissions.
   --ssh-host HOST        Run the CLI-backed examples over execution_surface=:ssh_exec.
   --ssh-user USER        Override the SSH user.
   --ssh-port PORT        Override the SSH port.
@@ -21,6 +23,9 @@ EOF
 
 FORWARD_ARGS=()
 SSH_HOST=""
+SSH_AUX_SET=0
+CWD_CONFIGURED=0
+DANGER_FULL_ACCESS=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -38,6 +43,26 @@ while [[ $# -gt 0 ]]; do
       export CLAUDE_EXAMPLES_OLLAMA_MODEL="$2"
       shift 2
       ;;
+    --cwd)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: --cwd requires a value." >&2
+        exit 1
+      fi
+
+      CWD_CONFIGURED=1
+      FORWARD_ARGS+=("$1" "$2")
+      shift 2
+      ;;
+    --cwd=*)
+      CWD_CONFIGURED=1
+      FORWARD_ARGS+=("$1")
+      shift
+      ;;
+    --danger-full-access)
+      DANGER_FULL_ACCESS=1
+      FORWARD_ARGS+=("$1")
+      shift
+      ;;
     --ssh-host)
       if [[ $# -lt 2 ]]; then
         echo "ERROR: --ssh-host requires a value." >&2
@@ -54,12 +79,15 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
 
+      SSH_AUX_SET=1
       FORWARD_ARGS+=("$1" "$2")
       shift 2
       ;;
     --ssh-host=*|--ssh-user=*|--ssh-port=*|--ssh-identity-file=*)
       if [[ "$1" == --ssh-host=* ]]; then
         SSH_HOST="${1#*=}"
+      else
+        SSH_AUX_SET=1
       fi
 
       FORWARD_ARGS+=("$1")
@@ -77,6 +105,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "$SSH_HOST" && "$SSH_AUX_SET" -eq 1 ]]; then
+  echo "ERROR: --ssh-user/--ssh-port/--ssh-identity-file require --ssh-host." >&2
+  exit 1
+fi
 
 if command -v stty >/dev/null 2>&1; then
   trap 'stty sane >/dev/null 2>&1 || true' EXIT
@@ -152,6 +185,13 @@ fi
 
 if [[ -n "$SSH_HOST" ]]; then
   echo "Execution surface: ssh_exec host=${SSH_HOST}"
+  if [[ "$CWD_CONFIGURED" -eq 1 ]]; then
+    echo "Working directory override: configured via --cwd"
+  fi
+fi
+
+if [[ "$DANGER_FULL_ACCESS" -eq 1 ]]; then
+  echo "Permission override: bypass_permissions (--danger-full-access)"
 fi
 
 if [[ -z "$SSH_HOST" ]]; then

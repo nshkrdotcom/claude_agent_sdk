@@ -70,6 +70,7 @@ mix ask -q "What is 2+2?"           # Script-friendly output
 ```bash
 bash examples/run_all.sh
 bash examples/run_all.sh --ssh-host example.internal
+bash examples/run_all.sh --ssh-host example.internal --danger-full-access
 ```
 
 Sets `CLAUDE_EXAMPLES_FORCE_HALT=true` to ensure each script exits cleanly.
@@ -113,6 +114,7 @@ Set `CLAUDE_EXAMPLES_FORCE_UNSUPPORTED=true` if you want to force those runs.
 ```bash
 mix run examples/basic_example.exs
 mix run examples/basic_example.exs -- --ssh-host example.internal
+mix run examples/basic_example.exs -- --ssh-host example.internal --danger-full-access
 ```
 
 ## Shared SSH Flags
@@ -120,6 +122,8 @@ mix run examples/basic_example.exs -- --ssh-host example.internal
 Every CLI-backed example in this directory accepts the same optional SSH
 transport flags:
 
+- `--cwd <path>` passes an explicit working directory to the example
+- `--danger-full-access` maps the example to `permission_mode: :bypass_permissions`
 - `--ssh-host <host>` switches the example to `execution_surface: :ssh_exec`
 - `--ssh-user <user>` overrides the SSH user
 - `--ssh-port <port>` overrides the SSH port
@@ -127,6 +131,11 @@ transport flags:
 
 If you omit the SSH flags, the examples keep the existing local subprocess
 default unchanged.
+
+`--danger-full-access` only changes the Claude runtime permission posture. It
+does not change transport placement. Use it when you want the same example to
+stay on `execution_surface: :ssh_exec` but run with the permissive Claude mode
+on a remote host.
 
 Run an individual example with Ollama:
 

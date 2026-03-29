@@ -245,7 +245,7 @@ defmodule ClaudeAgentSDK.CLITest do
       ]
     }
 
-    assert {:ok, %CommandSpec{program: "claude-code", argv_prefix: []}} =
+    assert {:ok, %CommandSpec{program: "claude", argv_prefix: []}} =
              CLI.resolve_command_spec(options)
   end
 
