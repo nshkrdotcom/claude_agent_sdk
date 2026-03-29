@@ -4,6 +4,7 @@ defmodule ClaudeAgentSDK.CLITest do
   import ExUnit.CaptureLog
 
   alias ClaudeAgentSDK.{CLI, Options}
+  alias CliSubprocessCore.CommandSpec
 
   # Tests spawn fake CLI scripts via System.cmd - requires process spawning
   @moduletag :live_cli
@@ -188,8 +189,8 @@ defmodule ClaudeAgentSDK.CLITest do
     primary = Path.join(dir, "primary")
     fallback = Path.join(dir, "fallback")
 
-    File.write!(primary, "")
-    File.write!(fallback, "")
+    write_cli_script(primary, "claude-code", "2.1.0")
+    write_cli_script(fallback, "claude", "2.1.0")
 
     options = %Options{
       path_to_claude_code_executable: primary,
@@ -208,13 +209,44 @@ defmodule ClaudeAgentSDK.CLITest do
     File.mkdir_p!(dir)
 
     executable = Path.join(dir, "custom")
-    File.write!(executable, "")
+    write_cli_script(executable, "claude", "2.1.0")
 
     options = %Options{executable: executable}
 
     assert {:ok, ^executable} = CLI.resolve_executable(options)
 
     File.rm_rf!(dir)
+  end
+
+  test "resolve_command_spec/1 falls back to the remote provider command instead of local CLAUDE_CLI_PATH" do
+    dir =
+      Path.join(System.tmp_dir!(), "claude_cli_remote_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(dir)
+
+    local_path = Path.join(dir, "claude-code")
+    write_cli_script(local_path, "claude-code", "2.1.0")
+    previous = System.get_env("CLAUDE_CLI_PATH")
+    System.put_env("CLAUDE_CLI_PATH", local_path)
+
+    on_exit(fn ->
+      case previous do
+        nil -> System.delete_env("CLAUDE_CLI_PATH")
+        value -> System.put_env("CLAUDE_CLI_PATH", value)
+      end
+
+      File.rm_rf!(dir)
+    end)
+
+    options = %Options{
+      execution_surface: [
+        surface_kind: :static_ssh,
+        transport_options: [destination: "claude.example"]
+      ]
+    }
+
+    assert {:ok, %CommandSpec{program: "claude-code", argv_prefix: []}} =
+             CLI.resolve_command_spec(options)
   end
 
   defp with_fake_cli(original_path, cli_defs, fun) do

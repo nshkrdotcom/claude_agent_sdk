@@ -18,5 +18,6 @@ Code.ensure_loaded!(ClaudeAgentSDK.TestSupport.ImageTools)
 # - :live - Tests using actual Claude API inference (slow, costs money)
 # - :live_cli - Tests that spawn real CLI/processes but no inference
 # - :slow - Tests that are intentionally slow (timeout testing, etc.)
+# - :live_ssh - Real SSH execution-surface smoke tests
 # - :integration - End-to-end integration tests
-ExUnit.start(exclude: [:integration, :live, :live_cli, :slow], capture_log: true)
+ExUnit.start(exclude: [:integration, :live, :live_cli, :live_ssh, :slow], capture_log: true)

@@ -226,7 +226,7 @@ ssh_options = %Options{
     surface_kind: :static_ssh,
     transport_options: [
       destination: "claude.example",
-      user: "sdk",
+      ssh_user: "sdk",
       port: 22
     ]
   ]

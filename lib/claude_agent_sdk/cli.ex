@@ -32,7 +32,7 @@ defmodule ClaudeAgentSDK.CLI do
       |> option_overrides()
       |> maybe_put_bundled_override()
 
-    case ProviderCLI.resolve(:claude, provider_opts, provider_cli_opts()) do
+    case ProviderCLI.resolve(:claude, provider_opts, provider_cli_opts(options)) do
       {:ok, %CommandSpec{} = spec} ->
         {:ok, spec}
 
@@ -180,7 +180,16 @@ defmodule ClaudeAgentSDK.CLI do
     :ok
   end
 
-  defp provider_cli_opts do
+  defp provider_cli_opts(%Options{} = options) do
+    [
+      execution_surface: options.execution_surface,
+      extra_keys: [:path_to_claude_code_executable],
+      known_locations: known_locations(),
+      path_candidates: CLIConfig.executable_candidates()
+    ]
+  end
+
+  defp provider_cli_opts(_other) do
     [
       extra_keys: [:path_to_claude_code_executable],
       known_locations: known_locations(),
@@ -189,9 +198,14 @@ defmodule ClaudeAgentSDK.CLI do
   end
 
   defp option_overrides(%Options{} = options) do
-    []
-    |> maybe_put_option(:path_to_claude_code_executable, options.path_to_claude_code_executable)
-    |> maybe_put_option(:executable, options.executable)
+    case options.path_to_claude_code_executable do
+      value when is_binary(value) and value != "" ->
+        [path_to_claude_code_executable: value]
+
+      _other ->
+        []
+        |> maybe_put_option(:executable, options.executable)
+    end
   end
 
   defp option_overrides(_other), do: []
