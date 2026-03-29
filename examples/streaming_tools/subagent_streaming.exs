@@ -35,13 +35,15 @@ defmodule SubagentStreamingDemo do
 
     # Configure streaming with Agent tool enabled for subagent spawning
     # Use control client transport to exercise that code path
-    options = %Options{
-      model: "haiku",
-      max_turns: 3,
-      allowed_tools: ["Agent", "Glob"],
-      permission_mode: :bypass_permissions,
-      preferred_transport: :control
-    }
+    options =
+      %Options{
+        model: "haiku",
+        max_turns: 3,
+        allowed_tools: ["Agent", "Glob"],
+        permission_mode: :bypass_permissions,
+        preferred_transport: :control
+      }
+      |> Support.with_execution_surface()
 
     IO.puts("[CONFIG] Model: haiku, Max turns: 3, Tools: [Agent, Glob]\n")
 

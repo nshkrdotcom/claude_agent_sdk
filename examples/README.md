@@ -69,6 +69,7 @@ mix ask -q "What is 2+2?"           # Script-friendly output
 
 ```bash
 bash examples/run_all.sh
+bash examples/run_all.sh --ssh-host example.internal
 ```
 
 Sets `CLAUDE_EXAMPLES_FORCE_HALT=true` to ensure each script exits cleanly.
@@ -111,7 +112,21 @@ Set `CLAUDE_EXAMPLES_FORCE_UNSUPPORTED=true` if you want to force those runs.
 
 ```bash
 mix run examples/basic_example.exs
+mix run examples/basic_example.exs -- --ssh-host example.internal
 ```
+
+## Shared SSH Flags
+
+Every CLI-backed example in this directory accepts the same optional SSH
+transport flags:
+
+- `--ssh-host <host>` switches the example to `execution_surface: :ssh_exec`
+- `--ssh-user <user>` overrides the SSH user
+- `--ssh-port <port>` overrides the SSH port
+- `--ssh-identity-file <path>` sets the SSH identity file
+
+If you omit the SSH flags, the examples keep the existing local subprocess
+default unchanged.
 
 Run an individual example with Ollama:
 

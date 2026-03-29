@@ -67,12 +67,14 @@ hooks = %{
 
 # Note: We don't set max_turns here to match Python SDK behavior.
 # Even without tool use, hooks still need proper turn handling.
-options = %Options{
-  allowed_tools: [],
-  hooks: hooks,
-  model: "haiku",
-  permission_mode: :default
-}
+options =
+  %Options{
+    allowed_tools: [],
+    hooks: hooks,
+    model: "haiku",
+    permission_mode: :default
+  }
+  |> Support.with_execution_surface()
 
 table = ContextHooks.table_name()
 

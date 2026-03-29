@@ -17,14 +17,16 @@ defmodule MultiTurnToolStreamingSessionExample do
     Support.ensure_live!()
     Support.header!("Multi-turn Tool Streaming (session path)")
 
-    options = %Options{
-      model: "haiku",
-      max_turns: 2,
-      tools: ["Bash"],
-      allowed_tools: ["Bash"],
-      permission_mode: :bypass_permissions,
-      preferred_transport: :cli
-    }
+    options =
+      %Options{
+        model: "haiku",
+        max_turns: 2,
+        tools: ["Bash"],
+        allowed_tools: ["Bash"],
+        permission_mode: :bypass_permissions,
+        preferred_transport: :cli
+      }
+      |> Support.with_execution_surface()
 
     {:ok, session} = Streaming.start_session(options)
 

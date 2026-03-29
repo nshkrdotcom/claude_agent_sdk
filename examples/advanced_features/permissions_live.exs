@@ -21,9 +21,13 @@ output_dir = Support.output_dir!()
 target_file = Path.join(output_dir, "permissions_demo.txt")
 
 cli_version =
-  case ClaudeAgentSDK.CLI.version() do
-    {:ok, version} -> version
-    _ -> "unknown"
+  if Support.ssh_enabled?() do
+    "remote via --ssh-host"
+  else
+    case ClaudeAgentSDK.CLI.version() do
+      {:ok, version} -> version
+      _ -> "unknown"
+    end
   end
 
 IO.puts("Output dir: #{output_dir}")
@@ -36,13 +40,15 @@ IO.puts("Reason: some CLI builds do not emit can_use_tool callbacks.\n")
 # Create options with permissions - use streaming mode for control protocol
 # IMPORTANT: Include Write in allowed_tools so the CLI exposes the tool. Use
 # :default to keep built-in tool execution in the CLI.
-options = %Options{
-  model: "haiku",
-  max_turns: 3,
-  tools: ["Write"],
-  allowed_tools: ["Write"],
-  preferred_transport: :control
-}
+options =
+  %Options{
+    model: "haiku",
+    max_turns: 3,
+    tools: ["Write"],
+    allowed_tools: ["Write"],
+    preferred_transport: :control
+  }
+  |> Support.with_execution_surface()
 
 wait_for_file = fn path, attempts, delay_ms ->
   Enum.reduce_while(1..attempts, {:error, :not_found}, fn _idx, _acc ->

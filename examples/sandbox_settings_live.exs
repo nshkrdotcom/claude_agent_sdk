@@ -29,8 +29,13 @@ defmodule SandboxSettingsLive do
   end
 
   def run do
-    IO.inspect(CLI.find_executable(), label: "Claude CLI (resolved)")
-    IO.inspect(CLI.version(), label: "Claude CLI (version)")
+    if Support.ssh_enabled?() do
+      IO.puts("Claude CLI (resolved): remote via --ssh-host")
+    else
+      IO.inspect(CLI.find_executable(), label: "Claude CLI (resolved)")
+      IO.inspect(CLI.version(), label: "Claude CLI (version)")
+    end
+
     IO.puts("")
 
     sandbox = %{
@@ -73,6 +78,7 @@ defmodule SandboxSettingsLive do
           output_format: :stream_json,
           sandbox: sandbox
         }
+        |> Support.with_execution_surface()
       )
       |> Enum.reduce(nil, fn
         %{type: :assistant} = message, acc ->

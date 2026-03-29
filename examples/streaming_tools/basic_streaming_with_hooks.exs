@@ -21,11 +21,13 @@ defmodule BasicStreamingExample do
     IO.puts("For hooks examples, see examples/hooks/ directory.\n")
 
     # Simple options without hooks
-    options = %Options{
-      model: "haiku",
-      max_turns: 1,
-      preferred_transport: :control
-    }
+    options =
+      %Options{
+        model: "haiku",
+        max_turns: 1,
+        preferred_transport: :control
+      }
+      |> Support.with_execution_surface()
 
     IO.puts("Starting streaming session...\n")
 

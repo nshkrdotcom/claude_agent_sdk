@@ -16,22 +16,29 @@ defmodule FileCheckpointingLive do
 
     try do
       IO.puts("Demo working directory: #{demo_dir}")
-      IO.inspect(CLI.find_executable(), label: "Claude CLI (resolved)")
-      IO.inspect(CLI.version(), label: "Claude CLI (version)")
+
+      if Support.ssh_enabled?() do
+        IO.puts("Claude CLI (resolved): remote via --ssh-host")
+      else
+        IO.inspect(CLI.find_executable(), label: "Claude CLI (resolved)")
+        IO.inspect(CLI.version(), label: "Claude CLI (version)")
+      end
 
       file_path = Path.join(demo_dir, "demo.txt")
       init_git_repo(demo_dir)
 
-      options = %Options{
-        cwd: demo_dir,
-        enable_file_checkpointing: true,
-        extra_args: %{"replay-user-messages" => nil},
-        permission_mode: :accept_edits,
-        tools: ["Read", "Write", "Edit"],
-        allowed_tools: ["Read", "Write", "Edit"],
-        model: "haiku",
-        max_turns: 3
-      }
+      options =
+        %Options{
+          cwd: demo_dir,
+          enable_file_checkpointing: true,
+          extra_args: %{"replay-user-messages" => nil},
+          permission_mode: :accept_edits,
+          tools: ["Read", "Write", "Edit"],
+          allowed_tools: ["Read", "Write", "Edit"],
+          model: "haiku",
+          max_turns: 3
+        }
+        |> Support.with_execution_surface()
 
       # The default client transport already uses the shared core-backed lane.
       {:ok, client} = Client.start_link(options)

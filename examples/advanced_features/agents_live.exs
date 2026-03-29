@@ -50,6 +50,7 @@ options =
     agent: :coder,
     max_turns: 2
   )
+  |> Support.with_execution_surface()
 
 prompt1 =
   "Write a simple Python function to check if a number is prime. Keep it under 10 lines total. Do not use tools."

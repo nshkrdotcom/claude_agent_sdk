@@ -104,6 +104,7 @@ options =
     model: "haiku",
     allowed_tools: allowed_tools
   )
+  |> Support.with_execution_surface()
 
 IO.puts("🤖 Configured Claude with SDK MCP server")
 IO.puts("   MCP servers: #{inspect(Map.keys(options.mcp_servers))}")

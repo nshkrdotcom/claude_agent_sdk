@@ -35,12 +35,14 @@ defmodule StructuredOutputLiveExample do
     respond directly in validated JSON only.
     """
 
-    options = %Options{
-      output_format: %{type: :json_schema, schema: @schema},
-      model: "haiku",
-      max_turns: 5,
-      tools: []
-    }
+    options =
+      %Options{
+        output_format: %{type: :json_schema, schema: @schema},
+        model: "haiku",
+        max_turns: 5,
+        tools: []
+      }
+      |> Support.with_execution_surface()
 
     IO.puts("\n🧪 Structured output demo (live CLI)…")
     IO.puts("Schema: #{Jason.encode!(@schema)}\n")

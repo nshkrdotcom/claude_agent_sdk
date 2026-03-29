@@ -15,11 +15,13 @@ alias Examples.Support
 Support.ensure_live!()
 Support.header!("Streaming Quick Demo (live)")
 
-options = %Options{
-  model: "haiku",
-  max_turns: 1,
-  allowed_tools: []
-}
+options =
+  %Options{
+    model: "haiku",
+    max_turns: 1,
+    allowed_tools: []
+  }
+  |> Support.with_execution_surface()
 
 {:ok, session} = Streaming.start_session(options)
 

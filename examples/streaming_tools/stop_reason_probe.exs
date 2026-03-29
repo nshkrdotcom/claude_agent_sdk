@@ -20,12 +20,14 @@ defmodule StopReasonProbeExample do
 
     IO.puts("\nThis example verifies message_delta.stop_reason emission per message.\n")
 
-    base_options = %Options{
-      model: "haiku",
-      max_turns: 4,
-      permission_mode: :bypass_permissions,
-      preferred_transport: :control
-    }
+    base_options =
+      %Options{
+        model: "haiku",
+        max_turns: 4,
+        permission_mode: :bypass_permissions,
+        preferred_transport: :control
+      }
+      |> Support.with_execution_surface()
 
     end_turn_summary =
       run_probe(

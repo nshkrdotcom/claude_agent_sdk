@@ -27,6 +27,7 @@ defmodule EffortGatingLive do
         max_turns: 1,
         setting_sources: ["user"]
       )
+      |> Support.with_execution_surface()
     )
 
     run_case(
@@ -37,6 +38,7 @@ defmodule EffortGatingLive do
         max_turns: 1,
         setting_sources: ["user"]
       )
+      |> Support.with_execution_surface()
     )
 
     run_case(
@@ -47,6 +49,7 @@ defmodule EffortGatingLive do
         max_turns: 1,
         setting_sources: ["user"]
       )
+      |> Support.with_execution_surface()
     )
 
     IO.puts("\nInvalid effort values fail fast:")

@@ -20,10 +20,12 @@ defmodule BasicExample do
     IO.puts("Asking Claude for a simple response...")
 
     # Include user settings so `claude login` credentials are available.
-    options = %{
-      OptionBuilder.with_haiku()
-      | setting_sources: ["user"]
-    }
+    options =
+      %{
+        OptionBuilder.with_haiku()
+        | setting_sources: ["user"]
+      }
+      |> Support.with_execution_surface()
 
     # Make a simple query - just ask for one word back
     response =

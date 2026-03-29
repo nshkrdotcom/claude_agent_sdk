@@ -83,6 +83,7 @@ options =
       pre_tool_use: [Matcher.new("*", [track_web_tools])]
     }
   )
+  |> Support.with_execution_surface()
 
 # Prompt that explicitly requires both web tools
 prompt = """

@@ -2,8 +2,16 @@ defmodule Examples.Support do
   @moduledoc false
 
   alias ClaudeAgentSDK.CLI
+  alias ClaudeAgentSDK.ExamplesSupport
+  alias ClaudeAgentSDK.Options
 
   @examples_dir Path.expand("..", __DIR__)
+
+  def init!(argv \\ System.argv()), do: ExamplesSupport.init!(argv)
+
+  def with_execution_surface(options), do: ExamplesSupport.with_execution_surface(options)
+
+  def ssh_enabled?, do: ExamplesSupport.ssh_enabled?()
 
   def examples_dir, do: @examples_dir
 
@@ -78,10 +86,15 @@ defmodule Examples.Support do
   end
 
   def ensure_live! do
+    init!()
     Application.put_env(:claude_agent_sdk, :use_mock, false)
     ensure_task_supervisor_started!()
 
-    case CLI.find_executable() do
+    options =
+      %Options{}
+      |> with_execution_surface()
+
+    case CLI.resolve_executable(options) do
       {:ok, _path} ->
         :ok
 

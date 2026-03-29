@@ -131,17 +131,19 @@ defmodule SDKMCPStreamingExample do
     IO.puts("")
 
     # Configure options with SDK MCP server
-    options = %Options{
-      mcp_servers: %{"math-tools" => server},
-      model: "haiku",
-      max_turns: 2,
-      allowed_tools: [
-        "mcp__math-tools__add",
-        "mcp__math-tools__multiply",
-        "mcp__math-tools__factorial"
-      ],
-      permission_mode: :bypass_permissions
-    }
+    options =
+      %Options{
+        mcp_servers: %{"math-tools" => server},
+        model: "haiku",
+        max_turns: 2,
+        allowed_tools: [
+          "mcp__math-tools__add",
+          "mcp__math-tools__multiply",
+          "mcp__math-tools__factorial"
+        ],
+        permission_mode: :bypass_permissions
+      }
+      |> Support.with_execution_surface()
 
     IO.puts("Starting streaming session with SDK MCP...\n")
 

@@ -37,13 +37,15 @@ defmodule FilesystemAgentsLive do
       File.write!(Path.join(agents_dir, "fs-test-agent.md"), agent_content)
       IO.puts("Demo working directory: #{demo_dir}")
 
-      options = %Options{
-        cwd: demo_dir,
-        setting_sources: ["project"],
-        max_turns: 1,
-        model: "haiku",
-        output_format: :stream_json
-      }
+      options =
+        %Options{
+          cwd: demo_dir,
+          setting_sources: ["project"],
+          max_turns: 1,
+          model: "haiku",
+          output_format: :stream_json
+        }
+        |> Support.with_execution_surface()
 
       {:ok, client} = Client.start_link(options)
 

@@ -30,12 +30,14 @@ File.mkdir_p!(storage_dir)
     other -> other
   end
 
-base_options = %Options{
-  model: "haiku",
-  max_turns: 1,
-  output_format: :stream_json,
-  allowed_tools: []
-}
+base_options =
+  %Options{
+    model: "haiku",
+    max_turns: 1,
+    output_format: :stream_json,
+    allowed_tools: []
+  }
+  |> Support.with_execution_surface()
 
 assert_success = fn messages, label ->
   case Enum.find(messages, &(&1.type == :result)) do
@@ -132,6 +134,7 @@ add_dir_opts =
     | add_dir: ["/tmp/project1", "/tmp/project2"],
       allowed_tools: ["Read"]
   }
+  |> Support.with_execution_surface()
 
 IO.inspect(
   Enum.filter(
@@ -141,7 +144,9 @@ IO.inspect(
   label: "--add-dir args"
 )
 
-mcp_opts = %Options{base_options | mcp_config: "mcp_config.json", strict_mcp_config: true}
+mcp_opts =
+  %Options{base_options | mcp_config: "mcp_config.json", strict_mcp_config: true}
+  |> Support.with_execution_surface()
 
 IO.inspect(Enum.filter(Options.to_args(mcp_opts), &String.contains?(&1, "mcp")),
   label: "MCP args"

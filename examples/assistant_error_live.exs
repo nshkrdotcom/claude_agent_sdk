@@ -24,10 +24,11 @@ defmodule AssistantErrorLiveExample do
   """
 
   @options %Options{
-    model: "haiku",
-    max_turns: 1,
-    include_partial_messages: true
-  }
+             model: "haiku",
+             max_turns: 1,
+             include_partial_messages: true
+           }
+           |> Support.with_execution_surface()
 
   def run do
     IO.puts("\nAssistant error field demo (live CLI)")

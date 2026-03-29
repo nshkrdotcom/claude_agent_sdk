@@ -149,13 +149,15 @@ try do
 
   # Note: We don't set max_turns here to match Python SDK behavior.
   # With hooks enabled, the conversation needs multiple turns for tool use + response.
-  options = %Options{
-    tools: ["Bash", "Write"],
-    allowed_tools: ["Bash", "Write"],
-    hooks: hooks,
-    model: "haiku",
-    permission_mode: :default
-  }
+  options =
+    %Options{
+      tools: ["Bash", "Write"],
+      allowed_tools: ["Bash", "Write"],
+      hooks: hooks,
+      model: "haiku",
+      permission_mode: :default
+    }
+    |> Support.with_execution_surface()
 
   {:ok, client} = Client.start_link(options)
 

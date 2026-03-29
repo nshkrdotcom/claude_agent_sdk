@@ -96,6 +96,7 @@ options =
       post_tool_use: [Matcher.new("Agent", [track_agent_completion])]
     }
   )
+  |> Support.with_execution_surface()
 
 # The prompt asks Claude to use the Agent tool to spawn subagents
 # This demonstrates the multi-agent coordination pattern

@@ -148,14 +148,16 @@ hooks = %{
 # 3. Tool executes
 # 4. Claude responds to tool result
 # Setting max_turns too low (e.g., 2) causes error_max_turns failures.
-options = %Options{
-  tools: if(Support.ollama_backend?(), do: ["Write"], else: ["Bash"]),
-  allowed_tools: if(Support.ollama_backend?(), do: ["Write"], else: ["Bash"]),
-  max_turns: if(Support.ollama_backend?(), do: 4, else: nil),
-  hooks: hooks,
-  model: "haiku",
-  permission_mode: :default
-}
+options =
+  %Options{
+    tools: if(Support.ollama_backend?(), do: ["Write"], else: ["Bash"]),
+    allowed_tools: if(Support.ollama_backend?(), do: ["Write"], else: ["Bash"]),
+    max_turns: if(Support.ollama_backend?(), do: 4, else: nil),
+    hooks: hooks,
+    model: "haiku",
+    permission_mode: :default
+  }
+  |> Support.with_execution_surface()
 
 # Start client with hooks
 {:ok, client} = Client.start_link(options)

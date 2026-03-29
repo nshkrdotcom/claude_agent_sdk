@@ -124,12 +124,14 @@ betas =
     value -> String.split(value, ",", trim: true)
   end
 
-base = %Options{
-  model: "haiku",
-  max_turns: 1,
-  output_format: :stream_json,
-  betas: betas
-}
+base =
+  %Options{
+    model: "haiku",
+    max_turns: 1,
+    output_format: :stream_json,
+    betas: betas
+  }
+  |> Support.with_execution_surface()
 
 ToolsAndBetasLive.run_case(
   "tools: explicit list",

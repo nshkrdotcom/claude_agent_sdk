@@ -92,13 +92,15 @@ hook = fn input, _tool_use_id, _context ->
 end
 
 # Control-aware query: hooks trigger user prompt submit event
-query_options = %Options{
-  model: "haiku",
-  max_turns: 1,
-  hooks: %{user_prompt_submit: [Matcher.new(nil, [hook])]},
-  permission_mode: :default,
-  include_partial_messages: true
-}
+query_options =
+  %Options{
+    model: "haiku",
+    max_turns: 1,
+    hooks: %{user_prompt_submit: [Matcher.new(nil, [hook])]},
+    permission_mode: :default,
+    include_partial_messages: true
+  }
+  |> Support.with_execution_surface()
 
 IO.puts("== Control-aware query with hooks ==")
 
@@ -139,13 +141,15 @@ case Enum.find(query_messages, &(&1.type == :result)) do
 end
 
 # Streaming with partial events + runtime permission mode change
-stream_options = %Options{
-  model: "haiku",
-  max_turns: 1,
-  include_partial_messages: true,
-  permission_mode: :default,
-  allowed_tools: []
-}
+stream_options =
+  %Options{
+    model: "haiku",
+    max_turns: 1,
+    include_partial_messages: true,
+    permission_mode: :default,
+    allowed_tools: []
+  }
+  |> Support.with_execution_surface()
 
 {:ok, client} = Client.start_link(stream_options)
 

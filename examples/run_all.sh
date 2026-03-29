@@ -6,14 +6,21 @@ cd "$ROOT"
 
 usage() {
   cat <<'EOF'
-Usage: bash examples/run_all.sh [--ollama] [--ollama-model MODEL] [--help]
+Usage: bash examples/run_all.sh [--ollama] [--ollama-model MODEL] [--ssh-host HOST] [--ssh-user USER] [--ssh-port PORT] [--ssh-identity-file PATH] [--help]
 
 Options:
   --ollama               Run the Ollama-compatible example subset.
   --ollama-model MODEL   Override the Ollama model. Default: llama3.2
+  --ssh-host HOST        Run the CLI-backed examples over execution_surface=:ssh_exec.
+  --ssh-user USER        Override the SSH user.
+  --ssh-port PORT        Override the SSH port.
+  --ssh-identity-file PATH  Set the SSH identity file.
   --help                 Show this help text.
 EOF
 }
+
+FORWARD_ARGS=()
+SSH_HOST=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,6 +37,33 @@ while [[ $# -gt 0 ]]; do
       export CLAUDE_EXAMPLES_BACKEND="ollama"
       export CLAUDE_EXAMPLES_OLLAMA_MODEL="$2"
       shift 2
+      ;;
+    --ssh-host)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: --ssh-host requires a value." >&2
+        exit 1
+      fi
+
+      SSH_HOST="$2"
+      FORWARD_ARGS+=("$1" "$2")
+      shift 2
+      ;;
+    --ssh-user|--ssh-port|--ssh-identity-file)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: $1 requires a value." >&2
+        exit 1
+      fi
+
+      FORWARD_ARGS+=("$1" "$2")
+      shift 2
+      ;;
+    --ssh-host=*|--ssh-user=*|--ssh-port=*|--ssh-identity-file=*)
+      if [[ "$1" == --ssh-host=* ]]; then
+        SSH_HOST="${1#*=}"
+      fi
+
+      FORWARD_ARGS+=("$1")
+      shift
       ;;
     --help|-h)
       usage
@@ -53,24 +87,21 @@ trap 'exit 1' TERM
 echo "Running LIVE examples (real Claude CLI calls)."
 echo "These may incur API costs."
 
-if ! command -v claude >/dev/null 2>&1; then
-  echo "ERROR: Claude CLI not found on PATH." >&2
-  echo "Install: npm install -g @anthropic-ai/claude-code" >&2
-  exit 1
-fi
-
 BACKEND="${CLAUDE_EXAMPLES_BACKEND:-${CLAUDE_AGENT_PROVIDER_BACKEND:-anthropic}}"
 
-echo ""
-echo "==> claude --version"
-claude --version
-
-if [[ "$BACKEND" == "ollama" ]]; then
-  if ! command -v ollama >/dev/null 2>&1; then
-    echo "ERROR: Ollama CLI not found on PATH." >&2
+if [[ -z "$SSH_HOST" ]]; then
+  if ! command -v claude >/dev/null 2>&1; then
+    echo "ERROR: Claude CLI not found on PATH." >&2
+    echo "Install: npm install -g @anthropic-ai/claude-code" >&2
     exit 1
   fi
 
+  echo ""
+  echo "==> claude --version"
+  claude --version
+fi
+
+if [[ "$BACKEND" == "ollama" ]]; then
   OLLAMA_MODEL="${CLAUDE_EXAMPLES_OLLAMA_MODEL:-${CLAUDE_EXAMPLES_MODEL:-llama3.2}}"
   ANTHROPIC_BASE_URL="${CLAUDE_EXAMPLES_ANTHROPIC_BASE_URL:-${ANTHROPIC_BASE_URL:-http://localhost:11434}}"
   export CLAUDE_AGENT_PROVIDER_BACKEND="ollama"
@@ -83,15 +114,22 @@ if [[ "$BACKEND" == "ollama" ]]; then
 JSON
 )"
 
-  echo ""
-  echo "==> ollama --version"
-  ollama --version
+  if [[ -z "$SSH_HOST" ]]; then
+    if ! command -v ollama >/dev/null 2>&1; then
+      echo "ERROR: Ollama CLI not found on PATH." >&2
+      exit 1
+    fi
 
-  echo ""
-  echo "==> ollama show $OLLAMA_MODEL"
-  if ! ollama show "$OLLAMA_MODEL" >/dev/null 2>&1; then
-    echo "ERROR: Ollama model not installed: $OLLAMA_MODEL" >&2
-    exit 1
+    echo ""
+    echo "==> ollama --version"
+    ollama --version
+
+    echo ""
+    echo "==> ollama show $OLLAMA_MODEL"
+    if ! ollama show "$OLLAMA_MODEL" >/dev/null 2>&1; then
+      echo "ERROR: Ollama model not installed: $OLLAMA_MODEL" >&2
+      exit 1
+    fi
   fi
 
   echo "Using Ollama backend"
@@ -112,36 +150,42 @@ else
   echo "Claude CLI model: ${ANTHROPIC_MODEL:-haiku (preflight default unless examples override)}"
 fi
 
-echo ""
-echo "==> claude auth preflight (may make a small API call)"
+if [[ -n "$SSH_HOST" ]]; then
+  echo "Execution surface: ssh_exec host=${SSH_HOST}"
+fi
 
-PREFLIGHT_PROMPT="Respond with exactly: OK"
-PREFLIGHT_TIMEOUT_SECONDS="${CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS:-30}"
-echo "    (timeout: ${PREFLIGHT_TIMEOUT_SECONDS}s; set CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS to adjust)"
+if [[ -z "$SSH_HOST" ]]; then
+  echo ""
+  echo "==> claude auth preflight (may make a small API call)"
 
-preflight_out="$(mktemp)"
-preflight_rc=0
+  PREFLIGHT_PROMPT="Respond with exactly: OK"
+  PREFLIGHT_TIMEOUT_SECONDS="${CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS:-30}"
+  echo "    (timeout: ${PREFLIGHT_TIMEOUT_SECONDS}s; set CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS to adjust)"
 
-if command -v timeout >/dev/null 2>&1; then
-  timeout --foreground "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+  preflight_out="$(mktemp)"
+  preflight_rc=0
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --foreground "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+      claude --print "$PREFLIGHT_PROMPT" --max-turns 1 --model "${OLLAMA_MODEL:-haiku}" \
+      >"$preflight_out" 2>&1 || preflight_rc=$?
+  else
     claude --print "$PREFLIGHT_PROMPT" --max-turns 1 --model "${OLLAMA_MODEL:-haiku}" \
-    >"$preflight_out" 2>&1 || preflight_rc=$?
-else
-  claude --print "$PREFLIGHT_PROMPT" --max-turns 1 --model "${OLLAMA_MODEL:-haiku}" \
-    >"$preflight_out" 2>&1 || preflight_rc=$?
-fi
+      >"$preflight_out" 2>&1 || preflight_rc=$?
+  fi
 
-if [[ "$preflight_rc" -ne 0 ]]; then
-  echo "ERROR: Claude CLI preflight failed or timed out (exit=$preflight_rc)." >&2
-  echo "---- claude output ----" >&2
-  cat "$preflight_out" >&2
-  echo "-----------------------" >&2
-  echo "Run: claude login" >&2
+  if [[ "$preflight_rc" -ne 0 ]]; then
+    echo "ERROR: Claude CLI preflight failed or timed out (exit=$preflight_rc)." >&2
+    echo "---- claude output ----" >&2
+    cat "$preflight_out" >&2
+    echo "-----------------------" >&2
+    echo "Run: claude login" >&2
+    rm -f "$preflight_out"
+    exit 1
+  fi
+
   rm -f "$preflight_out"
-  exit 1
 fi
-
-rm -f "$preflight_out"
 
 EXAMPLE_TIMEOUT_SECONDS="${CLAUDE_EXAMPLES_TIMEOUT_SECONDS:-900}"
 echo ""
@@ -195,16 +239,28 @@ failures=()
 
 for ex in "${examples[@]}"; do
   echo ""
-  echo "==> mix run $ex"
+  if [[ "${#FORWARD_ARGS[@]}" -gt 0 ]]; then
+    echo "==> mix run $ex -- ${FORWARD_ARGS[*]}"
+  else
+    echo "==> mix run $ex"
+  fi
   if command -v stty >/dev/null 2>&1; then
     stty sane >/dev/null 2>&1 || true
   fi
   rc=0
   if command -v timeout >/dev/null 2>&1; then
     # Use --foreground to avoid process group issues with :erlang.halt
-    timeout --foreground "${EXAMPLE_TIMEOUT_SECONDS}s" mix run "$ex" || rc=$?
+    if [[ "${#FORWARD_ARGS[@]}" -gt 0 ]]; then
+      timeout --foreground "${EXAMPLE_TIMEOUT_SECONDS}s" mix run "$ex" -- "${FORWARD_ARGS[@]}" || rc=$?
+    else
+      timeout --foreground "${EXAMPLE_TIMEOUT_SECONDS}s" mix run "$ex" || rc=$?
+    fi
   else
-    mix run "$ex" || rc=$?
+    if [[ "${#FORWARD_ARGS[@]}" -gt 0 ]]; then
+      mix run "$ex" -- "${FORWARD_ARGS[@]}" || rc=$?
+    else
+      mix run "$ex" || rc=$?
+    fi
   fi
 
   if [[ "$rc" -ne 0 ]]; then

@@ -73,10 +73,15 @@ defmodule SDKMCPExample do
     IO.puts("\n0. Environment check:")
     IO.puts("   Mix env: #{Mix.env()}")
     IO.puts("   use_mock config: #{Application.get_env(:claude_agent_sdk, :use_mock, false)}")
-    {:ok, cli_path} = ClaudeAgentSDK.CLI.find_executable()
-    IO.puts("   Claude CLI: #{cli_path}")
-    {:ok, cli_version} = ClaudeAgentSDK.CLI.version()
-    IO.puts("   CLI version: #{cli_version}")
+
+    if Support.ssh_enabled?() do
+      IO.puts("   Claude CLI: remote via --ssh-host")
+    else
+      {:ok, cli_path} = ClaudeAgentSDK.CLI.find_executable()
+      IO.puts("   Claude CLI: #{cli_path}")
+      {:ok, cli_version} = ClaudeAgentSDK.CLI.version()
+      IO.puts("   CLI version: #{cli_version}")
+    end
 
     IO.puts(
       "   NOTE: Client uses the Claude-named transport adapter over the shared core -> real CLI (ignores use_mock)"
@@ -101,16 +106,18 @@ defmodule SDKMCPExample do
     # Pre-approve the calculator tools so Claude can use them without prompts
     IO.puts("\n2. Configuring Claude with SDK MCP server and allowed tools...")
 
-    options = %Options{
-      model: "haiku",
-      max_turns: 5,
-      mcp_servers: %{"calc" => calculator_server},
-      allowed_tools: [
-        "mcp__calc__add",
-        "mcp__calc__multiply"
-      ],
-      permission_mode: :bypass_permissions
-    }
+    options =
+      %Options{
+        model: "haiku",
+        max_turns: 5,
+        mcp_servers: %{"calc" => calculator_server},
+        allowed_tools: [
+          "mcp__calc__add",
+          "mcp__calc__multiply"
+        ],
+        permission_mode: :bypass_permissions
+      }
+      |> Support.with_execution_surface()
 
     IO.puts("   Allowed tools: #{inspect(options.allowed_tools)}")
 
