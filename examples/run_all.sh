@@ -194,38 +194,38 @@ if [[ "$DANGER_FULL_ACCESS" -eq 1 ]]; then
   echo "Permission override: bypass_permissions (--danger-full-access)"
 fi
 
-if [[ -z "$SSH_HOST" ]]; then
-  echo ""
-  echo "==> claude auth preflight (may make a small API call)"
+echo ""
+echo "==> Claude live preflight (transport-aware; may make a small API call)"
 
-  PREFLIGHT_PROMPT="Respond with exactly: OK"
-  PREFLIGHT_TIMEOUT_SECONDS="${CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS:-30}"
-  echo "    (timeout: ${PREFLIGHT_TIMEOUT_SECONDS}s; set CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS to adjust)"
+PREFLIGHT_TIMEOUT_SECONDS="${CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS:-30}"
+echo "    (timeout: ${PREFLIGHT_TIMEOUT_SECONDS}s; set CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS to adjust)"
 
-  preflight_out="$(mktemp)"
-  preflight_rc=0
+preflight_out="$(mktemp)"
+preflight_rc=0
+preflight_cmd=(mix run -e "Code.require_file(Path.expand(\"examples/support/example_helper.exs\")); case Examples.Support.preflight!() do :ok -> :ok; {:error, reason} -> IO.puts(reason); System.halt(1) end")
 
-  if command -v timeout >/dev/null 2>&1; then
-    timeout --foreground "${PREFLIGHT_TIMEOUT_SECONDS}s" \
-      claude --print "$PREFLIGHT_PROMPT" --max-turns 1 --model "${OLLAMA_MODEL:-haiku}" \
-      >"$preflight_out" 2>&1 || preflight_rc=$?
-  else
-    claude --print "$PREFLIGHT_PROMPT" --max-turns 1 --model "${OLLAMA_MODEL:-haiku}" \
-      >"$preflight_out" 2>&1 || preflight_rc=$?
-  fi
-
-  if [[ "$preflight_rc" -ne 0 ]]; then
-    echo "ERROR: Claude CLI preflight failed or timed out (exit=$preflight_rc)." >&2
-    echo "---- claude output ----" >&2
-    cat "$preflight_out" >&2
-    echo "-----------------------" >&2
-    echo "Run: claude login" >&2
-    rm -f "$preflight_out"
-    exit 1
-  fi
-
-  rm -f "$preflight_out"
+if [[ ${#FORWARD_ARGS[@]} -gt 0 ]]; then
+  preflight_cmd+=(-- "${FORWARD_ARGS[@]}")
 fi
+
+if command -v timeout >/dev/null 2>&1; then
+  timeout --foreground "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    "${preflight_cmd[@]}" >"$preflight_out" 2>&1 || preflight_rc=$?
+else
+  "${preflight_cmd[@]}" >"$preflight_out" 2>&1 || preflight_rc=$?
+fi
+
+if [[ "$preflight_rc" -ne 0 ]]; then
+  echo "ERROR: Claude live preflight failed or timed out (exit=$preflight_rc)." >&2
+  echo "---- claude output ----" >&2
+  cat "$preflight_out" >&2
+  echo "-----------------------" >&2
+  echo "Run: claude login" >&2
+  rm -f "$preflight_out"
+  exit 1
+fi
+
+rm -f "$preflight_out"
 
 EXAMPLE_TIMEOUT_SECONDS="${CLAUDE_EXAMPLES_TIMEOUT_SECONDS:-900}"
 echo ""

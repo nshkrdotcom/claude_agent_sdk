@@ -12,6 +12,7 @@ defmodule Examples.Support do
   def with_execution_surface(options), do: ExamplesSupport.with_execution_surface(options)
 
   def ssh_enabled?, do: ExamplesSupport.ssh_enabled?()
+  def preflight!(), do: ExamplesSupport.preflight()
 
   def examples_dir, do: @examples_dir
 

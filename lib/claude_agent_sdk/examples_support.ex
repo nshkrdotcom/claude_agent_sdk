@@ -1,8 +1,15 @@
 defmodule ClaudeAgentSDK.ExamplesSupport do
   @moduledoc false
 
-  alias ClaudeAgentSDK.Options
+  alias ClaudeAgentSDK.{CLI, Options}
+  alias ClaudeAgentSDK.Process, as: ClaudeProcess
+  alias CliSubprocessCore.Command, as: CoreCommand
+  alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ExecutionSurface
+  alias CliSubprocessCore.Transport.RunResult
+
+  @preflight_prompt "Reply with exactly: OK"
+  @preflight_timeout_ms 30_000
 
   defmodule SSHContext do
     @moduledoc false
@@ -101,6 +108,38 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   def cli_resolution_options do
     %Options{}
     |> with_execution_surface()
+  end
+
+  @spec preflight_options() :: Options.t()
+  def preflight_options do
+    %Options{
+      model: preflight_model(),
+      max_turns: 1,
+      output_format: :json,
+      setting_sources: ["user"]
+    }
+    |> with_execution_surface()
+  end
+
+  @spec preflight() :: :ok | {:error, String.t()}
+  def preflight do
+    options = preflight_options()
+
+    with {:ok, %CommandSpec{} = command_spec} <- CLI.resolve_command_spec(options),
+         invocation <- preflight_invocation(command_spec, options),
+         {:ok, %RunResult{} = result} <- CoreCommand.run(invocation, preflight_run_opts(options)),
+         :ok <- validate_preflight_result(result) do
+      :ok
+    else
+      {:error, :not_found} ->
+        {:error, "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"}
+
+      {:error, error} when is_exception(error) ->
+        {:error, normalize_preflight_error(Exception.message(error))}
+
+      {:error, error} ->
+        {:error, normalize_preflight_error(error)}
+    end
   end
 
   defp build_context(parsed, argv) do
@@ -250,6 +289,78 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
       options
     end
   end
+
+  defp preflight_model do
+    case System.get_env("ANTHROPIC_MODEL") do
+      model when is_binary(model) and model != "" -> model
+      _ -> "haiku"
+    end
+  end
+
+  defp preflight_invocation(%CommandSpec{} = command_spec, %Options{} = options) do
+    CoreCommand.new(command_spec, Options.to_args(options) ++ ["--print", @preflight_prompt],
+      cwd: options.cwd,
+      env: ClaudeProcess.__env_vars__(options),
+      user: options.user
+    )
+  end
+
+  defp preflight_run_opts(%Options{} = options) do
+    [timeout: @preflight_timeout_ms, stderr: :separate]
+    |> Kernel.++(Options.execution_surface_options(options))
+  end
+
+  defp validate_preflight_result(%RunResult{} = result) do
+    if RunResult.success?(result) do
+      case Jason.decode(result.stdout) do
+        {:ok, decoded} -> validate_preflight_payload(decoded)
+        {:error, _reason} -> {:error, "Claude CLI preflight returned invalid JSON output"}
+      end
+    else
+      {:error, preflight_error_text(result)}
+    end
+  end
+
+  defp validate_preflight_payload(%{"is_error" => true, "result" => result})
+       when is_binary(result) and result != "" do
+    {:error, result}
+  end
+
+  defp validate_preflight_payload(%{"result" => result}) when is_binary(result), do: :ok
+  defp validate_preflight_payload(%{}), do: :ok
+
+  defp validate_preflight_payload(_other),
+    do: {:error, "Claude CLI preflight returned invalid JSON output"}
+
+  defp preflight_error_text(%RunResult{} = result) do
+    result.stderr
+    |> case do
+      stderr when is_binary(stderr) and stderr != "" -> stderr
+      _ -> result.stdout
+    end
+    |> String.trim()
+    |> case do
+      "" -> "Claude CLI preflight failed (exit=#{result.exit.code})"
+      text -> text
+    end
+  end
+
+  defp normalize_preflight_error(error) when is_binary(error) do
+    trimmed = String.trim(error)
+
+    case Jason.decode(trimmed) do
+      {:ok, %{"result" => result}} when is_binary(result) and result != "" ->
+        result
+
+      {:ok, inner} when is_binary(inner) ->
+        normalize_preflight_error(inner)
+
+      _ ->
+        trimmed
+    end
+  end
+
+  defp normalize_preflight_error(error), do: inspect(error)
 
   defp invalid_example_cwd?(nil), do: false
   defp invalid_example_cwd?(path) when is_binary(path), do: String.trim(path) == ""

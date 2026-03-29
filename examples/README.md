@@ -77,6 +77,11 @@ Sets `CLAUDE_EXAMPLES_FORCE_HALT=true` to ensure each script exits cleanly.
 The runner continues after failures and prints a summary at the end (non-zero exit
 if any example failed).
 
+`run_all.sh` now uses one transport-aware live preflight for both local and
+`--ssh-host` runs. That means missing CLI, remote auth/access failures, and SSH
+placement issues are caught before the runner fans out into the full example
+list.
+
 ### Run with Ollama
 
 Fastest path:

@@ -68,4 +68,29 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
   after
     Process.delete({ExamplesSupport, :ssh_context})
   end
+
+  test "preflight_options/0 carries the shared SSH context into the auth probe" do
+    assert {:ok, context} =
+             ExamplesSupport.parse_argv([
+               "--cwd",
+               "/srv/claude",
+               "--danger-full-access",
+               "--ssh-host",
+               "example.internal"
+             ])
+
+    Process.put({ExamplesSupport, :ssh_context}, context)
+
+    opts = ExamplesSupport.preflight_options()
+
+    assert opts.execution_surface.surface_kind == :ssh_exec
+    assert opts.execution_surface.transport_options[:destination] == "example.internal"
+    assert opts.cwd == "/srv/claude"
+    assert opts.permission_mode == :bypass_permissions
+    assert opts.max_turns == 1
+    assert opts.output_format == :json
+    assert opts.setting_sources == ["user"]
+  after
+    Process.delete({ExamplesSupport, :ssh_context})
+  end
 end
