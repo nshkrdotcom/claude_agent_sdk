@@ -208,14 +208,14 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
     request_id
   end
 
-  @spec static_ssh_surface(t(), FakeSSH.t(), keyword()) :: keyword()
-  def static_ssh_surface(%__MODULE__{}, %FakeSSH{} = fake_ssh, opts \\ []) when is_list(opts) do
+  @spec ssh_exec_surface(t(), FakeSSH.t(), keyword()) :: keyword()
+  def ssh_exec_surface(%__MODULE__{}, %FakeSSH{} = fake_ssh, opts \\ []) when is_list(opts) do
     destination = Keyword.get(opts, :destination, "claude-sdk.test.example")
     user = Keyword.get(opts, :user, "sdk")
     port = Keyword.get(opts, :port, 22)
 
     [
-      surface_kind: :static_ssh,
+      surface_kind: :ssh_exec,
       transport_options:
         FakeSSH.transport_options(fake_ssh,
           destination: destination,

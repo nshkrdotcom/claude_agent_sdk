@@ -223,7 +223,7 @@ over SSH, configure `Options.execution_surface`:
 ```elixir
 ssh_options = %Options{
   execution_surface: [
-    surface_kind: :static_ssh,
+    surface_kind: :ssh_exec,
     transport_options: [
       destination: "claude.example",
       ssh_user: "sdk",

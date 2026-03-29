@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.Streaming.SessionCwdSemanticsTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
 
@@ -55,7 +55,7 @@ defmodule ClaudeAgentSDK.Streaming.SessionCwdSemanticsTest do
       |> FakeCLI.options(%Options{
         cwd: cwd,
         execution_surface:
-          FakeCLI.static_ssh_surface(fake_cli, fake_ssh, destination: "claude-cwd.example")
+          FakeCLI.ssh_exec_surface(fake_cli, fake_ssh, destination: "claude-cwd.example")
       })
 
     try do

@@ -63,7 +63,7 @@ defmodule ClaudeAgentSDK.QueryCLIStreamTest do
         CLIStream.stream_args([], %Options{
           executable: "claude-code",
           execution_surface: [
-            surface_kind: :static_ssh,
+            surface_kind: :ssh_exec,
             transport_options:
               FakeSSH.transport_options(fake_ssh, destination: "claude-stream.missing.example")
           ],
