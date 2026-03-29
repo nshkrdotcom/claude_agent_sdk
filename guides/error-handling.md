@@ -471,7 +471,13 @@ defp do_query(prompt, options) do
 
   # Check for auth errors in response
   auth_error? = Enum.any?(messages, fn
-    %Message{type: :assistant, data: %{error: "authentication_failed"}} -> true
+    %Message{} = message when Message.error?(message) ->
+      (message.data[:error] || "") =~ "login" or
+        (message.data[:error] || "") =~ "access"
+
+    %Message{type: :assistant, data: %{error: :authentication_failed}} ->
+      true
+
     _ -> false
   end)
 
@@ -493,6 +499,13 @@ defp do_query(prompt, options) do
   end
 end
 ```
+
+Transport failures and provider-native result failures are normalized
+differently:
+
+- SSH/process startup failures become `Message.error_result/2` frames.
+- Claude CLI result frames with `is_error: true` are normalized as
+  `:error_during_execution`, so `Message.error?/1` returns `true`.
 
 `AuthManager` now surfaces token storage failures as `{:error, reason}` (instead of crashing).
 That applies to save paths during setup/refresh and to `clear_auth/0`:

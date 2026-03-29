@@ -254,7 +254,7 @@ defmodule ClaudeAgentSDK.Message do
   end
 
   defp parse_by_type(message, :result, raw) do
-    subtype = safe_subtype(:result, raw["subtype"])
+    subtype = safe_result_subtype(raw)
 
     data =
       case subtype do
@@ -339,6 +339,13 @@ defmodule ClaudeAgentSDK.Message do
   defp safe_subtype(_type, subtype) when is_binary(subtype), do: subtype
   defp safe_subtype(_type, _subtype), do: nil
 
+  defp safe_result_subtype(%{"subtype" => subtype, "is_error" => true})
+       when subtype in ["success", :success] do
+    :error_during_execution
+  end
+
+  defp safe_result_subtype(%{} = raw), do: safe_subtype(:result, raw["subtype"])
+
   defp parse_content_block(%{"type" => "text", "text" => text}) when is_binary(text),
     do: %{type: :text, text: text}
 
@@ -413,7 +420,7 @@ defmodule ClaudeAgentSDK.Message do
 
   defp build_result_data(error_type, raw)
        when error_type in [:error_max_turns, :error_during_execution] do
-    error_message = get_error_message(error_type, raw["error"])
+    error_message = get_error_message(error_type, raw["error"] || raw["result"])
 
     %{
       session_id: raw["session_id"],
@@ -557,6 +564,8 @@ defmodule ClaudeAgentSDK.Message do
   def error?(%__MODULE__{type: :result, subtype: subtype})
       when subtype in [:error_max_turns, :error_during_execution],
       do: true
+
+  def error?(%__MODULE__{type: :result, data: %{is_error: true}}), do: true
 
   def error?(_), do: false
 

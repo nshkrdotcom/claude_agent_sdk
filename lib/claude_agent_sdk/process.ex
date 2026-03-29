@@ -15,6 +15,8 @@ defmodule ClaudeAgentSDK.Process do
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.Command.Error, as: CoreCommandError
   alias CliSubprocessCore.CommandSpec
+  alias CliSubprocessCore.ExecutionSurface
+  alias CliSubprocessCore.ProviderCLI
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
   alias CliSubprocessCore.Transport.RunResult
 
@@ -33,7 +35,7 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp start_claude_process(args, options, stdin_input) do
-    with :ok <- validate_cwd(options.cwd),
+    with :ok <- validate_cwd(options.cwd, options.execution_surface),
          {:ok, invocation} <- build_claude_invocation(args, options),
          {:ok, %RunResult{} = result} <- run_claude_invocation(invocation, stdin_input, options) do
       _ = dispatch_stderr_from_result(result, options)
@@ -52,15 +54,15 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp validate_cwd(cwd) when is_binary(cwd) do
-    if File.dir?(cwd) do
+  defp validate_cwd(cwd, execution_surface) when is_binary(cwd) do
+    if ExecutionSurface.remote_surface?(execution_surface) or File.dir?(cwd) do
       :ok
     else
       {:error, cwd_not_found_state(cwd)}
     end
   end
 
-  defp validate_cwd(_cwd), do: :ok
+  defp validate_cwd(_cwd, _execution_surface), do: :ok
 
   defp cwd_not_found_state(cwd) do
     error =
@@ -130,14 +132,20 @@ defmodule ClaudeAgentSDK.Process do
       %Errors.CLIJSONDecodeError{} = normalized ->
         error_state(Exception.message(normalized), normalized)
 
-      normalized ->
-        sdk_error =
-          %Errors.ClaudeSDKError{
-            message: "Failed to execute Claude CLI: #{inspect(normalized)}",
-            cause: error
-          }
+      _normalized ->
+        failure =
+          ProviderCLI.runtime_failure(
+            :claude,
+            error,
+            execution_surface: options.execution_surface,
+            cwd: options.cwd
+          )
 
-        error_state(Exception.message(sdk_error), sdk_error)
+        error = runtime_failure_error_struct(failure)
+
+        error_state(Exception.message(error), error,
+          error_details: runtime_failure_details(failure)
+        )
     end
   end
 
@@ -182,8 +190,22 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp exit_result_state(%RunResult{} = result, %Options{} = options) do
-    formatted_error = format_exit_error_message(result, options)
-    error_msg = process_error_message(formatted_error, result)
+    failure =
+      ProviderCLI.runtime_failure(
+        :claude,
+        result.exit,
+        execution_surface: options.execution_surface,
+        cwd: options.cwd,
+        stderr: result.stderr
+      )
+
+    error = runtime_failure_error_struct(failure)
+
+    error_msg =
+      Message.error_result(Exception.message(error),
+        error_struct: error,
+        error_details: runtime_failure_details(failure)
+      )
 
     %{
       mode: :error,
@@ -225,10 +247,15 @@ defmodule ClaudeAgentSDK.Process do
     }
   end
 
-  defp error_state(message, error_struct) do
+  defp error_state(message, error_struct, opts \\ []) do
     %{
       mode: :error,
-      messages: [Message.error_result(message, error_struct: error_struct)],
+      messages: [
+        Message.error_result(message,
+          error_struct: error_struct,
+          error_details: Keyword.get(opts, :error_details)
+        )
+      ],
       current_index: 0,
       done: false
     }
@@ -483,19 +510,48 @@ defmodule ClaudeAgentSDK.Process do
 
   defp max_buffer_size(_), do: Buffers.max_stdout_buffer_bytes()
 
-  defp process_error_message(formatted_error, %RunResult{} = result) do
-    error =
-      %Errors.ProcessError{
-        message: formatted_error,
-        exit_code: result.exit.code,
-        stderr: blank_to_nil(result.stderr)
-      }
+  defp runtime_failure_error_struct(
+         %ProviderCLI.ErrorRuntimeFailure{kind: :cli_not_found} = failure
+       ) do
+    %Errors.CLINotFoundError{
+      message: failure.message,
+      cli_path: failure.context[:command]
+    }
+  end
 
-    Message.error_result(Exception.message(error), error_struct: error)
+  defp runtime_failure_error_struct(
+         %ProviderCLI.ErrorRuntimeFailure{kind: :cwd_not_found} = failure
+       ) do
+    %Errors.CLIConnectionError{
+      message: failure.message,
+      cwd: failure.context[:cwd],
+      reason: :cwd_not_found
+    }
+  end
+
+  defp runtime_failure_error_struct(%ProviderCLI.ErrorRuntimeFailure{} = failure) do
+    %Errors.ProcessError{
+      message: failure.message,
+      exit_code: failure.exit_code,
+      stderr: blank_to_nil(failure.stderr)
+    }
+  end
+
+  defp runtime_failure_details(%ProviderCLI.ErrorRuntimeFailure{} = failure) do
+    %{}
+    |> maybe_put_runtime_detail(:kind, failure.kind)
+    |> maybe_put_runtime_detail(:exit_code, failure.exit_code)
+    |> maybe_put_runtime_detail(:stderr, blank_to_nil(failure.stderr))
+    |> maybe_put_runtime_detail(:cwd, failure.context[:cwd])
+    |> maybe_put_runtime_detail(:destination, failure.context[:destination])
   end
 
   defp blank_to_nil(""), do: nil
+  defp blank_to_nil(nil), do: nil
   defp blank_to_nil(value) when is_binary(value), do: value
+
+  defp maybe_put_runtime_detail(details, _key, nil), do: details
+  defp maybe_put_runtime_detail(details, key, value), do: Map.put(details, key, value)
 
   defp message_parse_error_message(data, reason) do
     error =
@@ -529,35 +585,6 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp cleanup_process(_state), do: :ok
-
-  defp format_exit_error_message(%RunResult{} = result, options) do
-    cwd_info = if options.cwd, do: " (cwd: #{options.cwd})", else: ""
-    stderr_text = result.stderr
-    error_details = if stderr_text != "", do: "\nstderr: #{stderr_text}", else: ""
-    formatted_json = format_json_output(result.stdout)
-
-    case result.exit.code do
-      code when is_integer(code) ->
-        "Failed to execute claude#{cwd_info} (exit status: #{code}):\n#{formatted_json}#{error_details}"
-
-      _other ->
-        "Failed to execute claude#{cwd_info}: #{inspect(result.exit.reason)}#{error_details}"
-    end
-  end
-
-  defp format_json_output(json_string) do
-    json_string
-    |> String.split("\n")
-    |> Enum.filter(&(&1 != ""))
-    |> Enum.map_join("\n", &format_single_json_line/1)
-  end
-
-  defp format_single_json_line(line) do
-    case ClaudeAgentSDK.JSON.decode(line) do
-      {:ok, _parsed} -> line
-      {:error, _reason} -> line
-    end
-  end
 
   @doc false
   defp detect_challenge_url(output) do

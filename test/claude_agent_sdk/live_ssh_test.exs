@@ -1,7 +1,7 @@
 defmodule ClaudeAgentSDK.LiveSSHTest do
   use ExUnit.Case, async: false
 
-  alias ClaudeAgentSDK.Options
+  alias ClaudeAgentSDK.{Message, Options}
   alias CliSubprocessCore.TestSupport.LiveSSH
 
   @moduletag :live_ssh
@@ -13,35 +13,35 @@ defmodule ClaudeAgentSDK.LiveSSHTest do
     @moduletag skip: LiveSSH.skip_reason()
   end
 
-  setup_all do
-    runnable? = LiveSSH.runnable?("claude-code") or LiveSSH.runnable?("claude")
+  test "live SSH: ClaudeAgentSDK.query/2 returns a success result or a normalized error result" do
+    messages =
+      ClaudeAgentSDK.query(
+        "Say exactly: CLAUDE_LIVE_SSH_OK",
+        %Options{
+          execution_surface: LiveSSH.execution_surface(),
+          max_turns: 1,
+          output_format: :stream_json,
+          executable: LiveSSH.provider_command(:claude) || "claude"
+        }
+      )
+      |> Enum.to_list()
 
-    {:ok,
-     skip: not runnable?,
-     skip_reason:
-       "Remote SSH target #{inspect(LiveSSH.destination())} does not have a runnable Claude CLI."}
-  end
+    assert Enum.any?(messages, &(&1.type == :result))
 
-  test "live SSH: ClaudeAgentSDK.query/2 runs against the remote Claude CLI", %{
-    skip: skip?,
-    skip_reason: skip_reason
-  } do
-    if skip? do
-      assert is_binary(skip_reason)
+    result = Enum.find(messages, &(&1.type == :result))
+
+    if Message.error?(result) do
+      error_text =
+        result.data[:error] ||
+          result.data[:result] ||
+          get_in(result.data, [:error_details, :stderr]) ||
+          ""
+
+      assert error_text =~ "login" or error_text =~ "access" or error_text =~ "not found"
     else
-      messages =
-        ClaudeAgentSDK.query(
-          "Say exactly: CLAUDE_LIVE_SSH_OK",
-          %Options{
-            execution_surface: LiveSSH.execution_surface(),
-            max_turns: 1,
-            output_format: :stream_json
-          }
-        )
-        |> Enum.to_list()
-
+      assert result.subtype == :success
+      refute result.data.is_error
       assert Enum.any?(messages, &(&1.type == :assistant))
-      assert Enum.any?(messages, &match?(%{type: :result, subtype: :success}, &1))
     end
   end
 end

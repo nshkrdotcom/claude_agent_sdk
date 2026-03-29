@@ -1,9 +1,11 @@
 defmodule ClaudeAgentSDK.QueryCLIStreamTest do
   use ExUnit.Case, async: false
 
+  alias ClaudeAgentSDK.Errors.CLINotFoundError
   alias ClaudeAgentSDK.Message
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Query.CLIStream
+  alias CliSubprocessCore.TestSupport.FakeSSH
 
   test "forces stream-json output even when output_format is json" do
     options = %Options{output_format: :json}
@@ -51,6 +53,33 @@ defmodule ClaudeAgentSDK.QueryCLIStreamTest do
     stream = CLIStream.stream_args([], %Options{executable: script})
 
     assert [%Message{type: :assistant}] = Enum.take(stream, 1)
+  end
+
+  test "remote missing Claude CLIs surface a structured error result instead of an empty stream" do
+    fake_ssh = FakeSSH.new!()
+
+    try do
+      stream =
+        CLIStream.stream_args([], %Options{
+          executable: "claude-code",
+          execution_surface: [
+            surface_kind: :static_ssh,
+            transport_options:
+              FakeSSH.transport_options(fake_ssh, destination: "claude-stream.missing.example")
+          ],
+          env: %{"PATH" => "/nonexistent_dir_only"}
+        })
+
+      assert [%Message{type: :result, subtype: :error_during_execution, data: data}] =
+               Enum.to_list(stream)
+
+      assert data.error =~ "remote target claude-stream.missing.example"
+      assert %CLINotFoundError{} = data.error_struct
+      assert data.error_details[:kind] == :cli_not_found
+      assert data.error_details[:exit_code] == 127
+    after
+      FakeSSH.cleanup(fake_ssh)
+    end
   end
 
   defp flag_value(args, flag) do

@@ -597,6 +597,10 @@ Key options for `ClaudeAgentSDK.Options`:
 
 CLI path override: set `path_to_claude_code_executable` or `executable` in `Options` (Python `cli_path` equivalent).
 
+On SSH-backed `execution_surface` values, Claude is resolved on the remote host.
+If the binary is installed outside the remote non-login `PATH`, pass an
+explicit `executable` or `path_to_claude_code_executable` for that target.
+
 ### Runtime Application Config
 
 All tunable constants (timeouts, buffer sizes, auth paths, CLI flags, env var

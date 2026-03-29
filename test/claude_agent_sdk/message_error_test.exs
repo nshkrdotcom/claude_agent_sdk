@@ -49,4 +49,28 @@ defmodule ClaudeAgentSDK.MessageErrorTest do
       assert {:error, {:parse_error, _reason}} = Message.from_json(malformed_json)
     end
   end
+
+  describe "from_json/1 with result errors" do
+    test "reclassifies success subtypes with is_error=true as execution errors" do
+      json =
+        Jason.encode!(%{
+          "type" => "result",
+          "subtype" => "success",
+          "session_id" => "s1",
+          "result" =>
+            "Your organization does not have access to Claude. Please login again or contact your administrator.",
+          "duration_ms" => 12,
+          "duration_api_ms" => 10,
+          "num_turns" => 1,
+          "is_error" => true
+        })
+
+      {:ok, message} = Message.from_json(json)
+
+      assert message.type == :result
+      assert message.subtype == :error_during_execution
+      assert message.data.error =~ "organization does not have access"
+      assert Message.error?(message)
+    end
+  end
 end

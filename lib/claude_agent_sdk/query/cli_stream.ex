@@ -22,6 +22,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.CommandSpec
+  alias CliSubprocessCore.ProcessExit, as: CoreProcessExit
+  alias CliSubprocessCore.ProviderCLI
   alias CliSubprocessCore.Transport, as: CoreTransport
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
@@ -118,6 +120,9 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         transport_ref: transport_ref,
         input_task: input_task,
         done?: false,
+        command: command.command,
+        cwd: command.cwd,
+        execution_surface: options.execution_surface,
         transport_error_mode: transport_error_mode(options),
         # Track if we've received at least one message for better error diagnostics
         received_first_message?: false,
@@ -126,7 +131,12 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       }
     else
       {:error, reason} ->
-        error_msg = Message.error_result("Failed to start CLI transport: #{inspect(reason)}")
+        error_msg =
+          transport_error_message(reason, %{
+            command: transport_command_name(options),
+            cwd: options.cwd,
+            execution_surface: options.execution_surface
+          })
 
         {:error, [error_msg]}
     end
@@ -199,8 +209,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       {:transport_stderr, _chunk} ->
         receive_next(state)
 
-      {:transport_exit, _reason} ->
-        maybe_halt_after_transport_exit(state)
+      {:transport_exit, reason} ->
+        handle_transport_exit(reason, state)
     after
       Timeouts.stream_receive_ms() ->
         if process_running?(state.transport) do
@@ -225,8 +235,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       {:transport_stderr, _chunk} ->
         receive_next(state)
 
-      {:transport_exit, _reason} ->
-        maybe_halt_after_transport_exit(state)
+      {:transport_exit, reason} ->
+        handle_transport_exit(reason, state)
     after
       Timeouts.stream_receive_ms() ->
         if process_running?(state.transport) do
@@ -273,17 +283,21 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     }
   end
 
-  defp handle_transport_error(error, %{transport_error_mode: :raise}) do
-    raise transport_error_struct(error)
+  defp handle_transport_error(error, %{transport_error_mode: :raise} = state) do
+    raise transport_error_struct(error, state)
   end
 
   defp handle_transport_error(error, state) do
-    {[transport_error_message(error)], %{state | done?: true}}
+    {[transport_error_message(error, state)], %{state | done?: true}}
   end
 
-  defp transport_error_message(error) do
-    error_struct = transport_error_struct(error)
-    Message.error_result(Exception.message(error_struct), error_struct: error_struct)
+  defp transport_error_message(error, state) do
+    error_struct = transport_error_struct(error, state)
+
+    Message.error_result(Exception.message(error_struct),
+      error_struct: error_struct,
+      error_details: transport_error_details(error, state)
+    )
   end
 
   defp input_task_error_message(reason) do
@@ -375,14 +389,18 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp handle_transport_event({:error, error}, state), do: handle_transport_error(error, state)
   defp handle_transport_event({:stderr, _chunk}, state), do: receive_next(state)
   defp handle_transport_event({:data, _chunk}, state), do: receive_next(state)
-  defp handle_transport_event({:exit, _reason}, state), do: maybe_halt_after_transport_exit(state)
+  defp handle_transport_event({:exit, reason}, state), do: handle_transport_exit(reason, state)
 
-  defp maybe_halt_after_transport_exit(state) do
-    if process_running?(state.transport) do
-      receive_next(state)
-    else
-      {:halt, %{state | done?: true}}
-    end
+  defp handle_transport_exit(_reason, %{received_result?: true} = state) do
+    {:halt, %{state | done?: true}}
+  end
+
+  defp handle_transport_exit(reason, %{transport_error_mode: :raise} = state) do
+    raise transport_error_struct(normalize_exit(reason), state)
+  end
+
+  defp handle_transport_exit(reason, state) do
+    {[transport_error_message(normalize_exit(reason), state)], %{state | done?: true}}
   end
 
   defp await_down_or_shutdown(ref, transport, timeout_ms) do
@@ -441,32 +459,36 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp process_running?(pid) when is_pid(pid), do: Process.info(pid, :status) != nil
   defp process_running?(_pid), do: false
 
-  defp transport_error_struct(%Errors.CLIJSONDecodeError{} = error), do: error
-  defp transport_error_struct(%Errors.CLIConnectionError{} = error), do: error
-  defp transport_error_struct(%Errors.CLINotFoundError{} = error), do: error
-  defp transport_error_struct(%Errors.ProcessError{} = error), do: error
-  defp transport_error_struct(%Errors.ClaudeSDKError{} = error), do: error
+  defp transport_error_struct(%Errors.CLIJSONDecodeError{} = error, _state), do: error
+  defp transport_error_struct(%Errors.CLIConnectionError{} = error, _state), do: error
+  defp transport_error_struct(%Errors.CLINotFoundError{} = error, _state), do: error
+  defp transport_error_struct(%Errors.ProcessError{} = error, _state), do: error
+  defp transport_error_struct(%Errors.ClaudeSDKError{} = error, _state), do: error
 
-  defp transport_error_struct(%CoreTransportError{} = error) do
+  defp transport_error_struct(%CoreTransportError{} = error, state) do
     case normalize_transport_reason(error) do
       %Errors.CLIJSONDecodeError{} = normalized ->
         normalized
 
-      :cli_not_found ->
-        %Errors.CLINotFoundError{
-          message:
-            "Claude CLI not found. Please install with: #{ClaudeAgentSDK.Config.CLI.install_command()}"
-        }
-
-      normalized ->
-        %Errors.ClaudeSDKError{
-          message: "Transport error: #{inspect(normalized)}",
-          cause: error
-        }
+      _other ->
+        error
+        |> provider_runtime_failure(state)
+        |> runtime_failure_error_struct()
     end
   end
 
-  defp transport_error_struct(error) do
+  defp transport_error_struct(%CoreProcessExit{} = exit, state) do
+    exit
+    |> provider_runtime_failure(state)
+    |> runtime_failure_error_struct()
+  end
+
+  defp transport_error_struct(:cli_not_found, state) do
+    provider_runtime_failure(CoreProcessExit.from_reason({:exit_status, 127}), state)
+    |> runtime_failure_error_struct()
+  end
+
+  defp transport_error_struct(error, _state) do
     %Errors.ClaudeSDKError{
       message: "Transport error: #{inspect(error)}",
       cause: error
@@ -528,6 +550,96 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp normalize_transport_reason({:call_exit, :noproc}), do: :not_connected
   defp normalize_transport_reason({:transport, :noproc}), do: :not_connected
   defp normalize_transport_reason(reason), do: reason
+
+  defp provider_runtime_failure(reason, state) do
+    ProviderCLI.runtime_failure(
+      :claude,
+      reason,
+      execution_surface: Map.get(state, :execution_surface),
+      cwd: Map.get(state, :cwd),
+      command: Map.get(state, :command)
+    )
+  end
+
+  defp runtime_failure_error_struct(
+         %ProviderCLI.ErrorRuntimeFailure{kind: :cli_not_found} = failure
+       ) do
+    %Errors.CLINotFoundError{
+      message: failure.message,
+      cli_path: failure.context[:command]
+    }
+  end
+
+  defp runtime_failure_error_struct(
+         %ProviderCLI.ErrorRuntimeFailure{kind: :cwd_not_found} = failure
+       ) do
+    %Errors.CLIConnectionError{
+      message: failure.message,
+      cwd: failure.context[:cwd],
+      reason: :cwd_not_found
+    }
+  end
+
+  defp runtime_failure_error_struct(%ProviderCLI.ErrorRuntimeFailure{kind: :auth_error} = failure) do
+    %Errors.ProcessError{
+      message: failure.message,
+      exit_code: failure.exit_code,
+      stderr: blank_to_nil(failure.stderr)
+    }
+  end
+
+  defp runtime_failure_error_struct(%ProviderCLI.ErrorRuntimeFailure{} = failure) do
+    %Errors.ProcessError{
+      message: failure.message,
+      exit_code: failure.exit_code,
+      stderr: blank_to_nil(failure.stderr)
+    }
+  end
+
+  defp transport_error_details(%CoreTransportError{} = error, state) do
+    case normalize_transport_reason(error) do
+      %Errors.CLIJSONDecodeError{} ->
+        nil
+
+      _other ->
+        runtime_failure_details(provider_runtime_failure(error, state))
+    end
+  end
+
+  defp transport_error_details(%CoreProcessExit{} = exit, state) do
+    runtime_failure_details(provider_runtime_failure(exit, state))
+  end
+
+  defp transport_error_details(:cli_not_found, state) do
+    runtime_failure_details(
+      provider_runtime_failure(CoreProcessExit.from_reason({:exit_status, 127}), state)
+    )
+  end
+
+  defp transport_error_details(_error, _state), do: nil
+
+  defp runtime_failure_details(%ProviderCLI.ErrorRuntimeFailure{} = failure) do
+    %{}
+    |> maybe_put_detail(:kind, failure.kind)
+    |> maybe_put_detail(:exit_code, failure.exit_code)
+    |> maybe_put_detail(:stderr, blank_to_nil(failure.stderr))
+    |> maybe_put_detail(:cwd, failure.context[:cwd])
+    |> maybe_put_detail(:destination, failure.context[:destination])
+  end
+
+  defp transport_command_name(%Options{} = options) do
+    options.executable || options.path_to_claude_code_executable || "claude-code"
+  end
+
+  defp normalize_exit(%CoreProcessExit{} = exit), do: exit
+  defp normalize_exit(reason), do: CoreProcessExit.from_reason(reason)
+
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value) when is_binary(value), do: value
+
+  defp maybe_put_detail(details, _key, nil), do: details
+  defp maybe_put_detail(details, key, value), do: Map.put(details, key, value)
 
   defp mock_prompt_from(prompt) when is_binary(prompt), do: prompt
 

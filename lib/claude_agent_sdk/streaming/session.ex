@@ -16,6 +16,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   alias ClaudeAgentSDK.Runtime.CLI
   alias ClaudeAgentSDK.Streaming.EventParser
   alias ClaudeAgentSDK.Streaming.Termination
+  alias CliSubprocessCore.ExecutionSurface
   alias CliSubprocessCore.Transport.Error, as: CoreTransportError
 
   @type subscriber_ref :: reference()
@@ -580,9 +581,9 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   defp normal_exit_reason?(reason), do: reason in [:normal, :shutdown, {:shutdown, :normal}]
 
-  defp prevalidate_runtime_start(%Options{cwd: cwd})
+  defp prevalidate_runtime_start(%Options{cwd: cwd, execution_surface: execution_surface})
        when is_binary(cwd) and cwd != "" do
-    if File.dir?(cwd) do
+    if ExecutionSurface.remote_surface?(execution_surface) or File.dir?(cwd) do
       :ok
     else
       {:error, {:cwd_not_found, cwd}}
