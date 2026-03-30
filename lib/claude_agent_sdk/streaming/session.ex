@@ -583,7 +583,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   defp prevalidate_runtime_start(%Options{cwd: cwd, execution_surface: execution_surface})
        when is_binary(cwd) and cwd != "" do
-    if ExecutionSurface.remote_surface?(execution_surface) or File.dir?(cwd) do
+    if ExecutionSurface.nonlocal_path_surface?(execution_surface) or File.dir?(cwd) do
       :ok
     else
       {:error, {:cwd_not_found, cwd}}

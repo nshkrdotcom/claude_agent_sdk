@@ -4,6 +4,8 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
   alias ClaudeAgentSDK.Options
   alias CliSubprocessCore.TestSupport.FakeSSH
 
+  @startup_timeout_floor_ms 2_500
+
   defstruct root_dir: nil,
             script_path: nil,
             requests_path: nil,
@@ -73,9 +75,11 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
   end
 
   @spec wait_until_started(t(), non_neg_integer()) :: :ok | :timeout
-  def wait_until_started(%__MODULE__{started_path: started_path}, timeout_ms)
+  def wait_until_started(%__MODULE__{} = fake_cli, timeout_ms)
       when is_integer(timeout_ms) and timeout_ms >= 0 do
-    case wait_until(fn -> File.exists?(started_path) end, timeout_ms) do
+    effective_timeout_ms = max(timeout_ms, @startup_timeout_floor_ms)
+
+    case wait_until(fn -> started?(fake_cli) end, effective_timeout_ms) do
       {:ok, _result} -> :ok
       :timeout -> :timeout
     end
@@ -260,6 +264,11 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
        do: true
 
   defp initialize_request?(_message), do: false
+
+  defp started?(%__MODULE__{started_path: started_path, requests_path: requests_path}) do
+    File.exists?(started_path) or
+      match?({:ok, contents} when byte_size(contents) > 0, File.read(requests_path))
+  end
 
   defp script_contents(root_dir) do
     """
