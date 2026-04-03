@@ -82,6 +82,17 @@ if any example failed).
 placement issues are caught before the runner fans out into the full example
 list.
 
+The preflight timeout is backend-aware:
+
+- Anthropic-backed runs default to `30s`
+- Ollama-backed runs default to `60s`
+
+Set `CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS` to override the inner transport
+budget. The shell wrapper keeps a small extra headroom above that value so
+compile/startup overhead does not trip the outer `timeout` before the transport
+budget does. You can also override that headroom with
+`CLAUDE_EXAMPLES_PREFLIGHT_WRAPPER_HEADROOM_SECONDS`.
+
 ### Run with Ollama
 
 Fastest path:
@@ -113,6 +124,12 @@ core-owned model registry path.
 
 Examples that depend on unsupported Ollama features now self-skip by default.
 Set `CLAUDE_EXAMPLES_FORCE_UNSUPPORTED=true` if you want to force those runs.
+
+If Ollama preflight fails, the first things to check are:
+
+- `ANTHROPIC_BASE_URL` points at a reachable Ollama server
+- the selected model is installed and warmed
+- `CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS` is high enough for cold-start latency
 
 ### Run Individual Examples
 

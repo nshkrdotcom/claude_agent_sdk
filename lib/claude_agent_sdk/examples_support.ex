@@ -4,12 +4,15 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   alias ClaudeAgentSDK.{CLI, Options}
   alias ClaudeAgentSDK.Process, as: ClaudeProcess
   alias CliSubprocessCore.Command, as: CoreCommand
+  alias CliSubprocessCore.Command.Error, as: CoreCommandError
   alias CliSubprocessCore.Command.RunResult
   alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ExecutionSurface
+  alias ExternalRuntimeTransport.Transport.Error, as: CoreTransportError
 
   @preflight_prompt "Reply with exactly: OK"
-  @preflight_timeout_ms 30_000
+  @default_preflight_timeout_seconds 30
+  @default_ollama_preflight_timeout_seconds 60
 
   defmodule SSHContext do
     @moduledoc false
@@ -134,11 +137,51 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
       {:error, :not_found} ->
         {:error, "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"}
 
+      {:error, %CoreCommandError{reason: {:transport, %CoreTransportError{reason: :timeout}}}} ->
+        {:error, preflight_timeout_error()}
+
       {:error, error} when is_exception(error) ->
         {:error, normalize_preflight_error(Exception.message(error))}
 
       {:error, error} ->
         {:error, normalize_preflight_error(error)}
+    end
+  end
+
+  @doc false
+  @spec preflight_timeout_seconds() :: pos_integer()
+  def preflight_timeout_seconds do
+    env_positive_integer("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS") ||
+      default_preflight_timeout_seconds()
+  end
+
+  @doc false
+  @spec preflight_timeout_ms() :: pos_integer()
+  def preflight_timeout_ms, do: preflight_timeout_seconds() * 1_000
+
+  @doc false
+  @spec preflight_auth_hint() :: String.t()
+  def preflight_auth_hint do
+    case preflight_backend() do
+      :ollama ->
+        "Verify Ollama is reachable at ANTHROPIC_BASE_URL and that the selected model is installed."
+
+      :anthropic ->
+        "Authenticate with `claude login`, or set ANTHROPIC_API_KEY / CLAUDE_AGENT_OAUTH_TOKEN."
+    end
+  end
+
+  @doc false
+  @spec preflight_timeout_hint() :: String.t()
+  def preflight_timeout_hint do
+    timeout_seconds = preflight_timeout_seconds()
+
+    case preflight_backend() do
+      :ollama ->
+        "Ollama cold starts can exceed #{timeout_seconds}s. Increase CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS or warm the model first."
+
+      :anthropic ->
+        "Increase CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS if Claude CLI startup is slow in this environment."
     end
   end
 
@@ -306,7 +349,7 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   end
 
   defp preflight_run_opts(%Options{} = options) do
-    [timeout: @preflight_timeout_ms, stderr: :separate]
+    [timeout: preflight_timeout_ms(), stderr: :separate]
     |> Kernel.++(Options.execution_surface_options(options))
   end
 
@@ -362,9 +405,58 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
 
   defp normalize_preflight_error(error), do: inspect(error)
 
+  defp preflight_timeout_error do
+    "Claude CLI preflight timed out after #{preflight_timeout_seconds()}s. " <>
+      preflight_timeout_hint()
+  end
+
+  defp default_preflight_timeout_seconds do
+    case preflight_backend() do
+      :ollama -> @default_ollama_preflight_timeout_seconds
+      :anthropic -> @default_preflight_timeout_seconds
+    end
+  end
+
+  defp preflight_backend do
+    cond do
+      normalized_env("CLAUDE_AGENT_PROVIDER_BACKEND") == "ollama" ->
+        :ollama
+
+      normalized_env("CLAUDE_EXAMPLES_BACKEND") == "ollama" ->
+        :ollama
+
+      System.get_env("ANTHROPIC_AUTH_TOKEN") == "ollama" and
+          present?(System.get_env("ANTHROPIC_BASE_URL")) ->
+        :ollama
+
+      true ->
+        :anthropic
+    end
+  end
+
+  defp env_positive_integer(name) when is_binary(name) do
+    case System.get_env(name) do
+      value when is_binary(value) ->
+        case Integer.parse(String.trim(value)) do
+          {parsed, ""} when parsed > 0 -> parsed
+          _ -> nil
+        end
+
+      _other ->
+        nil
+    end
+  end
+
   defp invalid_example_cwd?(nil), do: false
   defp invalid_example_cwd?(path) when is_binary(path), do: String.trim(path) == ""
 
   defp normalize_example_cwd(nil), do: nil
   defp normalize_example_cwd(path) when is_binary(path), do: String.trim(path)
+
+  defp normalized_env(name) when is_binary(name) do
+    case System.get_env(name) do
+      nil -> nil
+      value -> value |> String.trim() |> String.downcase()
+    end
+  end
 end

@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.ExamplesSupportTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias ClaudeAgentSDK.ExamplesSupport
   alias CliSubprocessCore.ExecutionSurface
@@ -92,5 +92,86 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
     assert opts.setting_sources == ["user"]
   after
     Process.delete({ExamplesSupport, :ssh_context})
+  end
+
+  test "preflight_timeout_seconds/0 defaults to 30 seconds for Anthropic" do
+    restore = capture_env()
+
+    on_exit(fn ->
+      restore_env(restore)
+    end)
+
+    System.delete_env("CLAUDE_AGENT_PROVIDER_BACKEND")
+    System.delete_env("CLAUDE_EXAMPLES_BACKEND")
+    System.delete_env("ANTHROPIC_AUTH_TOKEN")
+    System.delete_env("ANTHROPIC_BASE_URL")
+    System.delete_env("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS")
+
+    assert ExamplesSupport.preflight_timeout_seconds() == 30
+    assert ExamplesSupport.preflight_timeout_ms() == 30_000
+  end
+
+  test "preflight_timeout_seconds/0 defaults to 60 seconds for Ollama" do
+    restore = capture_env()
+
+    on_exit(fn ->
+      restore_env(restore)
+    end)
+
+    System.put_env("CLAUDE_AGENT_PROVIDER_BACKEND", "ollama")
+    System.delete_env("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS")
+
+    assert ExamplesSupport.preflight_timeout_seconds() == 60
+    assert ExamplesSupport.preflight_timeout_ms() == 60_000
+  end
+
+  test "preflight_timeout_seconds/0 respects explicit environment overrides" do
+    restore = capture_env()
+
+    on_exit(fn ->
+      restore_env(restore)
+    end)
+
+    System.put_env("CLAUDE_AGENT_PROVIDER_BACKEND", "ollama")
+    System.put_env("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS", "75")
+
+    assert ExamplesSupport.preflight_timeout_seconds() == 75
+    assert ExamplesSupport.preflight_timeout_ms() == 75_000
+  end
+
+  test "preflight hints are backend-aware" do
+    restore = capture_env()
+
+    on_exit(fn ->
+      restore_env(restore)
+    end)
+
+    System.put_env("CLAUDE_AGENT_PROVIDER_BACKEND", "ollama")
+
+    assert ExamplesSupport.preflight_auth_hint() =~ "Ollama"
+    assert ExamplesSupport.preflight_timeout_hint() =~ "Ollama"
+
+    System.put_env("CLAUDE_AGENT_PROVIDER_BACKEND", "anthropic")
+
+    assert ExamplesSupport.preflight_auth_hint() =~ "claude login"
+    assert ExamplesSupport.preflight_timeout_hint() =~ "CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS"
+  end
+
+  defp capture_env do
+    %{
+      "CLAUDE_AGENT_PROVIDER_BACKEND" => System.get_env("CLAUDE_AGENT_PROVIDER_BACKEND"),
+      "CLAUDE_EXAMPLES_BACKEND" => System.get_env("CLAUDE_EXAMPLES_BACKEND"),
+      "ANTHROPIC_AUTH_TOKEN" => System.get_env("ANTHROPIC_AUTH_TOKEN"),
+      "ANTHROPIC_BASE_URL" => System.get_env("ANTHROPIC_BASE_URL"),
+      "CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS" =>
+        System.get_env("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS")
+    }
+  end
+
+  defp restore_env(env) when is_map(env) do
+    Enum.each(env, fn
+      {key, nil} -> System.delete_env(key)
+      {key, value} -> System.put_env(key, value)
+    end)
   end
 end

@@ -122,6 +122,24 @@ echo "These may incur API costs."
 
 BACKEND="${CLAUDE_EXAMPLES_BACKEND:-${CLAUDE_AGENT_PROVIDER_BACKEND:-anthropic}}"
 
+default_preflight_timeout_seconds() {
+  if [[ "$BACKEND" == "ollama" ]]; then
+    echo 60
+  else
+    echo 30
+  fi
+}
+
+require_positive_integer() {
+  local name="$1"
+  local value="$2"
+
+  if ! [[ "$value" =~ ^[0-9]+$ ]] || [[ "$value" -le 0 ]]; then
+    echo "ERROR: ${name} must be a positive integer (got: ${value})." >&2
+    exit 1
+  fi
+}
+
 if [[ -z "$SSH_HOST" ]]; then
   if ! command -v claude >/dev/null 2>&1; then
     echo "ERROR: Claude CLI not found on PATH." >&2
@@ -197,8 +215,19 @@ fi
 echo ""
 echo "==> Claude live preflight (transport-aware; may make a small API call)"
 
-PREFLIGHT_TIMEOUT_SECONDS="${CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS:-30}"
-echo "    (timeout: ${PREFLIGHT_TIMEOUT_SECONDS}s; set CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS to adjust)"
+PREFLIGHT_TIMEOUT_SECONDS="${CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS:-$(default_preflight_timeout_seconds)}"
+PREFLIGHT_WRAPPER_HEADROOM_SECONDS="${CLAUDE_EXAMPLES_PREFLIGHT_WRAPPER_HEADROOM_SECONDS:-15}"
+
+require_positive_integer "CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS" "$PREFLIGHT_TIMEOUT_SECONDS"
+require_positive_integer \
+  "CLAUDE_EXAMPLES_PREFLIGHT_WRAPPER_HEADROOM_SECONDS" \
+  "$PREFLIGHT_WRAPPER_HEADROOM_SECONDS"
+
+export CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS="$PREFLIGHT_TIMEOUT_SECONDS"
+PREFLIGHT_WRAPPER_TIMEOUT_SECONDS=$((PREFLIGHT_TIMEOUT_SECONDS + PREFLIGHT_WRAPPER_HEADROOM_SECONDS))
+
+echo "    (inner timeout: ${PREFLIGHT_TIMEOUT_SECONDS}s; wrapper timeout: ${PREFLIGHT_WRAPPER_TIMEOUT_SECONDS}s)"
+echo "    (set CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS to adjust)"
 
 preflight_out="$(mktemp)"
 preflight_rc=0
@@ -209,7 +238,7 @@ if [[ ${#FORWARD_ARGS[@]} -gt 0 ]]; then
 fi
 
 if command -v timeout >/dev/null 2>&1; then
-  timeout --foreground "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+  timeout --foreground "${PREFLIGHT_WRAPPER_TIMEOUT_SECONDS}s" \
     "${preflight_cmd[@]}" >"$preflight_out" 2>&1 || preflight_rc=$?
 else
   "${preflight_cmd[@]}" >"$preflight_out" 2>&1 || preflight_rc=$?
@@ -220,7 +249,21 @@ if [[ "$preflight_rc" -ne 0 ]]; then
   echo "---- claude output ----" >&2
   cat "$preflight_out" >&2
   echo "-----------------------" >&2
-  echo "Run: claude login" >&2
+
+  if [[ "$preflight_rc" -eq 124 ]]; then
+    echo "Preflight exceeded the wrapper timeout (${PREFLIGHT_WRAPPER_TIMEOUT_SECONDS}s)." >&2
+  elif grep -q "timed out after" "$preflight_out" || grep -q "Transport timeout" "$preflight_out"; then
+    echo "Preflight exceeded the inner transport timeout (${PREFLIGHT_TIMEOUT_SECONDS}s)." >&2
+  fi
+
+  if [[ "$BACKEND" == "ollama" ]]; then
+    echo "Hint: verify Ollama is reachable at ${ANTHROPIC_BASE_URL} and that ${OLLAMA_MODEL} is installed." >&2
+    echo "Hint: cold model startup can be slow; increase CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS if needed." >&2
+  else
+    echo "Hint: authenticate with 'claude login', or set ANTHROPIC_API_KEY / CLAUDE_AGENT_OAUTH_TOKEN." >&2
+    echo "Hint: increase CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS if Claude CLI startup is slow." >&2
+  fi
+
   rm -f "$preflight_out"
   exit 1
 fi
