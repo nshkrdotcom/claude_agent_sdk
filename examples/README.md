@@ -235,3 +235,13 @@ The `archive/` directory contains older or experimental scripts, including mock/
 - [Streaming Guide](../guides/streaming.md)
 - [Hooks Guide](../guides/hooks.md)
 - [Permissions Guide](../guides/permissions.md)
+## Recovery-Oriented Example Lanes
+
+The most relevant examples for session recovery and intervention are the live CLI-backed demos run
+through `examples/run_all.sh`. In particular, keep an eye on:
+
+- the live session-oriented examples already in the runner
+- the examples that exercise multi-turn state and permissions under the real CLI
+
+Those examples are the public smoke-test lane for the same runtime session surfaces now consumed by
+upper orchestration repos.

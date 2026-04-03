@@ -18,6 +18,8 @@ Options:
   --ssh-port PORT        Override the SSH port.
   --ssh-identity-file PATH  Set the SSH identity file.
   --help                 Show this help text.
+
+The standard runner already includes the live session-oriented lanes used for recovery hardening.
 EOF
 }
 

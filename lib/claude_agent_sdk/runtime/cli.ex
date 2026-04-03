@@ -20,6 +20,12 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
 
   @runtime_metadata %{lane: :claude_agent_sdk_common_cli}
   @default_session_event_tag :claude_agent_sdk_runtime_cli
+  @session_control_capabilities [
+    :session_history,
+    :session_resume,
+    :session_pause,
+    :session_intervene
+  ]
 
   defmodule ProjectionState do
     @moduledoc """
@@ -150,7 +156,34 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
   def info(session) when is_pid(session), do: CoreSession.info(session)
 
   @spec capabilities() :: [atom()]
-  def capabilities, do: CoreClaude.capabilities()
+  def capabilities do
+    (CoreClaude.capabilities() ++ @session_control_capabilities)
+    |> Enum.uniq()
+  end
+
+  @spec list_provider_sessions(keyword()) :: {:ok, [map()]} | {:error, term()}
+  def list_provider_sessions(opts \\ []) when is_list(opts) do
+    {:ok,
+     Enum.map(ClaudeAgentSDK.list_sessions(opts), fn session ->
+       %{
+         id: session.session_id,
+         label: session.custom_title || session.summary || session.first_prompt,
+         cwd: session.cwd || session.project_path,
+         updated_at: iso8601_from_unix_ms(session.last_modified),
+         source_kind: :transcript_history,
+         metadata: %{
+           project_path: session.project_path,
+           git_branch: session.git_branch,
+           summary: session.summary,
+           file_size: session.file_size
+         },
+         raw: Map.from_struct(session)
+       }
+     end)}
+  rescue
+    error ->
+      {:error, error}
+  end
 
   @doc false
   @spec session_event_tag() :: atom()
@@ -257,6 +290,15 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
   defp force_partial_messages(%Options{} = options) do
     %{options | include_partial_messages: true}
   end
+
+  defp iso8601_from_unix_ms(value) when is_integer(value) do
+    case DateTime.from_unix(value, :millisecond) do
+      {:ok, datetime} -> DateTime.to_iso8601(datetime)
+      _ -> nil
+    end
+  end
+
+  defp iso8601_from_unix_ms(_value), do: nil
 
   defp user_message(input) when is_binary(input) do
     %{

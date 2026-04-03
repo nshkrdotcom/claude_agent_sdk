@@ -896,3 +896,14 @@ The Claude Agent SDK provides comprehensive session management through:
 | CLI messages | `ClaudeAgentSDK.get_session_messages/2` | Read canonical transcript messages |
 
 Sessions enable building sophisticated conversational applications with context persistence, multi-step workflows, and proper conversation management.
+## Runtime-Neutral Session Control
+
+When Claude is hosted under a broader orchestrator, prefer the runtime surface below over custom
+history parsing:
+
+- `ClaudeAgentSDK.Runtime.CLI.capabilities/0`
+- `ClaudeAgentSDK.Runtime.CLI.list_provider_sessions/1`
+
+Those APIs let higher layers discover whether session history, resume, pause, and intervention are
+really available, then project transcript-history entries into a stable list form for recovery
+workflows.

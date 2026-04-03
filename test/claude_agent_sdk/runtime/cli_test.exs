@@ -161,4 +161,29 @@ defmodule ClaudeAgentSDK.Runtime.CLITest do
       assert state.session_id == "sess-123"
     end
   end
+
+  describe "session control surfaces" do
+    test "capabilities publish session control support" do
+      assert :session_history in CLI.capabilities()
+      assert :session_resume in CLI.capabilities()
+      assert :session_pause in CLI.capabilities()
+      assert :session_intervene in CLI.capabilities()
+    end
+
+    test "list_provider_sessions/1 returns an empty standardized list for an empty directory" do
+      dir =
+        Path.join(
+          System.tmp_dir!(),
+          "claude_runtime_history_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(dir)
+
+      try do
+        assert {:ok, []} = CLI.list_provider_sessions(directory: dir, include_worktrees: false)
+      after
+        File.rm_rf!(dir)
+      end
+    end
+  end
 end
