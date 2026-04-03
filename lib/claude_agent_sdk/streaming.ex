@@ -243,7 +243,7 @@ defmodule ClaudeAgentSDK.Streaming do
 
   alias ClaudeAgentSDK.{Client, Options}
   alias ClaudeAgentSDK.Config.Timeouts
-  alias ClaudeAgentSDK.Streaming.{Session, Termination}
+  alias ClaudeAgentSDK.Streaming.{Session, Termination, Timeout}
   alias ClaudeAgentSDK.Transport.StreamingRouter
 
   @doc """
@@ -426,12 +426,13 @@ defmodule ClaudeAgentSDK.Streaming do
     with :ok <- Client.await_initialized(client_pid),
          :ok <- Client.send_message(client_pid, message) do
       timeout_ms = control_client_timeout_ms(client_pid)
+      timeout = Timeout.new(timeout_ms)
 
       # Return stream that adapts client messages to events
-      # State: {client_pid, ref, status, accumulated_text, stop_reason, timeout_ms}
+      # State: {client_pid, ref, status, accumulated_text, stop_reason, timeout}
       # stop_reason is tracked so we can continue streaming for multi-turn tool conversations
       Stream.resource(
-        fn -> {client_pid, ref, :active, "", nil, timeout_ms} end,
+        fn -> {client_pid, ref, :active, "", nil, timeout} end,
         &next_control_client_stream_state/1,
         fn {client, ref, _, _, _, _} ->
           GenServer.cast(client, {:unsubscribe, ref})
@@ -466,15 +467,13 @@ defmodule ClaudeAgentSDK.Streaming do
   end
 
   defp next_control_client_stream_state(
-         {_client, _ref, :complete, _accumulated, _stop_reason, _timeout_ms} =
+         {_client, _ref, :complete, _accumulated, _stop_reason, _timeout} =
            state
        ) do
     {:halt, state}
   end
 
-  defp next_control_client_stream_state(
-         {client, ref, :active, accumulated, stop_reason, timeout_ms} = state
-       ) do
+  defp next_control_client_stream_state({client, ref, :active, accumulated, stop_reason, timeout}) do
     receive do
       # Stream events from control client
       {:stream_event, ^ref, event} ->
@@ -490,16 +489,17 @@ defmodule ClaudeAgentSDK.Streaming do
 
         new_accumulated = Map.get(event, :accumulated, accumulated)
 
-        {[event], {client, ref, new_status, new_accumulated, new_stop_reason, timeout_ms}}
+        {[event],
+         {client, ref, new_status, new_accumulated, new_stop_reason, Timeout.reset(timeout)}}
 
       # Regular messages (tool results, etc.) - convert to event format
       {:claude_message, message} ->
         event = message_to_event(message, accumulated)
-        {[event], state}
+        {[event], {client, ref, :active, accumulated, stop_reason, Timeout.reset(timeout)}}
     after
-      timeout_ms ->
-        timeout_event = %{type: :error, error: :timeout}
-        {[timeout_event], {client, ref, :complete, accumulated, stop_reason, timeout_ms}}
+      Timeout.remaining_ms(timeout) ->
+        timeout_event = Timeout.timeout_event()
+        {[timeout_event], {client, ref, :complete, accumulated, stop_reason, timeout}}
     end
   end
 

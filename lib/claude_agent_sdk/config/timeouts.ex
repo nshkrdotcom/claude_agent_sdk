@@ -155,6 +155,10 @@ defmodule ClaudeAgentSDK.Config.Timeouts do
 
   # -- session ---------------------------------------------------------------
 
+  @doc "Git worktree probe timeout for session history scans (default: 5 s)."
+  @spec session_git_worktree_ms() :: pos_integer()
+  def session_git_worktree_ms, do: get(:session_git_worktree_ms, 5_000)
+
   @doc "Session cleanup check interval (default: 24 h)."
   @spec session_cleanup_interval_ms() :: pos_integer()
   def session_cleanup_interval_ms,

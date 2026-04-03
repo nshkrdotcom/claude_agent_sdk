@@ -10,10 +10,13 @@ defmodule ClaudeAgentSDK.Session.History do
 
   import Bitwise
 
+  alias ClaudeAgentSDK.Config.Timeouts
   alias ClaudeAgentSDK.Session.{SessionInfo, SessionMessage}
 
   @lite_read_buf_size 65_536
   @max_sanitized_length 200
+  @git_worktree_args ["worktree", "list", "--porcelain"]
+  @git_worktree_env [{"GIT_PAGER", "cat"}, {"GIT_TERMINAL_PROMPT", "0"}]
   @uuid_pattern ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   @transcript_entry_types ["user", "assistant", "progress", "system", "attachment"]
   @skip_first_prompt_pattern ~r/^(?:<local-command-stdout>|<session-start-hook>|<tick>|<goal>|\[Request interrupted by user[^\]]*\]|\s*<ide_opened_file>[\s\S]*<\/ide_opened_file>\s*$|\s*<ide_selection>[\s\S]*<\/ide_selection>\s*$)/
@@ -736,11 +739,14 @@ defmodule ClaudeAgentSDK.Session.History do
   end
 
   defp get_worktree_paths(cwd) do
-    case System.cmd("git", ["worktree", "list", "--porcelain"],
+    case system_cmd_with_timeout(
+           "git",
+           @git_worktree_args,
            cd: cwd,
+           env: @git_worktree_env,
            stderr_to_stdout: true
          ) do
-      {output, 0} ->
+      {:ok, {output, 0}} ->
         output
         |> String.split("\n", trim: true)
         |> Enum.flat_map(fn
@@ -753,6 +759,39 @@ defmodule ClaudeAgentSDK.Session.History do
     end
   rescue
     _ -> []
+  end
+
+  defp system_cmd_with_timeout(command, args, opts)
+       when is_binary(command) and is_list(args) and is_list(opts) do
+    caller = self()
+    ref = make_ref()
+    timeout_ms = Timeouts.session_git_worktree_ms()
+
+    {:ok, pid} =
+      Task.start(fn ->
+        result =
+          try do
+            {:ok, System.cmd(command, args, opts)}
+          rescue
+            error -> {:error, error}
+          catch
+            kind, reason -> {kind, reason}
+          end
+
+        send(caller, {ref, result})
+      end)
+
+    receive do
+      {^ref, {:ok, result}} ->
+        {:ok, result}
+
+      {^ref, _other} ->
+        {:error, :command_failed}
+    after
+      timeout_ms ->
+        Process.exit(pid, :kill)
+        {:error, :timeout}
+    end
   end
 
   defp default_projects_dir do

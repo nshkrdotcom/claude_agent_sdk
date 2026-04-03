@@ -2,9 +2,11 @@ defmodule ClaudeAgentSDK.Session.HistoryTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK
+  alias ClaudeAgentSDK.Config.Timeouts
   alias ClaudeAgentSDK.Session.History
   alias ClaudeAgentSDK.Session.SessionInfo
   alias ClaudeAgentSDK.Session.SessionMessage
+  alias ClaudeAgentSDK.TestEnvHelpers
 
   @session_uuid "550e8400-e29b-41d4-a716-446655440000"
 
@@ -256,6 +258,35 @@ defmodule ClaudeAgentSDK.Session.HistoryTest do
       sessions = History.list_sessions(directory: repo, include_worktrees: true)
 
       assert [%SessionInfo{session_id: ^shared_id, first_prompt: "worktree"}] = sessions
+    end
+
+    test "include_worktrees falls back to the main project when git probing times out", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "git-timeout") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      {session_id, _path} = make_session_file(project_dir, first_prompt: "main")
+
+      fake_bin = Path.join(root, "fake-bin")
+      fake_git = Path.join(fake_bin, "git")
+      File.mkdir_p!(fake_bin)
+      File.write!(fake_git, "#!/bin/sh\nsleep 1\n")
+      File.chmod!(fake_git, 0o755)
+
+      path = prepend_path(fake_bin)
+
+      TestEnvHelpers.with_system_and_app_env(
+        :claude_agent_sdk,
+        [{"PATH", path}],
+        [{Timeouts, [session_git_worktree_ms: 100]}],
+        fn ->
+          assert [%SessionInfo{session_id: ^session_id, first_prompt: "main"}] =
+                   History.list_sessions(directory: project_path, include_worktrees: true)
+        end
+      )
     end
   end
 
@@ -550,12 +581,41 @@ defmodule ClaudeAgentSDK.Session.HistoryTest do
   end
 
   defp run_git!(cwd, args) do
-    case System.cmd("git", args, cd: cwd, stderr_to_stdout: true) do
+    case System.cmd("git", ["-c", "commit.gpgsign=false" | args],
+           cd: cwd,
+           env: git_test_env(cwd),
+           stderr_to_stdout: true
+         ) do
       {_output, 0} ->
         :ok
 
       {output, status} ->
         flunk("git #{Enum.join(args, " ")} failed with status #{status}: #{output}")
+    end
+  end
+
+  defp git_test_env(cwd) do
+    global_config_path = Path.join(cwd, ".git-test-global-config")
+    File.write!(global_config_path, "")
+
+    [
+      {"GIT_CONFIG_NOSYSTEM", "1"},
+      {"GIT_CONFIG_GLOBAL", global_config_path},
+      {"GIT_TERMINAL_PROMPT", "0"}
+    ]
+  end
+
+  defp prepend_path(path) do
+    case System.get_env("PATH") do
+      nil -> path
+      current -> path <> path_separator() <> current
+    end
+  end
+
+  defp path_separator do
+    case :os.type() do
+      {:win32, _} -> ";"
+      _ -> ":"
     end
   end
 

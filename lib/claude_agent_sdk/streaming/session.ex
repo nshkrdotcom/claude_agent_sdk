@@ -10,12 +10,12 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   use GenServer
 
   alias ClaudeAgentSDK.Config.Timeouts
-  alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Process, as: SDKProcess
   alias ClaudeAgentSDK.Runtime.CLI
   alias ClaudeAgentSDK.Streaming.EventParser
   alias ClaudeAgentSDK.Streaming.Termination
+  alias ClaudeAgentSDK.Streaming.Timeout
   alias CliSubprocessCore.ExecutionSurface
   alias ExternalRuntimeTransport.Transport.Error, as: CoreTransportError
 
@@ -85,38 +85,35 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   def send_message(session, message) do
     ref = make_ref()
     timeout_ms = timeout_ms_for_session(session)
+    timeout = Timeout.new(timeout_ms)
 
     :ok = GenServer.call(session, {:subscribe, ref, self()}, Timeouts.streaming_session_ms())
     :ok = GenServer.cast(session, {:send_message, message, ref})
 
     Stream.resource(
-      fn -> {session, ref, :active, nil, timeout_ms} end,
+      fn -> {session, ref, :active, nil, timeout} end,
       fn
-        {session, ref, :complete, stop_reason, timeout_ms} ->
-          {:halt, {session, ref, :complete, stop_reason, timeout_ms}}
+        {session, ref, :complete, stop_reason, timeout} ->
+          {:halt, {session, ref, :complete, stop_reason, timeout}}
 
-        {session, ref, :active, stop_reason, timeout_ms} ->
+        {session, ref, :active, stop_reason, timeout} ->
           receive do
             {:stream_event, ^ref, event} ->
               {new_stop_reason, complete?} = Termination.step(event, stop_reason)
               status = if complete?, do: :complete, else: :active
-              {[event], {session, ref, status, new_stop_reason, timeout_ms}}
+              {[event], {session, ref, status, new_stop_reason, Timeout.reset(timeout)}}
 
             {:stream_error, ^ref, reason} ->
-              {[%{type: :error, error: reason}],
-               {session, ref, :complete, stop_reason, timeout_ms}}
+              {[%{type: :error, error: reason}], {session, ref, :complete, stop_reason, timeout}}
 
             {:stream_complete, ^ref} ->
-              {:halt, {session, ref, :complete, stop_reason, timeout_ms}}
+              {:halt, {session, ref, :complete, stop_reason, timeout}}
           after
-            timeout_ms ->
-              Logger.warning("Streaming timeout after #{timeout_ms}ms")
-
-              {[%{type: :error, error: :timeout}],
-               {session, ref, :complete, stop_reason, timeout_ms}}
+            Timeout.remaining_ms(timeout) ->
+              {[Timeout.timeout_event()], {session, ref, :complete, stop_reason, timeout}}
           end
       end,
-      fn {session, ref, _status, _stop_reason, _timeout_ms} ->
+      fn {session, ref, _status, _stop_reason, _timeout} ->
         GenServer.cast(session, {:unsubscribe, ref})
       end
     )

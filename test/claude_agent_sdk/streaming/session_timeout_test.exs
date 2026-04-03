@@ -1,6 +1,8 @@
 defmodule ClaudeAgentSDK.Streaming.SessionTimeoutTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.Streaming.Session
 
@@ -26,6 +28,20 @@ defmodule ClaudeAgentSDK.Streaming.SessionTimeoutTest do
     assert [%{type: :error, error: :timeout}] = events
     assert elapsed_ms >= 50
     assert elapsed_ms < 1_000
+
+    :ok = Session.close(session)
+  end
+
+  test "send_message timeout does not emit warning logs in the consumer hot path" do
+    {:ok, session} = Session.start_link(%Options{timeout_ms: 75}, mock_stream: true)
+
+    log =
+      capture_log(fn ->
+        assert [%{type: :error, error: :timeout}] =
+                 Session.send_message(session, "hello") |> Enum.to_list()
+      end)
+
+    assert log == ""
 
     :ok = Session.close(session)
   end
