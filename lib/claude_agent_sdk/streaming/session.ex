@@ -17,7 +17,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   alias ClaudeAgentSDK.Streaming.EventParser
   alias ClaudeAgentSDK.Streaming.Termination
   alias CliSubprocessCore.ExecutionSurface
-  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
+  alias ExternalRuntimeTransport.Transport.Error, as: CoreTransportError
 
   @type subscriber_ref :: reference()
   @type subscriber_pid :: pid()

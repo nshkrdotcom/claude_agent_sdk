@@ -54,7 +54,7 @@ defmodule ClaudeAgentSDK.Runtime.CLITest do
         assert info.invocation.env["CLAUDE_CODE_ENTRYPOINT"] == "sdk-elixir"
         assert info.invocation.env["CLAUDE_AGENT_SDK_VERSION"]
         assert info.invocation.user == nil
-        assert info.transport.module == CliSubprocessCore.Transport
+        assert info.transport.module == ExternalRuntimeTransport.Transport
 
         args = info.invocation.args
 

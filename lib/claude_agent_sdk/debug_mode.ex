@@ -60,7 +60,7 @@ defmodule ClaudeAgentSDK.DebugMode do
   alias ClaudeAgentSDK.Config.Buffers
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias CliSubprocessCore.{Command, CommandSpec}
-  alias CliSubprocessCore.Transport.RunResult
+  alias CliSubprocessCore.Command.RunResult
 
   @doc """
   Executes a query in debug mode with detailed logging and timing.

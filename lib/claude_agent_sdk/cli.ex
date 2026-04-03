@@ -8,7 +8,7 @@ defmodule ClaudeAgentSDK.CLI do
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Options
   alias CliSubprocessCore.{Command, CommandSpec, ProviderCLI}
-  alias CliSubprocessCore.Transport.RunResult
+  alias CliSubprocessCore.Command.RunResult
 
   @doc false
   @spec find_command_spec() :: {:ok, CommandSpec.t()} | {:error, :not_found}

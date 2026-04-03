@@ -31,7 +31,7 @@ defmodule ClaudeAgentSDK.Streaming do
       ↓
   CliSubprocessCore.Session
       ↓
-  CliSubprocessCore.Transport
+  ExternalRuntimeTransport.Transport
 
   Control lane:
   Your App
@@ -42,7 +42,7 @@ defmodule ClaudeAgentSDK.Streaming do
       ↓
   CliSubprocessCore.ProtocolSession
       ↓
-  CliSubprocessCore.Channel / CliSubprocessCore.Transport
+  CliSubprocessCore.Channel / ExternalRuntimeTransport.Transport
   ```
 
   ## Quick Start

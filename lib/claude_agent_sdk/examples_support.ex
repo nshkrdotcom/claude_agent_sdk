@@ -4,9 +4,9 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   alias ClaudeAgentSDK.{CLI, Options}
   alias ClaudeAgentSDK.Process, as: ClaudeProcess
   alias CliSubprocessCore.Command, as: CoreCommand
+  alias CliSubprocessCore.Command.RunResult
   alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ExecutionSurface
-  alias CliSubprocessCore.Transport.RunResult
 
   @preflight_prompt "Reply with exactly: OK"
   @preflight_timeout_ms 30_000

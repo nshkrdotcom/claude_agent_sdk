@@ -22,10 +22,10 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.CommandSpec
-  alias CliSubprocessCore.ProcessExit, as: CoreProcessExit
   alias CliSubprocessCore.ProviderCLI
-  alias CliSubprocessCore.Transport, as: CoreTransport
-  alias CliSubprocessCore.Transport.Error, as: CoreTransportError
+  alias ExternalRuntimeTransport.ProcessExit, as: CoreProcessExit
+  alias ExternalRuntimeTransport.Transport, as: CoreTransport
+  alias ExternalRuntimeTransport.Transport.Error, as: CoreTransportError
 
   @transport_event_tag :claude_agent_sdk_transport
 
@@ -106,7 +106,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
          {:ok, transport_pid} <-
            CoreTransport.start_link(
              [
-               command: command,
+               command: CoreCommand.to_transport_command(command),
                subscriber: {self(), transport_ref},
                event_tag: @transport_event_tag,
                stderr_callback: nil
