@@ -855,7 +855,8 @@ reference.
 # Timeouts
 config :claude_agent_sdk, ClaudeAgentSDK.Config.Timeouts,
   query_total_ms: 5_400_000,           # total query timeout (default: 75 min)
-  tool_execution_ms: 60_000            # per-tool timeout (default: 30 s)
+  tool_execution_ms: 60_000,           # per-tool timeout (default: 30 s)
+  session_git_worktree_ms: 2_000       # session-history git worktree probe
 
 # Buffer sizes
 config :claude_agent_sdk, ClaudeAgentSDK.Config.Buffers,

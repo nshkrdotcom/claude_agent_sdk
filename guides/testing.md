@@ -892,6 +892,37 @@ keeps normal linked-GenServer semantics, so trap exits before you assert
 deterministic config failures such as missing cwd/command directly from
 `start_link`.
 
+### Hermetic Git Fixtures
+
+If a test creates temporary git repositories, do not let developer-local git
+configuration leak into the fixture. Global hooks, signing settings, pagers, or
+prompts can turn a simple `git commit` into a slow or hanging test on one
+machine while it passes on another.
+
+Prefer an isolated git environment for fixtures:
+
+```elixir
+global_config_path = Path.join(tmp_dir, ".git-test-global-config")
+File.write!(global_config_path, "")
+
+env = [
+  {"GIT_CONFIG_NOSYSTEM", "1"},
+  {"GIT_CONFIG_GLOBAL", global_config_path},
+  {"GIT_TERMINAL_PROMPT", "0"}
+]
+
+System.cmd("git", ["-c", "commit.gpgsign=false", "commit", "-m", "initial"],
+  cd: repo_path,
+  env: env,
+  stderr_to_stdout: true
+)
+```
+
+Use the same pattern for `git worktree` integration tests. If you need to stub
+`git` itself by prepending a fake binary to `PATH`, restore `PATH` after the
+test with a bounded helper such as `ClaudeAgentSDK.TestEnvHelpers.with_system_env/2`
+or `with_system_and_app_env/4`.
+
 ### Development Configuration (config/dev.exs)
 
 ```elixir

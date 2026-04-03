@@ -62,6 +62,7 @@ All values in milliseconds unless noted.
 | `auth_cli_version_ms/0` | 10,000 | CLI version check timeout |
 | `tool_execution_ms/0` | 30,000 | Tool execution timeout |
 | `hook_min_ms/0` | 1,000 | Minimum hook timeout floor |
+| `session_git_worktree_ms/0` | 5,000 | Git worktree probe timeout for session history |
 | `session_cleanup_interval_ms/0` | 86,400,000 | Session cleanup check interval (24 h) |
 | `orchestrator_backoff_ms/0` | 1,000 | Initial retry backoff |
 | `ms_per_hour/0` | 3,600,000 | Conversion constant |
@@ -145,7 +146,8 @@ Every function returns a string literal — the canonical environment variable n
 # config/config.exs
 config :claude_agent_sdk, ClaudeAgentSDK.Config.Timeouts,
   client_init_ms: 90_000,
-  query_total_ms: 5_400_000
+  query_total_ms: 5_400_000,
+  session_git_worktree_ms: 2_000
 
 config :claude_agent_sdk, ClaudeAgentSDK.Config.Buffers,
   max_stdout_buffer_bytes: 2_097_152
@@ -189,7 +191,8 @@ end
 # config/test.exs
 config :claude_agent_sdk, ClaudeAgentSDK.Config.Timeouts,
   client_init_ms: 5_000,       # faster for tests
-  query_total_ms: 10_000
+  query_total_ms: 10_000,
+  session_git_worktree_ms: 250
 
 # config/prod.exs
 config :claude_agent_sdk, ClaudeAgentSDK.Config.Timeouts,

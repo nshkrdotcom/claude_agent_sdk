@@ -846,6 +846,18 @@ exact_project_only =
   ClaudeAgentSDK.list_sessions(directory: "/path/to/project", include_worktrees: false)
 ```
 
+When `include_worktrees: true`, the SDK probes `git worktree list --porcelain`
+with a bounded timeout before scanning sibling transcript directories. If git is
+unavailable, the directory is not in a repo, or the probe times out, the SDK
+falls back to the main project transcript directory instead of blocking session
+history reads.
+
+```elixir
+# Optional: tighten the git worktree probe budget
+config :claude_agent_sdk, ClaudeAgentSDK.Config.Timeouts,
+  session_git_worktree_ms: 2_000
+```
+
 ### Reading Session Messages
 
 ```elixir
