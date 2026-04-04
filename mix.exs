@@ -81,7 +81,7 @@ defmodule ClaudeAgentSdk.MixProject do
           examples/research_agent/README.md
           examples/skill_invocation/README.md
           examples/email_agent/README.md
-          assets/claude_agent_sdk.svg
+          assets
           docs/RUNTIME_CONTROL.md
           mix.exs
           README.md
