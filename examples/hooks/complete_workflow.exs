@@ -114,12 +114,6 @@ end
 table = CompleteWorkflowHooks.table_name()
 sandbox_dir = Support.tmp_dir!("claude_agent_sdk_complete_workflow")
 
-outside_path =
-  Path.join(
-    System.tmp_dir!(),
-    "claude_agent_sdk_outside_#{System.unique_integer([:positive])}.txt"
-  )
-
 client = nil
 
 try do
@@ -149,6 +143,9 @@ try do
 
   # Note: We don't set max_turns here to match Python SDK behavior.
   # With hooks enabled, the conversation needs multiple turns for tool use + response.
+  # The deny path uses Bash rather than an out-of-sandbox write because the
+  # injected security context can cause Claude to self-refuse the write before
+  # a PreToolUse hook ever fires.
   options =
     %Options{
       tools: ["Bash", "Write"],
@@ -197,10 +194,10 @@ try do
       "Use the Write tool to write exactly 'ok' to #{Path.join(sandbox_dir, "ok.txt")}."
     )
 
-  IO.puts("\nTest 2: Write outside sandbox (denied by hook)\n")
+  IO.puts("\nTest 2: Blocked bash command (denied by hook)\n")
 
   messages2 =
-    run_prompt.("Use the Write tool to write exactly 'outside' to #{outside_path}.")
+    run_prompt.("Use the Bash tool to run this exact command: ./blocked.sh --help")
 
   messages3 =
     if Support.ollama_backend?() do
@@ -220,7 +217,7 @@ try do
   result_runs =
     [
       {"sandbox write", messages1},
-      {"outside write", messages2}
+      {"blocked bash", messages2}
     ] ++ if(messages3 == [], do: [], else: [{"safe bash", messages3}])
 
   for {label, msgs} <- result_runs do

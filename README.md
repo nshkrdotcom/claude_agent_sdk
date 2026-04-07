@@ -168,7 +168,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.16.0"}
+    {:claude_agent_sdk, "~> 0.17.0"}
   ]
 end
 ```

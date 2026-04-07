@@ -7,12 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-04-06
+
+### Added
+
+- Session recovery helpers plus timeout-aware Git worktree scanning controls,
+  including `session_git_worktree_ms`, so transcript/session discovery can be
+  resumed without hanging large repos.
+
 ### Changed
 
+- The common Claude CLI lane now runs on `cli_subprocess_core`, and the public
+  transport story is reduced to `Options.execution_surface` rather than custom
+  transport injection.
 - Runtime-control docs and release notes now describe the final Phase 4
   boundary explicitly: `cli_subprocess_core` owns the shared subprocess
   lifecycle, `claude_agent_sdk` owns Claude-native control semantics, and
   ASM composition remains an optional bridge above that split.
+- Model selection, fallback/defaulting, and Ollama payload shaping now flow
+  through the shared core model registry instead of Claude-local policy.
+
+### Fixed
+
+- Remote execution now handles SSH option shaping, nonlocal path readiness,
+  remote CWD validation, and example preflight diagnostics more consistently.
+- Stream sessions and transcript/worktree scans now fail with bounded timeout
+  behavior instead of hanging on slow filesystem state.
 
 ## [0.16.0] - 2026-03-11
 
@@ -1490,7 +1510,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.16.0...v0.17.0
 [0.15.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.12.0...v0.13.0

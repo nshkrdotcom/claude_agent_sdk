@@ -129,7 +129,11 @@ base =
     model: "haiku",
     max_turns: 1,
     output_format: :stream_json,
-    betas: betas
+    betas: betas,
+    # Keep the example deterministic: Claude Code can auto-load Claude.ai MCP
+    # servers, which inject authenticate tools into the init metadata.
+    strict_mcp_config: true,
+    env: %{"ENABLE_CLAUDEAI_MCP_SERVERS" => "false"}
   }
   |> Support.with_execution_surface()
 
