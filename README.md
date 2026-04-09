@@ -39,7 +39,7 @@ An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python]
 ## Runtime Architecture
 
 - Common CLI query/streaming flows run on the shared `cli_subprocess_core`
-  runtime: `CliSubprocessCore.Session`, `ExternalRuntimeTransport.Transport`, and
+  runtime: `CliSubprocessCore.Session`, `CliSubprocessCore.RawSession`, and
   `CliSubprocessCore.Command`.
 - `ClaudeAgentSDK.Client` remains SDK-local only for the advanced Claude
   control family: hooks, permission callbacks, SDK MCP routing, and control
@@ -635,7 +635,7 @@ but it is deprecated and logs a warning once per legacy module.
 `SessionStore` now hydrates on-disk cache in a `handle_continue/2` step. Startup is faster,
 but `list/search` can be briefly incomplete immediately after boot while warmup finishes.
 
-`ExternalRuntimeTransport.Transport` and `Streaming.Session` support `startup_mode: :lazy`
+`CliSubprocessCore.RawSession` and `Streaming.Session` support `startup_mode: :lazy`
 to defer subprocess startup to `handle_continue/2`. Deterministic startup
 validation still happens before `start_link` returns, so missing cwd/command
 style failures surface immediately. Once preflight passes, lazy mode can still
@@ -767,7 +767,8 @@ For breaking changes and migration notes, see `CHANGELOG.md`.
 
 **0.12.0 breaking changes:**
 - `Transport.Port` removed. The built-in common transport lane now runs through
-  `ExternalRuntimeTransport.Transport`.
+  `CliSubprocessCore.Command`, `CliSubprocessCore.RawSession`, and
+  `CliSubprocessCore.Session`.
 - Custom transport injection removed from `Client`, `Query`, and common CLI lanes.
   Use `Options.execution_surface` for SSH/local routing instead.
 - Transport error tuple shape updated: low-level failures now use `{:error, {:transport, reason}}` instead of bare `{:error, reason}`.

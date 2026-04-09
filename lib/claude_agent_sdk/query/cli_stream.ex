@@ -23,8 +23,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ProviderCLI
+  alias CliSubprocessCore.RawSession
   alias ExternalRuntimeTransport.ProcessExit, as: CoreProcessExit
-  alias ExternalRuntimeTransport.Transport, as: CoreTransport
   alias ExternalRuntimeTransport.Transport.Error, as: CoreTransportError
 
   @transport_event_tag :claude_agent_sdk_transport
@@ -100,24 +100,25 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp start_transport(args, %Options{} = options, input) do
     drain_stale_transport_messages()
-    transport_ref = make_ref()
 
     with {:ok, command} <- build_transport_command(options, args),
-         {:ok, transport_pid} <-
-           CoreTransport.start_link(
+         {:ok, raw_session} <-
+           RawSession.start_link(
+             command,
              [
-               command: CoreCommand.to_transport_command(command),
-               subscriber: {self(), transport_ref},
+               receiver: self(),
                event_tag: @transport_event_tag,
-               stderr_callback: nil
+               stderr_callback: nil,
+               stdout_mode: :line,
+               stdin_mode: :line
              ] ++
                Options.execution_surface_options(options)
            ),
-         :ok <- CoreTransport.subscribe(transport_pid, self(), transport_ref),
-         {:ok, input_task} <- maybe_stream_input(transport_pid, input) do
+         {:ok, input_task} <- maybe_stream_input(raw_session, input) do
       %{
-        transport: transport_pid,
-        transport_ref: transport_ref,
+        raw_session: raw_session,
+        transport: raw_session.transport,
+        transport_ref: raw_session.transport_ref,
         input_task: input_task,
         done?: false,
         command: command.command,
@@ -143,24 +144,24 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   # For non-streaming queries (nil input), close stdin immediately so the CLI starts processing
-  defp maybe_stream_input(transport, nil) do
-    case CoreTransport.end_input(transport) do
+  defp maybe_stream_input(raw_session, nil) do
+    case RawSession.close_input(raw_session) do
       :ok -> {:ok, nil}
       {:error, reason} -> {:error, {:end_input_failed, normalize_transport_reason(reason)}}
     end
   end
 
-  defp maybe_stream_input(transport, input) do
+  defp maybe_stream_input(raw_session, input) do
     with {:ok, pid} <-
-           TaskSupervisor.start_child(fn -> stream_input_messages(transport, input) end) do
+           TaskSupervisor.start_child(fn -> stream_input_messages(raw_session, input) end) do
       {:ok, %{pid: pid, monitor_ref: Process.monitor(pid)}}
     end
   end
 
-  defp stream_input_messages(transport, input) do
+  defp stream_input_messages(raw_session, input) do
     send_result =
       Enum.reduce_while(input, :ok, fn message, _acc ->
-        case CoreTransport.send(transport, message) do
+        case RawSession.send_input(raw_session, message) do
           :ok ->
             {:cont, :ok}
 
@@ -170,7 +171,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       end)
 
     end_result =
-      case CoreTransport.end_input(transport) do
+      case RawSession.close_input(raw_session) do
         :ok -> :ok
         {:error, reason} -> {:error, normalize_transport_reason(reason)}
       end
@@ -324,9 +325,9 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     receive_next(state)
   end
 
-  defp cleanup(%{transport: transport, transport_ref: transport_ref, input_task: task}) do
+  defp cleanup(%{raw_session: raw_session, transport_ref: transport_ref, input_task: task}) do
     cleanup_input_task(task)
-    close_transport_with_timeout(transport, Timeouts.transport_close_grace_ms())
+    close_transport_with_timeout(raw_session, Timeouts.transport_close_grace_ms())
     flush_transport_messages(transport_ref)
 
     :ok
@@ -342,10 +343,10 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   defp cleanup_input_task(_), do: :ok
 
-  defp close_transport_with_timeout(transport, timeout_ms) when is_pid(transport) do
+  defp close_transport_with_timeout(%RawSession{transport: transport} = raw_session, timeout_ms) do
     ref = Process.monitor(transport)
 
-    _ = safe_force_close(transport)
+    _ = safe_force_close(raw_session)
     await_down_or_shutdown(ref, transport, timeout_ms)
   end
 
@@ -436,8 +437,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     end
   end
 
-  defp safe_force_close(transport) when is_pid(transport) do
-    CoreTransport.force_close(transport)
+  defp safe_force_close(%RawSession{} = raw_session) do
+    RawSession.force_close(raw_session)
   catch
     :exit, _ -> {:error, {:transport, :not_connected}}
   end
