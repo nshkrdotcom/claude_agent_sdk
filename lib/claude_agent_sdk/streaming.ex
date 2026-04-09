@@ -17,7 +17,7 @@ defmodule ClaudeAgentSDK.Streaming do
 
   Common CLI streaming/session flows now run on the shared `cli_subprocess_core`
   runtime, while the advanced control-client family remains SDK-local above the
-  shared raw transport.
+  shared core CLI lane.
 
   ```
   Common lane:
@@ -30,8 +30,6 @@ defmodule ClaudeAgentSDK.Streaming do
   ClaudeAgentSDK.Runtime.CLI
       ↓
   CliSubprocessCore.Session
-      ↓
-  ExternalRuntimeTransport.Transport
 
   Control lane:
   Your App
@@ -42,7 +40,7 @@ defmodule ClaudeAgentSDK.Streaming do
       ↓
   CliSubprocessCore.ProtocolSession
       ↓
-  CliSubprocessCore.Channel / ExternalRuntimeTransport.Transport
+  CliSubprocessCore.Channel
   ```
 
   ## Quick Start
