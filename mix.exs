@@ -77,6 +77,8 @@ defmodule ClaudeAgentSdk.MixProject do
           LICENSE
           CHANGELOG.md
           .formatter.exs
+          examples
+          guides
         )
     ]
   end
