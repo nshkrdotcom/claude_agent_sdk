@@ -18,7 +18,7 @@ defmodule ClaudeAgentSDK.Process do
   alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ExecutionSurface
   alias CliSubprocessCore.ProviderCLI
-  alias ExternalRuntimeTransport.Transport.Error, as: CoreTransportError
+  alias ExecutionPlane.Process.Transport.Error, as: CoreTransportError
 
   @doc """
   Streams messages from Claude Code CLI using the shared non-PTY command lane.

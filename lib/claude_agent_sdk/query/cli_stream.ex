@@ -24,8 +24,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ProviderCLI
   alias CliSubprocessCore.RawSession
-  alias ExternalRuntimeTransport.ProcessExit, as: CoreProcessExit
-  alias ExternalRuntimeTransport.Transport.Error, as: CoreTransportError
+  alias ExecutionPlane.Process.Transport.Error, as: CoreTransportError
+  alias ExecutionPlane.ProcessExit, as: CoreProcessExit
 
   @transport_event_tag :claude_agent_sdk_transport
 

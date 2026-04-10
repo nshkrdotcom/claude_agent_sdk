@@ -1,11 +1,11 @@
-defmodule ExternalRuntimeTransport.TestSupport.GuestLocalAdapter do
+defmodule ExecutionPlane.TestSupport.GuestLocalAdapter do
   @moduledoc false
 
-  alias ExternalRuntimeTransport.Command
-  alias ExternalRuntimeTransport.ExecutionSurface.Adapter
-  alias ExternalRuntimeTransport.ExecutionSurface.Capabilities
-  alias ExternalRuntimeTransport.Transport
-  alias ExternalRuntimeTransport.Transport.Subprocess
+  alias ExecutionPlane.Command
+  alias ExecutionPlane.Process.Transport
+  alias ExecutionPlane.Process.Transport.Subprocess
+  alias ExecutionPlane.Process.Transport.Surface.Adapter
+  alias ExecutionPlane.Process.Transport.Surface.Capabilities
 
   @behaviour Adapter
   @behaviour Transport
