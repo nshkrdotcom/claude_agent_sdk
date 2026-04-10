@@ -8,7 +8,7 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   alias CliSubprocessCore.Command.RunResult
   alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ExecutionSurface
-  alias ExternalRuntimeTransport.Transport.Error, as: CoreTransportError
+  alias ExecutionPlane.Process.Transport.Error, as: CoreTransportError
 
   @preflight_prompt "Reply with exactly: OK"
   @default_preflight_timeout_seconds 30

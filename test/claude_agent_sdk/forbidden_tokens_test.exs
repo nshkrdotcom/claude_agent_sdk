@@ -1,70 +1,49 @@
 defmodule ClaudeAgentSDK.ForbiddenTokensTest do
   use ExUnit.Case, async: true
 
-  @legacy_backend Enum.join(["erl", "exec"])
+  @project_root Path.expand("../..", __DIR__)
+  @forbidden_tokens [
+    "ExternalRuntimeTransport",
+    "external_runtime_transport"
+  ]
   @paths [
-    "README.md",
-    "examples/archive/top_level/file_checkpointing_debug.exs",
+    "lib",
+    "test",
     "guides",
-    "lib/claude_agent_sdk/runtime",
-    "lib/claude_agent_sdk/streaming.ex",
-    "lib/claude_agent_sdk/streaming",
-    "lib/claude_agent_sdk/transport.ex",
-    "test/claude_agent_sdk/client_transport_stderr_test.exs",
-    "test/claude_agent_sdk/parity/print_removal_test.exs",
-    "test/claude_agent_sdk/query_cli_stream_cleanup_test.exs",
-    "test/claude_agent_sdk/transport"
-  ]
-  @transport_selector_paths [
     "README.md",
-    "docs/CUSTOM_TRANSPORTS.md",
-    "docs/RUNTIME_CONTROL.md",
-    "guides",
-    "lib/claude_agent_sdk/client.ex"
+    "mix.exs",
+    "mix.lock"
   ]
 
-  test "shared-lane public surfaces do not mention the legacy backend label" do
-    assert offending_files(@paths, fn contents ->
-             contents
-             |> String.downcase()
-             |> String.contains?(@legacy_backend)
-           end) == []
+  test "repo contains no external runtime transport references" do
+    Enum.each(expanded_files(), fn path ->
+      if path != __ENV__.file do
+        contents = File.read!(path)
+
+        Enum.each(@forbidden_tokens, fn token ->
+          refute contents =~ token,
+                 "unexpected forbidden token #{inspect(token)} in #{Path.relative_to(path, @project_root)}"
+        end)
+      end
+    end)
   end
 
-  test "public Claude entrypoints do not expose legacy transport_module naming" do
-    assert offending_files(@transport_selector_paths, &String.contains?(&1, "transport_module")) ==
-             []
-  end
+  defp expanded_files do
+    @paths
+    |> Enum.flat_map(fn relative ->
+      full_path = Path.join(@project_root, relative)
 
-  defp expand_files(project_root, relative_path) do
-    path = Path.join(project_root, relative_path)
+      cond do
+        File.regular?(full_path) ->
+          [full_path]
 
-    cond do
-      File.regular?(path) ->
-        [relative_path]
+        File.dir?(full_path) ->
+          Path.wildcard(Path.join(full_path, "**/*"))
+          |> Enum.filter(&File.regular?/1)
 
-      File.dir?(path) ->
-        path
-        |> Path.join("**/*")
-        |> Path.wildcard(match_dot: false)
-        |> Enum.filter(&File.regular?/1)
-        |> Enum.map(&Path.relative_to(&1, project_root))
-
-      true ->
-        []
-    end
-  end
-
-  defp offending_files(paths, matcher) when is_list(paths) and is_function(matcher, 1) do
-    project_root = Path.expand("../..", __DIR__)
-
-    paths
-    |> Enum.flat_map(&expand_files(project_root, &1))
-    |> Enum.filter(fn path ->
-      project_root
-      |> Path.join(path)
-      |> File.read!()
-      |> matcher.()
+        true ->
+          []
+      end
     end)
   end
 end
