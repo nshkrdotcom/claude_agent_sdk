@@ -15,6 +15,17 @@ defmodule ClaudeAgentSDK.RuntimeTest do
     )
   end
 
+  test "use_mock?/0 refuses provider-local mock mode outside test fixture env" do
+    TestEnvHelpers.with_system_and_app_env(
+      :claude_agent_sdk,
+      [{"LIVE_MODE", nil}, {"LIVE_TESTS", nil}],
+      [build_env: :dev, use_mock: true],
+      fn ->
+        refute Runtime.use_mock?()
+      end
+    )
+  end
+
   test "force_real?/1 returns true when custom executable is provided" do
     assert Runtime.force_real?(%Options{executable: "/usr/bin/claude"})
     assert Runtime.force_real?(%Options{path_to_claude_code_executable: "/usr/bin/claude"})

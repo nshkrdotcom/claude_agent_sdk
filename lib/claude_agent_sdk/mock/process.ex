@@ -1,11 +1,16 @@
 defmodule ClaudeAgentSDK.Mock.Process do
   @moduledoc """
-  Mock process implementation that returns predefined responses instead of spawning a CLI.
+  Package-local mock process fixture for Claude SDK tests.
 
-  This module serves as a drop-in replacement for `ClaudeAgentSDK.Process` when
-  the mock system is enabled. Instead of spawning actual Claude CLI processes,
-  it retrieves predefined responses from the `ClaudeAgentSDK.Mock` server and
-  converts them into a stream of `Message` structs.
+  This module is only reachable when package-local test fixture mocking is
+  enabled. Instead of spawning actual Claude CLI processes, it retrieves
+  predefined responses from the `ClaudeAgentSDK.Mock` server and converts them
+  into a stream of `Message` structs.
+
+  It is intentionally not a PRELIM service-mode simulation selector. Cross-stack
+  simulation must enter through ASM and the shared `cli_subprocess_core`
+  provider runtime profiles so normal provider parsers and execution-surface
+  controls still run.
 
   ## Behavior
 
@@ -23,9 +28,8 @@ defmodule ClaudeAgentSDK.Mock.Process do
 
   ## Integration
 
-  This module is automatically used when `Application.get_env(:claude_agent_sdk, :use_mock, false)`
-  returns `true`. The main SDK seamlessly switches between real and mock processing
-  without requiring code changes in client applications.
+  This module is automatically used only when the test-environment runtime mock
+  fixture gate is enabled.
 
   ## Mock Response Format
 

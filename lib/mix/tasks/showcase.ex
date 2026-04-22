@@ -4,16 +4,16 @@ defmodule Mix.Tasks.Showcase do
 
   ## Usage
 
-      # Run with mocks (safe, no API costs)
-      mix showcase
-
       # Run with live API calls (requires authentication)
       mix showcase --live
 
   ## Examples
 
-      mix showcase              # Safe demo with mocks
       mix showcase --live       # Live demo with real API calls
+
+  Provider-local mock showcase mode has been retired. Package-local tests may
+  still use `ClaudeAgentSDK.Mock`; service-mode simulation belongs under ASM and
+  `cli_subprocess_core`.
   """
 
   use Mix.Task
@@ -27,19 +27,17 @@ defmodule Mix.Tasks.Showcase do
 
     live_mode = "--live" in args
 
-    if live_mode do
-      IO.puts("🔴 LIVE MODE - Will make real API calls and incur costs!")
-      IO.puts("Press Enter to continue or Ctrl+C to cancel...")
-      IO.read(:line)
-      # Disable mocking
-      Application.put_env(:claude_agent_sdk, :use_mock, false)
-      IO.puts("✅ Live mode enabled - using real Claude CLI")
-    else
-      # Enable mocking (default)
-      Application.put_env(:claude_agent_sdk, :use_mock, true)
-      {:ok, _} = ClaudeAgentSDK.Mock.start_link()
-      IO.puts("✅ Mock mode enabled - no API calls will be made")
+    unless live_mode do
+      Mix.raise(
+        "mock showcase mode is retired; run package tests for fixture mocks or pass --live for real CLI execution"
+      )
     end
+
+    IO.puts("🔴 LIVE MODE - Will make real API calls and incur costs!")
+    IO.puts("Press Enter to continue or Ctrl+C to cancel...")
+    IO.read(:line)
+    Application.put_env(:claude_agent_sdk, :use_mock, false)
+    IO.puts("✅ Live mode enabled - using real Claude CLI")
 
     # Run the showcase
     run_showcase(live_mode)
@@ -56,7 +54,7 @@ defmodule Mix.Tasks.Showcase do
     end
 
     # Import all modules for showcase
-    alias ClaudeAgentSDK.{AuthChecker, ContentExtractor, DebugMode, Mock, OptionBuilder}
+    alias ClaudeAgentSDK.{AuthChecker, ContentExtractor, DebugMode, OptionBuilder}
 
     # Run all showcase sections
     run_option_builder_demo()
@@ -76,7 +74,7 @@ defmodule Mix.Tasks.Showcase do
     IO.puts("   ✅ Automatic environment validation with AuthChecker")
     IO.puts("   ✅ Effortless content extraction from any message format")
     IO.puts("   ✅ Comprehensive debugging tools for troubleshooting")
-    IO.puts("   ✅ Complete mock system for testing without API costs")
+    IO.puts("   ✅ Package-local mock fixtures for tests without API costs")
     IO.puts("   ✅ Production-ready configuration management")
     IO.puts("")
     IO.puts("🚀 Ready for production use!")

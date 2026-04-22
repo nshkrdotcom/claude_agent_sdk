@@ -34,7 +34,12 @@ defmodule ClaudeAgentSDK.Config do
 
   @spec use_mock?() :: boolean()
   def use_mock? do
-    Application.get_env(:claude_agent_sdk, :use_mock, false)
+    Application.get_env(:claude_agent_sdk, :use_mock, false) and test_fixture_env?()
+  end
+
+  @spec test_fixture_env?() :: boolean()
+  def test_fixture_env? do
+    ClaudeAgentSDK.BuildEnv.current() == :test
   end
 
   @spec cli_stream_module() :: module()
