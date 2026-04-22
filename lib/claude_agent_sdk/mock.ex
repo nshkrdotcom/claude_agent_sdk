@@ -1,17 +1,20 @@
 defmodule ClaudeAgentSDK.Mock do
   @moduledoc """
-  Mock implementation for the Claude Code CLI for testing purposes.
+  Package-local fixture implementation for Claude Code CLI tests.
 
-  This module provides a GenServer-based mock system that allows testing and development
-  without making actual API calls to the Claude service. It can be configured with
-  predefined responses for different prompt patterns.
+  This module provides a GenServer-based mock system for parser, wrapper, and
+  unit tests without making actual API calls to the Claude service. It is not a
+  service-mode simulation engine and must not be used as an orchestration or
+  StackLab proof selector; service-mode simulation belongs below ASM and
+  `cli_subprocess_core`.
 
   ## Features
 
   - **Pattern-based responses**: Configure responses for specific prompt patterns
   - **Default fallback**: Provides realistic default responses for unmatched prompts
   - **Integration testing**: Seamlessly integrates with the main SDK for testing
-  - **Cost-free development**: Enables development without incurring API costs
+  - **Package-local tests**: Enables deterministic SDK tests without incurring
+    API costs
 
   ## Usage
 
@@ -26,7 +29,7 @@ defmodule ClaudeAgentSDK.Mock do
         %{"type" => "result", "subtype" => "success", "total_cost_usd" => 0.001}
       ])
 
-  Enable mocking in your application configuration:
+  Enable mocking only in the package-local test environment:
 
       Application.put_env(:claude_agent_sdk, :use_mock, true)
 

@@ -1,6 +1,11 @@
 # Testing Guide for Claude Agent SDK
 
-This guide provides comprehensive documentation for testing applications built with the Claude Agent SDK for Elixir. It covers the mock system, test fixtures, hooks testing, permission callbacks, integration testing patterns, and best practices.
+This guide provides comprehensive documentation for testing applications built with the Claude Agent SDK for Elixir. It covers the package-local mock fixture system, test fixtures, hooks testing, permission callbacks, integration testing patterns, and best practices.
+
+The mock system is quarantined to this package's `:test` environment. It is not
+a service-mode simulation engine and must not be used as a StackLab,
+orchestration, ASM, or production runtime selector. Cross-stack simulation goes
+through `agent_session_manager` and `cli_subprocess_core`.
 
 ## Table of Contents
 
@@ -19,13 +24,13 @@ This guide provides comprehensive documentation for testing applications built w
 
 ## Mock System Overview
 
-The Claude Agent SDK includes a comprehensive mocking system that enables testing without making actual API calls to the Claude service. The mock system consists of three main components:
+The Claude Agent SDK includes a package-local mocking system that enables SDK tests without making actual API calls to the Claude service. The mock system consists of three main components:
 
 ### Components
 
 1. **Mock Server (`ClaudeAgentSDK.Mock`)**: A GenServer that stores and retrieves mock responses based on prompt patterns.
 
-2. **Mock Process (`ClaudeAgentSDK.Mock.Process`)**: Intercepts CLI calls when mock mode is enabled and returns stored responses.
+2. **Mock Process (`ClaudeAgentSDK.Mock.Process`)**: Intercepts CLI calls only in the package-local test fixture scope and returns stored responses.
 
 3. **Mock Transport (`ClaudeAgentSDK.TestSupport.MockTransport`)**: A test transport that records outbound messages, allows pushing inbound frames, and reports subscription metadata as `{pid, :legacy | reference()}` so tests can exercise both legacy and tagged subscriber paths.
 
@@ -35,13 +40,13 @@ The Claude Agent SDK includes a comprehensive mocking system that enables testin
 - **Predictable**: Deterministic responses for consistent test results
 - **No API Costs**: Zero usage charges during testing
 - **CI/CD Friendly**: No authentication required
-- **Offline Development**: Work without internet connectivity
+- **Fixture Scope**: Parser and wrapper tests can run without provider access
 
 ---
 
 ## Enabling Mock Mode
 
-There are multiple ways to enable mock mode depending on your use case.
+Mock mode is only honored in this package's `:test` environment.
 
 ### Configuration-Based (Recommended for Tests)
 
@@ -53,9 +58,9 @@ config :claude_agent_sdk,
   use_mock: true
 ```
 
-### Runtime Toggle
+### Runtime Toggle For Tests
 
-Enable or disable mocking at runtime:
+Enable or disable mocking at runtime inside package tests:
 
 ```elixir
 # Enable mocking
@@ -929,7 +934,7 @@ or `with_system_and_app_env/4`.
 import Config
 
 config :claude_agent_sdk,
-  use_mock: true,  # Use mocks by default in dev
+  use_mock: false,
   cli_command: "claude"
 ```
 
