@@ -45,6 +45,7 @@ defmodule ClaudeAgentSdk.MixProject do
   defp deps do
     [
       {:cli_subprocess_core, path: "../cli_subprocess_core"},
+      {:execution_plane, path: "../execution_plane", override: true},
       {:jason, "~> 1.4"},
       {:zoi, "~> 0.17"},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
