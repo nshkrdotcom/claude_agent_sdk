@@ -34,6 +34,16 @@ priv/_bundled/
 # Live examples write runtime artifacts here
 examples/_output/
 
+# Nested example project artifacts
+examples/**/_build/
+examples/**/deps/
+examples/**/doc/
+examples/**/cover/
+examples/**/priv/plts/
+examples/**/*.beam
+examples/**/*.plt
+examples/**/*.plt.hash
+
 # Ignore IDE files
 .vscode/
 .idea/

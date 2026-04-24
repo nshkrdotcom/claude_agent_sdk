@@ -22,10 +22,10 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.CommandSpec
+  alias CliSubprocessCore.ProcessExit, as: CoreProcessExit
   alias CliSubprocessCore.ProviderCLI
   alias CliSubprocessCore.RawSession
-  alias ExecutionPlane.Process.Transport.Error, as: CoreTransportError
-  alias ExecutionPlane.ProcessExit, as: CoreProcessExit
+  alias CliSubprocessCore.TransportError, as: CoreTransportError
 
   @transport_event_tag :claude_agent_sdk_transport
 
@@ -466,7 +466,35 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp transport_error_struct(%Errors.ProcessError{} = error, _state), do: error
   defp transport_error_struct(%Errors.ClaudeSDKError{} = error, _state), do: error
 
-  defp transport_error_struct(%CoreTransportError{} = error, state) do
+  defp transport_error_struct(:cli_not_found, state) do
+    provider_runtime_failure(CoreProcessExit.from_reason({:exit_status, 127}), state)
+    |> runtime_failure_error_struct()
+  end
+
+  defp transport_error_struct(error, state) when is_exception(error) do
+    if CoreTransportError.match?(error) do
+      transport_error_struct_from_core(error, state)
+    else
+      transport_error_struct_fallback(error)
+    end
+  end
+
+  defp transport_error_struct(error, state) do
+    cond do
+      CoreTransportError.match?(error) ->
+        transport_error_struct_from_core(error, state)
+
+      CoreProcessExit.match?(error) ->
+        error
+        |> provider_runtime_failure(state)
+        |> runtime_failure_error_struct()
+
+      true ->
+        transport_error_struct_fallback(error)
+    end
+  end
+
+  defp transport_error_struct_from_core(error, state) do
     case normalize_transport_reason(error) do
       %Errors.CLIJSONDecodeError{} = normalized ->
         normalized
@@ -478,18 +506,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     end
   end
 
-  defp transport_error_struct(%CoreProcessExit{} = exit, state) do
-    exit
-    |> provider_runtime_failure(state)
-    |> runtime_failure_error_struct()
-  end
-
-  defp transport_error_struct(:cli_not_found, state) do
-    provider_runtime_failure(CoreProcessExit.from_reason({:exit_status, 127}), state)
-    |> runtime_failure_error_struct()
-  end
-
-  defp transport_error_struct(error, _state) do
+  defp transport_error_struct_fallback(error) do
     %Errors.ClaudeSDKError{
       message: "Transport error: #{inspect(error)}",
       cause: error
@@ -525,10 +542,18 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
           "custom transport injection has been removed; use execution_surface instead: #{inspect(other)}"
   end
 
-  defp normalize_transport_reason(%CoreTransportError{
-         reason: {:buffer_overflow, actual_size, max_size},
-         context: context
-       }) do
+  defp normalize_transport_reason(error) do
+    if CoreTransportError.match?(error) do
+      normalize_transport_reason(
+        CoreTransportError.reason(error),
+        CoreTransportError.context(error)
+      )
+    else
+      normalize_transport_reason(error, %{})
+    end
+  end
+
+  defp normalize_transport_reason({:buffer_overflow, actual_size, max_size}, context) do
     %Errors.CLIJSONDecodeError{
       message: "JSON message exceeded maximum buffer size of #{max_size} bytes",
       line: Map.get(context, :preview, ""),
@@ -536,21 +561,14 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     }
   end
 
-  defp normalize_transport_reason(%CoreTransportError{reason: {:command_not_found, command}})
+  defp normalize_transport_reason({:command_not_found, command}, _context)
        when command in ["claude", "claude-code"],
        do: :cli_not_found
 
-  defp normalize_transport_reason(%CoreTransportError{reason: reason}),
-    do: normalize_transport_reason(reason)
-
-  defp normalize_transport_reason({:command_not_found, command})
-       when command in ["claude", "claude-code"],
-       do: :cli_not_found
-
-  defp normalize_transport_reason(:noproc), do: :not_connected
-  defp normalize_transport_reason({:call_exit, :noproc}), do: :not_connected
-  defp normalize_transport_reason({:transport, :noproc}), do: :not_connected
-  defp normalize_transport_reason(reason), do: reason
+  defp normalize_transport_reason(:noproc, _context), do: :not_connected
+  defp normalize_transport_reason({:call_exit, :noproc}, _context), do: :not_connected
+  defp normalize_transport_reason({:transport, :noproc}, _context), do: :not_connected
+  defp normalize_transport_reason(reason, _context), do: reason
 
   defp provider_runtime_failure(reason, state) do
     ProviderCLI.runtime_failure(
@@ -597,7 +615,32 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     }
   end
 
-  defp transport_error_details(%CoreTransportError{} = error, state) do
+  defp transport_error_details(:cli_not_found, state) do
+    runtime_failure_details(
+      provider_runtime_failure(CoreProcessExit.from_reason({:exit_status, 127}), state)
+    )
+  end
+
+  defp transport_error_details(error, state) when is_exception(error) do
+    if CoreTransportError.match?(error) do
+      transport_error_details_from_core(error, state)
+    end
+  end
+
+  defp transport_error_details(error, state) do
+    cond do
+      CoreTransportError.match?(error) ->
+        transport_error_details_from_core(error, state)
+
+      CoreProcessExit.match?(error) ->
+        runtime_failure_details(provider_runtime_failure(error, state))
+
+      true ->
+        nil
+    end
+  end
+
+  defp transport_error_details_from_core(error, state) do
     case normalize_transport_reason(error) do
       %Errors.CLIJSONDecodeError{} ->
         nil
@@ -606,18 +649,6 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         runtime_failure_details(provider_runtime_failure(error, state))
     end
   end
-
-  defp transport_error_details(%CoreProcessExit{} = exit, state) do
-    runtime_failure_details(provider_runtime_failure(exit, state))
-  end
-
-  defp transport_error_details(:cli_not_found, state) do
-    runtime_failure_details(
-      provider_runtime_failure(CoreProcessExit.from_reason({:exit_status, 127}), state)
-    )
-  end
-
-  defp transport_error_details(_error, _state), do: nil
 
   defp runtime_failure_details(%ProviderCLI.ErrorRuntimeFailure{} = failure) do
     %{}
@@ -632,8 +663,9 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     options.executable || options.path_to_claude_code_executable || "claude-code"
   end
 
-  defp normalize_exit(%CoreProcessExit{} = exit), do: exit
-  defp normalize_exit(reason), do: CoreProcessExit.from_reason(reason)
+  defp normalize_exit(reason) do
+    if CoreProcessExit.match?(reason), do: reason, else: CoreProcessExit.from_reason(reason)
+  end
 
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil

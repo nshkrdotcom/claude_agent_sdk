@@ -18,7 +18,7 @@ defmodule ClaudeAgentSDK.Process do
   alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ExecutionSurface
   alias CliSubprocessCore.ProviderCLI
-  alias ExecutionPlane.Process.Transport.Error, as: CoreTransportError
+  alias CliSubprocessCore.TransportError, as: CoreTransportError
 
   @doc """
   Streams messages from Claude Code CLI using the shared non-PTY command lane.
@@ -113,10 +113,7 @@ defmodule ClaudeAgentSDK.Process do
   defp maybe_put_stdin(run_opts, stdin_input) when is_binary(stdin_input),
     do: Keyword.put(run_opts, :stdin, stdin_input)
 
-  defp command_error_state(
-         %CoreCommandError{reason: {:transport, %CoreTransportError{} = error}},
-         %Options{} = options
-       ) do
+  defp command_error_state(%CoreCommandError{reason: {:transport, error}}, %Options{} = options) do
     case normalize_transport_reason(error) do
       :timeout ->
         timeout_state(options)
@@ -154,10 +151,18 @@ defmodule ClaudeAgentSDK.Process do
     error_state(Exception.message(sdk_error), sdk_error)
   end
 
-  defp normalize_transport_reason(%CoreTransportError{
-         reason: {:buffer_overflow, actual_size, max_size},
-         context: context
-       }) do
+  defp normalize_transport_reason(error) do
+    if CoreTransportError.match?(error) do
+      normalize_transport_reason(
+        CoreTransportError.reason(error),
+        CoreTransportError.context(error)
+      )
+    else
+      normalize_transport_reason(error, %{})
+    end
+  end
+
+  defp normalize_transport_reason({:buffer_overflow, actual_size, max_size}, context) do
     %Errors.CLIJSONDecodeError{
       message: "JSON message exceeded maximum buffer size of #{max_size} bytes",
       line: Map.get(context, :preview, "") |> truncate_preview(),
@@ -165,21 +170,14 @@ defmodule ClaudeAgentSDK.Process do
     }
   end
 
-  defp normalize_transport_reason(%CoreTransportError{reason: {:command_not_found, command}})
+  defp normalize_transport_reason({:command_not_found, command}, _context)
        when command in ["claude", "claude-code"],
        do: :cli_not_found
 
-  defp normalize_transport_reason(%CoreTransportError{reason: reason}),
-    do: normalize_transport_reason(reason)
-
-  defp normalize_transport_reason({:command_not_found, command})
-       when command in ["claude", "claude-code"],
-       do: :cli_not_found
-
-  defp normalize_transport_reason(:noproc), do: :not_connected
-  defp normalize_transport_reason({:call_exit, :noproc}), do: :not_connected
-  defp normalize_transport_reason({:transport, :noproc}), do: :not_connected
-  defp normalize_transport_reason(reason), do: reason
+  defp normalize_transport_reason(:noproc, _context), do: :not_connected
+  defp normalize_transport_reason({:call_exit, :noproc}, _context), do: :not_connected
+  defp normalize_transport_reason({:transport, :noproc}, _context), do: :not_connected
+  defp normalize_transport_reason(reason, _context), do: reason
 
   defp truncate_preview(preview) when is_binary(preview) do
     if byte_size(preview) > Buffers.error_preview_length() do

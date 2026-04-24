@@ -8,7 +8,7 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   alias CliSubprocessCore.Command.RunResult
   alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ExecutionSurface
-  alias ExecutionPlane.Process.Transport.Error, as: CoreTransportError
+  alias CliSubprocessCore.TransportError, as: CoreTransportError
 
   @preflight_prompt "Reply with exactly: OK"
   @default_preflight_timeout_seconds 30
@@ -137,8 +137,12 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
       {:error, :not_found} ->
         {:error, "Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code"}
 
-      {:error, %CoreCommandError{reason: {:transport, %CoreTransportError{reason: :timeout}}}} ->
-        {:error, preflight_timeout_error()}
+      {:error, %CoreCommandError{reason: {:transport, error}}} ->
+        if CoreTransportError.reason(error) == :timeout do
+          {:error, preflight_timeout_error()}
+        else
+          {:error, normalize_preflight_error(error)}
+        end
 
       {:error, error} when is_exception(error) ->
         {:error, normalize_preflight_error(Exception.message(error))}

@@ -6,6 +6,7 @@ defmodule ClaudeAgentSdk.MixProject do
   @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
   @homepage_url "https://hex.pm/packages/claude_agent_sdk"
   @docs_url "https://hexdocs.pm/claude_agent_sdk"
+  @cli_subprocess_core_version "~> 0.1.0"
 
   def project do
     [
@@ -44,8 +45,7 @@ defmodule ClaudeAgentSdk.MixProject do
 
   defp deps do
     [
-      {:cli_subprocess_core, path: "../cli_subprocess_core"},
-      {:execution_plane, path: "../execution_plane", override: true},
+      cli_subprocess_core_dep(),
       {:jason, "~> 1.4"},
       {:zoi, "~> 0.17"},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
@@ -54,6 +54,39 @@ defmodule ClaudeAgentSdk.MixProject do
       {:supertester, "~> 0.6.0", only: :test},
       {:stream_data, "~> 1.3", only: :test}
     ]
+  end
+
+  defp cli_subprocess_core_dep do
+    case workspace_dep_path("../cli_subprocess_core", "CLAUDE_AGENT_SDK_HEX_DEPS") do
+      nil -> {:cli_subprocess_core, @cli_subprocess_core_version}
+      path -> {:cli_subprocess_core, path: path}
+    end
+  end
+
+  defp workspace_dep_path(relative_path, force_hex_env) do
+    if prefer_workspace_paths?(force_hex_env) do
+      path = Path.expand(relative_path, __DIR__)
+      if File.dir?(path), do: path
+    end
+  end
+
+  defp prefer_workspace_paths?(force_hex_env) do
+    workspace_paths_forced?(force_hex_env) or
+      (not release_deps_forced?(force_hex_env) and not Enum.member?(Path.split(__DIR__), "deps"))
+  end
+
+  defp release_deps_forced?(force_hex_env) do
+    force_hex_deps?(force_hex_env) or
+      Enum.any?(System.argv(), &(&1 in ["hex.build", "hex.publish"]))
+  end
+
+  defp workspace_paths_forced?(force_hex_env) do
+    not force_hex_deps?(force_hex_env) and
+      System.get_env("FORCE_WORKSPACE_PATH_DEPS") in ["1", "true", "TRUE", "yes", "YES"]
+  end
+
+  defp force_hex_deps?(force_hex_env) do
+    System.get_env(force_hex_env) in ["1", "true", "TRUE", "yes", "YES"]
   end
 
   defp package do
@@ -78,9 +111,18 @@ defmodule ClaudeAgentSdk.MixProject do
           LICENSE
           CHANGELOG.md
           .formatter.exs
-          examples
           guides
-        )
+          examples
+        ),
+      exclude_patterns: [
+        "**/_build/**",
+        "**/deps/**",
+        "**/doc/**",
+        "**/*.beam",
+        "**/*.plt",
+        "**/*.plt.hash",
+        "examples/_output/**"
+      ]
     ]
   end
 
