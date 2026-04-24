@@ -74,13 +74,20 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
 
       {id, json} = Protocol.encode_initialize_request(hooks, sdk_servers, nil)
   """
-  @spec encode_initialize_request(map() | nil, map() | nil, request_id() | nil, map() | nil) ::
+  @spec encode_initialize_request(
+          map() | nil,
+          map() | nil,
+          request_id() | nil,
+          map() | nil,
+          map() | nil
+        ) ::
           {request_id(), String.t()}
   def encode_initialize_request(
         hooks_config,
         sdk_mcp_servers \\ nil,
         request_id \\ nil,
-        agents \\ nil
+        agents \\ nil,
+        initialize_options \\ nil
       ) do
     req_id = request_id || generate_request_id()
 
@@ -105,6 +112,8 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
         request_data
       end
 
+    request_data = merge_initialize_options(request_data, initialize_options)
+
     request = %{
       "type" => "control_request",
       "request_id" => req_id,
@@ -115,6 +124,13 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
     json = Jason.encode!(request)
     {req_id, json}
   end
+
+  defp merge_initialize_options(request_data, initialize_options)
+       when is_map(initialize_options) and map_size(initialize_options) > 0 do
+    Map.merge(request_data, initialize_options)
+  end
+
+  defp merge_initialize_options(request_data, _initialize_options), do: request_data
 
   @doc """
   Encodes an MCP status control request.
@@ -134,6 +150,26 @@ defmodule ClaudeAgentSDK.ControlProtocol.Protocol do
       "request_id" => req_id,
       "request" => %{
         "subtype" => "mcp_status"
+      }
+    }
+
+    {req_id, Jason.encode!(request)}
+  end
+
+  @doc """
+  Encodes a get_context_usage control request.
+
+  Returns `{request_id, json}`.
+  """
+  @spec encode_get_context_usage_request(request_id() | nil) :: {request_id(), String.t()}
+  def encode_get_context_usage_request(request_id \\ nil) do
+    req_id = request_id || generate_request_id()
+
+    request = %{
+      "type" => "control_request",
+      "request_id" => req_id,
+      "request" => %{
+        "subtype" => "get_context_usage"
       }
     }
 

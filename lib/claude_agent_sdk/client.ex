@@ -662,6 +662,14 @@ defmodule ClaudeAgentSDK.Client do
     GenServer.call(client, :get_mcp_status, :infinity)
   end
 
+  @doc """
+  Gets the current context usage reported by the Claude CLI.
+  """
+  @spec get_context_usage(pid()) :: {:ok, map()} | {:error, term()}
+  def get_context_usage(client) when is_pid(client) do
+    GenServer.call(client, :get_context_usage, :infinity)
+  end
+
   ## GenServer Callbacks
 
   @impl true
@@ -979,6 +987,29 @@ defmodule ClaudeAgentSDK.Client do
            state,
            req_id,
            fn task_ref -> {:mcp_status, from, task_ref} end,
+           fn ->
+             ProtocolSession.request(
+               state.protocol_session,
+               %{request_id: req_id, frame: json},
+               timeout_ms: state.control_request_timeout_ms
+             )
+           end
+         ) do
+      {:ok, next_state} ->
+        {:noreply, next_state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(:get_context_usage, from, state) do
+    {req_id, json} = Protocol.encode_get_context_usage_request()
+
+    case start_request_task(
+           state,
+           req_id,
+           fn task_ref -> {:get_context_usage, from, task_ref} end,
            fn ->
              ProtocolSession.request(
                state.protocol_session,
@@ -1374,11 +1405,15 @@ defmodule ClaudeAgentSDK.Client do
           result =
             execute_permission_callback(
               callback,
-              tool_name,
-              tool_input,
-              [],
-              nil,
-              session_id,
+              %{
+                tool_name: tool_name,
+                tool_input: tool_input,
+                suggestions: [],
+                blocked_path: nil,
+                session_id: session_id,
+                tool_use_id: nil,
+                agent_id: nil
+              },
               signal
             )
 
@@ -1627,6 +1662,7 @@ defmodule ClaudeAgentSDK.Client do
     hooks_config = build_hooks_config(registry, state.options.hooks)
     sdk_mcp_info = build_sdk_mcp_info(state.sdk_mcp_servers, state.options.mcp_servers)
     agents_for_init = Options.agents_for_initialize(state.options.agents)
+    initialize_options = Options.initialize_options(state.options)
 
     peer_request_handler =
       build_peer_request_handler(
@@ -1660,7 +1696,13 @@ defmodule ClaudeAgentSDK.Client do
           initialized: false
       }
 
-      start_initialize_task(state, hooks_config, sdk_mcp_info, agents_for_init)
+      start_initialize_task(
+        state,
+        hooks_config,
+        sdk_mcp_info,
+        agents_for_init,
+        initialize_options
+      )
     else
       {:error, reason} ->
         {:error, {:protocol_session_failed, reason}}
@@ -1709,9 +1751,21 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  defp start_initialize_task(state, hooks_config, sdk_mcp_info, agents_for_init) do
+  defp start_initialize_task(
+         state,
+         hooks_config,
+         sdk_mcp_info,
+         agents_for_init,
+         initialize_options
+       ) do
     {init_request_id, init_json} =
-      Protocol.encode_initialize_request(hooks_config, sdk_mcp_info, nil, agents_for_init)
+      Protocol.encode_initialize_request(
+        hooks_config,
+        sdk_mcp_info,
+        nil,
+        agents_for_init,
+        initialize_options
+      )
 
     init_timeout = schedule_initialize_timeout(init_request_id)
     init_timeout_ms = elem(init_timeout, 1)
@@ -2133,6 +2187,16 @@ defmodule ClaudeAgentSDK.Client do
     handle_mcp_status_response(from, response, request_id, state)
   end
 
+  defp dispatch_control_response(
+         {:get_context_usage, from, _timer_ref},
+         _response_data,
+         response,
+         request_id,
+         state
+       ) do
+    handle_context_usage_response(from, response, request_id, state)
+  end
+
   defp dispatch_control_response(nil, _response_data, response, request_id, state) do
     handle_untracked_control_response(response, request_id, state)
   end
@@ -2287,6 +2351,31 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
+  defp handle_context_usage_response(from, response, request_id, state) do
+    case response["subtype"] do
+      "success" ->
+        usage = response["response"] || %{}
+        Logger.info("get_context_usage acknowledged", request_id: request_id)
+        GenServer.reply(from, {:ok, usage})
+        state
+
+      "error" ->
+        error = response["error"] || "get_context_usage_failed"
+        Logger.error("get_context_usage rejected", request_id: request_id, error: error)
+        GenServer.reply(from, {:error, error})
+        state
+
+      other ->
+        Logger.warning("Unexpected subtype for get_context_usage response",
+          request_id: request_id,
+          subtype: other
+        )
+
+        GenServer.reply(from, {:error, :unexpected_response})
+        state
+    end
+  end
+
   defp handle_untracked_control_response(response, request_id, state) do
     case response["subtype"] do
       "success" ->
@@ -2381,6 +2470,8 @@ defmodule ClaudeAgentSDK.Client do
     tool_input = request["input"]
     suggestions = request["permission_suggestions"] || []
     blocked_path = request["blocked_path"]
+    tool_use_id = request["tool_use_id"]
+    agent_id = request["agent_id"]
     session_id = state.session_id || "unknown"
 
     Logger.debug("Permission request for tool",
@@ -2402,6 +2493,8 @@ defmodule ClaudeAgentSDK.Client do
           tool_input: tool_input,
           suggestions: suggestions,
           blocked_path: blocked_path,
+          tool_use_id: tool_use_id,
+          agent_id: agent_id,
           session_id: session_id
         }
 
@@ -2432,11 +2525,7 @@ defmodule ClaudeAgentSDK.Client do
       result =
         execute_permission_callback(
           callback,
-          permission_request.tool_name,
-          permission_request.tool_input,
-          permission_request.suggestions,
-          permission_request.blocked_path,
-          permission_request.session_id,
+          permission_request,
           signal
         )
 
@@ -2509,25 +2598,19 @@ defmodule ClaudeAgentSDK.Client do
     end
   end
 
-  defp execute_permission_callback(
-         callback,
-         tool_name,
-         tool_input,
-         suggestions,
-         blocked_path,
-         session_id,
-         signal
-       ) do
+  defp execute_permission_callback(callback, permission_request, signal) do
     task =
       Task.async(fn ->
         try do
           context =
             Context.new(
-              tool_name: tool_name,
-              tool_input: tool_input,
-              session_id: session_id,
-              suggestions: suggestions,
-              blocked_path: blocked_path,
+              tool_name: permission_value(permission_request, :tool_name),
+              tool_input: permission_value(permission_request, :tool_input),
+              session_id: permission_value(permission_request, :session_id),
+              suggestions: permission_value(permission_request, :suggestions),
+              blocked_path: permission_value(permission_request, :blocked_path),
+              tool_use_id: permission_value(permission_request, :tool_use_id),
+              agent_id: permission_value(permission_request, :agent_id),
               signal: signal
             )
 
@@ -2565,6 +2648,10 @@ defmodule ClaudeAgentSDK.Client do
       {:exit, reason} ->
         {:error, "Permission callback failed: #{inspect(reason)}"}
     end
+  end
+
+  defp permission_value(permission_request, key) when is_map(permission_request) do
+    Map.get(permission_request, key) || Map.get(permission_request, Atom.to_string(key))
   end
 
   defp put_subscriber(state, ref, pid) when is_reference(ref) and is_pid(pid) do
@@ -3031,11 +3118,9 @@ defmodule ClaudeAgentSDK.Client do
           "inputSchema" => tool.input_schema
         }
 
-        case Map.get(tool, :annotations) do
-          nil -> base
-          annotations when map_size(annotations) == 0 -> base
-          annotations -> Map.put(base, "annotations", annotations)
-        end
+        base
+        |> maybe_put_tool_annotations(tool)
+        |> maybe_put_tool_meta(tool)
       end)
 
     %{
@@ -3135,6 +3220,24 @@ defmodule ClaudeAgentSDK.Client do
         "message" => "Method not found: #{method}"
       }
     }
+  end
+
+  defp maybe_put_tool_annotations(base, tool) do
+    case Map.get(tool, :annotations) do
+      nil -> base
+      annotations when map_size(annotations) == 0 -> base
+      annotations -> Map.put(base, "annotations", annotations)
+    end
+  end
+
+  defp maybe_put_tool_meta(base, tool) do
+    case Map.get(tool, :max_result_size_chars) do
+      value when is_integer(value) and value > 0 ->
+        Map.put(base, "_meta", %{"anthropic/maxResultSizeChars" => value})
+
+      _other ->
+        base
+    end
   end
 
   defp normalize_tool_result(result) when is_map(result) do

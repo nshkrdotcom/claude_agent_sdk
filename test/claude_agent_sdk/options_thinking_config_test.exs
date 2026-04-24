@@ -40,25 +40,45 @@ defmodule ClaudeAgentSDK.Options.ThinkingConfigTest do
       assert Enum.at(args, idx + 1) == "8000"
     end
 
-    test "adaptive defaults to 32000 when max_thinking_tokens is nil" do
+    test "adaptive emits --thinking adaptive" do
       opts = new_options(thinking: %{type: :adaptive})
       args = Options.to_args(opts)
-      idx = Enum.find_index(args, &(&1 == "--max-thinking-tokens"))
-      assert Enum.at(args, idx + 1) == "32000"
+
+      idx = Enum.find_index(args, &(&1 == "--thinking"))
+      assert Enum.at(args, idx + 1) == "adaptive"
+      refute "--max-thinking-tokens" in args
     end
 
-    test "adaptive uses max_thinking_tokens as fallback when set" do
+    test "adaptive ignores deprecated max_thinking_tokens fallback" do
       opts = new_options(thinking: %{type: :adaptive}, max_thinking_tokens: 64_000)
       args = Options.to_args(opts)
-      idx = Enum.find_index(args, &(&1 == "--max-thinking-tokens"))
-      assert Enum.at(args, idx + 1) == "64000"
+
+      idx = Enum.find_index(args, &(&1 == "--thinking"))
+      assert Enum.at(args, idx + 1) == "adaptive"
+      refute "--max-thinking-tokens" in args
     end
 
-    test "disabled emits 0" do
+    test "disabled emits --thinking disabled" do
       opts = new_options(thinking: %{type: :disabled})
       args = Options.to_args(opts)
-      idx = Enum.find_index(args, &(&1 == "--max-thinking-tokens"))
-      assert Enum.at(args, idx + 1) == "0"
+
+      idx = Enum.find_index(args, &(&1 == "--thinking"))
+      assert Enum.at(args, idx + 1) == "disabled"
+      refute "--max-thinking-tokens" in args
+    end
+
+    test "thinking display emits --thinking-display for adaptive and enabled configs" do
+      adaptive = new_options(thinking: %{type: :adaptive, display: :summarized})
+      enabled = new_options(thinking: %{type: :enabled, budget_tokens: 8_000, display: "omitted"})
+
+      adaptive_args = Options.to_args(adaptive)
+      enabled_args = Options.to_args(enabled)
+
+      adaptive_idx = Enum.find_index(adaptive_args, &(&1 == "--thinking-display"))
+      enabled_idx = Enum.find_index(enabled_args, &(&1 == "--thinking-display"))
+
+      assert Enum.at(adaptive_args, adaptive_idx + 1) == "summarized"
+      assert Enum.at(enabled_args, enabled_idx + 1) == "omitted"
     end
 
     test "nil thinking falls back to max_thinking_tokens" do

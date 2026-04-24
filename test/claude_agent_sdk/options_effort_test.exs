@@ -130,8 +130,8 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert Enum.at(args, idx + 1) == "max"
     end
 
-    test "allows :max effort on claude-opus-4-6" do
-      opts = new_options(effort: :max, model: "claude-opus-4-6")
+    test "allows :max effort on claude-opus-4-7" do
+      opts = new_options(effort: :max, model: "claude-opus-4-7")
       args = Options.to_args(opts)
       assert "--effort" in args
     end
@@ -171,13 +171,30 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       )
     end
 
-    test "allows :max effort when model is nil and the default model is opus" do
+    test "allows :max effort when model is nil and env default is opus" do
       TestEnvHelpers.with_system_env(
         [{Env.provider_backend(), "anthropic"}, {Env.anthropic_model(), "opus"}],
         fn ->
           opts = Options.new(effort: :max, model: nil)
           args = Options.to_args(opts)
           assert "--effort" in args
+        end
+      )
+    end
+
+    test "warns and strips :max effort when model is nil and registry default is sonnet" do
+      TestEnvHelpers.with_system_env(
+        [{Env.provider_backend(), "anthropic"}, {Env.anthropic_model(), nil}],
+        fn ->
+          opts = Options.new(effort: :max, model: nil, provider_backend: :anthropic)
+
+          log =
+            capture_log(fn ->
+              args = Options.to_args(opts)
+              refute "--effort" in args
+            end)
+
+          assert log =~ "only supported on Opus"
         end
       )
     end

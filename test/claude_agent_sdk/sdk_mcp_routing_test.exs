@@ -3,7 +3,7 @@ defmodule ClaudeAgentSDK.SDKMCPRoutingTest do
   @moduletag capture_log: true
 
   alias ClaudeAgentSDK.{Client, Options}
-  alias ClaudeAgentSDK.TestSupport.{CalculatorTools, ErrorTools, FakeCLI}
+  alias ClaudeAgentSDK.TestSupport.{CalculatorTools, ErrorTools, FakeCLI, ParityTools}
 
   setup do
     Process.flag(:trap_exit, true)
@@ -91,6 +91,64 @@ defmodule ClaudeAgentSDK.SDKMCPRoutingTest do
 
     assert "add" in names
     assert "greet_user" in names
+  end
+
+  test "tools/list forwards Anthropic max result size metadata" do
+    server = sdk_server("parity", [ParityTools.LimitedTool])
+
+    %{client: client, transport: transport} =
+      start_client_with_fake_cli(%Options{mcp_servers: %{"parity" => server}})
+
+    on_exit(fn -> safe_stop(client) end)
+
+    request_id = "req_tools_list_meta"
+
+    FakeCLI.push_message(
+      transport,
+      sdk_mcp_request(request_id, "parity", %{
+        "jsonrpc" => "2.0",
+        "id" => "3-meta",
+        "method" => "tools/list",
+        "params" => %{}
+      })
+    )
+
+    {:ok, response} = FakeCLI.wait_for_control_response(transport, request_id, 5_000)
+    [tool] = response["response"]["response"]["mcp_response"]["result"]["tools"]
+
+    assert tool["_meta"]["anthropic/maxResultSizeChars"] == 1024
+  end
+
+  test "tools/call preserves resource content blocks and normalizes isError" do
+    server = sdk_server("parity", [ParityTools.ResourceTool])
+
+    %{client: client, transport: transport} =
+      start_client_with_fake_cli(%Options{mcp_servers: %{"parity" => server}})
+
+    on_exit(fn -> safe_stop(client) end)
+
+    request_id = "req_resource_tool"
+
+    FakeCLI.push_message(
+      transport,
+      sdk_mcp_request(request_id, "parity", %{
+        "jsonrpc" => "2.0",
+        "id" => "resource-1",
+        "method" => "tools/call",
+        "params" => %{"name" => "resource_tool", "arguments" => %{}}
+      })
+    )
+
+    {:ok, response} = FakeCLI.wait_for_control_response(transport, request_id, 5_000)
+    result = response["response"]["response"]["mcp_response"]["result"]
+
+    assert result["is_error"] == true
+    refute Map.has_key?(result, "isError")
+
+    assert [
+             %{"type" => "resource_link", "uri" => "file:///tmp/report.txt"},
+             %{"type" => "resource", "resource" => %{"text" => "data"}}
+           ] = result["content"]
   end
 
   test "normalizes SDK MCP tool failures into MCP error results" do

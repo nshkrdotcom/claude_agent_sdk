@@ -143,15 +143,9 @@ require_positive_integer() {
 }
 
 if [[ -z "$SSH_HOST" ]]; then
-  if ! command -v claude >/dev/null 2>&1; then
-    echo "ERROR: Claude CLI not found on PATH." >&2
-    echo "Install: npm install -g @anthropic-ai/claude-code" >&2
-    exit 1
-  fi
-
   echo ""
-  echo "==> claude --version"
-  claude --version
+  echo "==> Claude SDK CLI status"
+  mix run -e "Code.require_file(Path.expand(\"examples/support/example_helper.exs\")); Examples.Support.cli_status!()"
 fi
 
 if [[ "$BACKEND" == "ollama" ]]; then
@@ -195,7 +189,7 @@ echo ""
 if [[ "$BACKEND" == "ollama" ]]; then
   echo "Claude backend: Ollama via Anthropic-compatible API"
   echo "Claude CLI model: $OLLAMA_MODEL"
-  echo "Claude route: claude --model $OLLAMA_MODEL"
+  echo "SDK model route: $OLLAMA_MODEL"
   echo "Backend env: ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL"
   echo "Model slot mapping: haiku/sonnet/opus -> $OLLAMA_MODEL"
 else

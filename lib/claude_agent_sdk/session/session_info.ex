@@ -12,6 +12,8 @@ defmodule ClaudeAgentSDK.Session.SessionInfo do
     :project_path,
     :first_prompt,
     :custom_title,
+    :tag,
+    :created_at,
     :git_branch,
     :file_size,
     :last_modified
@@ -24,8 +26,10 @@ defmodule ClaudeAgentSDK.Session.SessionInfo do
           project_path: String.t() | nil,
           first_prompt: String.t() | nil,
           custom_title: String.t() | nil,
+          tag: String.t() | nil,
+          created_at: integer() | nil,
           git_branch: String.t() | nil,
-          file_size: non_neg_integer(),
+          file_size: non_neg_integer() | nil,
           last_modified: integer()
         }
 end

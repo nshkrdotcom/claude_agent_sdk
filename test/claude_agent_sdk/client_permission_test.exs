@@ -320,6 +320,41 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
 
       assert_receive {:blocked_path, "/tmp/blocked.txt"}, 500
     end
+
+    test "can_use_tool context includes tool_use_id and agent_id when provided by CLI" do
+      test_pid = self()
+
+      callback = fn context ->
+        send(test_pid, {:permission_context_ids, context.tool_use_id, context.agent_id})
+        Result.allow()
+      end
+
+      options = %Options{
+        can_use_tool: callback,
+        permission_mode: :default
+      }
+
+      %{transport: transport} = start_initialized_client_with_fake_cli(options)
+
+      request_id = "perm_req_context_ids"
+
+      can_use_tool_request = %{
+        "type" => "control_request",
+        "request_id" => request_id,
+        "request" => %{
+          "subtype" => "can_use_tool",
+          "tool_name" => "Bash",
+          "input" => %{"command" => "pwd"},
+          "permission_suggestions" => [],
+          "tool_use_id" => "toolu_123",
+          "agent_id" => "agent_456"
+        }
+      }
+
+      FakeCLI.push_message(transport, can_use_tool_request)
+
+      assert_receive {:permission_context_ids, "toolu_123", "agent_456"}, 500
+    end
   end
 
   describe "permission mode behavior" do

@@ -70,6 +70,36 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
       assert decoded["request"]["hooks"] == hooks_config
       assert decoded["request"]["sdkMcpServers"] == sdk_mcp_servers
     end
+
+    test "encodes initialize option fields" do
+      {_request_id, json} =
+        Protocol.encode_initialize_request(
+          nil,
+          nil,
+          "req_options",
+          nil,
+          %{"excludeDynamicSections" => true, "skills" => ["pdf", "docx"]}
+        )
+
+      decoded = Jason.decode!(json)
+
+      assert decoded["request"]["excludeDynamicSections"] == true
+      assert decoded["request"]["skills"] == ["pdf", "docx"]
+    end
+  end
+
+  describe "encode_get_context_usage_request/1" do
+    test "returns valid control_request with subtype get_context_usage" do
+      {req_id, json} = Protocol.encode_get_context_usage_request("req_context")
+
+      assert req_id == "req_context"
+
+      decoded = Jason.decode!(json)
+
+      assert decoded["type"] == "control_request"
+      assert decoded["request_id"] == "req_context"
+      assert decoded["request"]["subtype"] == "get_context_usage"
+    end
   end
 
   describe "encode_hook_response/3" do

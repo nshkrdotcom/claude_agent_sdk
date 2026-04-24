@@ -2,6 +2,8 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
   use ExUnit.Case, async: false
 
   alias ClaudeAgentSDK.ExamplesSupport
+  alias ClaudeAgentSDK.Options
+  alias CliSubprocessCore.Command
   alias CliSubprocessCore.ExecutionSurface
 
   test "parse_argv/1 keeps local defaults when ssh flags are absent" do
@@ -94,6 +96,17 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
     Process.delete({ExamplesSupport, :ssh_context})
   end
 
+  test "preflight argv with explicit empty system prompt is accepted by command lane" do
+    args = Options.to_args(ExamplesSupport.preflight_options())
+
+    assert flag_with_value?(args, "--system-prompt", "")
+
+    invocation = Command.new("/bin/sh", ["-c", "printf ok", "preflight" | args])
+
+    assert {:ok, result} = Command.run(invocation, timeout: 1_000)
+    assert result.stdout == "ok"
+  end
+
   test "preflight_timeout_seconds/0 defaults to 30 seconds for Anthropic" do
     restore = capture_env()
 
@@ -173,5 +186,11 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
       {key, nil} -> System.delete_env(key)
       {key, value} -> System.put_env(key, value)
     end)
+  end
+
+  defp flag_with_value?(args, flag, expected) do
+    args
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.any?(fn [candidate, value] -> candidate == flag and value == expected end)
   end
 end

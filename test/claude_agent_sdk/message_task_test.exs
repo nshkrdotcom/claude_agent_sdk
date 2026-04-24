@@ -157,7 +157,7 @@ defmodule ClaudeAgentSDK.Message.TaskTest do
           "permissionMode" => "default",
           "apiKeySource" => "none",
           "agents" => ["general-purpose"],
-          "claude_code_version" => "2.1.74",
+          "claude_code_version" => "2.1.119",
           "fast_mode_state" => "off",
           "plugins" => [],
           "skills" => ["debug"],
@@ -172,7 +172,7 @@ defmodule ClaudeAgentSDK.Message.TaskTest do
       assert msg.data.session_id == "sess-init"
       assert msg.data.permission_mode == "default"
       assert msg.data["agents"] == ["general-purpose"]
-      assert msg.data["claude_code_version"] == "2.1.74"
+      assert msg.data["claude_code_version"] == "2.1.119"
       assert msg.data["skills"] == ["debug"]
       assert msg.data["slash_commands"] == ["review"]
       assert msg.data["uuid"] == "uuid-init"

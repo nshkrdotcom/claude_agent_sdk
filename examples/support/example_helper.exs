@@ -88,7 +88,6 @@ defmodule Examples.Support do
 
   def ensure_live! do
     init!()
-    Application.put_env(:claude_agent_sdk, :use_mock, false)
     ensure_task_supervisor_started!()
 
     options =
@@ -109,6 +108,36 @@ defmodule Examples.Support do
         Then authenticate:
           claude login
         """
+    end
+  end
+
+  def cli_status! do
+    init!()
+    ensure_task_supervisor_started!()
+
+    options =
+      %Options{}
+      |> with_execution_surface()
+
+    case CLI.resolve_executable(options) do
+      {:ok, path} ->
+        IO.puts("Claude CLI path: #{path}")
+
+      {:error, :not_found} ->
+        raise """
+        Claude CLI not found.
+
+        Install:
+          npm install -g @anthropic-ai/claude-code
+
+        Then authenticate:
+          claude login
+        """
+    end
+
+    case CLI.version() do
+      {:ok, version} -> IO.puts("Claude CLI version: #{version}")
+      {:error, reason} -> IO.puts("Claude CLI version: unavailable (#{inspect(reason)})")
     end
   end
 

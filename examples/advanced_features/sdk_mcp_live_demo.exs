@@ -205,7 +205,7 @@ rescue
     IO.puts(Exception.format_stacktrace(__STACKTRACE__))
 
     IO.puts("\n💡 Troubleshooting:")
-    IO.puts("  - Ensure Claude CLI is installed: claude --version")
+    IO.puts("  - Ensure the Claude CLI is available to the SDK")
     IO.puts("  - Ensure you're authenticated: claude login")
     IO.puts("  - Check auth env vars: echo $ANTHROPIC_API_KEY / $CLAUDE_AGENT_OAUTH_TOKEN")
 

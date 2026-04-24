@@ -258,7 +258,7 @@ email_agent/
 | `mail` | IMAP protocol support |
 | `exqlite` | SQLite database |
 | `dotenvy` | Environment variable loading |
-| `mox` | Test mocking |
+| `mox` | Test-only interface doubles |
 | `credo` | Code analysis |
 | `dialyxir` | Type checking |
 

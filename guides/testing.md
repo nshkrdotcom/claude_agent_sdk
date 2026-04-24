@@ -7,6 +7,10 @@ a service-mode simulation engine and must not be used as a StackLab,
 orchestration, ASM, or production runtime selector. Cross-stack simulation goes
 through `agent_session_manager` and `cli_subprocess_core`.
 
+Runnable files under `examples/` are live-only. They must use public SDK APIs
+and may not invoke the Claude CLI directly or enable package test fixtures.
+Keep deterministic provider doubles in `test/` or test-support modules.
+
 ## Table of Contents
 
 1. [Mock System Overview](#mock-system-overview)

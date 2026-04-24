@@ -68,6 +68,8 @@ defmodule ClaudeAgentSDK.Permission.Context do
   - `tool_name` - Name of the tool being invoked (e.g., "Bash", "Write", "Read")
   - `tool_input` - Map of input parameters for the tool
   - `session_id` - Unique identifier for the current session
+  - `tool_use_id` - Claude tool-use identifier for this permission request, when provided
+  - `agent_id` - Subagent identifier for this permission request, when provided
   - `suggestions` - List of permission update suggestions from CLI
   - `signal` - Optional abort signal reference (reserved for future use)
   """
@@ -75,13 +77,24 @@ defmodule ClaudeAgentSDK.Permission.Context do
           tool_name: String.t(),
           tool_input: map(),
           session_id: String.t(),
+          tool_use_id: String.t() | nil,
+          agent_id: String.t() | nil,
           suggestions: [map()],
           blocked_path: String.t() | nil,
           signal: ClaudeAgentSDK.AbortSignal.t() | nil
         }
 
   @enforce_keys [:tool_name, :tool_input, :session_id]
-  defstruct [:tool_name, :tool_input, :session_id, :signal, :blocked_path, suggestions: []]
+  defstruct [
+    :tool_name,
+    :tool_input,
+    :session_id,
+    :signal,
+    :blocked_path,
+    :tool_use_id,
+    :agent_id,
+    suggestions: []
+  ]
 
   @doc """
   Creates a new permission context.
@@ -151,6 +164,9 @@ defmodule ClaudeAgentSDK.Permission.Context do
       tool_name: request_data["tool_name"] || "",
       tool_input: request_data["input"] || %{},
       session_id: session_id,
+      tool_use_id: request_data["tool_use_id"],
+      agent_id: request_data["agent_id"],
+      blocked_path: request_data["blocked_path"],
       suggestions: request_data["permission_suggestions"] || []
     )
   end

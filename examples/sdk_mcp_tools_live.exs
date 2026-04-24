@@ -10,7 +10,7 @@
 # 4. Claude calling and receiving results from SDK MCP tools
 #
 # Prereqs:
-#   - Claude CLI installed (`claude --version`)
+#   - Claude CLI available to the SDK
 #   - Authenticated (`claude login` or `ANTHROPIC_API_KEY`)
 #
 # This example mirrors the Python SDK's mcp_calculator.py example
@@ -69,10 +69,9 @@ defmodule SDKMCPExample do
     in the Elixir SDK, without requiring external subprocess servers.
     """)
 
-    # Verify we're using real CLI
+    # Verify the SDK can resolve the live CLI route.
     IO.puts("\n0. Environment check:")
     IO.puts("   Mix env: #{Mix.env()}")
-    IO.puts("   use_mock config: #{Application.get_env(:claude_agent_sdk, :use_mock, false)}")
 
     if Support.ssh_enabled?() do
       IO.puts("   Claude CLI: remote via --ssh-host")
@@ -83,9 +82,7 @@ defmodule SDKMCPExample do
       IO.puts("   CLI version: #{cli_version}")
     end
 
-    IO.puts(
-      "   NOTE: Client uses the Claude-named transport adapter over the shared core -> real CLI (ignores use_mock)"
-    )
+    IO.puts("   Live transport: SDK client over the shared Claude adapter")
 
     # Step 1: Create SDK MCP server with calculator tools
     IO.puts("\n1. Creating SDK MCP server with calculator tools...")

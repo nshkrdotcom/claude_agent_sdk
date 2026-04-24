@@ -4,7 +4,7 @@
 # Usage: mix run examples/basic_example.exs
 #
 # Prereqs:
-#   - Claude CLI installed (`claude --version`)
+#   - Claude CLI available to the SDK
 #   - Authenticated (`claude login` or `ANTHROPIC_API_KEY`)
 
 Code.require_file(Path.expand("support/example_helper.exs", __DIR__))

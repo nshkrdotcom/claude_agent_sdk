@@ -56,7 +56,7 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
                  end
   end
 
-  test "transport_error_mode :raise raises on malformed CLI stream frames" do
+  test "CLI-only query streaming skips non-JSON stdout lines" do
     fake_cli = FakeCLI.new!()
     on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
 
@@ -66,6 +66,26 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
         assert :ok = FakeCLI.wait_for_request_count(fake_cli, 1, 1_000)
         assert :ok = FakeCLI.wait_until_stdin_closed(fake_cli, 1_000)
         FakeCLI.push_message(fake_cli, "not json")
+        FakeCLI.push_message(fake_cli, %{"type" => "result", "subtype" => "success"})
+      end)
+
+    stream = Query.run("hi", FakeCLI.options(fake_cli, %Options{}))
+
+    assert [%Message{type: :result}] = Enum.to_list(stream)
+
+    Task.await(controller, 1_000)
+  end
+
+  test "transport_error_mode :raise raises on malformed CLI stream frames" do
+    fake_cli = FakeCLI.new!()
+    on_exit(fn -> FakeCLI.cleanup(fake_cli) end)
+
+    controller =
+      Task.async(fn ->
+        assert :ok = FakeCLI.wait_until_started(fake_cli, 1_000)
+        assert :ok = FakeCLI.wait_for_request_count(fake_cli, 1, 1_000)
+        assert :ok = FakeCLI.wait_until_stdin_closed(fake_cli, 1_000)
+        FakeCLI.push_message(fake_cli, "[1]")
       end)
 
     stream = Query.run("hi", FakeCLI.options(fake_cli, %Options{transport_error_mode: :raise}))
@@ -98,7 +118,7 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
         })
 
         assert :ok = FakeCLI.wait_for_request_count(fake_cli, 2, 1_000)
-        FakeCLI.push_message(fake_cli, "not json")
+        FakeCLI.push_message(fake_cli, "[1]")
       end)
 
     stream =
