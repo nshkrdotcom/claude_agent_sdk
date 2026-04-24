@@ -888,6 +888,80 @@ needed but filtered from the returned `%ClaudeAgentSDK.Session.SessionMessage{}`
 ClaudeAgentSDK.list_sessions(projects_dir: "/custom/path/to/projects")
 ```
 
+### Session Mutations and Subagents
+
+`0.18.0` adds the official session metadata and mutation helpers for local CLI
+transcripts:
+
+```elixir
+info = ClaudeAgentSDK.get_session_info(session_id, directory: "/path/to/project")
+
+:ok = ClaudeAgentSDK.rename_session(session_id, "Release review", directory: "/path/to/project")
+:ok = ClaudeAgentSDK.tag_session(session_id, "release", directory: "/path/to/project")
+
+subagents = ClaudeAgentSDK.list_subagents(session_id, directory: "/path/to/project")
+sub_messages =
+  ClaudeAgentSDK.get_subagent_messages(session_id, hd(subagents), directory: "/path/to/project")
+
+fork = ClaudeAgentSDK.fork_session(session_id, directory: "/path/to/project", title: "Release fork")
+:ok = ClaudeAgentSDK.delete_session(session_id, directory: "/path/to/project")
+```
+
+`delete_session/2` removes the main transcript and cascades to the subagent
+transcript directory. `fork_session/2` rewrites session/message IDs rather than
+copying bytes, so the fork can be resumed as an independent conversation.
+
+## SessionStore Adapter Surface
+
+The older `ClaudeAgentSDK.SessionStore` JSON GenServer remains available for
+SDK-managed save/load/search workflows. `0.18.0` also adds the official
+adapter-style SessionStore contract used by the Python SDK for live transcript
+mirroring, remote-store resume materialization, import, and store-backed
+session helpers.
+
+```elixir
+alias ClaudeAgentSDK.SessionStore
+alias ClaudeAgentSDK.SessionStore.{Adapter, InMemory}
+
+store = InMemory.new!()
+session_id = "550e8400-e29b-41d4-a716-446655440000"
+project_key = SessionStore.project_key_for_directory("/path/to/project")
+
+:ok =
+  Adapter.append(store, %{project_key: project_key, session_id: session_id}, [
+    %{
+      "type" => "user",
+      "uuid" => "u1",
+      "timestamp" => "2026-04-23T00:00:00Z",
+      "sessionId" => session_id,
+      "message" => %{"role" => "user", "content" => "hello"}
+    }
+  ])
+
+sessions = ClaudeAgentSDK.list_sessions_from_store(store, directory: "/path/to/project")
+messages = ClaudeAgentSDK.get_session_messages_from_store(session_id, store,
+  directory: "/path/to/project"
+)
+```
+
+Adapters are duck-typed. Struct adapters implement `append(store, key, entries)`
+and `load(store, key)`. Optional methods are probed before use:
+`list_sessions/2`, `list_session_summaries/2`, `delete/2`, and
+`list_subkeys/2`.
+
+Core helper modules:
+
+- `ClaudeAgentSDK.SessionStore.Key` defines `%{project_key, session_id, subpath}`.
+- `ClaudeAgentSDK.SessionStore.InMemory` is the reference adapter and conformance target.
+- `ClaudeAgentSDK.SessionStore.Summary.fold_session_summary/3` maintains summary sidecars.
+- `ClaudeAgentSDK.SessionStore.MirrorBatcher` handles `transcript_mirror` frames and emits `mirror_error` system messages on dropped batches.
+- `ClaudeAgentSDK.SessionStore.Resume.materialize/1` writes a temporary `CLAUDE_CONFIG_DIR` for store-backed resume.
+- `ClaudeAgentSDK.import_session_to_store/3` replays local JSONL transcripts, including subagents, into an adapter.
+
+External S3/Redis/Postgres adapters are intentionally not shipped in `0.18.0`;
+the public contract and conformance harness are stable so those can live as
+separate reference examples.
+
 ---
 
 ## Summary
@@ -906,6 +980,8 @@ The Claude Agent SDK provides comprehensive session management through:
 | Cleanup | `SessionStore.cleanup_old_sessions/1` | Remove old sessions |
 | CLI history | `ClaudeAgentSDK.list_sessions/1` | Read CLI transcript metadata |
 | CLI messages | `ClaudeAgentSDK.get_session_messages/2` | Read canonical transcript messages |
+| Store adapter | `SessionStore.Adapter` | Mirror/load opaque transcript entries |
+| Store helpers | `ClaudeAgentSDK.*_from_store` | Read/mutate adapter-backed sessions |
 
 Sessions enable building sophisticated conversational applications with context persistence, multi-step workflows, and proper conversation management.
 ## Runtime-Neutral Session Control

@@ -34,6 +34,7 @@ defmodule ClaudeAgentSDK do
 
   alias ClaudeAgentSDK.{Options, Query, SDKMCP}
   alias ClaudeAgentSDK.Session.History
+  alias ClaudeAgentSDK.SessionStore
 
   @doc """
   Runs a query against Claude Code and returns a stream of messages.
@@ -128,6 +129,149 @@ defmodule ClaudeAgentSDK do
   def get_session_messages(session_id, opts \\ []) do
     History.get_session_messages(session_id, opts)
   end
+
+  @doc """
+  Looks up metadata for a single CLI transcript session.
+  """
+  @spec get_session_info(String.t(), keyword()) :: ClaudeAgentSDK.Session.SessionInfo.t() | nil
+  def get_session_info(session_id, opts \\ []) do
+    History.get_session_info(session_id, opts)
+  end
+
+  @doc """
+  Appends a custom title entry to a CLI transcript session.
+  """
+  @spec rename_session(String.t(), String.t(), keyword()) :: :ok
+  def rename_session(session_id, title, opts \\ []) do
+    History.rename_session(session_id, title, opts)
+  end
+
+  @doc """
+  Appends or clears a tag entry on a CLI transcript session.
+  """
+  @spec tag_session(String.t(), String.t() | nil, keyword()) :: :ok
+  def tag_session(session_id, tag, opts \\ []) do
+    History.tag_session(session_id, tag, opts)
+  end
+
+  @doc """
+  Deletes a CLI transcript session and its subagent transcript directory.
+  """
+  @spec delete_session(String.t(), keyword()) :: :ok
+  def delete_session(session_id, opts \\ []) do
+    History.delete_session(session_id, opts)
+  end
+
+  @doc """
+  Forks a CLI transcript session into a new local session file.
+  """
+  @spec fork_session(String.t(), keyword()) :: ClaudeAgentSDK.Session.ForkResult.t()
+  def fork_session(session_id, opts \\ []) do
+    History.fork_session(session_id, opts)
+  end
+
+  @doc """
+  Lists subagent IDs for a CLI transcript session.
+  """
+  @spec list_subagents(String.t(), keyword()) :: [String.t()]
+  def list_subagents(session_id, opts \\ []) do
+    History.list_subagents(session_id, opts)
+  end
+
+  @doc """
+  Reads visible messages from a subagent transcript.
+  """
+  @spec get_subagent_messages(String.t(), String.t(), keyword()) :: [
+          ClaudeAgentSDK.Session.SessionMessage.t()
+        ]
+  def get_subagent_messages(session_id, agent_id, opts \\ []) do
+    History.get_subagent_messages(session_id, agent_id, opts)
+  end
+
+  @doc """
+  Derives the SessionStore project key for a directory.
+  """
+  @spec project_key_for_directory(String.t() | nil) :: String.t()
+  def project_key_for_directory(directory \\ nil),
+    do: SessionStore.project_key_for_directory(directory)
+
+  @doc """
+  Imports a local Claude JSONL session transcript into a SessionStore adapter.
+  """
+  @spec import_session_to_store(String.t(), term(), keyword()) :: :ok | {:error, term()}
+  def import_session_to_store(session_id, store, opts \\ []),
+    do: SessionStore.import_session_to_store(session_id, store, opts)
+
+  @doc """
+  Lists SessionStore-backed sessions.
+  """
+  @spec list_sessions_from_store(term(), keyword()) :: [ClaudeAgentSDK.Session.SessionInfo.t()]
+  def list_sessions_from_store(store, opts \\ []),
+    do: SessionStore.list_sessions_from_store(store, opts)
+
+  @doc """
+  Looks up SessionStore-backed session metadata.
+  """
+  @spec get_session_info_from_store(String.t(), term(), keyword()) ::
+          ClaudeAgentSDK.Session.SessionInfo.t() | nil
+  def get_session_info_from_store(session_id, store, opts \\ []),
+    do: SessionStore.get_session_info_from_store(session_id, store, opts)
+
+  @doc """
+  Reads visible messages from a SessionStore-backed session.
+  """
+  @spec get_session_messages_from_store(String.t(), term(), keyword()) :: [
+          ClaudeAgentSDK.Session.SessionMessage.t()
+        ]
+  def get_session_messages_from_store(session_id, store, opts \\ []),
+    do: SessionStore.get_session_messages_from_store(session_id, store, opts)
+
+  @doc """
+  Lists subagents in a SessionStore-backed session.
+  """
+  @spec list_subagents_from_store(String.t(), term(), keyword()) :: [String.t()]
+  def list_subagents_from_store(session_id, store, opts \\ []),
+    do: SessionStore.list_subagents_from_store(session_id, store, opts)
+
+  @doc """
+  Reads visible messages from a SessionStore-backed subagent transcript.
+  """
+  @spec get_subagent_messages_from_store(String.t(), String.t(), term(), keyword()) :: [
+          ClaudeAgentSDK.Session.SessionMessage.t()
+        ]
+  def get_subagent_messages_from_store(session_id, agent_id, store, opts \\ []),
+    do: SessionStore.get_subagent_messages_from_store(session_id, agent_id, store, opts)
+
+  @doc """
+  Appends a custom title entry to a SessionStore-backed session.
+  """
+  @spec rename_session_via_store(String.t(), String.t(), term(), keyword()) ::
+          :ok | {:error, term()}
+  def rename_session_via_store(session_id, title, store, opts \\ []),
+    do: SessionStore.rename_session_via_store(session_id, title, store, opts)
+
+  @doc """
+  Appends or clears a tag on a SessionStore-backed session.
+  """
+  @spec tag_session_via_store(String.t(), String.t() | nil, term(), keyword()) ::
+          :ok | {:error, term()}
+  def tag_session_via_store(session_id, tag, store, opts \\ []),
+    do: SessionStore.tag_session_via_store(session_id, tag, store, opts)
+
+  @doc """
+  Deletes a SessionStore-backed session when supported by the adapter.
+  """
+  @spec delete_session_via_store(String.t(), term(), keyword()) :: :ok | {:error, term()}
+  def delete_session_via_store(session_id, store, opts \\ []),
+    do: SessionStore.delete_session_via_store(session_id, store, opts)
+
+  @doc """
+  Forks a SessionStore-backed session into a new session.
+  """
+  @spec fork_session_via_store(String.t(), term(), keyword()) ::
+          ClaudeAgentSDK.Session.ForkResult.t() | {:error, term()}
+  def fork_session_via_store(session_id, store, opts \\ []),
+    do: SessionStore.fork_session_via_store(session_id, store, opts)
 
   @doc """
   Lists SDK-managed sessions from `ClaudeAgentSDK.SessionStore`.

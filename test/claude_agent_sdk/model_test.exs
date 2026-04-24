@@ -45,7 +45,7 @@ defmodule ClaudeAgentSDK.ModelTest do
 
   describe "default_model/0" do
     test "returns the shared core default" do
-      assert Model.default_model() == "opus"
+      assert Model.default_model() == "sonnet"
     end
 
     test "default is a valid model" do

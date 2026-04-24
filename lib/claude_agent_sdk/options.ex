@@ -14,6 +14,7 @@ defmodule ClaudeAgentSDK.Options do
   - `tools` - Base tools set selection (`--tools`) (Python v0.1.12+)
   - `allowed_tools` - List of allowed tool names (list of strings)
   - `disallowed_tools` - List of disallowed tool names (list of strings)
+  - `skills` - Skill access control (`:all`, `"all"`, or list of skill names)
   - `mcp_servers` - Map of MCP server configurations or JSON/path string (v0.5.0+)
   - `mcp_config` - Path to MCP configuration file (string, backward compat)
   - `betas` - SDK beta feature flags (`--betas`) (Python v0.1.12+)
@@ -100,6 +101,7 @@ defmodule ClaudeAgentSDK.Options do
     :resume,
     :settings,
     :setting_sources,
+    :skills,
     :sandbox,
     # MCP Configuration (v0.5.0+)
     # Programmatic MCP server definitions (SDK and external)
@@ -159,6 +161,9 @@ defmodule ClaudeAgentSDK.Options do
     :anthropic_auth_token,
     :user,
     :max_thinking_tokens,
+    :task_budget,
+    :session_store,
+    :load_timeout_ms,
     # Effort level (:low, :medium, :high, :max)
     :effort,
     # Thinking config (%{type: :adaptive | :enabled | :disabled, budget_tokens: integer()})
@@ -207,6 +212,23 @@ defmodule ClaudeAgentSDK.Options do
   - Preset map: `%{type: :preset, preset: :claude_code}` (maps to `"default"`)
   """
   @type tools_option :: [String.t()] | tools_preset() | map() | nil
+
+  @typedoc """
+  Skill access configuration.
+
+  Supported forms:
+  - `:all` or `"all"` allows every Skill tool via `Skill`
+  - a list of skill names allows specific skills via `Skill(name)`
+  - an empty list enables skill setting-source defaults without allowing Skill tools
+  """
+  @type skills_option :: :all | String.t() | [String.t()] | nil
+
+  @typedoc """
+  Task budget configuration. Python currently exposes a total budget only; the
+  CLI receives it as `--task-budget <total>`.
+  """
+  @type task_budget ::
+          %{required(:total) => pos_integer()} | %{required(String.t()) => pos_integer()}
 
   @typedoc """
   SDK beta feature flag.
@@ -283,6 +305,7 @@ defmodule ClaudeAgentSDK.Options do
           resume: String.t() | nil,
           settings: String.t() | nil,
           setting_sources: [String.t() | atom()] | nil,
+          skills: skills_option(),
           sandbox: map() | nil,
           plugins: [plugin_config()],
           mcp_servers: %{String.t() => mcp_server()} | String.t() | nil,
@@ -325,6 +348,9 @@ defmodule ClaudeAgentSDK.Options do
           stderr: (String.t() -> any()) | nil,
           user: String.t() | nil,
           max_thinking_tokens: pos_integer() | nil,
+          task_budget: task_budget() | nil,
+          session_store: term() | nil,
+          load_timeout_ms: pos_integer() | nil,
           effort: :low | :medium | :high | :max | nil,
           thinking: map() | nil
         }
@@ -442,14 +468,20 @@ defmodule ClaudeAgentSDK.Options do
   @spec to_args(t()) :: [String.t()]
   def to_args(%__MODULE__{} = options) do
     validate_effort!(options.effort)
-    options = maybe_ensure_model_payload!(options)
+
+    options =
+      options
+      |> maybe_ensure_model_payload!()
+      |> apply_skills_defaults()
 
     []
     |> add_output_format_args(options)
     |> add_max_turns_args(options)
     |> add_max_budget_args(options)
+    |> add_task_budget_args(options)
     |> add_system_prompt_args(options)
     |> add_append_system_prompt_args(options)
+    |> add_exclude_dynamic_system_prompt_args(options)
     |> add_tools_args(options)
     |> add_allowed_tools_args(options)
     |> add_disallowed_tools_args(options)
@@ -467,6 +499,7 @@ defmodule ClaudeAgentSDK.Options do
     |> add_agent_args(options)
     |> add_session_id_args(options)
     |> add_fork_session_args(options)
+    |> add_session_store_args(options)
     |> add_dir_args(options)
     |> add_plugins_args(options)
     |> add_strict_mcp_args(options)
@@ -582,6 +615,23 @@ defmodule ClaudeAgentSDK.Options do
     args ++ ["--max-budget-usd", to_string(budget)]
   end
 
+  defp add_task_budget_args(args, %{task_budget: nil}), do: args
+
+  defp add_task_budget_args(args, %{task_budget: %{} = task_budget}) do
+    case Map.get(task_budget, :total) || Map.get(task_budget, "total") do
+      total when is_integer(total) and total > 0 ->
+        args ++ ["--task-budget", Integer.to_string(total)]
+
+      other ->
+        raise ArgumentError,
+              "task_budget must be %{total: positive_integer()}, got total: #{inspect(other)}"
+    end
+  end
+
+  defp add_task_budget_args(_args, %{task_budget: other}) do
+    raise ArgumentError, "task_budget must be a map, got: #{inspect(other)}"
+  end
+
   # Python parity: always emit an explicit system prompt flag when unset.
   # When unset, this forces "no system prompt" rather than relying on CLI defaults.
   defp add_system_prompt_args(args, %{system_prompt: nil}), do: args ++ ["--system-prompt", ""]
@@ -591,14 +641,20 @@ defmodule ClaudeAgentSDK.Options do
 
   # Python parity: support SystemPromptPreset objects (type=preset, preset=claude_code, optional append).
   # A preset with no append emits no system-prompt flags (uses CLI default prompt).
-  defp add_system_prompt_args(args, %{system_prompt: %{} = preset}) do
-    case normalize_system_prompt_preset(preset) do
-      {:preset, _preset, _append} ->
-        args
+  defp add_system_prompt_args(args, %{system_prompt: %{} = system_prompt}) do
+    case normalize_system_prompt_file(system_prompt) do
+      {:file, path} ->
+        args ++ ["--system-prompt-file", path]
 
       :invalid ->
-        raise ArgumentError,
-              "system_prompt preset must be %{type: :preset, preset: :claude_code, append: ...} (or string-keyed equivalent)"
+        case normalize_system_prompt_preset(system_prompt) do
+          {:preset, _preset, _append, _exclude_dynamic_sections} ->
+            args
+
+          :invalid ->
+            raise ArgumentError,
+                  "system_prompt must be a preset (%{type: :preset, preset: :claude_code, append: ...}) or file (%{type: :file, path: ...})"
+        end
     end
   end
 
@@ -607,10 +663,11 @@ defmodule ClaudeAgentSDK.Options do
          system_prompt: %{} = preset
        }) do
     case normalize_system_prompt_preset(preset) do
-      {:preset, _preset, append} when is_binary(append) and append != "" ->
+      {:preset, _preset, append, _exclude_dynamic_sections}
+      when is_binary(append) and append != "" ->
         args ++ ["--append-system-prompt", append]
 
-      {:preset, _preset, _append} ->
+      {:preset, _preset, _append, _exclude_dynamic_sections} ->
         args
 
       :invalid ->
@@ -622,6 +679,30 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_append_system_prompt_args(args, %{append_system_prompt: prompt}),
     do: args ++ ["--append-system-prompt", prompt]
+
+  defp add_exclude_dynamic_system_prompt_args(args, %{system_prompt: %{} = preset}) do
+    case normalize_system_prompt_preset(preset) do
+      {:preset, _preset, _append, true} -> args ++ ["--exclude-dynamic-system-prompt-sections"]
+      _ -> args
+    end
+  end
+
+  defp add_exclude_dynamic_system_prompt_args(args, _options), do: args
+
+  defp normalize_system_prompt_file(%{"type" => "file"} = prompt),
+    do: normalize_system_prompt_file(string_keyed_to_atom_keyed(prompt))
+
+  defp normalize_system_prompt_file(%{type: "file"} = prompt),
+    do: normalize_system_prompt_file(%{prompt | type: :file})
+
+  defp normalize_system_prompt_file(%{type: :file} = prompt) do
+    case Map.get(prompt, :path) do
+      path when is_binary(path) and path != "" -> {:file, path}
+      _ -> :invalid
+    end
+  end
+
+  defp normalize_system_prompt_file(_), do: :invalid
 
   defp normalize_system_prompt_preset(%{"type" => "preset"} = preset),
     do: normalize_system_prompt_preset(string_keyed_to_atom_keyed(preset))
@@ -640,17 +721,20 @@ defmodule ClaudeAgentSDK.Options do
     if preset_atom != :claude_code do
       :invalid
     else
-      append =
-        case Map.fetch(map, :append) do
-          {:ok, value} when is_binary(value) -> value
-          _ -> nil
-        end
+      append = string_or_nil(Map.get(map, :append))
+      exclude_dynamic_sections = truthy?(Map.get(map, :exclude_dynamic_sections))
 
-      {:preset, :claude_code, append}
+      {:preset, :claude_code, append, exclude_dynamic_sections}
     end
   end
 
   defp normalize_system_prompt_preset(_), do: :invalid
+
+  defp string_or_nil(value) when is_binary(value), do: value
+  defp string_or_nil(_value), do: nil
+
+  defp truthy?(value) when value in [true, "true", 1, "1"], do: true
+  defp truthy?(_value), do: false
 
   defp string_keyed_to_atom_keyed(map) do
     Enum.reduce(map, %{}, fn {k, v}, acc ->
@@ -658,8 +742,44 @@ defmodule ClaudeAgentSDK.Options do
         "type" -> Map.put(acc, :type, v)
         "preset" -> Map.put(acc, :preset, v)
         "append" -> Map.put(acc, :append, v)
+        "path" -> Map.put(acc, :path, v)
+        "exclude_dynamic_sections" -> Map.put(acc, :exclude_dynamic_sections, v)
+        "excludeDynamicSections" -> Map.put(acc, :exclude_dynamic_sections, v)
         _other -> acc
       end
+    end)
+  end
+
+  defp apply_skills_defaults(%__MODULE__{skills: nil} = options), do: options
+
+  defp apply_skills_defaults(%__MODULE__{} = options) do
+    %{
+      options
+      | setting_sources: options.setting_sources || ["user", "project"],
+        allowed_tools: skill_allowed_tools(options.skills, options.allowed_tools)
+    }
+  end
+
+  defp skill_allowed_tools(skills, allowed_tools) when skills in [:all, "all"] do
+    append_unique(allowed_tools || [], ["Skill"])
+  end
+
+  defp skill_allowed_tools(skills, allowed_tools) when is_list(skills) do
+    tools =
+      skills
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&"Skill(#{to_string(&1)})")
+
+    append_unique(allowed_tools || [], tools)
+  end
+
+  defp skill_allowed_tools(other, _allowed_tools) do
+    raise ArgumentError, "skills must be :all, \"all\", a list, or nil; got: #{inspect(other)}"
+  end
+
+  defp append_unique(existing, additions) do
+    Enum.reduce(additions, existing, fn item, acc ->
+      if item in acc, do: acc, else: acc ++ [item]
     end)
   end
 
@@ -821,6 +941,10 @@ defmodule ClaudeAgentSDK.Options do
   # CLI-side persisted context (including resume session lookup).
   defp add_setting_sources_args(args, %{setting_sources: nil}), do: args
 
+  defp add_setting_sources_args(args, %{setting_sources: []}) do
+    args ++ ["--setting-sources="]
+  end
+
   defp add_setting_sources_args(args, %{setting_sources: sources}) when is_list(sources) do
     value = Enum.map_join(sources, ",", &to_string/1)
 
@@ -971,6 +1095,32 @@ defmodule ClaudeAgentSDK.Options do
     |> Map.new()
   end
 
+  @doc false
+  @spec initialize_options(t()) :: map()
+  def initialize_options(%__MODULE__{} = options) do
+    %{}
+    |> maybe_put_initialize_field(
+      "excludeDynamicSections",
+      exclude_dynamic_sections_for_initialize(options.system_prompt)
+    )
+    |> maybe_put_initialize_field("skills", skills_for_initialize(options.skills))
+  end
+
+  defp exclude_dynamic_sections_for_initialize(%{} = system_prompt) do
+    case normalize_system_prompt_preset(system_prompt) do
+      {:preset, _preset, _append, exclude_dynamic_sections} -> exclude_dynamic_sections
+      :invalid -> nil
+    end
+  end
+
+  defp exclude_dynamic_sections_for_initialize(_system_prompt), do: nil
+
+  defp skills_for_initialize(skills) when is_list(skills), do: Enum.map(skills, &to_string/1)
+  defp skills_for_initialize(_skills), do: nil
+
+  defp maybe_put_initialize_field(map, _key, nil), do: map
+  defp maybe_put_initialize_field(map, key, value), do: Map.put(map, key, value)
+
   defp add_agent_args(args, %{agent: nil}), do: args
 
   defp add_agent_args(args, %{agent: agent}) when is_atom(agent) do
@@ -982,6 +1132,9 @@ defmodule ClaudeAgentSDK.Options do
 
   defp add_fork_session_args(args, %{fork_session: true}), do: args ++ ["--fork-session"]
   defp add_fork_session_args(args, _), do: args
+
+  defp add_session_store_args(args, %{session_store: nil}), do: args
+  defp add_session_store_args(args, _options), do: args ++ ["--session-mirror"]
 
   defp add_dir_args(args, %{add_dir: add_dir, add_dirs: add_dirs}) do
     directories =
@@ -1222,24 +1375,22 @@ defmodule ClaudeAgentSDK.Options do
   defp external_backend?(%__MODULE__{}), do: false
 
   # Thinking config takes precedence over raw max_thinking_tokens.
-  # Resolution: thinking.type :enabled -> budget_tokens, :adaptive -> fallback or 32000,
-  #             :disabled -> 0, nil -> fall back to max_thinking_tokens.
-  defp add_thinking_args(args, %{thinking: %{type: :enabled, budget_tokens: tokens}})
+  # Python parity: adaptive/disabled are mode switches; enabled still uses a token budget.
+  defp add_thinking_args(args, %{thinking: %{type: :enabled, budget_tokens: tokens} = thinking})
        when is_integer(tokens) do
-    args ++ ["--max-thinking-tokens", to_string(tokens)]
+    args
+    |> Kernel.++(["--max-thinking-tokens", to_string(tokens)])
+    |> maybe_add_thinking_display(thinking)
   end
 
-  defp add_thinking_args(args, %{thinking: %{type: :adaptive}, max_thinking_tokens: tokens})
-       when is_integer(tokens) do
-    args ++ ["--max-thinking-tokens", to_string(tokens)]
-  end
-
-  defp add_thinking_args(args, %{thinking: %{type: :adaptive}}) do
-    args ++ ["--max-thinking-tokens", "32000"]
+  defp add_thinking_args(args, %{thinking: %{type: :adaptive} = thinking}) do
+    args
+    |> Kernel.++(["--thinking", "adaptive"])
+    |> maybe_add_thinking_display(thinking)
   end
 
   defp add_thinking_args(args, %{thinking: %{type: :disabled}}) do
-    args ++ ["--max-thinking-tokens", "0"]
+    args ++ ["--thinking", "disabled"]
   end
 
   defp add_thinking_args(args, %{thinking: nil, max_thinking_tokens: nil}), do: args
@@ -1250,6 +1401,28 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   defp add_thinking_args(args, _), do: args
+
+  defp maybe_add_thinking_display(args, %{display: display}) do
+    case normalize_thinking_display(display) do
+      nil -> args
+      value -> args ++ ["--thinking-display", value]
+    end
+  end
+
+  defp maybe_add_thinking_display(args, _thinking), do: args
+
+  defp normalize_thinking_display(display) when display in [:summarized, "summarized"],
+    do: "summarized"
+
+  defp normalize_thinking_display(display) when display in [:omitted, "omitted"],
+    do: "omitted"
+
+  defp normalize_thinking_display(nil), do: nil
+
+  defp normalize_thinking_display(other) do
+    raise ArgumentError,
+          "thinking display must be :summarized, :omitted, or nil; got: #{inspect(other)}"
+  end
 
   defp add_betas_args(args, %{betas: betas}) when is_list(betas) and betas != [] do
     args ++ ["--betas", Enum.join(betas, ",")]

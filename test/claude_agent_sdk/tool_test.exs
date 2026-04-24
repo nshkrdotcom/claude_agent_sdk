@@ -222,6 +222,24 @@ defmodule ClaudeAgentSDK.ToolTest do
       assert schema["properties"]["rate"]["type"] == "number"
     end
 
+    test "supports explicit schema maps with descriptions" do
+      schema =
+        Tool.simple_schema(%{
+          query: %{type: :string, description: "Search query"},
+          tags: %{type: :array, items: %{type: :string}}
+        })
+
+      assert schema["properties"]["query"] == %{
+               "type" => "string",
+               "description" => "Search query"
+             }
+
+      assert schema["properties"]["tags"] == %{
+               "type" => "array",
+               "items" => %{"type" => "string"}
+             }
+    end
+
     test "supports :number type" do
       schema = Tool.simple_schema(%{value: :number})
 

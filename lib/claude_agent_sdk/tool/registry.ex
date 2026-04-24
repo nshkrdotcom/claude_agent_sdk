@@ -36,7 +36,8 @@ defmodule ClaudeAgentSDK.Tool.Registry do
           required(:description) => String.t(),
           required(:input_schema) => map(),
           required(:module) => module(),
-          optional(:annotations) => map()
+          optional(:annotations) => map(),
+          optional(:max_result_size_chars) => pos_integer()
         }
 
   @type state :: %{

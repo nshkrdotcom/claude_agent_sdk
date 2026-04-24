@@ -12,6 +12,7 @@ defmodule ClaudeAgentSDK.Process do
   alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Errors
+  alias ClaudeAgentSDK.SessionStore.{MirrorBatcher, Resume}
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.Command.Error, as: CoreCommandError
   alias CliSubprocessCore.Command.RunResult
@@ -35,22 +36,35 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp start_claude_process(args, options, stdin_input) do
-    with :ok <- validate_cwd(options.cwd, options.execution_surface),
-         {:ok, invocation} <- build_claude_invocation(args, options),
-         {:ok, %RunResult{} = result} <- run_claude_invocation(invocation, stdin_input, options) do
-      _ = dispatch_stderr_from_result(result, options)
+    case Resume.materialize(options) do
+      {:ok, materialized} ->
+        options = Resume.apply_options(options, materialized)
 
-      if RunResult.success?(result) do
-        sync_state(parse_sync_result(result, options), result)
-      else
-        exit_result_state(result, options)
-      end
-    else
-      {:error, %CoreCommandError{} = error} ->
-        command_error_state(error, options)
+        try do
+          with :ok <- validate_cwd(options.cwd, options.execution_surface),
+               {:ok, invocation} <- build_claude_invocation(args, options),
+               {:ok, %RunResult{} = result} <-
+                 run_claude_invocation(invocation, stdin_input, options) do
+            _ = dispatch_stderr_from_result(result, options)
 
-      {:error, error_state} when is_map(error_state) ->
-        error_state
+            if RunResult.success?(result) do
+              sync_state(parse_sync_result(result, options), result)
+            else
+              exit_result_state(result, options)
+            end
+          else
+            {:error, %CoreCommandError{} = error} ->
+              command_error_state(error, options)
+
+            {:error, error_state} when is_map(error_state) ->
+              error_state
+          end
+        after
+          Resume.cleanup(materialized)
+        end
+
+      {:error, reason} ->
+        error_state("SessionStore resume materialization failed: #{inspect(reason)}", reason)
     end
   end
 
@@ -314,6 +328,7 @@ defmodule ClaudeAgentSDK.Process do
       |> Map.put_new(Env.entrypoint(), "sdk-elixir")
       |> Map.put_new(Env.sdk_version(), version_string())
       |> maybe_put_file_checkpointing_env(options)
+      |> Map.delete(Env.claudecode())
 
     Map.new(merged)
   end
@@ -412,7 +427,7 @@ defmodule ClaudeAgentSDK.Process do
     case detect_challenge_url(combined_text) do
       nil ->
         output_to_parse = if stdout_output == "", do: stderr_output, else: stdout_output
-        parse_sync_lines(output_to_parse, max_buffer_size(options))
+        parse_sync_lines(output_to_parse, max_buffer_size(options), options)
 
       challenge_url ->
         [
@@ -430,30 +445,64 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
-  defp parse_sync_lines(combined_text, max_buffer_size) do
+  defp parse_sync_lines(combined_text, max_buffer_size, %Options{} = options) do
+    mirror = start_mirror_batcher(options)
+
     combined_text
     |> String.split("\n", trim: true)
     |> Enum.reduce_while([], fn line, acc ->
-      if byte_size(line) > max_buffer_size do
-        {:halt, {:error, buffer_overflow_error_message(line, max_buffer_size)}}
-      else
-        parse_sync_line(line, acc)
+      cond do
+        not json_candidate?(line) ->
+          {:cont, acc}
+
+        byte_size(line) > max_buffer_size ->
+          {:halt, {:error, buffer_overflow_error_message(line, max_buffer_size)}}
+
+        true ->
+          parse_sync_line(line, acc, mirror)
       end
     end)
     |> case do
       {:error, error_message} -> [error_message]
-      messages when is_list(messages) -> Enum.reverse(messages)
+      messages when is_list(messages) -> Enum.reverse(flush_mirror(mirror) ++ messages)
     end
   end
 
-  defp parse_sync_line(line, acc) do
+  defp json_candidate?(line) when is_binary(line) do
+    line
+    |> String.trim_leading()
+    |> case do
+      "{" <> _rest -> true
+      "[" <> _rest -> true
+      _other -> false
+    end
+  end
+
+  defp parse_sync_line(line, acc, mirror) do
     case parse_json_line(line) do
-      {:ok, message} -> {:cont, [message | acc]}
-      {:error, error_message} -> {:halt, {:error, error_message}}
+      {:mirror, file_path, entries} ->
+        errors = enqueue_mirror(mirror, file_path, entries)
+        {:cont, Enum.reverse(errors) ++ acc}
+
+      {:ok, message} ->
+        {:cont, [message | acc]}
+
+      {:error, error_message} ->
+        {:halt, {:error, error_message}}
     end
   end
 
   defp parse_json_line(line) do
+    case ClaudeAgentSDK.JSON.decode(line) do
+      {:ok, %{"type" => "transcript_mirror"} = frame} ->
+        {:mirror, frame["filePath"] || frame["file_path"], frame["entries"] || []}
+
+      _other ->
+        parse_message_json_line(line)
+    end
+  end
+
+  defp parse_message_json_line(line) do
     case Message.from_json(line) do
       {:ok, message} ->
         {:ok, message}
@@ -471,6 +520,33 @@ defmodule ClaudeAgentSDK.Process do
         end
     end
   end
+
+  defp start_mirror_batcher(%Options{session_store: nil}), do: nil
+
+  defp start_mirror_batcher(%Options{} = options) do
+    config_dir =
+      (options.env || %{})
+      |> Map.get(
+        "CLAUDE_CONFIG_DIR",
+        System.get_env("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
+      )
+
+    case MirrorBatcher.start_link(options.session_store, Path.join(config_dir, "projects")) do
+      {:ok, pid} -> pid
+      _other -> nil
+    end
+  end
+
+  defp enqueue_mirror(nil, _file_path, _entries), do: []
+
+  defp enqueue_mirror(pid, file_path, entries) when is_binary(file_path) and is_list(entries) do
+    MirrorBatcher.enqueue(pid, file_path, entries)
+  end
+
+  defp enqueue_mirror(_pid, _file_path, _entries), do: []
+
+  defp flush_mirror(nil), do: []
+  defp flush_mirror(pid), do: MirrorBatcher.flush(pid)
 
   defp json_decode_error_message(line, original_error) do
     error =

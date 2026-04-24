@@ -35,11 +35,25 @@ The default backend is the normal Claude catalog path.
 
 Canonical Claude model names include:
 
-- `opus`
-- `sonnet`
-- `haiku`
-- `opus[1m]`
-- `sonnet[1m]`
+- `sonnet` - default/recommended, Claude Sonnet 4.6
+- `sonnet[1m]` - Claude Sonnet 4.6 with 1M context
+- `opus` - Claude Opus 4.7
+- `opus[1m]` - Claude Opus 4.7 with 1M context
+- `haiku` - Claude Haiku 4.5
+
+The current native Claude aliases are:
+
+| SDK name | Claude CLI/API alias |
+|----------|----------------------|
+| `sonnet` | `claude-sonnet-4-6` |
+| `sonnet[1m]` | `claude-sonnet-4-6[1m]` |
+| `opus` | `claude-opus-4-7` |
+| `opus[1m]` | `claude-opus-4-7[1m]` |
+| `haiku` | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` |
+
+`ClaudeAgentSDK.Model.short_forms/0`, `full_ids/0`, and `list_models/0` expose
+only public catalog entries. Core-owned private entries can still be validated
+for env or compatibility paths, but they are not advertised by the SDK helpers.
 
 Example:
 

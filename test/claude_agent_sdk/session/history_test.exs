@@ -163,6 +163,56 @@ defmodule ClaudeAgentSDK.Session.HistoryTest do
                |> length()
     end
 
+    test "supports offset pagination", %{config_dir: config_dir, root: root} do
+      project_path = Path.join(root, "offset") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      {old_id, old_path} = make_session_file(project_dir, first_prompt: "old")
+      {mid_id, mid_path} = make_session_file(project_dir, first_prompt: "mid")
+      {new_id, new_path} = make_session_file(project_dir, first_prompt: "new")
+
+      set_mtime!(old_path, 1_000)
+      set_mtime!(mid_path, 2_000)
+      set_mtime!(new_path, 3_000)
+
+      sessions =
+        History.list_sessions(
+          directory: project_path,
+          limit: 1,
+          offset: 1,
+          include_worktrees: false
+        )
+
+      assert Enum.map(sessions, & &1.session_id) == [mid_id]
+      assert old_id != mid_id
+      assert new_id != mid_id
+    end
+
+    test "includes tag and created_at metadata", %{config_dir: config_dir, root: root} do
+      project_path = Path.join(root, "metadata") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+      session_id = make_uuid(778)
+      file_path = Path.join(project_dir, "#{session_id}.jsonl")
+
+      lines = [
+        Jason.encode!(%{
+          "type" => "user",
+          "timestamp" => "2026-01-15T12:30:00Z",
+          "message" => %{"content" => "hello"}
+        }),
+        Jason.encode!(%{"type" => "tag", "tag" => "urgent", "sessionId" => session_id})
+      ]
+
+      File.write!(file_path, Enum.join(lines, "\n") <> "\n")
+
+      assert [%SessionInfo{tag: "urgent", created_at: created_at}] =
+               History.list_sessions(directory: project_path, include_worktrees: false)
+
+      assert created_at == DateTime.to_unix(~U[2026-01-15 12:30:00Z], :millisecond)
+    end
+
     test "filters sidechain and metadata-only sessions", %{
       config_dir: config_dir,
       root: root
@@ -448,6 +498,142 @@ defmodule ClaudeAgentSDK.Session.HistoryTest do
 
       assert [%SessionMessage{uuid: ^u1}, %SessionMessage{uuid: ^a1}] =
                History.get_session_messages(@session_uuid)
+    end
+  end
+
+  describe "session info and mutations" do
+    test "get_session_info returns one session or nil", %{config_dir: config_dir, root: root} do
+      project_path = Path.join(root, "info") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      {session_id, _path} = make_session_file(project_dir, first_prompt: "lookup")
+
+      assert %SessionInfo{session_id: ^session_id, summary: "lookup"} =
+               History.get_session_info(session_id, directory: project_path)
+
+      assert History.get_session_info("not-a-uuid", directory: project_path) == nil
+      assert History.get_session_info(make_uuid(999), directory: project_path) == nil
+    end
+
+    test "rename_session and tag_session append compact entries and last values win", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "mutations") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+      {session_id, file_path} = make_session_file(project_dir, first_prompt: "original")
+
+      assert :ok = History.rename_session(session_id, "  New Title  ", directory: project_path)
+
+      assert :ok =
+               History.tag_session(session_id, "  clean\u200btag\ufeff  ",
+                 directory: project_path
+               )
+
+      lines = file_path |> File.read!() |> String.split("\n", trim: true)
+
+      assert Jason.decode!(Enum.at(lines, -2)) == %{
+               "type" => "custom-title",
+               "customTitle" => "New Title",
+               "sessionId" => session_id
+             }
+
+      assert Jason.decode!(List.last(lines)) == %{
+               "type" => "tag",
+               "tag" => "cleantag",
+               "sessionId" => session_id
+             }
+
+      assert %SessionInfo{summary: "New Title", custom_title: "New Title", tag: "cleantag"} =
+               History.get_session_info(session_id, directory: project_path)
+    end
+
+    test "delete_session removes transcript and subagent directory", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "delete") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+      {session_id, file_path} = make_session_file(project_dir, first_prompt: "delete me")
+      subagent_dir = Path.join(project_dir, session_id)
+      File.mkdir_p!(subagent_dir)
+      File.write!(Path.join(subagent_dir, "agent-x.jsonl"), "{}\n")
+
+      assert :ok = History.delete_session(session_id, directory: project_path)
+
+      refute File.exists?(file_path)
+      refute File.exists?(subagent_dir)
+    end
+
+    test "fork_session remaps ids and creates a titled session", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "fork") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+
+      u1 = make_uuid(701)
+      a1 = make_uuid(702)
+      u2 = make_uuid(703)
+
+      write_transcript!(project_dir, @session_uuid, [
+        make_transcript_entry("user", u1, nil, @session_uuid, "hello"),
+        make_transcript_entry("assistant", a1, u1, @session_uuid, "hi"),
+        make_transcript_entry("user", u2, a1, @session_uuid, "again")
+      ])
+
+      result =
+        History.fork_session(@session_uuid,
+          directory: project_path,
+          up_to_message_id: a1,
+          title: "My Fork"
+        )
+
+      assert result.source_session_id == @session_uuid
+      assert result.session_id != @session_uuid
+      assert File.exists?(result.file_path)
+
+      fork_messages = History.get_session_messages(result.session_id, directory: project_path)
+      assert length(fork_messages) == 2
+      refute Enum.any?(fork_messages, &(&1.uuid in [u1, a1, u2]))
+
+      assert %SessionInfo{custom_title: "My Fork"} =
+               History.get_session_info(result.session_id, directory: project_path)
+    end
+  end
+
+  describe "subagent helpers" do
+    test "lists subagents recursively and reads subagent messages", %{
+      config_dir: config_dir,
+      root: root
+    } do
+      project_path = Path.join(root, "subagents") |> Path.expand()
+      File.mkdir_p!(project_path)
+      project_dir = make_project_dir(config_dir, project_path)
+      make_session_file(project_dir, session_id: @session_uuid, first_prompt: "main")
+
+      subagents_dir = Path.join([project_dir, @session_uuid, "subagents"])
+      nested_dir = Path.join([subagents_dir, "workflows", "run-1"])
+      File.mkdir_p!(nested_dir)
+      File.write!(Path.join(subagents_dir, "other.jsonl"), "{}\n")
+      File.write!(Path.join(subagents_dir, "agent-top.jsonl"), "{}\n")
+
+      u1 = make_uuid(801)
+      a1 = make_uuid(802)
+
+      write_transcript!(nested_dir, "agent-deep", [
+        make_transcript_entry("user", u1, nil, @session_uuid, "task"),
+        make_transcript_entry("assistant", a1, u1, @session_uuid, "done")
+      ])
+
+      assert History.list_subagents(@session_uuid, directory: project_path) == ["deep", "top"]
+
+      assert [%SessionMessage{uuid: ^u1}, %SessionMessage{uuid: ^a1}] =
+               History.get_subagent_messages(@session_uuid, "deep", directory: project_path)
     end
   end
 

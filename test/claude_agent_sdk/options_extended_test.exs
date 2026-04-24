@@ -75,6 +75,14 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
       assert flag_with_value?(args, "--setting-sources", "user,project,local")
     end
 
+    test "setting_sources empty list emits an explicit empty value" do
+      options = %Options{setting_sources: []}
+      args = Options.to_args(options)
+
+      assert "--setting-sources=" in args
+      refute "--setting-sources" in args
+    end
+
     test "model payload settings patch merges into explicit settings" do
       payload =
         Selection.new(
@@ -147,6 +155,41 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
 
       assert flag_with_value?(args, "--append-system-prompt", "Do X")
       refute "--system-prompt" in args
+    end
+
+    test "system_prompt file emits --system-prompt-file" do
+      options = %Options{system_prompt: %{type: :file, path: "./prompts/review.txt"}}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--system-prompt-file", "./prompts/review.txt")
+      refute "--system-prompt" in args
+    end
+
+    test "system_prompt preset with exclude_dynamic_sections emits CLI cache flag" do
+      options = %Options{
+        system_prompt: %{
+          type: :preset,
+          preset: :claude_code,
+          exclude_dynamic_sections: true
+        }
+      }
+
+      args = Options.to_args(options)
+
+      assert "--exclude-dynamic-system-prompt-sections" in args
+      refute "--system-prompt" in args
+    end
+
+    test "system_prompt preset exclude_dynamic_sections is available for initialize" do
+      options = %Options{
+        system_prompt: %{
+          type: :preset,
+          preset: :claude_code,
+          exclude_dynamic_sections: true
+        }
+      }
+
+      assert Options.initialize_options(options)["excludeDynamicSections"] == true
     end
   end
 
@@ -225,6 +268,57 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
       args = Options.to_args(options)
 
       refute "--disallowedTools" in args
+    end
+  end
+
+  describe "skills controls" do
+    test "skills all injects Skill and default setting sources" do
+      options = %Options{skills: "all"}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--allowedTools", "Skill")
+      assert flag_with_value?(args, "--setting-sources", "user,project")
+    end
+
+    test "skills list injects Skill patterns without duplicating allowed tools" do
+      options = %Options{
+        skills: ["planner", "reviewer"],
+        allowed_tools: ["Read", "Skill(planner)"],
+        setting_sources: ["local"]
+      }
+
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--allowedTools", "Read,Skill(planner),Skill(reviewer)")
+      assert flag_with_value?(args, "--setting-sources", "local")
+    end
+
+    test "empty skills list disables all skill invocations via empty allowed tools addition" do
+      options = %Options{skills: []}
+      args = Options.to_args(options)
+
+      refute "--allowedTools" in args
+      assert flag_with_value?(args, "--setting-sources", "user,project")
+    end
+
+    test "initialize skills are sent only for explicit lists" do
+      assert Options.initialize_options(%Options{skills: ["pdf", "docx"]})["skills"] == [
+               "pdf",
+               "docx"
+             ]
+
+      assert Options.initialize_options(%Options{skills: []})["skills"] == []
+      refute Map.has_key?(Options.initialize_options(%Options{skills: "all"}), "skills")
+      refute Map.has_key?(Options.initialize_options(%Options{skills: nil}), "skills")
+    end
+  end
+
+  describe "task budget controls" do
+    test "task_budget emits --task-budget" do
+      options = %Options{task_budget: %{total: 10_000}}
+      args = Options.to_args(options)
+
+      assert flag_with_value?(args, "--task-budget", "10000")
     end
   end
 

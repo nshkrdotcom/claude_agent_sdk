@@ -302,9 +302,11 @@ Claude-native `--effort`.
 
 | Shorthand | Full Model ID | Best For |
 |-----------|---------------|----------|
-| `"haiku"` | Auto-selects latest Haiku | Fast responses, simple queries, cost-effective |
-| `"sonnet"` | Auto-selects latest Sonnet | Balanced performance, general tasks |
-| `"opus"` | Auto-selects latest Opus | Complex reasoning, detailed code generation |
+| `"sonnet"` | Claude Sonnet 4.6 | Default/recommended, best for everyday tasks |
+| `"sonnet[1m]"` | Claude Sonnet 4.6 with 1M context | Long-context Sonnet work |
+| `"opus"` | Claude Opus 4.7 | Most capable model for complex reasoning |
+| `"opus[1m]"` | Claude Opus 4.7 with 1M context | Long-context Opus work |
+| `"haiku"` | Claude Haiku 4.5 | Fast responses, simple queries, cost-effective |
 
 ### Model Configuration
 
@@ -794,7 +796,7 @@ diagnosis = ClaudeAgentSDK.AuthChecker.diagnose()
 IO.inspect(diagnosis)
 # %{
 #   cli_installed: true,
-#   cli_version: "2.1.74",
+#   cli_version: "2.1.119",
 #   authenticated: true,
 #   auth_method: "Anthropic API",
 #   api_key_source: "env",

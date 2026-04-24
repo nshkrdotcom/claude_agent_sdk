@@ -87,6 +87,7 @@ defmodule ClaudeAgentSDK.Tool do
   ## Options
 
   - `:annotations` - MCP tool annotations map (see MCP spec)
+  - `:max_result_size_chars` - Optional Anthropic max result size hint
 
   ## Annotations
 
@@ -109,14 +110,15 @@ defmodule ClaudeAgentSDK.Tool do
   defmacro deftool(name, description, input_schema, opts, do: block)
            when is_atom(name) and is_list(opts) do
     annotations = Keyword.get(opts, :annotations)
-    do_deftool(name, description, input_schema, annotations, block)
+    max_result_size_chars = Keyword.get(opts, :max_result_size_chars)
+    do_deftool(name, description, input_schema, annotations, max_result_size_chars, block)
   end
 
   defmacro deftool(name, description, input_schema, do: block) when is_atom(name) do
-    do_deftool(name, description, input_schema, nil, block)
+    do_deftool(name, description, input_schema, nil, nil, block)
   end
 
-  defp do_deftool(name, description, input_schema, annotations, block) do
+  defp do_deftool(name, description, input_schema, annotations, max_result_size_chars, block) do
     # Generate module name from tool name (e.g., :my_tool -> MyTool)
     module_name = name |> Atom.to_string() |> Macro.camelize() |> String.to_atom()
     # Escape nil annotations to avoid unquote issues, but pass AST maps through directly
@@ -129,6 +131,7 @@ defmodule ClaudeAgentSDK.Tool do
         description: unquote(description),
         input_schema: unquote(input_schema),
         annotations: unquote(escaped_annotations),
+        max_result_size_chars: unquote(max_result_size_chars),
         module: Module.concat(__MODULE__, unquote(module_name))
       })
 
@@ -148,6 +151,7 @@ defmodule ClaudeAgentSDK.Tool do
         @tool_description unquote(description)
         @tool_input_schema unquote(input_schema)
         @tool_annotations unquote(escaped_annotations)
+        @tool_max_result_size_chars unquote(max_result_size_chars)
 
         @doc """
         Returns metadata about this tool.
@@ -157,6 +161,7 @@ defmodule ClaudeAgentSDK.Tool do
             name: @tool_name,
             description: @tool_description,
             input_schema: @tool_input_schema,
+            max_result_size_chars: @tool_max_result_size_chars,
             module: __MODULE__
           }
 
@@ -344,7 +349,28 @@ defmodule ClaudeAgentSDK.Tool do
   defp map_type_to_json_schema(String), do: %{"type" => "string"}
   defp map_type_to_json_schema(Float), do: %{"type" => "number"}
   defp map_type_to_json_schema(Integer), do: %{"type" => "integer"}
+  defp map_type_to_json_schema(%{} = schema), do: normalize_schema_map(schema)
   defp map_type_to_json_schema(type) when is_atom(type), do: %{"type" => to_string(type)}
+
+  defp normalize_schema_map(schema) do
+    Enum.reduce(schema, %{}, fn {key, value}, acc ->
+      Map.put(acc, to_string(key), normalize_schema_value(key, value))
+    end)
+  end
+
+  defp normalize_schema_value(key, value) when key in [:type, "type"] and is_atom(value),
+    do: type_to_string(value)
+
+  defp normalize_schema_value(_key, %{} = value), do: normalize_schema_map(value)
+
+  defp normalize_schema_value(_key, value) when is_list(value),
+    do: Enum.map(value, &normalize_schema_list_value/1)
+
+  defp normalize_schema_value(_key, value), do: value
+
+  defp normalize_schema_list_value(%{} = value), do: normalize_schema_map(value)
+  defp normalize_schema_list_value(value) when is_atom(value), do: to_string(value)
+  defp normalize_schema_list_value(value), do: value
 
   defp build_schema_fields([]), do: {%{}, []}
 

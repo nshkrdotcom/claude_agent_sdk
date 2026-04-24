@@ -2,8 +2,8 @@ defmodule EmailAgent.IMAP.ConnectionBehaviour do
   @moduledoc """
   Behaviour defining the IMAP client interface.
 
-  This behaviour allows for mocking the IMAP client in tests
-  while using a real implementation in production.
+  This behaviour allows tests to replace the IMAP client while production uses
+  the real implementation.
   """
 
   @type socket :: term()

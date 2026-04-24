@@ -123,6 +123,28 @@ defmodule ClaudeAgentSDK.PermissionTest do
 
       assert context.suggestions == suggestions
     end
+
+    test "from_control_request preserves tool_use_id agent_id and blocked_path" do
+      context =
+        Context.from_control_request(
+          %{
+            "request" => %{
+              "subtype" => "can_use_tool",
+              "tool_name" => "Bash",
+              "input" => %{"command" => "pwd"},
+              "tool_use_id" => "toolu_123",
+              "agent_id" => "agent_456",
+              "blocked_path" => "/etc/passwd",
+              "permission_suggestions" => [%{"type" => "allow"}]
+            }
+          },
+          "session-1"
+        )
+
+      assert context.tool_use_id == "toolu_123"
+      assert context.agent_id == "agent_456"
+      assert context.blocked_path == "/etc/passwd"
+    end
   end
 
   describe "permission callback invocation" do

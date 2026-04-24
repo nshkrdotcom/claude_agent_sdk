@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-04-23
+
+### Added
+
+- Official Python SDK parity through upstream `v0.1.66`, including Claude CLI
+  `2.1.119` as the recommended version for this SDK release.
+- Options parity for `system_prompt: %{type: :file, path: ...}`,
+  dynamic system-prompt section exclusion, `skills`, `task_budget`,
+  `thinking.display`, corrected adaptive/disabled thinking flags, and explicit
+  empty `setting_sources` semantics.
+- Client/control parity for `get_context_usage/1`, initialize `skills` and
+  `excludeDynamicSections`, and permission context fields `tool_use_id` and
+  `agent_id`.
+- Message parser coverage for `server_tool_use`, `advisor_tool_result`,
+  `mirror_error`, assistant usage/message IDs/stop reasons/UUIDs, and result
+  `modelUsage`, `permission_denials`, `errors`, and UUIDs.
+- SDK MCP parity for explicit schema maps with descriptions, resource and
+  `resource_link` result content, `isError` propagation, and
+  `_meta["anthropic/maxResultSizeChars"]`.
+- Local CLI session helpers: `get_session_info/2`, offset pagination, `tag` and
+  `created_at` metadata, rename/tag/delete/fork mutations, cascading subagent
+  delete, and subagent list/message helpers.
+- SessionStore adapter surface with `SessionStore.Key`,
+  `SessionStore.Adapter`, `SessionStore.InMemory`, summary folding, mirror
+  batching with `mirror_error` surfacing, resume materialization, local import,
+  store-backed session helpers, and a conformance harness.
+
+### Changed
+
+- Examples are live-only and use public SDK methods for CLI status/preflight.
+  Archived deterministic/mock examples moved to `docs/archive/examples_legacy/`.
+- `examples/run_all.sh` no longer directly invokes Claude CLI commands or
+  prints raw Claude CLI switch recipes.
+- Shared Claude model registry now matches the current Claude Code selector:
+  default/recommended `sonnet` maps to Claude Sonnet 4.6, `opus` maps to Claude
+  Opus 4.7, `opus[1m]` maps to Claude Opus 4.7 with 1M context, and `haiku`
+  accepts both the Claude Haiku 4.5 alias and dated API ID.
+- README and guides now document `0.18.0`, the `2.1.119` recommended CLI, and
+  the new session/session-store parity surfaces.
+
+### Fixed
+
+- Live preflight no longer crashes on valid empty argv values such as
+  `--system-prompt ""`; the lower execution-plane command contract now accepts
+  empty OS argv strings.
+- CLI stdout parsing now skips non-JSON chatter before decode and flushes
+  transcript mirror batches before surfacing final result messages.
+- Subprocess env shaping filters inherited `CLAUDECODE` and preserves W3C trace
+  context when available.
+
 ## [0.17.0] - 2026-04-06
 
 ### Added
@@ -1510,7 +1560,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.16.0...v0.17.0
 [0.15.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.13.0...v0.14.0

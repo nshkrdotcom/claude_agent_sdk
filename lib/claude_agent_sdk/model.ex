@@ -76,7 +76,9 @@ defmodule ClaudeAgentSDK.Model do
   defp catalog_entries do
     case ModelCatalog.load(:claude) do
       {:ok, catalog} ->
-        Enum.map(catalog.models, fn model -> {model.id, model.aliases} end)
+        catalog.models
+        |> Enum.filter(&(&1.visibility == :public))
+        |> Enum.map(fn model -> {model.id, model.aliases} end)
 
       {:error, _reason} ->
         []

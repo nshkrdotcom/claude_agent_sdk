@@ -50,7 +50,7 @@ Verify the installation:
 claude --version
 ```
 
-Use Claude CLI `2.1.0` or newer. `2.1.74` is the recommended version for this SDK release.
+Use Claude CLI `2.1.0` or newer. `2.1.119` is the recommended version for this SDK release.
 
 ### 3. Authentication
 
@@ -120,7 +120,7 @@ Add `claude_agent_sdk` to your Mix dependencies in `mix.exs`:
 ```elixir
 defp deps do
   [
-    {:claude_agent_sdk, "~> 0.17.0"}
+    {:claude_agent_sdk, "~> 0.18.0"}
   ]
 end
 ```

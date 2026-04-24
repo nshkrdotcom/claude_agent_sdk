@@ -478,6 +478,31 @@ defmodule ClaudeAgentSDK.ClientTest do
       assert {:error, :not_initialized} = Client.get_server_info(client)
     end
 
+    test "get_context_usage sends control request and returns usage", %{
+      client: client,
+      transport: transport
+    } do
+      task = Task.async(fn -> Client.get_context_usage(client) end)
+
+      request = wait_for_request(transport, 2)
+      assert request["request"]["subtype"] == "get_context_usage"
+
+      usage = %{"tokens" => %{"input" => 10, "output" => 2}, "percent" => 0.12}
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => request["request_id"],
+          "subtype" => "success",
+          "response" => usage
+        }
+      }
+
+      FakeCLI.push_message(transport, response)
+
+      assert {:ok, ^usage} = Task.await(task, 1_000)
+    end
+
     test "receive_response collects messages", %{client: client, transport: transport} do
       task = Task.async(fn -> Client.receive_response(client) end)
 

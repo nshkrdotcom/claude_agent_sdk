@@ -168,7 +168,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.17.0"}
+    {:claude_agent_sdk, "~> 0.18.0"}
   ]
 end
 ```
@@ -196,7 +196,7 @@ claude --version
 ### CLI Compatibility
 
 - Minimum supported Claude CLI version: `2.1.0`
-- Recommended Claude CLI version: `2.1.84`
+- Recommended Claude CLI version: `2.1.119`
 - Compatibility policy: this SDK follows the Python SDK where practical, but the Claude CLI wire protocol is authoritative. CLI-native frames such as `:rate_limit_event` are surfaced here even if the current Python SDK skips unknown message types for forward compatibility.
 
 ---
@@ -511,6 +511,21 @@ messages = ClaudeAgentSDK.get_session_messages("550e8400-e29b-41d4-a716-44665544
 
 # SDK-managed SessionStore history
 {:ok, saved_sessions} = ClaudeAgentSDK.list_saved_sessions(storage_dir: "/custom/path")
+
+# Official SessionStore adapter surface
+store = ClaudeAgentSDK.SessionStore.InMemory.new!()
+session_id = "550e8400-e29b-41d4-a716-446655440000"
+project_key = ClaudeAgentSDK.project_key_for_directory("/path/to/project")
+
+:ok =
+  ClaudeAgentSDK.SessionStore.Adapter.append(store, %{project_key: project_key, session_id: session_id}, [
+    %{"type" => "user", "uuid" => "u1", "sessionId" => session_id, "message" => %{"content" => "hello"}}
+  ])
+
+sessions = ClaudeAgentSDK.list_sessions_from_store(store, directory: "/path/to/project")
+messages = ClaudeAgentSDK.get_session_messages_from_store(session_id, store,
+  directory: "/path/to/project"
+)
 ```
 
 Stream a single client response until the final result:
@@ -580,11 +595,15 @@ Key options for `ClaudeAgentSDK.Options`:
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `model` | string | `"sonnet"`, `"opus"`, `"haiku"` |
+| `model` | string | `"sonnet"` (default/recommended Sonnet 4.6), `"sonnet[1m]"`, `"opus"` (Opus 4.7), `"opus[1m]"`, `"haiku"` |
 | `effort` | atom | `:low`, `:medium`, `:high`, `:max` — controls reasoning effort; `:max` is Opus-only; invalid values raise `ArgumentError` (not supported for Haiku) |
 | `thinking` | map | `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}` |
+| `skills` | `:all` / list | Enables Claude skills and defaults setting sources to user/project when set |
+| `task_budget` | map | `%{total: n}` passed as an SDK task budget |
+| `session_store` | adapter | Mirrors transcript frames through the SessionStore adapter contract |
+| `load_timeout_ms` | integer | Bound for SessionStore resume materialization loads |
 | `max_turns` | integer | Maximum conversation turns |
-| `system_prompt` | string | Custom system instructions |
+| `system_prompt` | string/map | Custom text, `%{type: :file, path: path}`, or preset maps with dynamic-section exclusion |
 | `output_format` | atom/map | `:text`, `:json`, `:stream_json`, or JSON schema (SDK enforces stream-json for transport; JSON schema still passed) |
 | `allowed_tools` | list | Tools Claude can use |
 | `permission_mode` | atom | `:default`, `:accept_edits`, `:plan`, `:bypass_permissions`, `:auto`, `:dont_ask` |
@@ -783,7 +802,7 @@ For breaking changes and migration notes, see `CHANGELOG.md`.
 
 **0.10.0 fix (resume turn persistence):**
 - `resume/3` no longer uses `--print --resume` (one-shot mode that dropped intermediate turns). It now uses `--resume` with `--input-format stream-json`, preserving the full conversation history across resume calls.
-- Updated default Opus model to `claude-opus-4-6`.
+- Current model defaults and aliases are owned by `cli_subprocess_core`; the native Claude default is `sonnet` (Claude Sonnet 4.6).
 
 **0.9.0 breaking change (streaming):**
 - Stream event wrappers now require `uuid` and `session_id`. Missing keys raise and terminate the streaming client.

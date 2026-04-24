@@ -2,7 +2,9 @@
 
 > **Note:** Examples are available in the [source repository](https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples) and are not included in the Hex package to minimize download size. Clone the repo to run them locally.
 
-These examples demonstrate real integration with the Claude Code CLI.
+These examples demonstrate real integration with the Claude Code CLI through
+the Elixir SDK. Runnable examples are live-only: they do not invoke the Claude
+CLI directly, build raw Claude CLI switches, or use test transports.
 
 ## Prerequisites
 
@@ -225,9 +227,10 @@ mix run examples/basic_example.exs
 | `file_checkpointing_live.exs` | `rewind_files/2` (depends on CLI support) |
 | `filesystem_agents_live.exs` | Filesystem agents via `setting_sources: ["project"]` |
 
-## Archived Examples
+## Legacy Material
 
-The `archive/` directory contains older or experimental scripts, including mock/transport examples for deterministic testing.
+Older deterministic demos were moved to `docs/archive/examples_legacy/` so this
+directory contains only runnable live examples.
 
 ## Related Documentation
 

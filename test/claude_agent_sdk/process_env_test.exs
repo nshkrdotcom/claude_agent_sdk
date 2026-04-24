@@ -55,6 +55,36 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
     assert env_map["ANTHROPIC_BASE_URL"] == "http://localhost:11434"
   end
 
+  test "env builder propagates trace context and filters CLAUDECODE" do
+    previous = %{
+      "TRACEPARENT" => System.get_env("TRACEPARENT"),
+      "TRACESTATE" => System.get_env("TRACESTATE"),
+      "CLAUDECODE" => System.get_env("CLAUDECODE")
+    }
+
+    on_exit(fn ->
+      Enum.each(previous, fn
+        {key, nil} -> System.delete_env(key)
+        {key, value} -> System.put_env(key, value)
+      end)
+    end)
+
+    System.put_env("TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00")
+    System.put_env("TRACESTATE", "vendor=value")
+    System.put_env("CLAUDECODE", "internal")
+
+    env_map =
+      %Options{env: %{"CLAUDECODE" => "explicit"}}
+      |> Process.__env_vars__()
+      |> Map.new()
+
+    assert env_map["TRACEPARENT"] ==
+             "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+
+    assert env_map["TRACESTATE"] == "vendor=value"
+    refute Map.has_key?(env_map, "CLAUDECODE")
+  end
+
   test "shell escaping preserves empty string arguments" do
     assert Process.__shell_escape__("") == "\"\""
   end

@@ -83,7 +83,7 @@ defmodule ClaudeAgentSDK.Message do
           | :unknown
           | String.t()
   @type result_subtype :: :success | :error_max_turns | :error_during_execution | String.t()
-  @type system_subtype :: :init | String.t()
+  @type system_subtype :: :init | :mirror_error | String.t()
   @type assistant_error :: AssistantError.t()
   @type rate_limit_info :: %{
           required(:status) => String.t(),
@@ -219,6 +219,9 @@ defmodule ClaudeAgentSDK.Message do
 
   defp maybe_put_error_details(data, nil, _error_struct), do: data
 
+  defp maybe_put(data, _key, nil), do: data
+  defp maybe_put(data, key, value), do: Map.put(data, key, value)
+
   defp parse_message(raw) do
     case MessageSchema.parse(raw) do
       {:ok, parsed} ->
@@ -276,6 +279,7 @@ defmodule ClaudeAgentSDK.Message do
         :task_started -> build_task_started_data(raw)
         :task_progress -> build_task_progress_data(raw)
         :task_notification -> build_task_notification_data(raw)
+        :mirror_error -> build_mirror_error_data(raw)
         _ -> raw
       end
 
@@ -332,6 +336,7 @@ defmodule ClaudeAgentSDK.Message do
       "task_started" -> :task_started
       "task_progress" -> :task_progress
       "task_notification" -> :task_notification
+      "mirror_error" -> :mirror_error
       other -> other
     end
   end
@@ -375,6 +380,23 @@ defmodule ClaudeAgentSDK.Message do
     }
   end
 
+  defp parse_content_block(%{"type" => "server_tool_use"} = block) do
+    %{
+      type: :server_tool_use,
+      id: block["id"],
+      name: block["name"],
+      input: block["input"] || %{}
+    }
+  end
+
+  defp parse_content_block(%{"type" => "advisor_tool_result"} = block) do
+    %{
+      type: :advisor_tool_result,
+      tool_use_id: block["tool_use_id"],
+      content: block["content"]
+    }
+  end
+
   defp parse_content_block(block) when is_map(block), do: %{type: :unknown, raw: block}
   defp parse_content_block(other), do: %{type: :unknown, raw: other}
 
@@ -393,6 +415,10 @@ defmodule ClaudeAgentSDK.Message do
       session_id: raw["session_id"],
       parent_tool_use_id: raw["parent_tool_use_id"]
     }
+    |> maybe_put(:uuid, raw["uuid"])
+    |> maybe_put(:message_id, get_in(raw, ["message", "id"]))
+    |> maybe_put(:stop_reason, get_in(raw, ["message", "stop_reason"]))
+    |> maybe_put(:usage, get_in(raw, ["message", "usage"]))
     |> maybe_put_assistant_error(error_value)
   end
 
@@ -416,6 +442,7 @@ defmodule ClaudeAgentSDK.Message do
       is_error: raw["is_error"],
       stop_reason: raw["stop_reason"]
     }
+    |> put_result_parity_fields(raw)
   end
 
   defp build_result_data(error_type, raw)
@@ -434,6 +461,15 @@ defmodule ClaudeAgentSDK.Message do
       error: error_message,
       stop_reason: raw["stop_reason"]
     }
+    |> put_result_parity_fields(raw)
+  end
+
+  defp put_result_parity_fields(data, raw) do
+    data
+    |> maybe_put(:uuid, raw["uuid"])
+    |> maybe_put(:model_usage, raw["modelUsage"])
+    |> maybe_put(:permission_denials, raw["permission_denials"])
+    |> maybe_put(:errors, raw["errors"])
   end
 
   defp get_error_message(:error_max_turns, nil) do
@@ -469,6 +505,15 @@ defmodule ClaudeAgentSDK.Message do
       mcp_servers: raw["mcp_servers"] || [],
       model: raw["model"],
       permission_mode: raw["permissionMode"]
+    })
+  end
+
+  defp build_mirror_error_data(raw) do
+    Map.merge(raw, %{
+      subtype: :mirror_error,
+      session_id: raw["session_id"],
+      key: raw["key"],
+      error: raw["error"]
     })
   end
 

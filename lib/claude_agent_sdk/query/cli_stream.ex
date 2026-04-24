@@ -20,6 +20,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
 
   alias ClaudeAgentSDK.Config.{Buffers, Timeouts}
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
+  alias ClaudeAgentSDK.SessionStore.{MirrorBatcher, Resume}
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ProcessExit, as: CoreProcessExit
@@ -101,7 +102,10 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp start_transport(args, %Options{} = options, input) do
     drain_stale_transport_messages()
 
-    with {:ok, command} <- build_transport_command(options, args),
+    with {:ok, materialized} <- Resume.materialize(options),
+         options = Resume.apply_options(options, materialized),
+         {:ok, mirror_batcher} <- start_mirror_batcher(options),
+         {:ok, command} <- build_transport_command(options, args),
          {:ok, raw_session} <-
            RawSession.start_link(
              command,
@@ -125,6 +129,8 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         cwd: command.cwd,
         execution_surface: options.execution_surface,
         transport_error_mode: transport_error_mode(options),
+        materialized_resume: materialized,
+        mirror_batcher: mirror_batcher,
         # Track if we've received at least one message for better error diagnostics
         received_first_message?: false,
         # Track if we've received the result for stream completion detection
@@ -253,12 +259,19 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       {:ok, message} ->
         state = %{state | received_first_message?: true}
 
-        state =
-          if Message.final?(message),
-            do: %{state | received_result?: true, done?: true},
-            else: state
+        if Message.final?(message) do
+          mirror_errors = flush_mirror(state.mirror_batcher)
+          {mirror_errors ++ [message], %{state | received_result?: true, done?: true}}
+        else
+          {[message], state}
+        end
 
-        {[message], state}
+      {:mirror, file_path, entries} ->
+        errors = enqueue_mirror(state.mirror_batcher, file_path, entries)
+        if errors == [], do: receive_next(state), else: {errors, state}
+
+      :skip ->
+        receive_next(state)
 
       {:error, error} ->
         handle_transport_error(error, state)
@@ -266,12 +279,36 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp parse_message(line) do
+    if json_candidate?(line) do
+      case ClaudeAgentSDK.JSON.decode(line) do
+        {:ok, %{"type" => "transcript_mirror"} = frame} ->
+          {:mirror, frame["filePath"] || frame["file_path"], frame["entries"] || []}
+
+        _other ->
+          parse_regular_message(line)
+      end
+    else
+      :skip
+    end
+  end
+
+  defp parse_regular_message(line) do
     case Message.from_json(line) do
       {:ok, message} ->
         {:ok, message}
 
       {:error, reason} ->
         {:error, json_decode_error(line, reason)}
+    end
+  end
+
+  defp json_candidate?(line) when is_binary(line) do
+    line
+    |> String.trim_leading()
+    |> case do
+      "{" <> _rest -> true
+      "[" <> _rest -> true
+      _other -> false
     end
   end
 
@@ -325,10 +362,18 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
     receive_next(state)
   end
 
-  defp cleanup(%{raw_session: raw_session, transport_ref: transport_ref, input_task: task}) do
+  defp cleanup(%{
+         raw_session: raw_session,
+         transport_ref: transport_ref,
+         input_task: task,
+         materialized_resume: materialized,
+         mirror_batcher: mirror_batcher
+       }) do
     cleanup_input_task(task)
+    _ = flush_mirror(mirror_batcher)
     close_transport_with_timeout(raw_session, Timeouts.transport_close_grace_ms())
     flush_transport_messages(transport_ref)
+    Resume.cleanup(materialized)
 
     :ok
   end
@@ -403,6 +448,31 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp handle_transport_exit(reason, state) do
     {[transport_error_message(normalize_exit(reason), state)], %{state | done?: true}}
   end
+
+  defp start_mirror_batcher(%Options{session_store: nil}), do: {:ok, nil}
+
+  defp start_mirror_batcher(%Options{} = options) do
+    config_dir =
+      options.env
+      |> Map.get(
+        "CLAUDE_CONFIG_DIR",
+        System.get_env("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
+      )
+
+    MirrorBatcher.start_link(options.session_store, Path.join(config_dir, "projects"))
+  end
+
+  defp enqueue_mirror(nil, _file_path, _entries), do: []
+
+  defp enqueue_mirror(pid, file_path, entries)
+       when is_pid(pid) and is_binary(file_path) and is_list(entries) do
+    MirrorBatcher.enqueue(pid, file_path, entries)
+  end
+
+  defp enqueue_mirror(_pid, _file_path, _entries), do: []
+
+  defp flush_mirror(nil), do: []
+  defp flush_mirror(pid) when is_pid(pid), do: MirrorBatcher.flush(pid)
 
   defp await_down_or_shutdown(ref, transport, timeout_ms) do
     case ProcessSupport.await_down(ref, transport, timeout_ms) do

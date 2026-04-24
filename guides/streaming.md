@@ -43,6 +43,9 @@ The Claude Agent SDK provides two streaming approaches:
 - the common CLI streaming parser keeps the stricter `stream_event` wrapper
   contract (`uuid` and `session_id` required), while the SDK-local control lane
   may surface missing wrapper metadata as `nil`.
+- `0.18.0` skips non-JSON stdout chatter before decode, preserves mirror-error
+  system messages, and flushes SessionStore mirror batches before yielding the
+  final result.
 
 ### Key Differences
 
@@ -55,6 +58,21 @@ The Claude Agent SDK provides two streaming approaches:
 | Use case | Scripts, batch | Chat UIs, interactive |
 
 ---
+
+## Context Usage
+
+The control client exposes Claude's context-usage request:
+
+```elixir
+{:ok, client} = ClaudeAgentSDK.Client.start_link(%ClaudeAgentSDK.Options{})
+:ok = ClaudeAgentSDK.Client.send_message(client, "Summarize this project")
+
+{:ok, usage} = ClaudeAgentSDK.Client.get_context_usage(client)
+IO.inspect(usage["totalTokens"] || usage[:totalTokens])
+```
+
+Use this from long-lived clients when a UI or orchestrator needs the current
+context budget without ending the session.
 
 ## Simple Query Streaming with query/2
 

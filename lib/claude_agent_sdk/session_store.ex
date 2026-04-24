@@ -51,6 +51,7 @@ defmodule ClaudeAgentSDK.SessionStore do
   use GenServer
   alias ClaudeAgentSDK.Config.{Auth, Timeouts}
   alias ClaudeAgentSDK.Log, as: Logger
+  alias ClaudeAgentSDK.SessionStore.{Helpers, Import, Summary}
 
   defstruct [
     :storage_dir,
@@ -78,6 +79,107 @@ defmodule ClaudeAgentSDK.SessionStore do
         }
 
   ## Public API
+
+  @doc """
+  Derives the SessionStore project key for a directory.
+  """
+  @spec project_key_for_directory(String.t() | nil) :: String.t()
+  def project_key_for_directory(directory \\ nil),
+    do: Summary.project_key_for_directory(directory)
+
+  @doc """
+  Converts a Claude transcript file path under a projects directory into a SessionStore key.
+  """
+  @spec file_path_to_session_key(String.t(), String.t()) ::
+          ClaudeAgentSDK.SessionStore.Key.t() | nil
+  def file_path_to_session_key(file_path, projects_dir),
+    do: Summary.file_path_to_session_key(file_path, projects_dir)
+
+  @doc """
+  Folds appended SessionStore entries into a summary sidecar.
+  """
+  @spec fold_session_summary(map() | nil, ClaudeAgentSDK.SessionStore.Key.input(), [map()]) ::
+          map()
+  def fold_session_summary(prev, key, entries),
+    do: Summary.fold_session_summary(prev, key, entries)
+
+  @doc """
+  Imports a local Claude JSONL session transcript into a SessionStore adapter.
+  """
+  @spec import_session_to_store(String.t(), term(), keyword()) :: :ok | {:error, term()}
+  def import_session_to_store(session_id, store, opts \\ []),
+    do: Import.import_session(session_id, store, opts)
+
+  @doc """
+  Lists sessions backed by a SessionStore adapter.
+  """
+  @spec list_sessions_from_store(term(), keyword()) :: [ClaudeAgentSDK.Session.SessionInfo.t()]
+  def list_sessions_from_store(store, opts \\ []),
+    do: Helpers.list_sessions_from_store(store, opts)
+
+  @doc """
+  Looks up one SessionStore-backed session.
+  """
+  @spec get_session_info_from_store(String.t(), term(), keyword()) ::
+          ClaudeAgentSDK.Session.SessionInfo.t() | nil
+  def get_session_info_from_store(session_id, store, opts \\ []),
+    do: Helpers.get_session_info_from_store(session_id, store, opts)
+
+  @doc """
+  Reads visible messages from a SessionStore-backed session.
+  """
+  @spec get_session_messages_from_store(String.t(), term(), keyword()) :: [
+          ClaudeAgentSDK.Session.SessionMessage.t()
+        ]
+  def get_session_messages_from_store(session_id, store, opts \\ []),
+    do: Helpers.get_session_messages_from_store(session_id, store, opts)
+
+  @doc """
+  Lists subagent IDs for a SessionStore-backed session.
+  """
+  @spec list_subagents_from_store(String.t(), term(), keyword()) :: [String.t()]
+  def list_subagents_from_store(session_id, store, opts \\ []),
+    do: Helpers.list_subagents_from_store(session_id, store, opts)
+
+  @doc """
+  Reads visible messages from a SessionStore-backed subagent transcript.
+  """
+  @spec get_subagent_messages_from_store(String.t(), String.t(), term(), keyword()) :: [
+          ClaudeAgentSDK.Session.SessionMessage.t()
+        ]
+  def get_subagent_messages_from_store(session_id, agent_id, store, opts \\ []),
+    do: Helpers.get_subagent_messages_from_store(session_id, agent_id, store, opts)
+
+  @doc """
+  Appends a custom title entry to a SessionStore-backed session.
+  """
+  @spec rename_session_via_store(String.t(), String.t(), term(), keyword()) ::
+          :ok | {:error, term()}
+  def rename_session_via_store(session_id, title, store, opts \\ []),
+    do: Helpers.rename_session_via_store(session_id, title, store, opts)
+
+  @doc """
+  Appends or clears a tag on a SessionStore-backed session.
+  """
+  @spec tag_session_via_store(String.t(), String.t() | nil, term(), keyword()) ::
+          :ok | {:error, term()}
+  def tag_session_via_store(session_id, tag, store, opts \\ []),
+    do: Helpers.tag_session_via_store(session_id, tag, store, opts)
+
+  @doc """
+  Deletes a SessionStore-backed session when the adapter implements delete.
+  """
+  @spec delete_session_via_store(String.t(), term(), keyword()) :: :ok | {:error, term()}
+  def delete_session_via_store(session_id, store, opts \\ []),
+    do: Helpers.delete_session_via_store(session_id, store, opts)
+
+  @doc """
+  Forks a SessionStore-backed session into a new session.
+  """
+  @spec fork_session_via_store(String.t(), term(), keyword()) ::
+          ClaudeAgentSDK.Session.ForkResult.t() | {:error, term()}
+  def fork_session_via_store(session_id, store, opts \\ []),
+    do: Helpers.fork_session_via_store(session_id, store, opts)
 
   @doc """
   Starts the SessionStore GenServer.

@@ -1,6 +1,6 @@
 # MCP Tools Guide
 
-**Version:** 0.17.0 | **Last Updated:** 2026-04-06
+**Version:** 0.18.0 | **Last Updated:** 2026-04-23
 
 ---
 
@@ -271,9 +271,18 @@ Tool.simple_schema(
   name: :string,
   email: {:string, optional: true}
 )
+
+# Explicit JSON Schema fragments with descriptions
+Tool.simple_schema(
+  query: %{type: :string, description: "Search query"},
+  limit: %{type: :integer, description: "Maximum result count"}
+)
 ```
 
 **Supported types:** `:string`, `:number`, `:integer`, `:boolean`, `:array`, `:object`
+
+`0.18.0` accepts explicit schema maps in `simple_schema/1`, which is the
+Elixir equivalent of Python's `Annotated[...]` parameter descriptions.
 
 **Example in deftool:**
 
@@ -516,6 +525,32 @@ def execute(input) do
   {:ok, %{"content" => [%{"type" => "text", "text" => content}]}}
 end
 ```
+
+#### Resource Results and Size Hints
+
+`0.18.0` forwards resource-style MCP content blocks and Anthropic result-size
+metadata:
+
+```elixir
+deftool :read_doc,
+        "Read a document",
+        Tool.simple_schema(path: %{type: :string, description: "Document path"}),
+        max_result_size_chars: 20_000 do
+  def execute(%{"path" => path}) do
+    {:ok,
+     %{
+       "content" => [
+         %{"type" => "resource_link", "uri" => "file://" <> path, "name" => Path.basename(path)},
+         %{"type" => "resource", "resource" => %{"uri" => "file://" <> path, "text" => File.read!(path)}}
+       ]
+     }}
+  end
+end
+```
+
+The SDK advertises `max_result_size_chars` as
+`_meta["anthropic/maxResultSizeChars"]`. Tool results preserve `isError` and
+`is_error` so adapters can surface tool failures without losing MCP shape.
 
 #### Error Handling
 

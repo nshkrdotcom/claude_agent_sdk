@@ -67,10 +67,22 @@ defmodule ClaudeAgentSDK.Config.Env do
   @spec stream_close_timeout() :: String.t()
   def stream_close_timeout, do: "CLAUDE_CODE_STREAM_CLOSE_TIMEOUT"
 
+  @doc "Legacy Claude Code internal env var that must not be inherited."
+  @spec claudecode() :: String.t()
+  def claudecode, do: "CLAUDECODE"
+
   @doc "Skip version check flag (`\"CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK\"`)."
   @spec skip_version_check() :: String.t()
   def skip_version_check,
     do: "CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK"
+
+  @doc "W3C trace context parent header env var (`\"TRACEPARENT\"`)."
+  @spec traceparent() :: String.t()
+  def traceparent, do: "TRACEPARENT"
+
+  @doc "W3C trace context state header env var (`\"TRACESTATE\"`)."
+  @spec tracestate() :: String.t()
+  def tracestate, do: "TRACESTATE"
 
   # -- cloud providers -------------------------------------------------------
 
@@ -118,6 +130,8 @@ defmodule ClaudeAgentSDK.Config.Env do
       anthropic_api_key(),
       anthropic_auth_token(),
       anthropic_base_url(),
+      traceparent(),
+      tracestate(),
       "PATH",
       "HOME"
     ]

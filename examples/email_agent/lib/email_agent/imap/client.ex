@@ -3,7 +3,7 @@ defmodule EmailAgent.IMAP.Client do
   Real IMAP client implementation using the mail library.
 
   This module provides the actual IMAP operations for production use.
-  In tests, the ConnectionBehaviour mock is used instead.
+  Tests can replace the ConnectionBehaviour implementation.
 
   ## Note
 

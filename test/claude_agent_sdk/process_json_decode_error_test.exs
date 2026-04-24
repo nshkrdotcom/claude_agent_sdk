@@ -4,16 +4,20 @@ defmodule ClaudeAgentSDK.ProcessJSONDecodeErrorTest do
   alias ClaudeAgentSDK.Errors.CLIJSONDecodeError
   alias ClaudeAgentSDK.{Message, Options, Process}
 
-  test "non-JSON output yields a structured JSON decode error result" do
-    [msg] = Process.__parse_output__("this is not json\n")
+  test "non-JSON stdout lines are skipped before parsing JSON frames" do
+    output = """
+    this is not json
+    {"type":"result","subtype":"success","session_id":"s","result":"ok","is_error":false}
+    """
 
-    assert %Message{type: :result, subtype: :error_during_execution, data: data} = msg
-    assert data.is_error == true
-    assert %CLIJSONDecodeError{line: "this is not json"} = data.error_struct
+    [msg] = Process.__parse_output__(output)
+
+    assert %Message{type: :result, subtype: :success, data: data} = msg
+    assert data.result == "ok"
   end
 
   test "oversized JSON lines yield a buffer overflow JSON decode error" do
-    output = String.duplicate("a", 20) <> "\n"
+    output = "{" <> String.duplicate("a", 20) <> "\n"
     options = %Options{max_buffer_size: 10}
 
     [msg] = Process.__parse_output__(output, options)

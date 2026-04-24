@@ -89,6 +89,47 @@ defmodule ClaudeAgentSDK.TestSupport.ImageTools do
   end
 end
 
+defmodule ClaudeAgentSDK.TestSupport.ParityTools do
+  @moduledoc false
+
+  use ClaudeAgentSDK.Tool
+
+  deftool :limited_tool,
+          "Tool with max result size metadata",
+          %{type: "object"},
+          max_result_size_chars: 1024 do
+    def execute(_input) do
+      {:ok, %{"content" => [%{"type" => "text", "text" => "limited"}]}}
+    end
+  end
+
+  deftool :resource_tool,
+          "Returns resource content blocks",
+          %{type: "object"} do
+    def execute(_input) do
+      {:ok,
+       %{
+         "content" => [
+           %{
+             "type" => "resource_link",
+             "uri" => "file:///tmp/report.txt",
+             "name" => "report.txt"
+           },
+           %{
+             "type" => "resource",
+             "resource" => %{
+               "uri" => "file:///tmp/data.txt",
+               "mimeType" => "text/plain",
+               "text" => "data"
+             }
+           }
+         ],
+         "isError" => true
+       }}
+    end
+  end
+end
+
 defmodule ClaudeAgentSDK.TestSupport.SlowTools do
   @moduledoc false
 

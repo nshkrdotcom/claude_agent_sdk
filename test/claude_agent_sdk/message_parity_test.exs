@@ -75,6 +75,98 @@ defmodule ClaudeAgentSDK.MessageParityTest do
            ] = Message.content_blocks(msg)
   end
 
+  test "content_blocks/1 preserves server-side tool use and advisor results" do
+    json =
+      Jason.encode!(%{
+        "type" => "assistant",
+        "uuid" => "msg-uuid",
+        "session_id" => "s",
+        "message" => %{
+          "id" => "msg_123",
+          "role" => "assistant",
+          "model" => "claude-sonnet",
+          "stop_reason" => "end_turn",
+          "usage" => %{"input_tokens" => 10},
+          "content" => [
+            %{
+              "type" => "server_tool_use",
+              "id" => "srv_1",
+              "name" => "web_search",
+              "input" => %{"query" => "latest"}
+            },
+            %{
+              "type" => "advisor_tool_result",
+              "tool_use_id" => "srv_1",
+              "content" => %{"type" => "web_search_result", "items" => []}
+            }
+          ]
+        }
+      })
+
+    assert {:ok, %Message{type: :assistant, data: data} = msg} = Message.from_json(json)
+
+    assert data.uuid == "msg-uuid"
+    assert data.message_id == "msg_123"
+    assert data.stop_reason == "end_turn"
+    assert data.usage == %{"input_tokens" => 10}
+
+    assert [
+             %{
+               type: :server_tool_use,
+               id: "srv_1",
+               name: "web_search",
+               input: %{"query" => "latest"}
+             },
+             %{
+               type: :advisor_tool_result,
+               tool_use_id: "srv_1",
+               content: %{"type" => "web_search_result", "items" => []}
+             }
+           ] = Message.content_blocks(msg)
+  end
+
+  test "result messages preserve model usage permission denials errors and uuid" do
+    json =
+      Jason.encode!(%{
+        "type" => "result",
+        "subtype" => "success",
+        "uuid" => "result-uuid",
+        "session_id" => "s",
+        "result" => "ok",
+        "total_cost_usd" => 0.0,
+        "duration_ms" => 1,
+        "duration_api_ms" => 1,
+        "num_turns" => 1,
+        "is_error" => false,
+        "modelUsage" => %{"claude-sonnet" => %{"input_tokens" => 10}},
+        "permission_denials" => [%{"tool_name" => "Bash"}],
+        "errors" => ["warning"]
+      })
+
+    assert {:ok, %Message{type: :result, data: data}} = Message.from_json(json)
+    assert data.uuid == "result-uuid"
+    assert data.model_usage == %{"claude-sonnet" => %{"input_tokens" => 10}}
+    assert data.permission_denials == [%{"tool_name" => "Bash"}]
+    assert data.errors == ["warning"]
+  end
+
+  test "mirror_error system messages are surfaced" do
+    json =
+      Jason.encode!(%{
+        "type" => "system",
+        "subtype" => "mirror_error",
+        "session_id" => "s",
+        "key" => %{"project_key" => "proj", "session_id" => "s"},
+        "error" => "append failed"
+      })
+
+    assert {:ok, %Message{type: :system, subtype: :mirror_error, data: data}} =
+             Message.from_json(json)
+
+    assert data.key == %{"project_key" => "proj", "session_id" => "s"}
+    assert data.error == "append failed"
+  end
+
   test "unknown message types are preserved as strings" do
     json = Jason.encode!(%{"type" => "new_message_type", "foo" => "bar"})
 
