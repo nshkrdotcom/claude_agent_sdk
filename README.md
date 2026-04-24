@@ -596,7 +596,7 @@ Key options for `ClaudeAgentSDK.Options`:
 | Option | Type | Description |
 |--------|------|-------------|
 | `model` | string | `"sonnet"` (default/recommended Sonnet 4.6), `"sonnet[1m]"`, `"opus"` (Opus 4.7), `"opus[1m]"`, `"haiku"` |
-| `effort` | atom | `:low`, `:medium`, `:high`, `:max` — controls reasoning effort; `:max` is Opus-only; invalid values raise `ArgumentError` (not supported for Haiku) |
+| `effort` | atom | `:low`, `:medium`, `:high`, `:xhigh`, `:max` — controls reasoning effort; `:xhigh` is Opus-only; invalid values raise `ArgumentError` (not supported for Haiku) |
 | `thinking` | map | `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}` |
 | `skills` | `:all` / list | Enables Claude skills and defaults setting sources to user/project when set |
 | `task_budget` | map | `%{total: n}` passed as an SDK task budget |

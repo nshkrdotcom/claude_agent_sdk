@@ -31,6 +31,11 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert opts.effort == :high
     end
 
+    test "accepts :xhigh" do
+      opts = new_options(effort: :xhigh)
+      assert opts.effort == :xhigh
+    end
+
     test "emits --effort flag when set" do
       opts = new_options(effort: :high)
       args = Options.to_args(opts)
@@ -130,6 +135,20 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert Enum.at(args, idx + 1) == "max"
     end
 
+    test "allows :xhigh effort on opus" do
+      opts = new_options(effort: :xhigh, model: "opus")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+      idx = Enum.find_index(args, &(&1 == "--effort"))
+      assert Enum.at(args, idx + 1) == "xhigh"
+    end
+
+    test "allows :xhigh effort on opus[1m]" do
+      opts = new_options(effort: :xhigh, model: "opus[1m]")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+    end
+
     test "allows :max effort on claude-opus-4-7" do
       opts = new_options(effort: :max, model: "claude-opus-4-7")
       args = Options.to_args(opts)
@@ -142,8 +161,22 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert "--effort" in args
     end
 
-    test "warns and strips :max effort on sonnet" do
+    test "allows :max effort on sonnet" do
       opts = new_options(effort: :max, model: "sonnet")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+      idx = Enum.find_index(args, &(&1 == "--effort"))
+      assert Enum.at(args, idx + 1) == "max"
+    end
+
+    test "allows :max effort on sonnet[1m]" do
+      opts = new_options(effort: :max, model: "sonnet[1m]")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+    end
+
+    test "warns and strips :xhigh effort on sonnet" do
+      opts = new_options(effort: :xhigh, model: "sonnet")
 
       log =
         capture_log(fn ->
@@ -182,11 +215,22 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       )
     end
 
-    test "warns and strips :max effort when model is nil and registry default is sonnet" do
+    test "allows :max effort when model is nil and registry default is sonnet" do
       TestEnvHelpers.with_system_env(
         [{Env.provider_backend(), "anthropic"}, {Env.anthropic_model(), nil}],
         fn ->
           opts = Options.new(effort: :max, model: nil, provider_backend: :anthropic)
+          args = Options.to_args(opts)
+          assert "--effort" in args
+        end
+      )
+    end
+
+    test "warns and strips :xhigh effort when model is nil and registry default is sonnet" do
+      TestEnvHelpers.with_system_env(
+        [{Env.provider_backend(), "anthropic"}, {Env.anthropic_model(), nil}],
+        fn ->
+          opts = Options.new(effort: :xhigh, model: nil, provider_backend: :anthropic)
 
           log =
             capture_log(fn ->
@@ -203,6 +247,18 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       opts =
         new_options(
           effort: :max,
+          model: nil,
+          model_payload: resolved_payload!("sonnet")
+        )
+
+      args = Options.to_args(opts)
+      assert "--effort" in args
+    end
+
+    test "uses the resolved payload model when gating :xhigh" do
+      opts =
+        new_options(
+          effort: :xhigh,
           model: nil,
           model_payload: resolved_payload!("sonnet")
         )
