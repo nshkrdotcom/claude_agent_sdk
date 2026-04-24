@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default/recommended `sonnet` maps to Claude Sonnet 4.6, `opus` maps to Claude
   Opus 4.7, `opus[1m]` maps to Claude Opus 4.7 with 1M context, and `haiku`
   accepts both the Claude Haiku 4.5 alias and dated API ID.
+- Claude effort validation now allows Sonnet `:max` and Opus-only `:xhigh`;
+  Haiku models still do not emit `--effort`.
 - README and guides now document `0.18.0`, the `2.1.119` recommended CLI, and
   the new session/session-store parity surfaces.
 

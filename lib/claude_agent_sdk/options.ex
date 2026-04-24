@@ -83,7 +83,7 @@ defmodule ClaudeAgentSDK.Options do
   alias ClaudeAgentSDK.Model
   alias CliSubprocessCore.{ExecutionSurface, ModelInput}
 
-  @valid_efforts [:low, :medium, :high, :max]
+  @valid_efforts [:low, :medium, :high, :xhigh, :max]
 
   # This struct intentionally has many fields as it mirrors the Claude Code CLI options.
   # The struct is created once per request and is short-lived, so memory overhead is minimal.
@@ -164,7 +164,7 @@ defmodule ClaudeAgentSDK.Options do
     :task_budget,
     :session_store,
     :load_timeout_ms,
-    # Effort level (:low, :medium, :high, :max)
+    # Effort level (:low, :medium, :high, :xhigh, :max)
     :effort,
     # Thinking config (%{type: :adaptive | :enabled | :disabled, budget_tokens: integer()})
     :thinking,
@@ -351,7 +351,7 @@ defmodule ClaudeAgentSDK.Options do
           task_budget: task_budget() | nil,
           session_store: term() | nil,
           load_timeout_ms: pos_integer() | nil,
-          effort: :low | :medium | :high | :max | nil,
+          effort: :low | :medium | :high | :xhigh | :max | nil,
           thinking: map() | nil
         }
 
@@ -1185,9 +1185,9 @@ defmodule ClaudeAgentSDK.Options do
 
           args
 
-        effort == :max and not opus_model?(model) ->
+        effort == :xhigh and not opus_model?(model) ->
           Logger.warning(
-            "Effort :max is only supported on Opus models; ignoring effort for model: #{model}"
+            "Effort :xhigh is only supported on Opus models; ignoring effort for model: #{model}"
           )
 
           args
@@ -1465,7 +1465,7 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   defp invalid_effort_message(effort) do
-    "effort must be one of :low, :medium, :high, :max, or nil, got: #{inspect(effort)}"
+    "effort must be one of :low, :medium, :high, :xhigh, :max, or nil, got: #{inspect(effort)}"
   end
 
   defp normalize_plugin(%{type: type, path: path}) do
