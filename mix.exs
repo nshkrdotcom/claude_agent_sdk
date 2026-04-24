@@ -57,36 +57,25 @@ defmodule ClaudeAgentSdk.MixProject do
   end
 
   defp cli_subprocess_core_dep do
-    case workspace_dep_path("../cli_subprocess_core", "CLAUDE_AGENT_SDK_HEX_DEPS") do
+    case local_dep_path("../cli_subprocess_core") do
       nil -> {:cli_subprocess_core, @cli_subprocess_core_version}
       path -> {:cli_subprocess_core, path: path}
     end
   end
 
-  defp workspace_dep_path(relative_path, force_hex_env) do
-    if prefer_workspace_paths?(force_hex_env) do
+  defp local_dep_path(relative_path) do
+    if local_workspace_deps?() do
       path = Path.expand(relative_path, __DIR__)
       if File.dir?(path), do: path
     end
   end
 
-  defp prefer_workspace_paths?(force_hex_env) do
-    workspace_paths_forced?(force_hex_env) or
-      (not release_deps_forced?(force_hex_env) and not Enum.member?(Path.split(__DIR__), "deps"))
+  defp local_workspace_deps? do
+    not hex_packaging_task?() and not Enum.member?(Path.split(__DIR__), "deps")
   end
 
-  defp release_deps_forced?(force_hex_env) do
-    force_hex_deps?(force_hex_env) or
-      Enum.any?(System.argv(), &(&1 in ["hex.build", "hex.publish"]))
-  end
-
-  defp workspace_paths_forced?(force_hex_env) do
-    not force_hex_deps?(force_hex_env) and
-      System.get_env("FORCE_WORKSPACE_PATH_DEPS") in ["1", "true", "TRUE", "yes", "YES"]
-  end
-
-  defp force_hex_deps?(force_hex_env) do
-    System.get_env(force_hex_env) in ["1", "true", "TRUE", "yes", "YES"]
+  defp hex_packaging_task? do
+    Enum.any?(System.argv(), &(&1 in ["hex.build", "hex.publish"]))
   end
 
   defp package do
