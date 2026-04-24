@@ -2,7 +2,7 @@ defmodule ClaudeAgentSDK.Runtime.CLITest do
   use ExUnit.Case, async: false
 
   alias ClaudeAgentSDK.{Options, Runtime.CLI}
-  alias CliSubprocessCore.{Event, Payload}
+  alias CliSubprocessCore.{Event, Payload, TransportInfo}
 
   defp write_runtime_stub!(dir) do
     path = Path.join(dir, "claude_runtime_stub.sh")
@@ -54,7 +54,7 @@ defmodule ClaudeAgentSDK.Runtime.CLITest do
         assert info.invocation.env["CLAUDE_CODE_ENTRYPOINT"] == "sdk-elixir"
         assert info.invocation.env["CLAUDE_AGENT_SDK_VERSION"]
         assert info.invocation.user == nil
-        assert info.transport.module == ExecutionPlane.Process.Transport
+        assert TransportInfo.match?(info.transport.info)
 
         args = info.invocation.args
 

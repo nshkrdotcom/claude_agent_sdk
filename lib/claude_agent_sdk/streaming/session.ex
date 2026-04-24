@@ -17,7 +17,7 @@ defmodule ClaudeAgentSDK.Streaming.Session do
   alias ClaudeAgentSDK.Streaming.Termination
   alias ClaudeAgentSDK.Streaming.Timeout
   alias CliSubprocessCore.ExecutionSurface
-  alias ExecutionPlane.Process.Transport.Error, as: CoreTransportError
+  alias CliSubprocessCore.TransportError, as: CoreTransportError
 
   @type subscriber_ref :: reference()
   @type subscriber_pid :: pid()
@@ -589,9 +589,10 @@ defmodule ClaudeAgentSDK.Streaming.Session do
 
   defp prevalidate_runtime_start(_options), do: :ok
 
-  defp normalize_runtime_start_error({:transport, %CoreTransportError{reason: reason}}),
-    do: reason
+  defp normalize_runtime_start_error({:transport, error}), do: CoreTransportError.reason(error)
 
-  defp normalize_runtime_start_error(%CoreTransportError{reason: reason}), do: reason
+  defp normalize_runtime_start_error(error) when is_exception(error),
+    do: CoreTransportError.reason(error)
+
   defp normalize_runtime_start_error(reason), do: reason
 end

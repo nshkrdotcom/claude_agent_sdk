@@ -38,7 +38,8 @@ defmodule ClaudeAgentSDK.AuthChecker do
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.Command.Error, as: CoreCommandError
   alias CliSubprocessCore.Command.RunResult
-  alias ExecutionPlane.Process.Transport.Error, as: CoreTransportError
+  alias CliSubprocessCore.ProcessExit
+  alias CliSubprocessCore.TransportError, as: CoreTransportError
 
   @type auth_status ::
           :ready | :cli_not_found | :not_authenticated | :invalid_credentials | :unknown
@@ -664,14 +665,17 @@ defmodule ClaudeAgentSDK.AuthChecker do
       {:ok, result.stdout}
     else
       error_text = extract_error_text(result.stdout, result.stderr)
-      {:error, "Command failed (exit #{result.exit.code}): #{error_text}"}
+      {:error, "Command failed (exit #{ProcessExit.code(result.exit)}): #{error_text}"}
     end
   end
 
-  defp handle_execution_error(%CoreCommandError{
-         reason: {:transport, %CoreTransportError{reason: :timeout}}
-       }),
-       do: {:error, :timeout}
+  defp handle_execution_error(%CoreCommandError{reason: {:transport, error}}) do
+    if CoreTransportError.reason(error) == :timeout do
+      {:error, :timeout}
+    else
+      {:error, "Command failed: #{CoreTransportError.message(error)}"}
+    end
+  end
 
   defp handle_execution_error(%CoreCommandError{} = error) do
     {:error, "Command failed: #{Exception.message(error)}"}
