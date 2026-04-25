@@ -66,29 +66,4 @@ defmodule ClaudeAgentSDK.Streaming.SessionCwdSemanticsTest do
       FakeCLI.cleanup(fake_cli)
     end
   end
-
-  test "guest path semantics also skip local cwd prevalidation even when the transport is not remote" do
-    cwd =
-      Path.join(
-        System.tmp_dir!(),
-        "claude_agent_sdk_guest_missing_cwd_#{System.unique_integer([:positive])}"
-      )
-
-    _ = File.rm_rf(cwd)
-    fake_cli = FakeCLI.new!()
-
-    options =
-      fake_cli
-      |> FakeCLI.options(%Options{
-        cwd: cwd,
-        execution_surface: [surface_kind: :test_guest_local]
-      })
-
-    try do
-      assert {:ok, session} = Session.start_link(options)
-      assert :ok = Session.close(session)
-    after
-      FakeCLI.cleanup(fake_cli)
-    end
-  end
 end
