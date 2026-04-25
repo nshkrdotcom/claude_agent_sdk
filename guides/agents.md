@@ -169,14 +169,20 @@ You are a Python expert specializing in data science and machine learning.
 Choose the appropriate model based on task complexity:
 
 ```elixir
+# Default/recommended for everyday work
+model: "sonnet"
+
 # Fast responses for simple tasks
 model: "haiku"
 
-# Balanced performance for most tasks
-model: "sonnet"
+# Long-context everyday work
+model: "sonnet[1m]"
 
 # Maximum capability for complex tasks
 model: "opus"
+
+# Long-context complex work
+model: "opus[1m]"
 ```
 
 ### Tool Configuration
@@ -841,7 +847,7 @@ simple_agent = Agent.new(
   model: "haiku"
 )
 
-# Complex tasks: Use more capable models
+# Complex tasks: Use Opus when capability matters most
 complex_agent = Agent.new(
   description: "Architecture designer",
   prompt: "Design complex software systems",
