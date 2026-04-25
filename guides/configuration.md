@@ -88,9 +88,9 @@ ClaudeAgentSDK.query("Refactor this code for better performance", options)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `model` | `String.t()` | `nil` | Model selection ("opus", "sonnet", "haiku", or full model name) |
+| `model` | `String.t()` | `nil` | Model selection (`"sonnet"`, `"sonnet[1m]"`, `"opus"`, `"opus[1m]"`, `"haiku"`, or a current full model ID). When omitted, core defaults to `"sonnet"`. |
 | `fallback_model` | `String.t()` | `nil` | Fallback model when primary is busy |
-| `effort` | `atom()` | `nil` | Reasoning effort level (`:low`, `:medium`, `:high`, `:xhigh`, `:max`). `:xhigh` is Opus-only. Not supported for Haiku. |
+| `effort` | `atom()` | `nil` | Reasoning effort level (`:low`, `:medium`, `:high`, `:xhigh`, `:max`). Sonnet supports all except `:xhigh`; Opus supports all five; Haiku does not emit `--effort`. |
 | `thinking` | `map()` | `nil` | Thinking config (`%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}`) |
 | `max_thinking_tokens` | `pos_integer()` | `nil` | Maximum tokens for model thinking (fallback when `thinking` is nil) |
 | `provider_backend` | `atom() \| String.t()` | `nil` | Claude backend selector. Use `:ollama` for Anthropic-compatible Ollama runs. |
@@ -277,8 +277,8 @@ runtime, and thinking tokens, see the [Model Configuration](model-configuration.
 
 Active model selection is owned by `cli_subprocess_core`.
 
-For the native Claude backend, use canonical Claude names such as `haiku`,
-`sonnet`, and `opus`.
+For the native Claude backend, use canonical Claude names such as `sonnet`,
+`sonnet[1m]`, `opus`, `opus[1m]`, and `haiku`.
 
 For the Claude `:ollama` backend, either:
 
@@ -300,13 +300,13 @@ options =
 When the resolved payload comes from an external backend, the SDK does not emit
 Claude-native `--effort`.
 
-| Shorthand | Full Model ID | Best For |
-|-----------|---------------|----------|
-| `"sonnet"` | Claude Sonnet 4.6 | Default/recommended, best for everyday tasks |
-| `"sonnet[1m]"` | Claude Sonnet 4.6 with 1M context | Long-context Sonnet work |
-| `"opus"` | Claude Opus 4.7 | Most capable model for complex reasoning |
-| `"opus[1m]"` | Claude Opus 4.7 with 1M context | Long-context Opus work |
-| `"haiku"` | Claude Haiku 4.5 | Fast responses, simple queries, cost-effective |
+| Shorthand | Model | CLI/API alias | Supported effort |
+|-----------|-------|---------------|------------------|
+| `"sonnet"` | Claude Sonnet 4.6 | `claude-sonnet-4-6` | `:low`, `:medium`, `:high`, `:max` |
+| `"sonnet[1m]"` | Claude Sonnet 4.6 with 1M context | `claude-sonnet-4-6[1m]` | `:low`, `:medium`, `:high`, `:max` |
+| `"opus"` | Claude Opus 4.7 | `claude-opus-4-7` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
+| `"opus[1m]"` | Claude Opus 4.7 with 1M context | `claude-opus-4-7[1m]` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
+| `"haiku"` | Claude Haiku 4.5 | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` | none |
 
 ### Model Configuration
 

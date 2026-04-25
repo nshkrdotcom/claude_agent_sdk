@@ -140,9 +140,11 @@ Effort is still a Claude-native feature.
 
 For native Claude models:
 
-- `haiku` does not support effort
-- `sonnet` supports `:low`, `:medium`, `:high`, `:max`
-- `opus` supports `:low`, `:medium`, `:high`, `:xhigh`, `:max`
+| Model family | Supported efforts |
+|--------------|-------------------|
+| `sonnet`, `sonnet[1m]` | `:low`, `:medium`, `:high`, `:max` |
+| `opus`, `opus[1m]` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
+| `haiku` | none; the SDK logs a warning and omits `--effort` |
 
 For external Claude/Ollama runs, the SDK does not emit `--effort`.
 
