@@ -143,6 +143,7 @@ defmodule ClaudeAgentSdk.MixProject do
         {"docs/RUNTIME_CONTROL.md", title: "Runtime Control"},
         {"guides/testing.md", title: "Testing"},
         {"guides/error-handling.md", title: "Error Handling"},
+        {"guides/provider_behavior_manifest.md", title: "Provider Behavior Manifest"},
         {"examples/README.md", title: "Examples", filename: "examples"},
         {"examples/mix_task_chat/README.md",
          title: "Mix Task Chat Example", filename: "mix-task-chat-example"},
@@ -182,7 +183,8 @@ defmodule ClaudeAgentSdk.MixProject do
         ],
         Quality: [
           "guides/testing.md",
-          "guides/error-handling.md"
+          "guides/error-handling.md",
+          "guides/provider_behavior_manifest.md"
         ],
         Examples: [
           "examples/README.md",

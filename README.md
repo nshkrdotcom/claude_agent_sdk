@@ -23,6 +23,8 @@ An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python]
 - `guides/model-configuration.md` - Claude model selection and effort controls
 - `guides/agents.md` - agent and orchestration patterns
 - `guides/testing.md` - local validation workflow
+- `guides/provider_behavior_manifest.md` - evidence for Claude-native feature
+  translation
 
 ---
 
@@ -65,9 +67,10 @@ namespace automatically in `ASM.Extensions.ProviderSDK.available_extensions/0`
 and `ASM.Extensions.ProviderSDK.capability_report/0`. Client apps do not need
 to register it manually.
 
-ASM-owned fields such as `cwd`, `permission_mode`, `model`, `max_turns`, and
-the transport timeout still stay in ASM config. The extension's native override
-bag is for Claude-native fields only.
+Common fields such as `cwd`, `model`, `max_turns`, and transport timeouts may
+be derived from ASM config. Claude-native controls such as permission modes,
+hooks, MCP, settings, agents, tool lists, and system prompt channels must stay
+in this SDK or be passed through an explicit Claude-native override bag.
 
 It does not move the control family into ASM. Once you cross that seam, the
 real control APIs remain here:
@@ -77,6 +80,22 @@ real control APIs remain here:
 - `ClaudeAgentSDK.Client.interrupt/1`
 - `ClaudeAgentSDK.Client.rewind_files/2`
 - `ClaudeAgentSDK.ControlProtocol.Protocol`
+
+SDK-direct live verification lives in
+`examples/promotion_path/sdk_direct_claude.exs`. It uses the Claude SDK API
+without importing ASM, passes keyword `execution_surface` input, and
+demonstrates Claude-native tool suppression as SDK-owned behavior:
+
+```bash
+mix run examples/promotion_path/sdk_direct_claude.exs -- \
+  --model haiku \
+  --prompt "Reply with exactly: claude sdk direct ok"
+```
+
+Provider-native feature evidence is tracked in
+`guides/provider_behavior_manifest.md`. Add or update that manifest before
+translating any new Claude-specific CLI flag, control-client behavior, hook,
+MCP, permission, or settings feature.
 
 ## Packaging Boundary
 
@@ -779,6 +798,7 @@ cd examples/email_agent && mix deps.get && mix email.assistant "find emails from
 | [Sessions](guides/sessions.md) | Session management and persistence |
 | [Testing](guides/testing.md) | Mock system and testing patterns |
 | [Error Handling](guides/error-handling.md) | Error types and recovery |
+| [Provider Behavior Manifest](guides/provider_behavior_manifest.md) | Evidence for Claude-native feature translation |
 
 ## Upgrading
 

@@ -161,6 +161,49 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
     |> Enum.uniq()
   end
 
+  @doc false
+  @spec render_for_test(keyword()) :: {:ok, map()} | {:error, term()}
+  def render_for_test(opts) when is_list(opts) do
+    options =
+      opts
+      |> Keyword.get(:options, %Options{})
+      |> maybe_override_execution_surface(Keyword.get(opts, :execution_surface))
+      |> force_partial_messages()
+
+    with {:ok, execution_surface} <-
+           Options.normalize_execution_surface(options.execution_surface) do
+      options = %{options | execution_surface: execution_surface}
+
+      {:ok,
+       %{
+         provider: :claude,
+         args: CLIConfig.streaming_bidirectional_args() ++ Options.to_stream_json_args(options),
+         cwd: options.cwd,
+         env: SDKProcess.__env_vars__(options),
+         execution_surface: execution_surface,
+         provider_native: %{
+           tools: options.tools,
+           allowed_tools: options.allowed_tools,
+           disallowed_tools: options.disallowed_tools,
+           mcp_servers: options.mcp_servers,
+           mcp_config: options.mcp_config,
+           hooks: options.hooks,
+           permission_mode: options.permission_mode,
+           permission_prompt_tool: options.permission_prompt_tool,
+           can_use_tool?: is_function(options.can_use_tool),
+           system_prompt: options.system_prompt,
+           append_system_prompt: options.append_system_prompt,
+           settings: options.settings,
+           sandbox: options.sandbox,
+           agents: options.agents
+         }
+       }}
+    end
+  rescue
+    error in [ArgumentError] ->
+      {:error, error}
+  end
+
   @spec list_provider_sessions(keyword()) :: {:ok, [map()]} | {:error, term()}
   def list_provider_sessions(opts \\ []) when is_list(opts) do
     {:ok,
