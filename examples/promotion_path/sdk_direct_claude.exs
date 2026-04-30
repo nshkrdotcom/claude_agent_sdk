@@ -3,7 +3,7 @@
 # SDK-direct Claude promotion-path verifier.
 #
 # Usage:
-#   mix run examples/promotion_path/sdk_direct_claude.exs -- \
+#   mix run examples/promotion_path/sdk_direct_claude.exs \
 #     --model haiku \
 #     --prompt "Reply with exactly: claude sdk direct ok"
 #

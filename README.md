@@ -87,7 +87,7 @@ without importing ASM, passes keyword `execution_surface` input, and
 demonstrates Claude-native tool suppression as SDK-owned behavior:
 
 ```bash
-mix run examples/promotion_path/sdk_direct_claude.exs -- \
+mix run examples/promotion_path/sdk_direct_claude.exs \
   --model haiku \
   --prompt "Reply with exactly: claude sdk direct ok"
 ```
