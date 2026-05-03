@@ -66,10 +66,14 @@ Implement ADR 0005a (CLI Discovery Consolidation and Version Tracking) using TDD
 The `claude --version` output format may vary. Example approaches:
 ```elixir
 # If output is "claude 1.2.3\n"
-case Regex.run(~r/(\d+\.\d+\.\d+)/, output) do
-  [_, version] -> {:ok, version}
-  _ -> {:error, :parse_failed}
-end
+output
+|> String.split()
+|> Enum.find_value({:error, :parse_failed}, fn token ->
+  case Version.parse(token) do
+    {:ok, version} -> {:ok, Version.to_string(version)}
+    :error -> nil
+  end
+end)
 ```
 
 ## Version Comparison

@@ -76,9 +76,12 @@ defmodule SimpleTestGen do
   end
 
   defp extract_module_name(content) do
-    case Regex.run(~r/defmodule\s+([A-Z][A-Za-z0-9_.]*)/m, content) do
-      [_, module_name] -> module_name
-      _ -> "UnknownModule"
+    content
+    |> String.split(["\n", " "], trim: true)
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.find_value("UnknownModule", fn
+      ["defmodule", module_name] -> module_name
+      _ -> nil
     end
   end
 

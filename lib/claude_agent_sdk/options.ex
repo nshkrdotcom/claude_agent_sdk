@@ -39,6 +39,7 @@ defmodule ClaudeAgentSDK.Options do
   - `external_model_overrides` - Canonical Claude-to-external model map used by core model resolution
   - `anthropic_base_url` - Anthropic-compatible API base URL override
   - `anthropic_auth_token` - Anthropic-compatible auth token override
+  - `governed_authority` - Materialized authority used only for governed launch
 
   ## Streaming + Tools (v0.8.0)
 
@@ -159,6 +160,7 @@ defmodule ClaudeAgentSDK.Options do
     :external_model_overrides,
     :anthropic_base_url,
     :anthropic_auth_token,
+    :governed_authority,
     :user,
     :max_thinking_tokens,
     :task_budget,
@@ -342,6 +344,7 @@ defmodule ClaudeAgentSDK.Options do
           external_model_overrides: %{optional(String.t()) => String.t()} | nil,
           anthropic_base_url: String.t() | nil,
           anthropic_auth_token: String.t() | nil,
+          governed_authority: CliSubprocessCore.GovernedAuthority.t() | keyword() | map() | nil,
           max_buffer_size: pos_integer() | nil,
           extra_args: %{optional(String.t()) => String.t() | boolean() | nil},
           env: %{optional(String.t()) => String.t()},

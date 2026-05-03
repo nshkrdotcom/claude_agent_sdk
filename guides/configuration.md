@@ -762,6 +762,13 @@ options = %Options{
 }
 ```
 
+`Options.env`, ambient shell variables, and native login discovery are
+standalone compatibility mechanisms. Governed launch callers pass
+`Options.governed_authority`; while governed, the SDK rejects caller-provided
+env, cwd, executable, provider backend, base URL, auth token, model payload
+backend metadata, and default token-store roots, then uses only the authority
+materialized launch contract.
+
 ---
 
 ## Authentication Configuration
@@ -773,6 +780,10 @@ The SDK supports three authentication methods:
 1. **Anthropic API** (default) - Direct API key or OAuth session
 2. **AWS Bedrock** - Using AWS credentials
 3. **Google Vertex AI** - Using GCP credentials
+
+These authentication methods are standalone direct-use paths. Governed callers
+must pass `governed_authority`; governed diagnostics succeed only from that
+authority and fail closed when the authority is missing or invalid.
 
 ### Quick Authentication Check
 

@@ -199,13 +199,17 @@ defmodule ClaudeAgentSDK.CLI do
   end
 
   defp option_overrides(%Options{} = options) do
-    case options.path_to_claude_code_executable do
-      value when is_binary(value) and value != "" ->
-        [path_to_claude_code_executable: value]
+    if ClaudeAgentSDK.GovernedLaunch.governed?(options) do
+      [governed_authority: options.governed_authority]
+    else
+      case options.path_to_claude_code_executable do
+        value when is_binary(value) and value != "" ->
+          [path_to_claude_code_executable: value]
 
-      _other ->
-        []
-        |> maybe_put_option(:executable, options.executable)
+        _other ->
+          []
+          |> maybe_put_option(:executable, options.executable)
+      end
     end
   end
 

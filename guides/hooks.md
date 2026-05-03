@@ -145,9 +145,9 @@ Matcher.new("Bash", [&check_bash/3])
 Matcher.new("Write", [&check_write/3])
 ```
 
-### Regex Pattern Matching
+### Multi-Tool Matcher Expressions
 
-Match multiple tools using regex patterns:
+Match multiple tools using matcher expressions:
 
 ```elixir
 # Match Write OR Edit tools

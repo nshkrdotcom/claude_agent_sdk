@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Governed Claude launch authority support: callers can pass a materialized
+  `governed_authority` carrying command, cwd, env, auth/config roots, target,
+  credential lease, command reference, and redaction reference for authority
+  controlled subprocess launch.
 - Official Python SDK parity through upstream `v0.1.66`, including Claude CLI
   `2.1.119` as the recommended version for this SDK release.
 - Options parity for `system_prompt: %{type: :file, path: ...}`,
@@ -34,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Standalone env, native login, Bedrock, Vertex, Ollama, token-store, and CLI
+  discovery paths remain direct SDK compatibility behavior only. Governed mode
+  now rejects caller env, cwd, executable, provider backend, base URL, auth
+  token, and model-payload override smuggling and launches only with the
+  authority-materialized process contract.
+- Repo-owned QC config and active docs now use fixed-string and structural
+  examples only.
 - Examples are live-only and use public SDK methods for CLI status/preflight.
   Archived deterministic/mock examples moved to `docs/archive/examples_legacy/`.
 - `examples/run_all.sh` no longer directly invokes Claude CLI commands or
@@ -49,6 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Governed auth diagnostics and token helpers fail closed instead of accepting
+  ambient env credentials, cloud provider credentials, native login state, or
+  default token-store paths.
 - Live preflight no longer crashes on valid empty argv values such as
   `--system-prompt ""`; the lower execution-plane command contract now accepts
   empty OS argv strings.
@@ -175,7 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Model registry updated**: Sonnet updated from `claude-sonnet-4-5-20250929` to `claude-sonnet-4-6` (Sonnet 4.6). Added `opus[1m]` short form and `claude-opus-4-6[1m]`, `claude-sonnet-4-6[1m]` full IDs for 1M context variants. Default model changed from `"sonnet"` to `"opus"`.
 - **`max_thinking_tokens` pipeline replaced**: The `add_max_thinking_tokens_args/2` function is replaced by `add_thinking_args/2` which respects the new `thinking` config with proper fallback to `max_thinking_tokens`.
-- **JSON decoding simplified**: `ClaudeAgentSDK.JSON` now prefers OTP `:json` and falls back to `Jason`, and `Message.from_json/1` no longer accepts malformed JSON through a secondary regex parser.
+- **JSON decoding simplified**: `ClaudeAgentSDK.JSON` now prefers OTP `:json` and falls back to `Jason`, and `Message.from_json/1` no longer accepts malformed JSON through a secondary fallback parser.
 - **SDK MCP default lifecycle hardened**: `create_sdk_mcp_server/1` now starts unsupervised registries under an internal SDK MCP supervisor instead of linking them to the creating process.
 - **Shared subprocess framing/setup helpers reused**: stderr line framing and built-in transport option/cwd validation paths are now shared across `Process`, `Streaming.Session`, and `Transport` where the audited drift existed.
 
@@ -1281,7 +1295,7 @@ No migration needed - all existing code continues to work. New features are opt-
 
 - `ClaudeAgentSDK.Hooks.Matcher` - Pattern-based hook matching
   - Exact tool matching ("Bash")
-  - Regex patterns ("Write|Edit")
+  - Multi-tool matcher expressions ("Write|Edit")
   - Wildcard matching ("*" or nil)
   - Multiple hooks per matcher
   - CLI format conversion

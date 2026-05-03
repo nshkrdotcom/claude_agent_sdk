@@ -286,6 +286,18 @@ The SDK supports three authentication methods, checked in this order:
 | API Key | `ANTHROPIC_API_KEY` | Development |
 | CLI Login | (uses `claude login` session) | Local development |
 
+These methods are standalone compatibility paths for direct SDK use. Governed
+launch callers must pass `Options.governed_authority` with the materialized
+command, cwd, environment, auth/config roots, target reference, credential
+lease reference, command reference, and redaction reference. In governed mode,
+ambient env values, native login state, provider backend overrides, token-store
+defaults, and explicit CLI paths are rejected instead of being used as fallback
+authentication.
+
+`AuthManager.get_token/1` does not project raw credentials for governed
+authority. It reports `{:error, :governed_token_unavailable}` so upper layers
+carry only authority and lease references.
+
 ### Cloud Providers
 
 **AWS Bedrock:**

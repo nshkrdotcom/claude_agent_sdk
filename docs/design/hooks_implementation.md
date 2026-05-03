@@ -104,7 +104,7 @@ Support pattern-based matching:
       hooks: [callback_fn]
     },
     %HookMatcher{
-      matcher: "Write|Edit",     # Regex pattern
+      matcher: "Write|Edit",     # Multi-tool expression
       hooks: [another_callback]
     }
   ]
@@ -1599,8 +1599,8 @@ end
 | SessionEnd | ❌ | ❌ | Not in SDK mode |
 | Notification | ❌ | ❌ | Not in SDK mode |
 | **Configuration** | | | |
-| Matcher patterns | ✅ | ✅ | Same syntax |
-| Regex support | ✅ | ✅ | Same syntax |
+| Matcher expressions | ✅ | ✅ | Same syntax |
+| Multi-tool expressions | ✅ | ✅ | Same syntax |
 | Multiple hooks | ✅ | ✅ | Same behavior |
 | **Hook Output** | | | |
 | permissionDecision | ✅ | ✅ | Identical |

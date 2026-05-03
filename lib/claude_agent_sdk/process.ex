@@ -8,7 +8,17 @@ defmodule ClaudeAgentSDK.Process do
   same message structs and helper functions.
   """
 
-  alias ClaudeAgentSDK.{CLI, LineFraming, Message, Options, Runtime, Shell, StringScan}
+  alias ClaudeAgentSDK.{
+    CLI,
+    GovernedLaunch,
+    LineFraming,
+    Message,
+    Options,
+    Runtime,
+    Shell,
+    StringScan
+  }
+
   alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Errors
@@ -18,6 +28,7 @@ defmodule ClaudeAgentSDK.Process do
   alias CliSubprocessCore.Command.RunResult
   alias CliSubprocessCore.CommandSpec
   alias CliSubprocessCore.ExecutionSurface
+  alias CliSubprocessCore.GovernedAuthority
   alias CliSubprocessCore.ProviderCLI
   alias CliSubprocessCore.TransportError, as: CoreTransportError
 
@@ -90,6 +101,19 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp build_claude_invocation(args, %Options{} = options) do
+    case GovernedLaunch.authority(options) do
+      {:ok, %GovernedAuthority{}} ->
+        build_governed_claude_invocation(args, options)
+
+      {:ok, nil} ->
+        build_standalone_claude_invocation(args, options)
+
+      {:error, reason} ->
+        {:error, governed_error_state(reason)}
+    end
+  end
+
+  defp build_standalone_claude_invocation(args, %Options{} = options) do
     case CLI.resolve_command_spec(options) do
       {:ok, %CommandSpec{} = command_spec} ->
         _ = CLI.warn_if_outdated()
@@ -111,6 +135,16 @@ defmodule ClaudeAgentSDK.Process do
     end
   end
 
+  defp build_governed_claude_invocation(args, %Options{} = options) do
+    case GovernedLaunch.invocation(ensure_json_flags(args), options) do
+      {:ok, %CoreCommand{} = invocation} ->
+        {:ok, invocation}
+
+      {:error, reason} ->
+        {:error, governed_error_state(reason)}
+    end
+  end
+
   defp run_claude_invocation(%CoreCommand{} = invocation, stdin_input, %Options{} = options) do
     timeout_ms = options.timeout_ms || Timeouts.query_total_ms()
 
@@ -118,6 +152,7 @@ defmodule ClaudeAgentSDK.Process do
       [timeout: timeout_ms, stderr: :separate]
       |> maybe_put_stdin(stdin_input)
       |> Kernel.++(Options.execution_surface_options(options))
+      |> GovernedLaunch.run_options(options)
 
     CoreCommand.run(invocation, run_opts)
   end
@@ -163,6 +198,15 @@ defmodule ClaudeAgentSDK.Process do
   defp command_error_state(%CoreCommandError{} = error, _options) do
     sdk_error = %Errors.ClaudeSDKError{message: Exception.message(error), cause: error}
     error_state(Exception.message(sdk_error), sdk_error)
+  end
+
+  defp governed_error_state(reason) do
+    error = %Errors.ClaudeSDKError{
+      message: "Governed Claude launch rejected: #{inspect(reason)}",
+      cause: reason
+    }
+
+    error_state(Exception.message(error), error)
   end
 
   defp normalize_transport_reason(error) do
@@ -287,6 +331,13 @@ defmodule ClaudeAgentSDK.Process do
   end
 
   defp build_env_vars(%Options{} = options) do
+    case GovernedLaunch.env_vars(options) do
+      %{} = env -> env
+      nil -> build_standalone_env_vars(options)
+    end
+  end
+
+  defp build_standalone_env_vars(%Options{} = options) do
     base_env =
       Env.passthrough_vars()
       |> Enum.reduce(%{}, fn var, acc ->
@@ -524,18 +575,40 @@ defmodule ClaudeAgentSDK.Process do
   defp start_mirror_batcher(%Options{session_store: nil}), do: nil
 
   defp start_mirror_batcher(%Options{} = options) do
-    config_dir =
-      (options.env || %{})
-      |> Map.get(
-        "CLAUDE_CONFIG_DIR",
-        System.get_env("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
-      )
+    config_dir = mirror_config_dir(options)
 
-    case MirrorBatcher.start_link(options.session_store, Path.join(config_dir, "projects")) do
-      {:ok, pid} -> pid
-      _other -> nil
+    case mirror_projects_path(config_dir) do
+      nil ->
+        nil
+
+      projects_path ->
+        case MirrorBatcher.start_link(options.session_store, projects_path) do
+          {:ok, pid} -> pid
+          _other -> nil
+        end
     end
   end
+
+  defp mirror_config_dir(%Options{} = options) do
+    case GovernedLaunch.mirror_config_root(options) do
+      value when is_binary(value) and value != "" ->
+        value
+
+      nil ->
+        (options.env || %{})
+        |> Map.get(
+          "CLAUDE_CONFIG_DIR",
+          System.get_env("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
+        )
+    end
+  end
+
+  defp mirror_projects_path(nil), do: nil
+
+  defp mirror_projects_path(config_dir) when is_binary(config_dir),
+    do: Path.join(config_dir, "projects")
+
+  defp mirror_projects_path(_config_dir), do: nil
 
   defp enqueue_mirror(nil, _file_path, _entries), do: []
 
@@ -620,12 +693,12 @@ defmodule ClaudeAgentSDK.Process do
     |> maybe_put_runtime_detail(:destination, failure.context[:destination])
   end
 
-  defp blank_to_nil(""), do: nil
-  defp blank_to_nil(nil), do: nil
-  defp blank_to_nil(value) when is_binary(value), do: value
-
   defp maybe_put_runtime_detail(details, _key, nil), do: details
   defp maybe_put_runtime_detail(details, key, value), do: Map.put(details, key, value)
+
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value) when is_binary(value), do: value
 
   defp message_parse_error_message(data, reason) do
     error =

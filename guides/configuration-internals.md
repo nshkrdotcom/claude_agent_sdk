@@ -128,7 +128,11 @@ Every function returns a string literal — the canonical environment variable n
 | `ci/0` | `CI` |
 | `live_mode/0` | `LIVE_MODE` |
 | `live_tests/0` | `LIVE_TESTS` |
-| `passthrough_vars/0` | `["CLAUDE_AGENT_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "PATH", "HOME"]` |
+| `passthrough_vars/0` | `["CLAUDE_AGENT_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "PATH", "HOME", "TRACEPARENT", "TRACESTATE"]` |
+
+`passthrough_vars/0` is used only by standalone launch. Governed launch ignores
+ambient pass-through values and uses the env map carried by
+`Options.governed_authority`.
 
 ### Config.Orchestration
 

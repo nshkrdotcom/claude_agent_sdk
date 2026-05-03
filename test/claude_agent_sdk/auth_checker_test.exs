@@ -17,6 +17,46 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
     end
   end
 
+  describe "governed authority auth checks" do
+    test "valid governed authority ignores ambient standalone env" do
+      previous_api_key = System.get_env("ANTHROPIC_API_KEY")
+      previous_oauth = System.get_env("CLAUDE_AGENT_OAUTH_TOKEN")
+
+      on_exit(fn ->
+        restore_env("ANTHROPIC_API_KEY", previous_api_key)
+        restore_env("CLAUDE_AGENT_OAUTH_TOKEN", previous_oauth)
+      end)
+
+      System.put_env("ANTHROPIC_API_KEY", "ambient-api-key")
+      System.put_env("CLAUDE_AGENT_OAUTH_TOKEN", "ambient-oauth")
+
+      assert {:ok, "Governed authority materialized"} =
+               AuthChecker.check_auth(governed_authority: authority())
+
+      assert {:ok, "governed authority credential lease"} =
+               AuthChecker.get_api_key_source(governed_authority: authority())
+
+      diagnosis = AuthChecker.diagnose(governed_authority: authority())
+
+      assert diagnosis.status == :ready
+      assert diagnosis.api_key_source == "governed authority credential lease"
+      assert diagnosis.authority_ref == "authority://claude/auth-checker"
+    end
+
+    test "invalid governed authority does not fall back to env" do
+      previous_api_key = System.get_env("ANTHROPIC_API_KEY")
+      on_exit(fn -> restore_env("ANTHROPIC_API_KEY", previous_api_key) end)
+      System.put_env("ANTHROPIC_API_KEY", "ambient-api-key")
+
+      assert {:error, message} = AuthChecker.check_auth(governed_authority: [])
+      assert String.contains?(message, "Invalid governed authority")
+
+      diagnosis = AuthChecker.diagnose(governed_authority: [])
+      assert diagnosis.status == :not_authenticated
+      assert diagnosis.api_key_source == nil
+    end
+  end
+
   describe "authenticated?/0" do
     @tag :live_cli
     test "returns boolean based on auth status (skipped in test env)" do
@@ -425,4 +465,19 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
 
   defp restore_env(key, nil), do: System.delete_env(key)
   defp restore_env(key, value), do: System.put_env(key, value)
+
+  defp authority do
+    [
+      authority_ref: "authority://claude/auth-checker",
+      credential_lease_ref: "lease://claude/auth-checker",
+      target_ref: "target://local/auth-checker",
+      command: "/authority/bin/claude",
+      cwd: "/workspace",
+      env: %{"CLAUDE_CONFIG_DIR" => "/authority/config"},
+      clear_env?: true,
+      config_root: "/authority/config",
+      auth_root: "/authority/auth",
+      base_url: "https://authority.example"
+    ]
+  end
 end

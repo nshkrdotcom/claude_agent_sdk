@@ -530,9 +530,17 @@ def warn_if_outdated do
 end
 
 defp parse_version(output) when is_binary(output) do
-  case Regex.run(~r/(\d+\.\d+\.\d+)/, output) do
-    [_, version] -> {:ok, version}
-    _ -> {:error, :parse_failed}
+  output
+  |> String.split()
+  |> Enum.find_value(fn token ->
+    case Version.parse(token) do
+      {:ok, version} -> {:ok, Version.to_string(version)}
+      :error -> nil
+    end
+  end)
+  |> case do
+    nil -> {:error, :parse_failed}
+    result -> result
   end
 end
 ```

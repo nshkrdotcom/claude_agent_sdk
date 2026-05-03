@@ -134,6 +134,11 @@ export ANTHROPIC_BASE_URL=http://localhost:11434
 That is the path used by `/home/home/p/g/n/claude_agent_sdk/examples/run_all.sh`
 when you set `CLAUDE_EXAMPLES_BACKEND=ollama`.
 
+Environment-driven backend selection is standalone direct-use behavior.
+Governed launch rejects `provider_backend`, `anthropic_base_url`,
+`anthropic_auth_token`, model-payload env overrides, and backend metadata
+outside the materialized authority contract.
+
 ## Effort Gating
 
 Effort is still a Claude-native feature.

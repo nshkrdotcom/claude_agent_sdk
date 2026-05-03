@@ -39,6 +39,7 @@ defmodule ClaudeAgentSDK.AuthManager do
 
   alias ClaudeAgentSDK.Auth.{Provider, TokenStore}
   alias ClaudeAgentSDK.Config.{Env, Timeouts}
+  alias ClaudeAgentSDK.GovernedLaunch
 
   # State structure
   defstruct [
@@ -108,9 +109,13 @@ defmodule ClaudeAgentSDK.AuthManager do
       iex> ClaudeAgentSDK.AuthManager.ensure_authenticated()
       {:error, :authentication_required}
   """
-  @spec ensure_authenticated() :: :ok | {:error, term()}
-  def ensure_authenticated do
-    GenServer.call(__MODULE__, :ensure_authenticated, Timeouts.auth_ensure_ms())
+  @spec ensure_authenticated(keyword()) :: :ok | {:error, term()}
+  def ensure_authenticated(opts \\ []) do
+    case GovernedLaunch.check_auth(opts) do
+      {:ok, _info} -> :ok
+      {:error, reason} -> {:error, {:invalid_governed_authority, reason}}
+      :standalone -> GenServer.call(__MODULE__, :ensure_authenticated, Timeouts.auth_ensure_ms())
+    end
   end
 
   @doc """
@@ -148,9 +153,14 @@ defmodule ClaudeAgentSDK.AuthManager do
       iex> ClaudeAgentSDK.AuthManager.get_token()
       {:error, :not_authenticated}
   """
-  @spec get_token() :: {:ok, String.t()} | {:error, :not_authenticated}
-  def get_token do
-    GenServer.call(__MODULE__, :get_token)
+  @spec get_token(keyword()) ::
+          {:ok, String.t()} | {:error, :not_authenticated | :governed_token_unavailable | term()}
+  def get_token(opts \\ []) do
+    case GovernedLaunch.check_auth(opts) do
+      {:ok, _info} -> {:error, :governed_token_unavailable}
+      {:error, reason} -> {:error, {:invalid_governed_authority, reason}}
+      :standalone -> GenServer.call(__MODULE__, :get_token)
+    end
   end
 
   @doc """
@@ -197,9 +207,36 @@ defmodule ClaudeAgentSDK.AuthManager do
         time_until_expiry_hours: 720
       }
   """
-  @spec status() :: map()
-  def status do
-    GenServer.call(__MODULE__, :status)
+  @spec status(keyword()) :: map()
+  def status(opts \\ []) do
+    case GovernedLaunch.check_auth(opts) do
+      {:ok, info} ->
+        %{
+          authenticated: true,
+          provider: :governed_authority,
+          token_present: false,
+          expires_at: nil,
+          time_until_expiry_hours: nil,
+          governed?: true,
+          authority_ref: info.authority_ref,
+          credential_lease_ref: info.credential_lease_ref,
+          target_ref: info.target_ref
+        }
+
+      {:error, reason} ->
+        %{
+          authenticated: false,
+          provider: :governed_authority,
+          token_present: false,
+          expires_at: nil,
+          time_until_expiry_hours: nil,
+          governed?: true,
+          error: {:invalid_governed_authority, reason}
+        }
+
+      :standalone ->
+        GenServer.call(__MODULE__, :status)
+    end
   end
 
   ## GenServer Callbacks

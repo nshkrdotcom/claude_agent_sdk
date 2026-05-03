@@ -33,7 +33,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
   This module detects and validates all supported authentication methods.
   """
 
-  alias ClaudeAgentSDK.{CLI, Runtime}
+  alias ClaudeAgentSDK.{CLI, GovernedLaunch, Runtime}
   alias ClaudeAgentSDK.Config.{Auth, Env, Timeouts}
   alias ClaudeAgentSDK.StringScan
   alias CliSubprocessCore.Command, as: CoreCommand
@@ -75,11 +75,20 @@ defmodule ClaudeAgentSDK.AuthChecker do
       end
 
   """
-  @spec authenticated?() :: boolean()
-  def authenticated? do
-    case check_cli_auth_status() do
-      {:ok, _} -> true
-      {:error, _} -> false
+  @spec authenticated?(keyword()) :: boolean()
+  def authenticated?(opts \\ []) do
+    case GovernedLaunch.check_auth(opts) do
+      {:ok, _info} ->
+        true
+
+      {:error, _reason} ->
+        false
+
+      :standalone ->
+        case check_cli_auth_status() do
+          {:ok, _} -> true
+          {:error, _} -> false
+        end
     end
   end
 
@@ -117,10 +126,23 @@ defmodule ClaudeAgentSDK.AuthChecker do
       end
 
   """
-  @spec diagnose() :: diagnosis()
-  def diagnose do
+  @spec diagnose(keyword()) :: diagnosis()
+  def diagnose(opts \\ []) do
     timestamp = DateTime.utc_now()
 
+    case GovernedLaunch.check_auth(opts) do
+      {:ok, info} ->
+        governed_diagnosis(timestamp, info)
+
+      {:error, reason} ->
+        governed_error_diagnosis(timestamp, reason)
+
+      :standalone ->
+        standalone_diagnosis(timestamp)
+    end
+  end
+
+  defp standalone_diagnosis(timestamp) do
     case check_cli_installation_private() do
       {:ok, %{path: cli_path, version: cli_version}} ->
         {authenticated, auth_info} = check_detailed_auth(cli_path)
@@ -161,6 +183,43 @@ defmodule ClaudeAgentSDK.AuthChecker do
     end
   end
 
+  defp governed_diagnosis(timestamp, info) do
+    %{
+      cli_installed: true,
+      cli_version: nil,
+      cli_path: nil,
+      cli_error: nil,
+      authenticated: true,
+      auth_method: "governed authority",
+      auth_info: "Credential lease materialized by governed authority",
+      auth_error: nil,
+      api_key_source: "governed authority credential lease",
+      status: :ready,
+      recommendations: ["Governed authority is materialized for this effect"],
+      last_checked: timestamp,
+      authority_ref: info.authority_ref,
+      credential_lease_ref: info.credential_lease_ref,
+      target_ref: info.target_ref
+    }
+  end
+
+  defp governed_error_diagnosis(timestamp, reason) do
+    %{
+      cli_installed: false,
+      cli_version: nil,
+      cli_path: nil,
+      cli_error: "Invalid governed authority",
+      authenticated: false,
+      auth_method: nil,
+      auth_info: nil,
+      auth_error: "Invalid governed authority: #{inspect(reason)}",
+      api_key_source: nil,
+      status: :not_authenticated,
+      recommendations: ["Provide a valid materialized governed authority"],
+      last_checked: timestamp
+    }
+  end
+
   @doc """
   Ensures the environment is ready for Claude queries.
 
@@ -180,9 +239,9 @@ defmodule ClaudeAgentSDK.AuthChecker do
   - `RuntimeError` - If CLI not found or authentication missing
 
   """
-  @spec ensure_ready!() :: :ok
-  def ensure_ready! do
-    case diagnose() do
+  @spec ensure_ready!(keyword()) :: :ok
+  def ensure_ready!(opts \\ []) do
+    case diagnose(opts) do
       %{status: :ready} ->
         :ok
 
@@ -229,11 +288,20 @@ defmodule ClaudeAgentSDK.AuthChecker do
       end
 
   """
-  @spec check_auth() :: {:ok, String.t()} | {:error, String.t()}
-  def check_auth do
-    case check_cli_auth_status() do
-      {:ok, _} -> {:ok, "Authenticated"}
-      {:error, reason} -> {:error, "Authentication failed: #{reason}"}
+  @spec check_auth(keyword()) :: {:ok, String.t()} | {:error, String.t()}
+  def check_auth(opts \\ []) do
+    case GovernedLaunch.check_auth(opts) do
+      {:ok, _info} ->
+        {:ok, "Governed authority materialized"}
+
+      {:error, reason} ->
+        {:error, "Invalid governed authority: #{inspect(reason)}"}
+
+      :standalone ->
+        case check_cli_auth_status() do
+          {:ok, _} -> {:ok, "Authenticated"}
+          {:error, reason} -> {:error, "Authentication failed: #{reason}"}
+        end
     end
   end
 
@@ -278,8 +346,21 @@ defmodule ClaudeAgentSDK.AuthChecker do
       end
 
   """
-  @spec auth_method_available?(atom()) :: boolean()
-  def auth_method_available?(method) do
+  @spec auth_method_available?(atom(), keyword()) :: boolean()
+  def auth_method_available?(method, opts \\ []) do
+    case GovernedLaunch.check_auth(opts) do
+      {:ok, _info} ->
+        method == :governed_authority
+
+      {:error, _reason} ->
+        false
+
+      :standalone ->
+        standalone_auth_method_available?(method)
+    end
+  end
+
+  defp standalone_auth_method_available?(method) do
     case method do
       :ollama ->
         check_ollama_auth()
@@ -317,18 +398,32 @@ defmodule ClaudeAgentSDK.AuthChecker do
       end
 
   """
-  @spec get_api_key_source() :: {:ok, String.t()} | {:error, String.t()}
-  def get_api_key_source do
-    case api_key_source_from_env() do
-      nil ->
-        if check_cli_session() do
-          {:ok, "claude login session"}
-        else
-          {:error, "no authentication method found"}
-        end
+  @spec get_api_key_source(keyword()) :: {:ok, String.t()} | {:error, String.t()}
+  def get_api_key_source(opts \\ []) do
+    case GovernedLaunch.check_auth(opts) do
+      {:ok, _info} ->
+        {:ok, "governed authority credential lease"}
 
-      result ->
-        result
+      {:error, reason} ->
+        {:error, "invalid governed authority: #{inspect(reason)}"}
+
+      :standalone ->
+        standalone_api_key_source()
+    end
+  end
+
+  defp standalone_api_key_source do
+    case api_key_source_from_env() do
+      nil -> cli_session_source()
+      result -> result
+    end
+  end
+
+  defp cli_session_source do
+    if check_cli_session() do
+      {:ok, "claude login session"}
+    else
+      {:error, "no authentication method found"}
     end
   end
 

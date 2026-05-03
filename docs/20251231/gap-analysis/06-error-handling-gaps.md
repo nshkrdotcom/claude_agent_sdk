@@ -337,7 +337,7 @@ end
 | Minimum version | 2.0.0 | 2.0.0 | Identical |
 | Skip env var | `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK` | `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK` | Identical |
 | Logging | Logger + stderr | Logger only | Minor difference |
-| Version parsing | Regex + manual split | `Version.parse/1` | Elixir uses standard library |
+| Version parsing | manual text scan + split | `Version.parse/1` | Elixir uses standard library |
 | Recommended version | N/A | 2.0.75 | Elixir adds recommended version |
 
 ---

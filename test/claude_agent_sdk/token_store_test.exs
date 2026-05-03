@@ -51,6 +51,19 @@ defmodule ClaudeAgentSDK.TokenStoreTest do
     assert token_data.provider == :anthropic
   end
 
+  test "governed storage path uses authority auth root instead of app env", %{path: path} do
+    authority_root = Path.join(Path.dirname(path), "authority-auth")
+    authority_path = Path.join(authority_root, "token.json")
+    File.mkdir_p!(authority_root)
+    write_token_file(authority_path, "vertex")
+
+    assert TokenStore.storage_path(governed_authority: authority(authority_root)) ==
+             authority_path
+
+    assert {:ok, token_data} = TokenStore.load(governed_authority: authority(authority_root))
+    assert token_data.provider == :vertex
+  end
+
   defp write_token_file(path, provider) do
     File.mkdir_p!(Path.dirname(path))
 
@@ -62,5 +75,20 @@ defmodule ClaudeAgentSDK.TokenStoreTest do
       })
 
     File.write!(path, payload)
+  end
+
+  defp authority(auth_root) do
+    [
+      authority_ref: "authority://claude/token-store",
+      credential_lease_ref: "lease://claude/token-store",
+      target_ref: "target://local/token-store",
+      command: "/authority/bin/claude",
+      cwd: "/workspace",
+      env: %{"CLAUDE_CONFIG_DIR" => "/authority/config"},
+      clear_env?: true,
+      config_root: "/authority/config",
+      auth_root: auth_root,
+      base_url: "https://authority.example"
+    ]
   end
 end

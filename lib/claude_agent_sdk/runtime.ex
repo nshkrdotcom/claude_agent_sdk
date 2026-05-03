@@ -14,7 +14,15 @@ defmodule ClaudeAgentSDK.Runtime do
   end
 
   @spec force_real?(Options.t()) :: boolean()
-  def force_real?(%Options{executable: executable, path_to_claude_code_executable: path}) do
+  def force_real?(%Options{} = options) do
+    ClaudeAgentSDK.GovernedLaunch.governed?(options) or
+      force_real_from_executable?(options)
+  end
+
+  defp force_real_from_executable?(%Options{
+         executable: executable,
+         path_to_claude_code_executable: path
+       }) do
     is_binary(executable) or is_binary(path)
   end
 end

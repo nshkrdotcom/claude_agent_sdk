@@ -75,7 +75,7 @@ Output.deny("Blocked")
 Matcher.new("Bash", [&hook/3])
 ```
 
-### Regex Pattern
+### Multi-Tool Matcher
 
 ```elixir
 Matcher.new("Write|Edit|MultiEdit", [&hook/3])

@@ -331,7 +331,7 @@ end
   description: "A text value",
   minLength: 1,
   maxLength: 1000,
-  pattern: "^[a-z]+$"  # Regex pattern
+  enum: ["alpha", "beta", "gamma"]
 }
 ```
 

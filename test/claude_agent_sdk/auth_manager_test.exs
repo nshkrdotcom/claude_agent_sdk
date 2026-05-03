@@ -228,6 +228,38 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
   end
 
+  describe "governed authority mode" do
+    test "ensure_authenticated accepts authority without reading env token" do
+      System.put_env("ANTHROPIC_API_KEY", "ambient-api-key")
+
+      assert :ok = AuthManager.ensure_authenticated(governed_authority: authority())
+
+      assert {:error, :governed_token_unavailable} =
+               AuthManager.get_token(governed_authority: authority())
+
+      status = AuthManager.status(governed_authority: authority())
+
+      assert status.authenticated == true
+      assert status.provider == :governed_authority
+      assert status.token_present == false
+      assert status.authority_ref == "authority://claude/auth-manager"
+    end
+
+    test "invalid governed authority fails without env fallback" do
+      System.put_env("ANTHROPIC_API_KEY", "ambient-api-key")
+
+      assert {:error, {:invalid_governed_authority, _reason}} =
+               AuthManager.ensure_authenticated(governed_authority: [])
+
+      assert {:error, {:invalid_governed_authority, _reason}} =
+               AuthManager.get_token(governed_authority: [])
+
+      status = AuthManager.status(governed_authority: [])
+      assert status.authenticated == false
+      assert status.token_present == false
+    end
+  end
+
   describe "get_token/0" do
     test "returns env var token when ANTHROPIC_API_KEY is set" do
       System.put_env("ANTHROPIC_API_KEY", "sk-ant-test-key-from-env")
@@ -534,6 +566,21 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
   defp restore_env(key, nil), do: System.delete_env(key)
   defp restore_env(key, value), do: System.put_env(key, value)
+
+  defp authority do
+    [
+      authority_ref: "authority://claude/auth-manager",
+      credential_lease_ref: "lease://claude/auth-manager",
+      target_ref: "target://local/auth-manager",
+      command: "/authority/bin/claude",
+      cwd: "/workspace",
+      env: %{"CLAUDE_CONFIG_DIR" => "/authority/config"},
+      clear_env?: true,
+      config_root: "/authority/config",
+      auth_root: "/authority/auth",
+      base_url: "https://authority.example"
+    ]
+  end
 
   defp assert_eventually(fun, attempts \\ 30)
 

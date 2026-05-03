@@ -22,6 +22,53 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
     assert env_map["CLAUDE_AGENT_SDK_VERSION"]
   end
 
+  test "governed env builder uses only authority materialized env" do
+    previous = %{
+      "ANTHROPIC_API_KEY" => System.get_env("ANTHROPIC_API_KEY"),
+      "CLAUDE_AGENT_OAUTH_TOKEN" => System.get_env("CLAUDE_AGENT_OAUTH_TOKEN"),
+      "ANTHROPIC_BASE_URL" => System.get_env("ANTHROPIC_BASE_URL"),
+      "PATH" => System.get_env("PATH"),
+      "HOME" => System.get_env("HOME")
+    }
+
+    on_exit(fn ->
+      Enum.each(previous, fn
+        {key, nil} -> System.delete_env(key)
+        {key, value} -> System.put_env(key, value)
+      end)
+    end)
+
+    System.put_env("ANTHROPIC_API_KEY", "ambient-api-key")
+    System.put_env("CLAUDE_AGENT_OAUTH_TOKEN", "ambient-oauth")
+    System.put_env("ANTHROPIC_BASE_URL", "https://ambient.example")
+
+    env_map =
+      %Options{governed_authority: authority()}
+      |> Process.__env_vars__()
+      |> Map.new()
+
+    assert env_map == %{"CLAUDE_CONFIG_DIR" => "/authority/config"}
+  end
+
+  test "governed invocation rejects env and model payload overrides" do
+    assert {:error, {:governed_launch_smuggling, :env}} =
+             ClaudeAgentSDK.GovernedLaunch.validate_options(%Options{
+               governed_authority: authority(),
+               env: %{"ANTHROPIC_API_KEY" => "ambient"}
+             })
+
+    assert {:error, {:governed_launch_smuggling, :model_payload, :env_overrides}} =
+             ClaudeAgentSDK.GovernedLaunch.validate_options(%Options{
+               governed_authority: authority(),
+               model_payload: %{
+                 "env_overrides" => %{
+                   "ANTHROPIC_AUTH_TOKEN" => "ollama",
+                   "ANTHROPIC_BASE_URL" => "http://ambient"
+                 }
+               }
+             })
+  end
+
   test "env builder sets file checkpointing env var when enabled" do
     options = %Options{enable_file_checkpointing: true}
 
@@ -98,5 +145,20 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
     for arg <- ["plain", "needs space", "quote\"test", "bang!", "a>b", "a<b"] do
       assert Process.__shell_escape__(arg) == Session.__shell_escape__(arg)
     end
+  end
+
+  defp authority do
+    [
+      authority_ref: "authority://claude/process",
+      credential_lease_ref: "lease://claude/process",
+      target_ref: "target://local/process",
+      command: "/authority/bin/claude",
+      cwd: "/workspace",
+      env: %{"CLAUDE_CONFIG_DIR" => "/authority/config"},
+      clear_env?: true,
+      config_root: "/authority/config",
+      auth_root: "/authority/auth",
+      base_url: "https://authority.example"
+    ]
   end
 end

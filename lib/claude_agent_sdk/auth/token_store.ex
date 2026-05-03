@@ -19,15 +19,16 @@ defmodule ClaudeAgentSDK.Auth.TokenStore do
   @callback clear() :: :ok
 
   alias ClaudeAgentSDK.Config.Auth, as: AuthConfig
+  alias ClaudeAgentSDK.GovernedLaunch
 
   ## Default File-Based Implementation
 
   @doc """
   Saves token data to storage.
   """
-  @spec save(token_data()) :: :ok | {:error, term()}
-  def save(data) do
-    path = storage_path()
+  @spec save(token_data(), keyword()) :: :ok | {:error, term()}
+  def save(data, opts \\ []) do
+    path = storage_path!(opts)
 
     # Ensure directory exists
     path
@@ -58,9 +59,9 @@ defmodule ClaudeAgentSDK.Auth.TokenStore do
   @doc """
   Loads token data from storage.
   """
-  @spec load() :: {:ok, token_data()} | {:error, :not_found | term()}
-  def load do
-    path = storage_path()
+  @spec load(keyword()) :: {:ok, token_data()} | {:error, :not_found | term()}
+  def load(opts \\ []) do
+    path = storage_path!(opts)
 
     case File.read(path) do
       {:ok, json} ->
@@ -89,14 +90,33 @@ defmodule ClaudeAgentSDK.Auth.TokenStore do
   @doc """
   Clears stored token data.
   """
-  @spec clear() :: :ok
-  def clear do
-    path = storage_path()
+  @spec clear(keyword()) :: :ok
+  def clear(opts \\ []) do
+    path = storage_path!(opts)
     File.rm(path)
     :ok
   end
 
-  defp storage_path do
+  @doc false
+  @spec storage_path(keyword()) :: String.t()
+  def storage_path(opts \\ []) do
+    storage_path!(opts)
+  end
+
+  defp storage_path!(opts) when is_list(opts) do
+    case GovernedLaunch.token_store_path(opts) do
+      {:ok, path} ->
+        path
+
+      {:error, :missing_governed_authority} ->
+        standalone_storage_path()
+
+      {:error, reason} ->
+        raise ArgumentError, "invalid governed token store path: #{inspect(reason)}"
+    end
+  end
+
+  defp standalone_storage_path do
     Application.get_env(:claude_agent_sdk, :auth_file_path, AuthConfig.token_store_path())
     |> Path.expand()
   end

@@ -55,6 +55,28 @@ defmodule ClaudeAgentSDK.QueryCLIStreamTest do
     assert [%Message{type: :assistant}] = Enum.take(stream, 1)
   end
 
+  test "governed transport command uses authority env and rejects caller env" do
+    assert {:ok, command} =
+             CLIStream.__build_transport_command__(
+               %Options{governed_authority: authority()},
+               ["--output-format", "stream-json"]
+             )
+
+    assert command.command == "/authority/bin/claude"
+    assert command.cwd == "/workspace"
+    assert command.env == %{"CLAUDE_CONFIG_DIR" => "/authority/config"}
+    assert command.clear_env? == true
+
+    assert {:error, {:governed_launch_smuggling, :env}} =
+             CLIStream.__build_transport_command__(
+               %Options{
+                 governed_authority: authority(),
+                 env: %{"ANTHROPIC_API_KEY" => "ambient"}
+               },
+               []
+             )
+  end
+
   test "remote missing Claude CLIs surface a structured error result instead of an empty stream" do
     fake_ssh = FakeSSH.new!()
 
@@ -107,5 +129,20 @@ defmodule ClaudeAgentSDK.QueryCLIStreamTest do
     ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(dir) end)
 
     path
+  end
+
+  defp authority do
+    [
+      authority_ref: "authority://claude/cli-stream",
+      credential_lease_ref: "lease://claude/cli-stream",
+      target_ref: "target://local/cli-stream",
+      command: "/authority/bin/claude",
+      cwd: "/workspace",
+      env: %{"CLAUDE_CONFIG_DIR" => "/authority/config"},
+      clear_env?: true,
+      config_root: "/authority/config",
+      auth_root: "/authority/auth",
+      base_url: "https://authority.example"
+    ]
   end
 end

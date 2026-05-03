@@ -635,7 +635,9 @@ test "token has correct format" do
 
   assert String.starts_with?(token, "sk-ant-api03-")
   assert String.length(token) == 118
-  assert String.match?(token, ~r/^[a-zA-Z0-9\-_]+$/)
+  assert token
+         |> String.to_charlist()
+         |> Enum.all?(&(&1 in ?a..?z or &1 in ?A..?Z or &1 in ?0..?9 or &1 in [?-, ?_]))
 end
 ```
 

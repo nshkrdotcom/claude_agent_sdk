@@ -771,18 +771,10 @@ defmodule ClaudeAgentSDK.Auth.Providers.Anthropic do
     # or
     # "Token: sk-ant-api03-..."
 
-    patterns = [
-      ~r/Token:\s+(sk-ant-api03-[A-Za-z0-9\-_]+)/,
-      ~r/token:\s+(sk-ant-api03-[A-Za-z0-9\-_]+)/,
-      ~r/(sk-ant-api03-[A-Za-z0-9\-_]{95})/  # Standard token format
-    ]
-
-    token = Enum.find_value(patterns, fn pattern ->
-      case Regex.run(pattern, output) do
-        [_, token] -> token
-        _ -> nil
-      end
-    end)
+    token =
+      output
+      |> String.split()
+      |> Enum.find(&String.starts_with?(&1, "sk-ant-api03-"))
 
     case token do
       nil ->

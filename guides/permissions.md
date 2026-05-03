@@ -526,7 +526,11 @@ callback = fn context ->
       command = context.tool_input["command"] || ""
 
       # Remove sudo from commands
-      sanitized = String.replace(command, ~r/\bsudo\s+/, "")
+      sanitized =
+        command
+        |> String.split()
+        |> Enum.reject(&(&1 == "sudo"))
+        |> Enum.join(" ")
 
       if sanitized != command do
         IO.puts("Removed sudo from command")
@@ -593,15 +597,18 @@ defmodule MyApp.FileSandbox do
     "/home/app/projects"
   ]
 
-  @forbidden_patterns [
-    ~r/\.\.\//, # Path traversal
-    ~r/^\/etc\//, # System config
-    ~r/^\/usr\//, # System binaries
-    ~r/^\/var\//, # System data
-    ~r/\.env$/,   # Environment files
-    ~r/secrets\./,# Secret files
-    ~r/\.pem$/,   # Private keys
-    ~r/\.key$/    # Key files
+  @file_commands [
+    "cat",
+    "head",
+    "tail",
+    "less",
+    "more",
+    "vi",
+    "vim",
+    "nano",
+    "rm",
+    "mv",
+    "cp"
   ]
 
   def permission_callback(context) do
@@ -621,8 +628,8 @@ defmodule MyApp.FileSandbox do
     file_path = context.tool_input["file_path"] || ""
 
     cond do
-      forbidden_pattern?(file_path) ->
-        Result.deny("Access to this file pattern is not allowed")
+      forbidden_path?(file_path) ->
+        Result.deny("Access to this file path is not allowed")
 
       not in_allowed_directory?(file_path) ->
         # Redirect to sandbox
@@ -638,24 +645,34 @@ defmodule MyApp.FileSandbox do
   defp check_bash_file_access(context) do
     command = context.tool_input["command"] || ""
 
-    # Check for file operations in bash commands
-    file_patterns = ~r/(cat|head|tail|less|more|vi|vim|nano|rm|mv|cp)\s+([^\s|;&]+)/
+    case command_path(command) do
+      path when is_binary(path) ->
+        if forbidden_path?(path) do
+          Result.deny("Bash command attempts to access forbidden file: #{path}")
+        else
+          Result.allow()
+        end
 
-    if Regex.match?(file_patterns, command) do
-      [_full, _cmd, path] = Regex.run(file_patterns, command)
-
-      if forbidden_pattern?(path) do
-        Result.deny("Bash command attempts to access forbidden file: #{path}")
-      else
+      nil ->
         Result.allow()
-      end
-    else
-      Result.allow()
     end
   end
 
-  defp forbidden_pattern?(path) do
-    Enum.any?(@forbidden_patterns, &Regex.match?(&1, path))
+  defp command_path(command) do
+    case String.split(command) do
+      [command_name, path | _rest] when command_name in @file_commands -> path
+      _ -> nil
+    end
+  end
+
+  defp forbidden_path?(path) do
+    expanded = Path.expand(path)
+    filename = Path.basename(path)
+
+    String.contains?(path, "../") or
+      String.starts_with?(expanded, ["/etc/", "/usr/", "/var/"]) or
+      String.ends_with?(filename, [".env", ".pem", ".key"]) or
+      String.starts_with?(filename, "secrets.")
   end
 
   defp in_allowed_directory?(path) do
@@ -700,7 +717,6 @@ defmodule MyApp.CommandPolicy do
     "mkfs",
     "> /dev/",
     "wget",
-    "curl.*|.*sh",  # Piping curl to shell
     "eval",
     "exec",
     ":(){",         # Fork bomb
@@ -708,15 +724,6 @@ defmodule MyApp.CommandPolicy do
     "reboot",
     "init 0",
     "init 6"
-  ]
-
-  @dangerous_patterns [
-    ~r/rm\s+-[rf]*\s+\/(?!tmp)/,      # rm -rf outside /tmp
-    ~r/>\s*\/dev\/(sd|hd|nvme)/,      # Overwriting devices
-    ~r/curl.*\|\s*(ba)?sh/,           # Piping downloads to shell
-    ~r/wget.*\|\s*(ba)?sh/,
-    ~r/\\x[0-9a-f]{2}/i,              # Hex-encoded payloads
-    ~r/base64\s+-d/                    # Base64 decoding (often used in exploits)
   ]
 
   def permission_callback(context) do
@@ -735,13 +742,13 @@ defmodule MyApp.CommandPolicy do
     cond do
       dangerous_literal?(command) ->
         Result.deny(
-          "Command contains dangerous pattern",
+          "Command contains dangerous literal",
           interrupt: false
         )
 
-      dangerous_pattern?(command) ->
+      dangerous_shape?(command) ->
         Result.deny(
-          "Command matches dangerous pattern",
+          "Command matches dangerous shape",
           interrupt: false
         )
 
@@ -761,8 +768,26 @@ defmodule MyApp.CommandPolicy do
     Enum.any?(@dangerous_commands, &String.contains?(command_lower, &1))
   end
 
-  defp dangerous_pattern?(command) do
-    Enum.any?(@dangerous_patterns, &Regex.match?(&1, command))
+  defp dangerous_shape?(command) do
+    command_lower = String.downcase(command)
+
+    rm_root?(command_lower) or
+      String.contains?(command_lower, "> /dev/") or
+      pipe_to_shell?(command_lower, "curl") or
+      pipe_to_shell?(command_lower, "wget") or
+      String.contains?(command_lower, "\\x") or
+      String.contains?(command_lower, "base64 -d")
+  end
+
+  defp rm_root?(command) do
+    String.contains?(command, ["rm -rf /", "rm -fr /"]) and
+      not String.contains?(command, ["rm -rf /tmp", "rm -fr /tmp"])
+  end
+
+  defp pipe_to_shell?(command, downloader) do
+    String.contains?(command, downloader) and
+      String.contains?(command, "|") and
+      String.contains?(command, [" sh", " bash"])
   end
 
   defp multiline_suspicious?(command) do

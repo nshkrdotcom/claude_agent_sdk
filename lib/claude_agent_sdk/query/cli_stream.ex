@@ -11,6 +11,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   alias ClaudeAgentSDK.{
     CLI,
     Errors,
+    GovernedLaunch,
     Message,
     Options,
     ProcessSupport,
@@ -23,6 +24,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   alias ClaudeAgentSDK.SessionStore.{MirrorBatcher, Resume}
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.CommandSpec
+  alias CliSubprocessCore.GovernedAuthority
   alias CliSubprocessCore.ProcessExit, as: CoreProcessExit
   alias CliSubprocessCore.ProviderCLI
   alias CliSubprocessCore.RawSession
@@ -452,14 +454,27 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   defp start_mirror_batcher(%Options{session_store: nil}), do: {:ok, nil}
 
   defp start_mirror_batcher(%Options{} = options) do
-    config_dir =
-      options.env
-      |> Map.get(
-        "CLAUDE_CONFIG_DIR",
-        System.get_env("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
-      )
+    case mirror_config_dir(options) do
+      nil ->
+        {:ok, nil}
 
-    MirrorBatcher.start_link(options.session_store, Path.join(config_dir, "projects"))
+      config_dir ->
+        MirrorBatcher.start_link(options.session_store, Path.join(config_dir, "projects"))
+    end
+  end
+
+  defp mirror_config_dir(%Options{} = options) do
+    case GovernedLaunch.mirror_config_root(options) do
+      value when is_binary(value) and value != "" ->
+        value
+
+      nil ->
+        options.env
+        |> Map.get(
+          "CLAUDE_CONFIG_DIR",
+          System.get_env("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
+        )
+    end
   end
 
   defp enqueue_mirror(nil, _file_path, _entries), do: []
@@ -584,6 +599,19 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
   end
 
   defp build_transport_command(%Options{} = options, args) when is_list(args) do
+    case GovernedLaunch.authority(options) do
+      {:ok, %GovernedAuthority{}} ->
+        GovernedLaunch.invocation(args, options)
+
+      {:ok, nil} ->
+        build_standalone_transport_command(options, args)
+
+      {:error, reason} ->
+        {:error, {:invalid_governed_authority, reason}}
+    end
+  end
+
+  defp build_standalone_transport_command(%Options{} = options, args) do
     case CLI.resolve_command_spec(options) do
       {:ok, %CommandSpec{} = command_spec} ->
         {:ok,
@@ -596,6 +624,11 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
       {:error, :not_found} ->
         {:error, :cli_not_found}
     end
+  end
+
+  @doc false
+  def __build_transport_command__(%Options{} = options, args) when is_list(args) do
+    build_transport_command(options, args)
   end
 
   defp transport_error_mode(%Options{transport_error_mode: :raise}), do: :raise
