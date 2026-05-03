@@ -103,9 +103,48 @@ defmodule ClaudeAgentSDK.QueryControlTest do
 
   describe "permission mode validation" do
     test "rejects deprecated delegate permission mode before starting a query" do
-      assert_raise ArgumentError, ~r/invalid permission_mode/, fn ->
-        Query.run("hello", %Options{permission_mode: :delegate}) |> Enum.to_list()
-      end
+      error =
+        assert_raise ArgumentError, fn ->
+          Query.run("hello", %Options{permission_mode: :delegate}) |> Enum.to_list()
+        end
+
+      assert Exception.message(error) =~ "invalid permission_mode"
+    end
+
+    test "rejects unknown permission mode strings before starting a query" do
+      error =
+        assert_raise ArgumentError, fn ->
+          Query.run("hello", %Options{permission_mode: "delegate"}) |> Enum.to_list()
+        end
+
+      assert Exception.message(error) =~ "invalid permission_mode"
+    end
+
+    test "rejects unknown permission mode atoms before starting a query" do
+      error =
+        assert_raise ArgumentError, fn ->
+          Query.run("hello", %Options{permission_mode: :unknown_mode}) |> Enum.to_list()
+        end
+
+      assert Exception.message(error) =~ "invalid permission_mode"
+    end
+
+    test "rejects invalid transport error modes before starting a query" do
+      error =
+        assert_raise ArgumentError, fn ->
+          Query.run("hello", %Options{transport_error_mode: :panic}) |> Enum.to_list()
+        end
+
+      assert Exception.message(error) =~ "transport_error_mode"
+    end
+
+    test "rejects unsupported permission enum strings before starting a query" do
+      error =
+        assert_raise ArgumentError, fn ->
+          Query.run("hello", %Options{permission_mode: "invalid"}) |> Enum.to_list()
+        end
+
+      assert Exception.message(error) =~ "invalid permission_mode"
     end
 
     test "allows the CLI auto permission mode" do

@@ -258,10 +258,15 @@ defmodule EmailAgent.Rules do
 
   defp get_required(map, key) do
     case Map.get(map, key) do
-      nil -> {:error, String.to_atom("missing_#{key}")}
+      nil -> {:error, missing_required_key(key)}
       value -> {:ok, value}
     end
   end
+
+  defp missing_required_key("name"), do: :missing_name
+  defp missing_required_key("action"), do: :missing_action
+  defp missing_required_key("condition"), do: :missing_condition
+  defp missing_required_key(key), do: {:missing_required_key, key}
 
   defp all_conditions_match?(condition, email) do
     checks = [

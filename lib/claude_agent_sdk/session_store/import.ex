@@ -4,6 +4,7 @@ defmodule ClaudeAgentSDK.SessionStore.Import do
   """
 
   alias ClaudeAgentSDK.SessionStore.{Adapter, MirrorBatcher, Summary}
+  alias ClaudeAgentSDK.StringScan
 
   @max_pending_bytes MirrorBatcher.max_pending_bytes()
 
@@ -137,10 +138,7 @@ defmodule ClaudeAgentSDK.SessionStore.Import do
   end
 
   defp validate_uuid(session_id) do
-    if Regex.match?(
-         ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-         session_id
-       ) do
+    if StringScan.valid_uuid?(session_id) do
       :ok
     else
       {:error, :invalid_session_id}

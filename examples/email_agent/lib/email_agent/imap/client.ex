@@ -220,11 +220,7 @@ defmodule EmailAgent.IMAP.Client do
 
     case send_command({transport, socket}, command) do
       {:ok, response} ->
-        # Try to extract new UID from COPYUID response
-        case Regex.run(~r/COPYUID \d+ \d+ (\d+)/, response) do
-          [_, new_uid] -> {:ok, String.to_integer(new_uid)}
-          nil -> {:ok, 0}
-        end
+        {:ok, extract_copy_uid(response)}
 
       {:error, reason} ->
         {:error, reason}
@@ -308,11 +304,11 @@ defmodule EmailAgent.IMAP.Client do
 
         cond do
           # End of command response
-          Regex.match?(~r/^A\d+ (OK|NO|BAD)/, line) ->
+          line_is_complete?(line) ->
             {:ok, new_acc}
 
           # Literal follows - need to read more
-          Regex.match?(~r/\{\d+\}$/, String.trim(line)) ->
+          line_has_literal_size?(line) ->
             recv_multiline_response({transport, socket}, new_acc, depth + 1)
 
           true ->
@@ -330,7 +326,13 @@ defmodule EmailAgent.IMAP.Client do
 
   defp line_is_complete?(line) do
     # A tagged response line starting with the command tag
-    Regex.match?(~r/^A\d+ (OK|NO|BAD)/, line)
+    case String.trim_leading(line) |> String.split(" ", parts: 3) do
+      [tag, status | _rest] ->
+        command_tag?(tag) and status in ["OK", "NO", "BAD"]
+
+      _ ->
+        false
+    end
   end
 
   defp quote_string(str) do
@@ -338,36 +340,152 @@ defmodule EmailAgent.IMAP.Client do
   end
 
   defp extract_mailbox_name(line) do
-    case Regex.run(~r/\* LIST \([^)]*\) "[^"]*" (.+)$/, line) do
-      [_, name] -> String.trim(name, "\"")
-      nil -> nil
+    parts = String.split(line, "\"")
+
+    cond do
+      length(parts) >= 4 ->
+        Enum.at(parts, 3)
+
+      String.contains?(line, ")") ->
+        line
+        |> String.split(")", parts: 2)
+        |> List.last()
+        |> String.trim()
+        |> String.trim("\"")
+
+      true ->
+        nil
     end
   end
 
   defp extract_exists_count(response) do
-    case Regex.run(~r/\* (\d+) EXISTS/, response) do
-      [_, count] -> String.to_integer(count)
-      nil -> 0
-    end
+    response
+    |> String.split([" ", "\r", "\n", "\t"], trim: true)
+    |> Enum.chunk_every(3, 1, :discard)
+    |> Enum.find_value(0, fn
+      ["*", count, "EXISTS"] -> if numeric?(count), do: String.to_integer(count), else: nil
+      _other -> nil
+    end)
   end
 
   defp parse_fetch_response(response) do
     # Simple extraction of message bodies from FETCH response
     # This is a simplified parser - a production version would need more robust parsing
     response
-    |> String.split(~r/\* \d+ FETCH/)
-    |> Enum.drop(1)
+    |> fetch_blocks()
     |> Enum.map(&extract_body/1)
     |> Enum.reject(&is_nil/1)
   end
 
   defp extract_body(fetch_data) do
     # Extract content between BODY[] { } markers
-    case Regex.run(~r/BODY\[\]\s*\{(\d+)\}\r?\n([\s\S]+?)(?=\)|$)/, fetch_data) do
-      [_, _size, body] -> String.trim(body)
-      nil -> nil
+    with {:ok, after_body} <- after_marker(fetch_data, "BODY[]"),
+         {:ok, after_literal} <- after_literal_header(after_body) do
+      after_literal
+      |> trim_fetch_body()
+      |> String.trim()
+    else
+      :error -> nil
     end
   end
+
+  defp extract_copy_uid(response) do
+    tokens = String.split(response, [" ", "\r", "\n", "\t", "[", "]"], trim: true)
+
+    tokens
+    |> Enum.with_index()
+    |> Enum.find_value(0, fn
+      {"COPYUID", index} ->
+        tokens
+        |> Enum.at(index + 3, "0")
+        |> digits_prefix()
+        |> parse_or_zero()
+
+      _other ->
+        nil
+    end)
+  end
+
+  defp command_tag?(<<"A", digits::binary>>), do: numeric?(digits)
+  defp command_tag?(_tag), do: false
+
+  defp line_has_literal_size?(line) do
+    trimmed = String.trim(line)
+
+    with true <- String.ends_with?(trimmed, "}"),
+         [_before, value] <- String.split(trimmed, "{") |> Enum.take(-2),
+         size <- String.trim_trailing(value, "}") do
+      numeric?(size)
+    else
+      _ -> false
+    end
+  end
+
+  defp fetch_blocks(response) do
+    response
+    |> String.split("* ", trim: true)
+    |> Enum.flat_map(fn segment ->
+      case String.split(segment, " ", parts: 3) do
+        [number, "FETCH", rest] when number != "" ->
+          if numeric?(number), do: [rest], else: []
+
+        _other ->
+          []
+      end
+    end)
+  end
+
+  defp after_marker(value, marker) do
+    case :binary.match(value, marker) do
+      {start, size} -> {:ok, binary_part(value, start + size, byte_size(value) - start - size)}
+      :nomatch -> :error
+    end
+  end
+
+  defp after_literal_header(value) do
+    case :binary.match(value, "}") do
+      {start, size} ->
+        rest = binary_part(value, start + size, byte_size(value) - start - size)
+
+        cond do
+          String.starts_with?(rest, "\r\n") -> {:ok, binary_part(rest, 2, byte_size(rest) - 2)}
+          String.starts_with?(rest, "\n") -> {:ok, binary_part(rest, 1, byte_size(rest) - 1)}
+          true -> {:ok, rest}
+        end
+
+      :nomatch ->
+        :error
+    end
+  end
+
+  defp trim_fetch_body(body) do
+    body
+    |> String.trim()
+    |> trim_single_trailing_paren()
+  end
+
+  defp trim_single_trailing_paren(value) do
+    if String.ends_with?(value, ")") do
+      value
+      |> String.slice(0, String.length(value) - 1)
+      |> String.trim()
+    else
+      value
+    end
+  end
+
+  defp digits_prefix(value) do
+    value
+    |> String.to_charlist()
+    |> Enum.take_while(&(&1 in ?0..?9))
+    |> List.to_string()
+  end
+
+  defp parse_or_zero(""), do: 0
+  defp parse_or_zero(value), do: String.to_integer(value)
+
+  defp numeric?(value) when is_binary(value), do: value != "" and digits_prefix(value) == value
+  defp numeric?(_value), do: false
 
   defp flag_to_string(:seen), do: "\\Seen"
   defp flag_to_string(:deleted), do: "\\Deleted"

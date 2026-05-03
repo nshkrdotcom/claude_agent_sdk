@@ -1310,15 +1310,21 @@ defmodule ClaudeAgentSDK.Options do
   defp provider_backend(%__MODULE__{provider_backend: nil}) do
     case System.get_env(Env.provider_backend()) do
       nil -> nil
-      value -> value |> String.trim() |> String.downcase() |> String.to_atom()
+      value -> normalize_provider_backend(value)
     end
   end
 
   defp provider_backend(%__MODULE__{provider_backend: value}) when is_binary(value) do
-    value |> String.trim() |> String.downcase() |> String.to_atom()
+    normalize_provider_backend(value)
   end
 
   defp provider_backend(%__MODULE__{provider_backend: value}), do: value
+
+  defp normalize_provider_backend(value) when is_binary(value) do
+    value
+    |> String.trim()
+    |> String.downcase()
+  end
 
   defp env_model(%__MODULE__{model: nil}), do: System.get_env(Env.anthropic_model())
   defp env_model(_options), do: nil

@@ -13,7 +13,7 @@ defmodule ClaudeAgentSDK.Hooks.MatcherTest do
       assert matcher.timeout_ms == nil
     end
 
-    test "creates matcher with regex pattern" do
+    test "creates matcher with Claude-native alternation string" do
       callback = fn _, _, _ -> %{} end
       matcher = Matcher.new("Write|Edit", [callback])
 

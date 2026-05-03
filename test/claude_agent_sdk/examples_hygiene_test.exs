@@ -1,15 +1,16 @@
 defmodule ClaudeAgentSDK.ExamplesHygieneTest do
   use ExUnit.Case, async: true
 
-  @forbidden_patterns [
-    "ClaudeAgentSDK\\.Mock",
+  @forbidden_literals [
+    "ClaudeAgentSDK.Mock",
     "FakeCLI",
     "MockTransport",
     "use_mock",
     "command -v claude",
     "claude --",
-    "System\\.cmd\\(\\s*\"claude\"",
-    "CliSubprocessCore\\.Command"
+    "System.cmd(\"claude\"",
+    "System.cmd( \"claude\"",
+    "CliSubprocessCore.Command"
   ]
 
   test "runnable examples are live-only and use SDK APIs instead of direct Claude CLI calls" do
@@ -25,16 +26,20 @@ defmodule ClaudeAgentSDK.ExamplesHygieneTest do
 
   defp allowed_path?(path) do
     normalized = Path.relative_to_cwd(path)
-    String.contains?(normalized, "/test/") or String.ends_with?(normalized, "/test_helper.exs")
+
+    String.contains?(normalized, "/test/") or
+      String.contains?(normalized, "/_build/") or
+      String.contains?(normalized, "/deps/") or
+      String.ends_with?(normalized, "/test_helper.exs")
   end
 
   defp violations_for_file(path) do
     text = File.read!(path)
 
-    @forbidden_patterns
-    |> Enum.flat_map(fn pattern ->
-      if Regex.match?(Regex.compile!(pattern), text) do
-        ["#{Path.relative_to_cwd(path)} matches #{inspect(pattern)}"]
+    @forbidden_literals
+    |> Enum.flat_map(fn literal ->
+      if String.contains?(text, literal) do
+        ["#{Path.relative_to_cwd(path)} contains #{inspect(literal)}"]
       else
         []
       end

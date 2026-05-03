@@ -39,21 +39,25 @@ defmodule ClaudeAgentSDK.QueryStreamingTest do
   end
 
   test "rejects custom transport injection for CLI-only query streaming" do
-    assert_raise ArgumentError,
-                 ~r/custom transport injection has been removed; use execution_surface instead/,
-                 fn ->
-                   Query.run("hi", %Options{}, {:legacy_transport, []})
-                 end
+    error =
+      assert_raise ArgumentError, fn ->
+        Query.run("hi", %Options{}, {:legacy_transport, []})
+      end
+
+    assert Exception.message(error) =~
+             "custom transport injection has been removed; use execution_surface instead"
   end
 
   test "rejects custom transport injection for control-client query streaming" do
     callback = fn _context -> Result.allow() end
 
-    assert_raise ArgumentError,
-                 ~r/custom transport injection has been removed; use execution_surface instead/,
-                 fn ->
-                   Query.run("hi", %Options{can_use_tool: callback}, {:legacy_transport, []})
-                 end
+    error =
+      assert_raise ArgumentError, fn ->
+        Query.run("hi", %Options{can_use_tool: callback}, {:legacy_transport, []})
+      end
+
+    assert Exception.message(error) =~
+             "custom transport injection has been removed; use execution_surface instead"
   end
 
   test "CLI-only query streaming skips non-JSON stdout lines" do

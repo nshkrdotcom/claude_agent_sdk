@@ -39,10 +39,13 @@ defmodule ClaudeAgentSDK.OptionBuilder.EffortThinkingTest do
     end
 
     test "raises a clear error for invalid effort values" do
-      assert_raise ArgumentError, ~r/effort must be one of/, fn ->
-        OptionBuilder.with_opus()
-        |> OptionBuilder.with_effort(:turbo)
-      end
+      error =
+        assert_raise ArgumentError, fn ->
+          OptionBuilder.with_opus()
+          |> OptionBuilder.with_effort(:turbo)
+        end
+
+      assert Exception.message(error) =~ "effort must be one of"
     end
   end
 

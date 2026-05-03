@@ -27,6 +27,8 @@ defmodule ResearchAgent.OutputManager do
       {:ok, path} = OutputManager.write_report(dir, "AI Safety", report_content)
   """
 
+  alias ClaudeAgentSDK.StringScan
+
   require Logger
 
   @doc """
@@ -144,9 +146,7 @@ defmodule ResearchAgent.OutputManager do
   @spec sanitize_filename(String.t()) :: String.t()
   defp sanitize_filename(name) do
     name
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9\s-]/, "")
-    |> String.replace(~r/\s+/, "_")
+    |> StringScan.lowercase_slug()
     |> String.slice(0, 50)
   end
 end

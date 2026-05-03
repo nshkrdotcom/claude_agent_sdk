@@ -33,9 +33,43 @@ defmodule ClaudeAgentSDK.Options.ModelInputTest do
   test "raises when raw attrs conflict with an explicit model_payload" do
     payload = resolved_payload!("sonnet")
 
-    assert_raise ArgumentError, ~r/model_payload_conflict/, fn ->
-      Options.new(model_payload: payload, model: "opus")
-    end
+    error =
+      assert_raise ArgumentError, fn ->
+        Options.new(model_payload: payload, model: "opus")
+      end
+
+    assert Exception.message(error) =~ "model_payload_conflict"
+  end
+
+  test "normalizes unsupported provider backend strings without creating atoms" do
+    error =
+      assert_raise ArgumentError, fn ->
+        Options.new(model: "sonnet", provider_backend: "Experimental_Backend")
+      end
+
+    assert String.contains?(String.downcase(Exception.message(error)), "provider_backend")
+  end
+
+  test "normalizes provider backend env strings without creating atoms" do
+    TestEnvHelpers.with_system_env([{Env.provider_backend(), "Experimental_Backend"}], fn ->
+      error =
+        assert_raise ArgumentError, fn ->
+          Options.new(model: "sonnet")
+          |> Options.to_args()
+        end
+
+      assert String.contains?(String.downcase(Exception.message(error)), "provider_backend")
+    end)
+  end
+
+  test "rejects unsupported output format enums without pattern assertions" do
+    error =
+      assert_raise ArgumentError, fn ->
+        %Options{output_format: :xml}
+        |> Options.to_args()
+      end
+
+    assert Exception.message(error) =~ "Unsupported output_format"
   end
 
   defp resolved_payload!(model) do

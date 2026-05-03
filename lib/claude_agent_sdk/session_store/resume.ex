@@ -5,6 +5,7 @@ defmodule ClaudeAgentSDK.SessionStore.Resume do
 
   alias ClaudeAgentSDK.Options
   alias ClaudeAgentSDK.SessionStore.{Adapter, Summary}
+  alias ClaudeAgentSDK.StringScan
 
   defstruct [:config_dir, :resume_session_id]
 
@@ -233,7 +234,7 @@ defmodule ClaudeAgentSDK.SessionStore.Resume do
     do: (Map.get(entry, :isSidechain) || Map.get(entry, "isSidechain")) in [true, "true", 1, "1"]
 
   defp valid_uuid?(value) when is_binary(value) do
-    Regex.match?(~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, value)
+    StringScan.valid_uuid?(value)
   end
 
   defp valid_uuid?(_value), do: false

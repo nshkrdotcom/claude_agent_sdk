@@ -5,6 +5,7 @@ defmodule ClaudeAgentSDK.SessionStore.Helpers do
 
   alias ClaudeAgentSDK.Session.{ForkResult, SessionMessage}
   alias ClaudeAgentSDK.SessionStore.{Adapter, Summary}
+  alias ClaudeAgentSDK.StringScan
 
   @transcript_types ["user", "assistant", "progress", "system", "attachment"]
 
@@ -120,7 +121,7 @@ defmodule ClaudeAgentSDK.SessionStore.Helpers do
       if is_binary(tag) do
         tag
         |> String.normalize(:nfc)
-        |> String.replace(~r/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/, "")
+        |> StringScan.strip_control_chars()
         |> String.trim()
       end
 
@@ -328,7 +329,7 @@ defmodule ClaudeAgentSDK.SessionStore.Helpers do
   defp truthy?(value), do: value in [true, "true", 1, "1"]
 
   defp valid_uuid?(value) when is_binary(value) do
-    Regex.match?(~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, value)
+    StringScan.valid_uuid?(value)
   end
 
   defp valid_uuid?(_value), do: false

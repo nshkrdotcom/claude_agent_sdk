@@ -22,7 +22,7 @@ defmodule ClaudeAgentSDK.Parity.PrintRemovalTest do
   defp non_comment_lines(contents) do
     contents
     |> String.split("\n")
-    |> Enum.reject(fn line -> String.match?(line, ~r/^\s*#/) end)
+    |> Enum.reject(fn line -> line |> String.trim_leading() |> String.starts_with?("#") end)
     |> Enum.join("\n")
   end
 

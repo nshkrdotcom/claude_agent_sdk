@@ -7,6 +7,7 @@ defmodule ClaudeAgentSDK.CLI do
   alias ClaudeAgentSDK.Config.Env
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Options
+  alias ClaudeAgentSDK.StringScan
   alias CliSubprocessCore.{Command, CommandSpec, ProviderCLI}
   alias CliSubprocessCore.Command.RunResult
 
@@ -313,9 +314,9 @@ defmodule ClaudeAgentSDK.CLI do
   end
 
   defp parse_version(output) when is_binary(output) do
-    case Regex.run(~r/(\d+\.\d+\.\d+)/, output) do
-      [_, version] -> {:ok, version}
-      _ -> {:error, :parse_failed}
+    case StringScan.first_semver(output) do
+      version when is_binary(version) -> {:ok, version}
+      nil -> {:error, :parse_failed}
     end
   end
 end

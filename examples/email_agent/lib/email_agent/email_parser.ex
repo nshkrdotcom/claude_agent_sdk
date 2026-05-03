@@ -9,6 +9,7 @@ defmodule EmailAgent.EmailParser do
   - Various header encodings
   """
 
+  alias ClaudeAgentSDK.StringScan
   alias EmailAgent.Email
   alias Mail.Parsers.RFC2822
 
@@ -238,15 +239,15 @@ defmodule EmailAgent.EmailParser do
   defp extract_filename(_), do: nil
 
   defp parse_address(address_string) when is_binary(address_string) do
-    # Pattern: "Display Name <email@example.com>" or just "email@example.com"
-    case Regex.run(~r/^(.+?)\s*<([^>]+)>$/, String.trim(address_string)) do
-      [_, name, email] ->
-        {String.trim(email), String.trim(name, "\"")}
+    trimmed = String.trim(address_string)
 
-      nil ->
-        # Just an email address
-        email = extract_email(address_string)
-        {email || address_string, nil}
+    case bracketed_email(trimmed) do
+      {:ok, name, email} ->
+        {email, normalize_display_name(name)}
+
+      :error ->
+        email = extract_email(trimmed)
+        {email || trimmed, nil}
     end
   end
 
@@ -266,9 +267,9 @@ defmodule EmailAgent.EmailParser do
   defp extract_email(nil), do: nil
 
   defp extract_email(string) when is_binary(string) do
-    case Regex.run(~r/<([^>]+)>/, string) do
-      [_, email] -> email
-      nil -> if String.contains?(string, "@"), do: String.trim(string), else: nil
+    case bracketed_email(string) do
+      {:ok, _name, email} -> email
+      :error -> if String.contains?(string, "@"), do: String.trim(string), else: nil
     end
   end
 
@@ -282,16 +283,12 @@ defmodule EmailAgent.EmailParser do
   end
 
   defp parse_rfc2822_date(date_string) do
-    # Remove day name if present
-    date_string =
-      Regex.replace(~r/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s*/i, date_string, "")
+    date_string = remove_day_name(date_string)
 
     # Parse: "6 Jan 2025 10:30:00 -0500"
-    case Regex.run(
-           ~r/(\d{1,2})\s+(\w{3})\s+(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*([+-]\d{4})?/,
-           date_string
-         ) do
-      [_, day, month, year, hour, min, sec | rest] ->
+    case String.split(date_string, " ", trim: true) do
+      [day, month, year, time | rest] ->
+        [hour, min, sec] = parse_time(time)
         month_num = month_to_number(month)
         offset = parse_offset(List.first(rest))
 
@@ -305,13 +302,14 @@ defmodule EmailAgent.EmailParser do
                  String.to_integer(sec)
                ),
              {:ok, datetime} <- DateTime.from_naive(naive, "Etc/UTC") do
-          # Apply offset
           {:ok, DateTime.add(datetime, -offset, :second)}
         end
 
-      nil ->
+      _ ->
         {:error, :invalid_date_format}
     end
+  rescue
+    _error -> {:error, :invalid_date_format}
   end
 
   defp month_to_number(month) do
@@ -334,8 +332,9 @@ defmodule EmailAgent.EmailParser do
   defp parse_offset(nil), do: 0
 
   defp parse_offset(offset_str) do
-    case Regex.run(~r/([+-])(\d{2})(\d{2})/, offset_str) do
-      [_, sign, hours, mins] ->
+    case String.trim(offset_str) do
+      <<sign::binary-size(1), hours::binary-size(2), mins::binary-size(2)>>
+      when sign in ["+", "-"] ->
         offset_seconds = String.to_integer(hours) * 3600 + String.to_integer(mins) * 60
         if sign == "-", do: -offset_seconds, else: offset_seconds
 
@@ -353,7 +352,7 @@ defmodule EmailAgent.EmailParser do
 
     text
     |> String.downcase()
-    |> String.replace(~r/[^\w\s]/, " ")
+    |> StringScan.words_and_spaces()
     |> String.split()
     |> Enum.reject(fn word -> String.length(word) <= 3 or word in common_words end)
     |> Enum.uniq()
@@ -372,5 +371,51 @@ defmodule EmailAgent.EmailParser do
 
   defp generate_id do
     :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+  end
+
+  defp bracketed_email(string) do
+    with {open, 1} <- :binary.match(string, "<"),
+         after_open <- binary_part(string, open + 1, byte_size(string) - open - 1),
+         {close, 1} <- :binary.match(after_open, ">") do
+      name = string |> binary_part(0, open) |> String.trim()
+      email = after_open |> binary_part(0, close) |> String.trim()
+
+      if email == "", do: :error, else: {:ok, name, email}
+    else
+      _ -> :error
+    end
+  end
+
+  defp normalize_display_name(""), do: nil
+
+  defp normalize_display_name(name) do
+    name
+    |> String.trim()
+    |> String.trim("\"")
+  end
+
+  defp remove_day_name(value) do
+    trimmed = String.trim(value)
+
+    case String.split(trimmed, " ", parts: 2, trim: true) do
+      [first, rest] ->
+        day = first |> String.trim_trailing(",") |> String.downcase() |> String.slice(0, 3)
+
+        if day in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] do
+          String.trim(rest)
+        else
+          trimmed
+        end
+
+      _ ->
+        trimmed
+    end
+  end
+
+  defp parse_time(value) do
+    case String.split(value, ":", parts: 3) do
+      [hour, min, sec] -> [hour, min, sec]
+      _ -> ["0", "0", "0"]
+    end
   end
 end

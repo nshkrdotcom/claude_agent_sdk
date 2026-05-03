@@ -13,6 +13,7 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   @preflight_prompt "Reply with exactly: OK"
   @default_preflight_timeout_seconds 30
   @default_ollama_preflight_timeout_seconds 60
+  @ignored_mix_test_flags ["--warnings-as-errors"]
 
   defmodule SSHContext do
     @moduledoc false
@@ -80,7 +81,7 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   def parse_argv(argv) when is_list(argv) do
     {parsed, remaining, invalid} =
       argv
-      |> Enum.reject(&(&1 == "--"))
+      |> Enum.reject(&ignored_argv?/1)
       |> OptionParser.parse(strict: @ssh_switches)
 
     if invalid != [] do
@@ -89,6 +90,8 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
       build_context(parsed, remaining)
     end
   end
+
+  defp ignored_argv?(value), do: value in @ignored_mix_test_flags or value == "--"
 
   @spec ssh_enabled?() :: boolean()
   def ssh_enabled?, do: match?(%SSHContext{execution_surface: %ExecutionSurface{}}, context())

@@ -8,7 +8,7 @@ defmodule ClaudeAgentSDK.Process do
   same message structs and helper functions.
   """
 
-  alias ClaudeAgentSDK.{CLI, LineFraming, Message, Options, Runtime, Shell}
+  alias ClaudeAgentSDK.{CLI, LineFraming, Message, Options, Runtime, Shell, StringScan}
   alias ClaudeAgentSDK.Config.{Buffers, Env, Timeouts}
   alias ClaudeAgentSDK.Config.CLI, as: CLIConfig
   alias ClaudeAgentSDK.Errors
@@ -662,42 +662,6 @@ defmodule ClaudeAgentSDK.Process do
 
   @doc false
   defp detect_challenge_url(output) do
-    patterns = [
-      ~r/https:\/\/[^\s]*(?:challenge|auth|login|verify|oauth|signin|authenticate)[^\s]*/i,
-      ~r/https:\/\/console\.anthropic\.com\/[^\s]+/i,
-      ~r/(?:visit|open|go to|navigate to|click|access)[\s:]+?(https:\/\/[^\s]+)/i,
-      ~r/(?:authenticate|login|sign in|verify|challenge).*?(https:\/\/[^\s]+)/i,
-      ~r/"(?:url|challenge_url|auth_url|login_url)"[\s:]+?"(https:\/\/[^\s"]+)"/i
-    ]
-
-    Enum.find_value(patterns, fn pattern ->
-      pattern
-      |> Regex.run(output)
-      |> process_regex_match()
-    end)
-  end
-
-  defp process_regex_match(nil), do: nil
-
-  defp process_regex_match([full_match | _captures]) do
-    url = extract_url_from_match(full_match)
-    if valid_challenge_url?(url), do: url, else: nil
-  end
-
-  defp extract_url_from_match(match) do
-    case Regex.run(~r/https:\/\/[^\s"'>\]]+/, match) do
-      [url] -> url
-      _ -> match
-    end
-  end
-
-  defp valid_challenge_url?(url) do
-    String.starts_with?(url, "https://") and
-      (String.contains?(url, "anthropic.com") or
-         String.contains?(url, "challenge") or
-         String.contains?(url, "auth") or
-         String.contains?(url, "login") or
-         String.contains?(url, "verify") or
-         String.contains?(url, "oauth"))
+    StringScan.challenge_url(output)
   end
 end

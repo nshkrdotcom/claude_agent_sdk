@@ -28,6 +28,7 @@ defmodule Mix.Tasks.Generate.Demo do
   """
   use Mix.Task
 
+  alias ClaudeAgentSDK.StringScan
   alias DocumentGeneration.Excel
 
   @shortdoc "Run document generation demonstration"
@@ -194,11 +195,6 @@ defmodule Mix.Tasks.Generate.Demo do
   end
 
   defp format_number(num) when is_number(num) do
-    num
-    |> round()
-    |> Integer.to_string()
-    |> String.reverse()
-    |> String.replace(~r/(\d{3})(?=\d)/, "\\1,")
-    |> String.reverse()
+    StringScan.grouped_number(num)
   end
 end

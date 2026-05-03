@@ -61,7 +61,7 @@ defmodule ClaudeAgentSDK.DebugModeTest do
         end)
 
       # Should show elapsed time in brackets
-      assert Regex.match?(~r/\[\d+ms\]/, output)
+      assert elapsed_time_marker?(output)
     end
 
     @tag :live_cli
@@ -633,5 +633,29 @@ defmodule ClaudeAgentSDK.DebugModeTest do
       assert "Tool1" in stats.tools_used
       assert "Tool2" in stats.tools_used
     end
+  end
+
+  defp elapsed_time_marker?(output) do
+    output
+    |> String.split("[")
+    |> Enum.any?(fn segment ->
+      case String.split(segment, "]", parts: 2) do
+        [marker, _rest] ->
+          String.ends_with?(marker, "ms") and
+            marker
+            |> String.trim_trailing("ms")
+            |> numeric?()
+
+        _ ->
+          false
+      end
+    end)
+  end
+
+  defp numeric?(value) do
+    value != "" and
+      value
+      |> String.to_charlist()
+      |> Enum.all?(&(&1 in ?0..?9))
   end
 end

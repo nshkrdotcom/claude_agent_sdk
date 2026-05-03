@@ -119,8 +119,8 @@ defmodule ClaudeAgentSDK.Tool do
   end
 
   defp do_deftool(name, description, input_schema, annotations, max_result_size_chars, block) do
-    # Generate module name from tool name (e.g., :my_tool -> MyTool)
-    module_name = name |> Atom.to_string() |> Macro.camelize() |> String.to_atom()
+    # Generate module segment from tool name (e.g., :my_tool -> MyTool)
+    module_name = name |> Atom.to_string() |> Macro.camelize()
     # Escape nil annotations to avoid unquote issues, but pass AST maps through directly
     escaped_annotations = if is_nil(annotations), do: nil, else: annotations
 

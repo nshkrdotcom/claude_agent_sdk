@@ -5,7 +5,8 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
   Defines which hooks should run for which tool patterns. Matchers support:
 
   - **Exact matching**: `"Bash"` matches only the Bash tool
-  - **Regex patterns**: `"Write|Edit"` matches Write or Edit tools
+  - **Alternative tool names**: `"Write|Edit"` is passed through to the
+    Claude CLI as a native matcher string
   - **Wildcard**: `"*"` or `nil` matches all tools
   - **Multiple hooks**: Each matcher can have multiple callback functions
   - **Per-matcher timeout**: Optional `timeout_ms` (default 60s, floored to 1s) for callback execution (serialized to seconds for the CLI)
@@ -15,7 +16,7 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
       # Match specific tool
       Matcher.new("Bash", [&MyModule.check_bash/3])
 
-      # Match multiple tools with regex
+      # Match multiple tools with a Claude-native matcher string
       Matcher.new("Write|Edit", [&check_file_edit/3])
 
       # Match all tools
@@ -33,7 +34,7 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
   Hook matcher struct.
 
   Fields:
-  - `matcher` - Tool name pattern (nil, "*", "ToolName", or regex like "Tool1|Tool2")
+  - `matcher` - Tool name pattern (nil, "*", "ToolName", or Claude-native alternatives like "Tool1|Tool2")
   - `hooks` - List of callback functions to invoke when pattern matches
   - `timeout_ms` - Optional timeout (ms) applied to callbacks matched by this matcher (sent as seconds to the CLI)
   """
@@ -55,7 +56,7 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
     - `nil` - Matches all tools
     - `"*"` - Matches all tools
     - `"ToolName"` - Matches specific tool exactly
-    - `"Tool1|Tool2"` - Regex pattern matching multiple tools
+    - `"Tool1|Tool2"` - Claude-native matcher string for multiple tools
   - `hooks` - List of callback functions (each with signature `(input, tool_use_id, context) -> output`)
   - `opts` - Optional keyword list
     - `:timeout_ms` - Timeout in milliseconds for callbacks matched by this matcher (serialized to seconds for CLI initialization)

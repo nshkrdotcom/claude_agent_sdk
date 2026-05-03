@@ -64,16 +64,19 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
     end
 
     test "rejects invalid effort at construction time" do
-      assert_raise ArgumentError, ~r/effort must be one of/, fn ->
-        Options.new(effort: :turbo)
-      end
+      error = assert_raise ArgumentError, fn -> Options.new(effort: :turbo) end
+
+      assert Exception.message(error) =~ "effort must be one of"
     end
 
     test "rejects invalid effort when converting a struct literal to args" do
-      assert_raise ArgumentError, ~r/effort must be one of/, fn ->
-        %Options{effort: :turbo}
-        |> Options.to_args()
-      end
+      error =
+        assert_raise ArgumentError, fn ->
+          %Options{effort: :turbo}
+          |> Options.to_args()
+        end
+
+      assert Exception.message(error) =~ "effort must be one of"
     end
   end
 

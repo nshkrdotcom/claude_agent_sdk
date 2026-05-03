@@ -23,6 +23,7 @@ defmodule EmailAgent.Agent do
   """
 
   alias ClaudeAgentSDK.Hooks.{Matcher, Output}
+  alias ClaudeAgentSDK.StringScan
   alias EmailAgent.Email
   alias EmailAgent.Storage
 
@@ -302,17 +303,23 @@ defmodule EmailAgent.Agent do
   end
 
   defp extract_from_filter(query) do
-    case Regex.run(~r/from[:\s]+(\w+)/, query) do
-      [_, name] -> name
-      nil -> nil
-    end
+    words = String.split(query)
+
+    words
+    |> Enum.with_index()
+    |> Enum.find_value(fn
+      {"from", index} -> Enum.at(words, index + 1)
+      {"from:", index} -> Enum.at(words, index + 1)
+      {<<"from:", name::binary>>, _index} when name != "" -> name
+      _other -> nil
+    end)
   end
 
   defp extract_keywords(query) do
     stop_words = ~w(find show me all the emails from about to with in)
 
     query
-    |> String.replace(~r/[^\w\s]/, " ")
+    |> StringScan.words_and_spaces()
     |> String.split()
     |> Enum.reject(fn word -> word in stop_words or String.length(word) < 3 end)
   end

@@ -107,6 +107,19 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
     assert result.stdout == "ok"
   end
 
+  test "preflight options ignore Mix test warning flags" do
+    assert {:ok, context} = ExamplesSupport.parse_argv(["--warnings-as-errors"])
+    assert context.argv == []
+
+    Process.put({ExamplesSupport, :ssh_context}, context)
+
+    args = Options.to_args(ExamplesSupport.preflight_options())
+
+    assert flag_with_value?(args, "--system-prompt", "")
+  after
+    Process.delete({ExamplesSupport, :ssh_context})
+  end
+
   test "preflight_timeout_seconds/0 defaults to 30 seconds for Anthropic" do
     restore = capture_env()
 

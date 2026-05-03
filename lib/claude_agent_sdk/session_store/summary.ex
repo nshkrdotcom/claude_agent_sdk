@@ -6,9 +6,8 @@ defmodule ClaudeAgentSDK.SessionStore.Summary do
   alias ClaudeAgentSDK.Session.History
   alias ClaudeAgentSDK.Session.SessionInfo
   alias ClaudeAgentSDK.SessionStore.Key
+  alias ClaudeAgentSDK.StringScan
 
-  @skip_first_prompt_pattern ~r/^(?:<local-command-stdout>|<session-start-hook>|<tick>|<goal>|\[Request interrupted by user[^\]]*\]|\s*<ide_opened_file>[\s\S]*<\/ide_opened_file>\s*$|\s*<ide_selection>[\s\S]*<\/ide_selection>\s*$)/
-  @command_name_pattern ~r/<command-name>(.*?)<\/command-name>/
   @last_wins_fields %{
     "customTitle" => :custom_title,
     "aiTitle" => :ai_title,
@@ -187,7 +186,7 @@ defmodule ClaudeAgentSDK.SessionStore.Summary do
   defp iso_to_epoch_ms(_value), do: nil
 
   defp normalize_iso8601(value) do
-    if String.ends_with?(value, "Z") or Regex.match?(~r/[+-]\d\d:\d\d$/, value) do
+    if StringScan.has_iso8601_zone_suffix?(value) do
       value
     else
       value <> "Z"
@@ -283,11 +282,11 @@ defmodule ClaudeAgentSDK.SessionStore.Summary do
       result == "" ->
         {:cont, data}
 
-      command = Regex.run(@command_name_pattern, result, capture: :all_but_first) ->
-        [name] = command
+      command = StringScan.extract_tag(result, "command-name") ->
+        name = command
         {:cont, Map.put_new(data, :command_fallback, name)}
 
-      Regex.match?(@skip_first_prompt_pattern, result) ->
+      StringScan.skip_first_prompt?(result) ->
         {:cont, data}
 
       true ->

@@ -35,6 +35,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   alias ClaudeAgentSDK.{CLI, Runtime}
   alias ClaudeAgentSDK.Config.{Auth, Env, Timeouts}
+  alias ClaudeAgentSDK.StringScan
   alias CliSubprocessCore.Command, as: CoreCommand
   alias CliSubprocessCore.Command.Error, as: CoreCommandError
   alias CliSubprocessCore.Command.RunResult
@@ -692,7 +693,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
     case CoreCommand.run(invocation, stderr: :separate) do
       {:ok, %RunResult{} = result} ->
         with true <- RunResult.success?(result),
-             [_, version] <- Regex.run(~r/(\d+\.\d+\.\d+)/, result.stdout) do
+             version when is_binary(version) <- StringScan.first_semver(result.stdout) do
           {:ok, version}
         else
           false -> {:error, {:exit_status, result.exit.code}}

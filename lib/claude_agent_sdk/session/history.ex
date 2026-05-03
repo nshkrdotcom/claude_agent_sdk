@@ -12,15 +12,13 @@ defmodule ClaudeAgentSDK.Session.History do
 
   alias ClaudeAgentSDK.Config.Timeouts
   alias ClaudeAgentSDK.Session.{ForkResult, SessionInfo, SessionMessage}
+  alias ClaudeAgentSDK.StringScan
 
   @lite_read_buf_size 65_536
   @max_sanitized_length 200
   @git_worktree_args ["worktree", "list", "--porcelain"]
   @git_worktree_env [{"GIT_PAGER", "cat"}, {"GIT_TERMINAL_PROMPT", "0"}]
-  @uuid_pattern ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   @transcript_entry_types ["user", "assistant", "progress", "system", "attachment"]
-  @skip_first_prompt_pattern ~r/^(?:<local-command-stdout>|<session-start-hook>|<tick>|<goal>|\[Request interrupted by user[^\]]*\]|\s*<ide_opened_file>[\s\S]*<\/ide_opened_file>\s*$|\s*<ide_selection>[\s\S]*<\/ide_selection>\s*$)/
-  @command_name_pattern ~r/<command-name>(.*?)<\/command-name>/
 
   @typedoc false
   @type transcript_entry :: map()
@@ -30,7 +28,7 @@ defmodule ClaudeAgentSDK.Session.History do
   """
   @spec sanitize_path(String.t()) :: String.t()
   def sanitize_path(path) when is_binary(path) do
-    sanitized = String.replace(path, ~r/[^a-zA-Z0-9]/, "-")
+    sanitized = StringScan.sanitize_path_chars(path, "-")
 
     if String.length(sanitized) <= @max_sanitized_length do
       sanitized
@@ -801,7 +799,7 @@ defmodule ClaudeAgentSDK.Session.History do
   end
 
   defp normalize_iso8601(timestamp) do
-    if Regex.match?(~r/(Z|[+-]\d\d:\d\d)$/, timestamp) do
+    if StringScan.has_iso8601_zone_suffix?(timestamp) do
       timestamp
     else
       timestamp <> "Z"
@@ -813,10 +811,7 @@ defmodule ClaudeAgentSDK.Session.History do
   def sanitize_unicode(value) when is_binary(value) do
     value
     |> String.normalize(:nfkc)
-    |> String.replace(
-      ~r/[\x{200B}-\x{200D}\x{FEFF}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{E000}-\x{F8FF}]/u,
-      ""
-    )
+    |> StringScan.strip_invisible_chars()
   end
 
   defp extract_last_json_string_field(text, key) do
@@ -1041,14 +1036,14 @@ defmodule ClaudeAgentSDK.Session.History do
   end
 
   defp classify_prompt_text(cleaned) do
-    case Regex.run(@command_name_pattern, cleaned, capture: :all_but_first) do
-      [command] -> {:command_name, command}
-      _ -> maybe_prompt_text(cleaned)
+    case StringScan.extract_tag(cleaned, "command-name") do
+      command when is_binary(command) -> {:command_name, command}
+      nil -> maybe_prompt_text(cleaned)
     end
   end
 
   defp maybe_prompt_text(cleaned) do
-    if Regex.match?(@skip_first_prompt_pattern, cleaned) do
+    if StringScan.skip_first_prompt?(cleaned) do
       :skip
     else
       :prompt
@@ -1203,8 +1198,7 @@ defmodule ClaudeAgentSDK.Session.History do
   defp maybe_downcase(value, true), do: String.downcase(value)
   defp maybe_downcase(value, false), do: value
 
-  defp valid_uuid?(value) when is_binary(value), do: Regex.match?(@uuid_pattern, value)
-  defp valid_uuid?(_value), do: false
+  defp valid_uuid?(value), do: StringScan.valid_uuid?(value)
 
   defp truthy?(value), do: not is_nil(value) and value != false
   defp windows?, do: match?({:win32, _}, :os.type())
