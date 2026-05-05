@@ -16,6 +16,7 @@ defmodule ClaudeAgentSdk.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      aliases: aliases(),
       description: description(),
       package: package(),
       docs: docs(),
@@ -34,6 +35,7 @@ defmodule ClaudeAgentSdk.MixProject do
   def cli do
     [
       preferred_envs: [
+        ci: :test,
         "test.live": :test,
         "run.live": :dev
       ]
@@ -313,6 +315,17 @@ defmodule ClaudeAgentSdk.MixProject do
       plt_add_apps: [:mix],
       plt_core_path: "priv/plts/core",
       plt_local_path: "priv/plts"
+    ]
+  end
+
+  defp aliases do
+    [
+      ci: [
+        "format --check-formatted",
+        "compile --warnings-as-errors",
+        "credo --strict",
+        "test"
+      ]
     ]
   end
 end

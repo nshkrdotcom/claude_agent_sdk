@@ -199,7 +199,15 @@ defmodule ClaudeAgentSDK.AuthChecker do
       last_checked: timestamp,
       authority_ref: info.authority_ref,
       credential_lease_ref: info.credential_lease_ref,
-      target_ref: info.target_ref
+      connector_instance_ref: info.connector_instance_ref,
+      connector_binding_ref: info.connector_binding_ref,
+      provider_account_ref: info.provider_account_ref,
+      native_auth_assertion_ref: info.native_auth_assertion_ref,
+      target_ref: info.target_ref,
+      operation_policy_ref: info.operation_policy_ref,
+      command_ref: info.command_ref,
+      redaction_ref: info.redaction_ref,
+      env_keys: info.env_keys
     }
   end
 

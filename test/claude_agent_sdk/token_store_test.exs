@@ -81,7 +81,12 @@ defmodule ClaudeAgentSDK.TokenStoreTest do
     [
       authority_ref: "authority://claude/token-store",
       credential_lease_ref: "lease://claude/token-store",
+      connector_instance_ref: "connector-instance://claude/token-store",
+      connector_binding_ref: "connector-binding://claude/token-store",
+      provider_account_ref: "provider-account://claude/token-store",
+      native_auth_assertion_ref: "native-auth-assertion://claude/token-store",
       target_ref: "target://local/token-store",
+      operation_policy_ref: "operation-policy://claude/token-store",
       command: "/authority/bin/claude",
       cwd: "/workspace",
       env: %{"CLAUDE_CONFIG_DIR" => "/authority/config"},

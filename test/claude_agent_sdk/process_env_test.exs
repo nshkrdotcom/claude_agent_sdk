@@ -151,7 +151,12 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
     [
       authority_ref: "authority://claude/process",
       credential_lease_ref: "lease://claude/process",
+      connector_instance_ref: "connector-instance://claude/process",
+      connector_binding_ref: "connector-binding://claude/process",
+      provider_account_ref: "provider-account://claude/process",
+      native_auth_assertion_ref: "native-auth-assertion://claude/process",
       target_ref: "target://local/process",
+      operation_policy_ref: "operation-policy://claude/process",
       command: "/authority/bin/claude",
       cwd: "/workspace",
       env: %{"CLAUDE_CONFIG_DIR" => "/authority/config"},

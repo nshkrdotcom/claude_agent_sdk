@@ -41,6 +41,12 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
       assert diagnosis.status == :ready
       assert diagnosis.api_key_source == "governed authority credential lease"
       assert diagnosis.authority_ref == "authority://claude/auth-checker"
+      assert diagnosis.connector_instance_ref == "connector-instance://claude/auth-checker"
+      assert diagnosis.connector_binding_ref == "connector-binding://claude/auth-checker"
+      assert diagnosis.provider_account_ref == "provider-account://claude/auth-checker"
+      assert diagnosis.native_auth_assertion_ref == "native-auth-assertion://claude/auth-checker"
+      assert diagnosis.operation_policy_ref == "operation-policy://claude/auth-checker"
+      assert diagnosis.env_keys == ["CLAUDE_CONFIG_DIR"]
     end
 
     test "invalid governed authority does not fall back to env" do
@@ -470,7 +476,12 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
     [
       authority_ref: "authority://claude/auth-checker",
       credential_lease_ref: "lease://claude/auth-checker",
+      connector_instance_ref: "connector-instance://claude/auth-checker",
+      connector_binding_ref: "connector-binding://claude/auth-checker",
+      provider_account_ref: "provider-account://claude/auth-checker",
+      native_auth_assertion_ref: "native-auth-assertion://claude/auth-checker",
       target_ref: "target://local/auth-checker",
+      operation_policy_ref: "operation-policy://claude/auth-checker",
       command: "/authority/bin/claude",
       cwd: "/workspace",
       env: %{"CLAUDE_CONFIG_DIR" => "/authority/config"},

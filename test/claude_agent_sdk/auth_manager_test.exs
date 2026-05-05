@@ -571,7 +571,12 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     [
       authority_ref: "authority://claude/auth-manager",
       credential_lease_ref: "lease://claude/auth-manager",
+      connector_instance_ref: "connector-instance://claude/auth-manager",
+      connector_binding_ref: "connector-binding://claude/auth-manager",
+      provider_account_ref: "provider-account://claude/auth-manager",
+      native_auth_assertion_ref: "native-auth-assertion://claude/auth-manager",
       target_ref: "target://local/auth-manager",
+      operation_policy_ref: "operation-policy://claude/auth-manager",
       command: "/authority/bin/claude",
       cwd: "/workspace",
       env: %{"CLAUDE_CONFIG_DIR" => "/authority/config"},

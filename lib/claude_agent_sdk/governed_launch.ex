@@ -110,13 +110,7 @@ defmodule ClaudeAgentSDK.GovernedLaunch do
   def check_auth(opts) when is_list(opts) do
     case authority(opts) do
       {:ok, %GovernedAuthority{} = authority} ->
-        {:ok,
-         %{
-           source: :governed_authority,
-           authority_ref: authority.authority_ref,
-           credential_lease_ref: authority.credential_lease_ref,
-           target_ref: authority.target_ref
-         }}
+        {:ok, Map.put(GovernedAuthority.redacted(authority), :source, :governed_authority)}
 
       {:ok, nil} ->
         :standalone

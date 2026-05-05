@@ -135,7 +135,12 @@ defmodule ClaudeAgentSDK.QueryCLIStreamTest do
     [
       authority_ref: "authority://claude/cli-stream",
       credential_lease_ref: "lease://claude/cli-stream",
+      connector_instance_ref: "connector-instance://claude/cli-stream",
+      connector_binding_ref: "connector-binding://claude/cli-stream",
+      provider_account_ref: "provider-account://claude/cli-stream",
+      native_auth_assertion_ref: "native-auth-assertion://claude/cli-stream",
       target_ref: "target://local/cli-stream",
+      operation_policy_ref: "operation-policy://claude/cli-stream",
       command: "/authority/bin/claude",
       cwd: "/workspace",
       env: %{"CLAUDE_CONFIG_DIR" => "/authority/config"},
