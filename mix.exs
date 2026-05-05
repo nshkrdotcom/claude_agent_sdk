@@ -49,11 +49,11 @@ defmodule ClaudeAgentSdk.MixProject do
     [
       cli_subprocess_core_dep(),
       {:jason, "~> 1.4"},
-      {:zoi, "~> 0.17"},
+      {:zoi, "~> 0.18"},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:supertester, "~> 0.6.0", only: :test},
+      {:supertester, "~> 0.6", only: :test},
       {:stream_data, "~> 1.3", only: :test}
     ]
   end
@@ -97,6 +97,7 @@ defmodule ClaudeAgentSdk.MixProject do
       files: ~w(
           lib
           docs/RUNTIME_CONTROL.md
+          assets
           mix.exs
           README.md
           LICENSE

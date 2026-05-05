@@ -423,7 +423,7 @@ Streaming.send_message(session, "Now write one about Phoenix")
 Streaming.close_session(session)
 ```
 
-**Subagent Streaming:** When Claude spawns subagents via the Agent tool, events include a `parent_tool_use_id` field to identify the source. Main agent events have `nil`, subagent events have the Agent tool call ID. Streaming events also include `uuid`, `session_id`, and `raw_event` metadata for parity with the Python SDK. Stream event wrappers require `uuid` and `session_id` (missing keys raise). See the [Streaming Guide](guides/streaming.md#subagent-events-parent_tool_use_id) for details.
+**Subagent Streaming:** When Claude spawns subagents via the Agent tool, events include a `parent_tool_use_id` field to identify the source. Main agent events have `nil`, subagent events have the Agent tool call ID. Streaming events also preserve `uuid`, `session_id`, and `raw_event` metadata when the CLI provides them. See the [Streaming Guide](guides/streaming.md#subagent-events-parent_tool_use_id) for details.
 
 ### Hooks System
 
@@ -808,6 +808,7 @@ cd examples/email_agent && mix deps.get && mix email.assistant "find emails from
 | [Configuration](guides/configuration.md) | Complete options reference |
 | [Agents](guides/agents.md) | Custom agent personas |
 | [Sessions](guides/sessions.md) | Session management and persistence |
+| [Runtime Control](docs/RUNTIME_CONTROL.md) | SDK-local runtime control features |
 | [Testing](guides/testing.md) | Mock system and testing patterns |
 | [Error Handling](guides/error-handling.md) | Error types and recovery |
 | [Provider Behavior Manifest](guides/provider_behavior_manifest.md) | Evidence for Claude-native feature translation |

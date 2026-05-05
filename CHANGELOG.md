@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credential lease, command reference, and redaction reference for authority
   controlled subprocess launch.
 - Official Python SDK parity through upstream `v0.1.66`, including Claude CLI
-  `2.1.119` as the recommended version for this SDK release.
+  `2.1.119` compatibility coverage.
 - Options parity for `system_prompt: %{type: :file, path: ...}`,
   dynamic system-prompt section exclusion, `skills`, `task_budget`,
   `thinking.display`, corrected adaptive/disabled thinking flags, and explicit
@@ -55,8 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accepts both the Claude Haiku 4.5 alias and dated API ID.
 - Claude effort validation now allows Sonnet `:max` and Opus-only `:xhigh`;
   Haiku models still do not emit `--effort`.
-- README and guides now document `0.18.0`, the `2.1.119` recommended CLI, and
-  the new session/session-store parity surfaces.
+- README and guides now document the current unreleased package line and the new
+  session/session-store parity surfaces.
 
 ### Fixed
 
