@@ -308,11 +308,11 @@ defmodule ClaudeAgentSDK.Runtime.CLI do
   end
 
   defp unwrap_stream_event(%{"type" => "stream_event"} = wrapper, provider_session_id, state) do
-    event = Map.fetch!(wrapper, "event")
+    event = Map.get(wrapper, "event", %{})
 
     metadata = %{
       parent_tool_use_id: Map.get(wrapper, "parent_tool_use_id"),
-      uuid: Map.fetch!(wrapper, "uuid"),
+      uuid: Map.get(wrapper, "uuid"),
       session_id: Map.get(wrapper, "session_id") || provider_session_id || state.session_id
     }
 

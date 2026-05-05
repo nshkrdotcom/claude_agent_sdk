@@ -112,4 +112,77 @@ defmodule ClaudeAgentSDK.MessageParityTest do
     assert data.uuid == nil
     assert data.event["type"] == "message_stop"
   end
+
+  test "parses Claude Code v2 assistant frames with Anthropic message fields" do
+    json =
+      Jason.encode!(%{
+        "type" => "assistant",
+        "message" => %{
+          "model" => "claude-sonnet-4-6",
+          "id" => "msg_015uttVd59aYJEd35XWd1vCs",
+          "type" => "message",
+          "role" => "assistant",
+          "content" => [%{"type" => "text", "text" => "4"}],
+          "stop_reason" => "end_turn",
+          "stop_sequence" => nil,
+          "usage" => %{"input_tokens" => 12, "output_tokens" => 3}
+        }
+      })
+
+    assert {:ok, %Message{type: :assistant, data: data, raw: raw}} = Message.from_json(json)
+    assert data.message["model"] == "claude-sonnet-4-6"
+    assert data.message["id"] == "msg_015uttVd59aYJEd35XWd1vCs"
+    assert data.message["type"] == "message"
+    assert data.message["content"] == [%{"type" => "text", "text" => "4"}]
+    assert data.session_id == nil
+    assert data.parent_tool_use_id == nil
+    assert raw["message"]["usage"] == %{"input_tokens" => 12, "output_tokens" => 3}
+  end
+
+  test "parses Claude Code v2 stream_event wrappers without wrapper metadata" do
+    json =
+      Jason.encode!(%{
+        "type" => "stream_event",
+        "event" => %{
+          "type" => "message_start",
+          "message" => %{
+            "model" => "claude-sonnet-4-6",
+            "id" => "msg_015uttVd59aYJEd35XWd1vCs",
+            "type" => "message",
+            "role" => "assistant",
+            "content" => [],
+            "stop_reason" => nil,
+            "stop_sequence" => nil,
+            "usage" => %{"input_tokens" => 12, "output_tokens" => 0}
+          }
+        }
+      })
+
+    assert {:ok, %Message{type: :stream_event, data: data, raw: raw}} = Message.from_json(json)
+    assert data.uuid == nil
+    assert data.session_id == nil
+    assert data.parent_tool_use_id == nil
+    assert data.event["type"] == "message_start"
+    assert data.event["message"]["model"] == "claude-sonnet-4-6"
+    assert raw["event"]["message"]["id"] == "msg_015uttVd59aYJEd35XWd1vCs"
+  end
+
+  test "known frames preserve raw data instead of failing on evolved optional metadata" do
+    json =
+      Jason.encode!(%{
+        "type" => "assistant",
+        "message" => %{
+          "model" => "claude-sonnet-4-6",
+          "id" => "msg_future",
+          "type" => "message",
+          "role" => "assistant",
+          "content" => []
+        },
+        "error" => %{"type" => "overloaded_error", "message" => "try again"}
+      })
+
+    assert {:ok, %Message{type: :assistant, data: data, raw: raw}} = Message.from_json(json)
+    assert data.message["id"] == "msg_future"
+    assert raw["error"] == %{"type" => "overloaded_error", "message" => "try again"}
+  end
 end

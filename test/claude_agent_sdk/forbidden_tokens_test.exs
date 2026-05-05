@@ -18,7 +18,7 @@ defmodule ClaudeAgentSDK.ForbiddenTokensTest do
   @transport_selector_paths [
     "README.md",
     "docs/CUSTOM_TRANSPORTS.md",
-    "docs/RUNTIME_CONTROL.md",
+    "guides/runtime-control.md",
     "guides",
     "lib/claude_agent_sdk/client.ex"
   ]

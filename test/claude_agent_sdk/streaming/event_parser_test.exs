@@ -181,13 +181,18 @@ defmodule ClaudeAgentSDK.Streaming.EventParserTest do
              }
     end
 
-    test "raises when stream_event wrapper is missing uuid" do
+    test "accepts stream_event wrapper when uuid and session_id are omitted" do
       buffer =
-        ~s({"type":"stream_event","session_id":"sess_123","event":{"type":"message_start","message":{"model":"#{test_model()}","role":"assistant"}}}\n)
+        ~s({"type":"stream_event","event":{"type":"message_start","message":{"model":"claude-sonnet-4-6","id":"msg_015uttVd59aYJEd35XWd1vCs","type":"message","role":"assistant","content":[]}}}\n)
 
-      assert_raise KeyError, fn ->
-        EventParser.parse_buffer(buffer, "")
-      end
+      {:ok, events, _remaining, _accumulated} = EventParser.parse_buffer(buffer, "")
+
+      assert [event] = events
+      assert event.type == :message_start
+      assert event.model == "claude-sonnet-4-6"
+      assert event.uuid == nil
+      assert event.session_id == nil
+      assert event.parent_tool_use_id == nil
     end
 
     test "sets raw_event with nil metadata for unwrapped events" do

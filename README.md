@@ -168,7 +168,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.17.0"}
+    {:claude_agent_sdk, "~> 0.17.1"}
   ]
 end
 ```
@@ -196,7 +196,7 @@ claude --version
 ### CLI Compatibility
 
 - Minimum supported Claude CLI version: `2.1.0`
-- Recommended Claude CLI version: `2.1.84`
+- Recommended Claude CLI version: `2.1.128`
 - Compatibility policy: this SDK follows the Python SDK where practical, but the Claude CLI wire protocol is authoritative. CLI-native frames such as `:rate_limit_event` are surfaced here even if the current Python SDK skips unknown message types for forward compatibility.
 
 ---
@@ -392,7 +392,7 @@ Streaming.send_message(session, "Now write one about Phoenix")
 Streaming.close_session(session)
 ```
 
-**Subagent Streaming:** When Claude spawns subagents via the Agent tool, events include a `parent_tool_use_id` field to identify the source. Main agent events have `nil`, subagent events have the Agent tool call ID. Streaming events also include `uuid`, `session_id`, and `raw_event` metadata for parity with the Python SDK. Stream event wrappers require `uuid` and `session_id` (missing keys raise). See the [Streaming Guide](guides/streaming.md#subagent-events-parent_tool_use_id) for details.
+**Subagent Streaming:** When Claude spawns subagents via the Agent tool, events include a `parent_tool_use_id` field to identify the source. Main agent events have `nil`, subagent events have the Agent tool call ID. Streaming events also preserve `uuid`, `session_id`, and `raw_event` metadata when the CLI provides them. See the [Streaming Guide](guides/streaming.md#subagent-events-parent_tool_use_id) for details.
 
 ### Hooks System
 
@@ -758,6 +758,7 @@ cd examples/email_agent && mix deps.get && mix email.assistant "find emails from
 | [Configuration](guides/configuration.md) | Complete options reference |
 | [Agents](guides/agents.md) | Custom agent personas |
 | [Sessions](guides/sessions.md) | Session management and persistence |
+| [Runtime Control](guides/runtime-control.md) | SDK-local runtime control features |
 | [Testing](guides/testing.md) | Mock system and testing patterns |
 | [Error Handling](guides/error-handling.md) | Error types and recovery |
 

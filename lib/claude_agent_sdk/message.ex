@@ -232,9 +232,32 @@ defmodule ClaudeAgentSDK.Message do
         parse_by_type(message, type, parsed)
 
       {:error, {:invalid_message_frame, details}} ->
-        raise ArgumentError, details.message
+        case parse_message_with_raw_frame(raw) do
+          {:ok, message} -> message
+          :error -> raise ArgumentError, details.message
+        end
     end
   end
+
+  defp parse_message_with_raw_frame(%{"type" => type} = raw) when is_binary(type) do
+    case String.trim(type) do
+      "" ->
+        :error
+
+      trimmed_type ->
+        type = safe_type(trimmed_type)
+        parsed = %{raw | "type" => trimmed_type}
+
+        message = %__MODULE__{
+          type: type,
+          raw: raw
+        }
+
+        {:ok, parse_by_type(message, type, parsed)}
+    end
+  end
+
+  defp parse_message_with_raw_frame(_raw), do: :error
 
   defp parse_by_type(message, :assistant, raw) do
     %{message | data: build_assistant_data(raw)}

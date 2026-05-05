@@ -366,14 +366,12 @@ defmodule ClaudeAgentSDK.Streaming.EventParser do
 
   # Unwrap stream_event wrapper from Claude CLI output, preserving metadata.
   defp unwrap_stream_event(%{"type" => "stream_event"} = wrapper) do
-    event = Map.fetch!(wrapper, "event")
-    uuid = Map.fetch!(wrapper, "uuid")
-    session_id = Map.fetch!(wrapper, "session_id")
+    event = Map.get(wrapper, "event", %{})
 
     metadata = %{
       parent_tool_use_id: Map.get(wrapper, "parent_tool_use_id"),
-      uuid: uuid,
-      session_id: session_id
+      uuid: Map.get(wrapper, "uuid"),
+      session_id: Map.get(wrapper, "session_id")
     }
 
     {event, metadata}

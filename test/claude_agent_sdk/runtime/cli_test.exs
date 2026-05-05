@@ -160,6 +160,40 @@ defmodule ClaudeAgentSDK.Runtime.CLITest do
       assert state.accumulated_text == ""
       assert state.session_id == "sess-123"
     end
+
+    test "projects Claude v2 stream_event wrappers when wrapper metadata is omitted" do
+      state = CLI.new_projection_state()
+
+      wrapper = %{
+        "type" => "stream_event",
+        "event" => %{
+          "type" => "message_start",
+          "message" => %{
+            "model" => "claude-sonnet-4-6",
+            "id" => "msg_015uttVd59aYJEd35XWd1vCs",
+            "type" => "message",
+            "role" => "assistant",
+            "content" => []
+          }
+        }
+      }
+
+      event =
+        Event.new(:raw,
+          provider: :claude,
+          provider_session_id: "sess-from-core",
+          raw: wrapper,
+          payload: Payload.Raw.new(stream: :stdout, content: wrapper)
+        )
+
+      assert {[projected], state} = CLI.project_event(event, state)
+      assert projected.type == :message_start
+      assert projected.model == "claude-sonnet-4-6"
+      assert projected.uuid == nil
+      assert projected.session_id == "sess-from-core"
+      assert projected.parent_tool_use_id == nil
+      assert state.session_id == "sess-from-core"
+    end
   end
 
   describe "session control surfaces" do

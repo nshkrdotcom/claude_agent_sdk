@@ -2,7 +2,7 @@ defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
   @app :claude_agent_sdk
-  @version "0.17.0"
+  @version "0.17.1"
   @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
   @homepage_url "https://hex.pm/packages/claude_agent_sdk"
   @docs_url "https://hexdocs.pm/claude_agent_sdk"
@@ -46,12 +46,12 @@ defmodule ClaudeAgentSdk.MixProject do
     [
       {:cli_subprocess_core, "~> 0.1.0"},
       {:jason, "~> 1.4"},
-      {:zoi, "~> 0.17"},
+      {:zoi, "~> 0.18"},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:supertester, "~> 0.5.1", only: :test},
-      {:stream_data, "~> 1.1", only: :test}
+      {:supertester, "~> 0.6", only: :test},
+      {:stream_data, "~> 1.3", only: :test}
     ]
   end
 
@@ -71,7 +71,8 @@ defmodule ClaudeAgentSdk.MixProject do
       maintainers: ["nshkrdotcom"],
       files: ~w(
           lib
-          docs/RUNTIME_CONTROL.md
+          assets
+          guides
           mix.exs
           README.md
           LICENSE
@@ -106,7 +107,7 @@ defmodule ClaudeAgentSdk.MixProject do
         {"guides/model-configuration.md", title: "Model Configuration"},
         {"guides/agents.md", title: "Agents"},
         {"guides/sessions.md", title: "Sessions"},
-        {"docs/RUNTIME_CONTROL.md", title: "Runtime Control"},
+        {"guides/runtime-control.md", title: "Runtime Control"},
         {"guides/testing.md", title: "Testing"},
         {"guides/error-handling.md", title: "Error Handling"},
         {"examples/README.md", title: "Examples", filename: "examples"},
@@ -144,7 +145,7 @@ defmodule ClaudeAgentSdk.MixProject do
           "guides/agents.md"
         ],
         Operations: [
-          "docs/RUNTIME_CONTROL.md"
+          "guides/runtime-control.md"
         ],
         Quality: [
           "guides/testing.md",

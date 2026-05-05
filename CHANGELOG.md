@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-05-05
+
+### Fixed
+
+- CLI stream-json parsing now accepts Claude Code v2.x `stream_event` wrappers
+  that omit wrapper `uuid` or `session_id` metadata while preserving available
+  raw event data and falling back to provider session metadata during runtime
+  projection.
+- Known CLI message frames now preserve raw data on schema drift instead of
+  turning valid JSON assistant/streaming frames into decode failures.
+
+### Changed
+
+- Recommended Claude CLI version bumped to `2.1.128`.
+- Hex package and ExDoc extras now ship the `guides/` and `assets/` trees, with
+  the runtime-control guide moved to `guides/runtime-control.md`.
+- Dependency constraints refreshed for the release: `zoi ~> 0.18`,
+  `supertester ~> 0.6`, and `stream_data ~> 1.3`.
+
 ## [0.17.0] - 2026-04-06
 
 ### Added
@@ -1510,7 +1529,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.1...HEAD
+[0.17.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.16.0...v0.17.0
 [0.15.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.13.0...v0.14.0
