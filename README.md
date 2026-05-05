@@ -215,7 +215,7 @@ claude --version
 ### CLI Compatibility
 
 - Minimum supported Claude CLI version: `2.1.0`
-- Recommended Claude CLI version: `2.1.119`
+- Recommended Claude CLI version: `2.1.128`
 - Compatibility policy: this SDK follows the Python SDK where practical, but the Claude CLI wire protocol is authoritative. CLI-native frames such as `:rate_limit_event` are surfaced here even if the current Python SDK skips unknown message types for forward compatibility.
 
 ---
