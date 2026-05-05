@@ -1491,7 +1491,7 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   defp apply_client_entrypoint_env(%Options{} = options) do
-    env = options.env || %{}
+    env = options.env
 
     entrypoint_key = Env.entrypoint()
     entrypoint_atom = env_atom_key(entrypoint_key)

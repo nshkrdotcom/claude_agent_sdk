@@ -64,7 +64,7 @@ defmodule ClaudeAgentSDK.ClientResponseStreamTest do
 
   test "client sets CLAUDE_CODE_ENTRYPOINT for client transports", %{client: client} do
     state = :sys.get_state(client)
-    env = state.options.env || %{}
+    env = state.options.env
 
     assert env["CLAUDE_CODE_ENTRYPOINT"] == "sdk-elixir-client"
   end
@@ -79,7 +79,7 @@ defmodule ClaudeAgentSDK.ClientResponseStreamTest do
 
     try do
       state = :sys.get_state(client)
-      env = state.options.env || %{}
+      env = state.options.env
 
       assert env[:CLAUDE_CODE_ENTRYPOINT] == "custom-entrypoint"
       refute Map.has_key?(env, "CLAUDE_CODE_ENTRYPOINT")

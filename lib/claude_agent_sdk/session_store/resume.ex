@@ -113,7 +113,7 @@ defmodule ClaudeAgentSDK.SessionStore.Resume do
       project_dir = Path.join([tmp_dir, "projects", project_key])
       File.mkdir_p!(project_dir)
       write_jsonl(Path.join(project_dir, "#{session_id}.jsonl"), entries)
-      copy_auth_files(tmp_dir, options.env || %{})
+      copy_auth_files(tmp_dir, options.env)
       materialize_subkeys(options.session_store, tmp_dir, project_dir, project_key, session_id)
       {:ok, %__MODULE__{config_dir: tmp_dir, resume_session_id: session_id}}
     rescue

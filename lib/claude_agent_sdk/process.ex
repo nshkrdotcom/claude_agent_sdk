@@ -595,7 +595,7 @@ defmodule ClaudeAgentSDK.Process do
         value
 
       nil ->
-        (options.env || %{})
+        options.env
         |> Map.get(
           "CLAUDE_CONFIG_DIR",
           System.get_env("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
