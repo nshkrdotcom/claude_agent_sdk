@@ -4,7 +4,7 @@
       name: "default",
       files: %{
         included: ["lib/", "test/"],
-        excluded: [~r"/_build/", ~r"/deps/"]
+        excluded: ["_build/", "deps/"]
       },
       strict: true,
       color: true,
