@@ -242,7 +242,10 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
       |> String.pad_leading(20, "0")
 
     path = Path.join(queue_dir, "#{sequence}#{suffix}")
-    File.write!(path, payload)
+    temp_path = Path.join(queue_dir, ".#{sequence}#{suffix}.tmp")
+
+    File.write!(temp_path, payload)
+    File.rename!(temp_path, path)
     :ok
   end
 
@@ -303,6 +306,9 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
             return processed, False
 
         for name in entries:
+            if not (name.endswith(".raw") or name.endswith(".frame")):
+                continue
+
             path = os.path.join(queue_dir, name)
 
             if not os.path.isfile(path):
