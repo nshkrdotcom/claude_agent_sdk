@@ -768,11 +768,11 @@ hooks = %{
     # Match specific MCP tool
     Matcher.new("mcp__calc__add", [&log_add/3]),
 
-    # Match all tools from a server (regex)
-    Matcher.new("mcp__calc__.*", [&audit_calc/3]),
+    # Match known tools from a server with an explicit alternation string
+    Matcher.new("mcp__calc__add|mcp__calc__multiply", [&audit_calc/3]),
 
     # Match all MCP tools
-    Matcher.new("mcp__.*", [&log_mcp_usage/3])
+    Matcher.new("*", [&log_mcp_usage/3])
   ]
 }
 ```

@@ -9,14 +9,12 @@ defmodule PhoenixChatWeb.ChatChannelTest do
   alias PhoenixChatWeb.UserSocket
 
   setup do
-    # Start a ChatStore for tests
-    store_name = :"store_#{:erlang.unique_integer([:positive])}"
-    {:ok, _store_pid} = ChatStore.start_link(name: store_name)
+    {:ok, store} = ChatStore.start_link(name: nil)
 
     # Create a test chat
-    {:ok, chat} = ChatStore.create_chat(store_name, "Test Chat")
+    {:ok, chat} = ChatStore.create_chat(store, "Test Chat")
 
-    {:ok, store: store_name, chat: chat}
+    {:ok, store: store, chat: chat}
   end
 
   describe "join/3" do

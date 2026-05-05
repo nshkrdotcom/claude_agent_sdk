@@ -8,6 +8,19 @@ defmodule ClaudeAgentSDK.Tool.RegistryTest do
   alias ClaudeAgentSDK.TestEnvHelpers
   alias ClaudeAgentSDK.Tool.Registry
 
+  @concurrent_modules [
+    ConcurrentModule1,
+    ConcurrentModule2,
+    ConcurrentModule3,
+    ConcurrentModule4,
+    ConcurrentModule5,
+    ConcurrentModule6,
+    ConcurrentModule7,
+    ConcurrentModule8,
+    ConcurrentModule9,
+    ConcurrentModule10
+  ]
+
   setup do
     # Start a registry for each test
     {:ok, pid} = Registry.start_link([])
@@ -263,18 +276,20 @@ defmodule ClaudeAgentSDK.Tool.RegistryTest do
   describe "concurrent access" do
     test "handles concurrent registrations", %{registry: registry} do
       tasks =
-        for i <- 1..10 do
+        @concurrent_modules
+        |> Enum.with_index(1)
+        |> Enum.map(fn {module, i} ->
           Task.async(fn ->
             tool = %{
               name: "tool_#{i}",
               description: "Tool #{i}",
               input_schema: %{},
-              module: :"Module#{i}"
+              module: module
             }
 
             Registry.register_tool(registry, tool)
           end)
-        end
+        end)
 
       results = Enum.map(tasks, &Task.await/1)
       assert Enum.all?(results, &(&1 == :ok))

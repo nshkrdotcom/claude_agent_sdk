@@ -4,6 +4,12 @@ defmodule ResearchAgent.SubagentTrackerTest do
   alias ResearchAgent.SubagentTracker
 
   describe "start_link/1" do
+    test "starts the tracker with an unnamed ETS table" do
+      {:ok, pid} = SubagentTracker.start_link()
+      assert Process.alive?(pid)
+      GenServer.stop(pid)
+    end
+
     test "starts the tracker with a named ETS table" do
       {:ok, pid} = SubagentTracker.start_link(name: :test_tracker_1)
       assert Process.alive?(pid)
@@ -14,6 +20,10 @@ defmodule ResearchAgent.SubagentTrackerTest do
       {:ok, pid} = SubagentTracker.start_link(name: :test_tracker_2)
       assert :ets.whereis(:test_tracker_2) != :undefined
       GenServer.stop(pid)
+    end
+
+    test "rejects configurable non-atom ETS table names" do
+      assert {:error, :invalid_table_name} = SubagentTracker.start_link(name: "test_tracker")
     end
   end
 

@@ -682,7 +682,7 @@ Output.deny("Reason")
 # Match specific tool
 %Matcher{matcher: "Bash", hooks: [&callback/3]}
 
-# Match multiple tools (regex)
+# Match multiple tools with a Claude-native alternation string
 %Matcher{matcher: "Write|Edit", hooks: [&callback/3]}
 
 # Match all tools

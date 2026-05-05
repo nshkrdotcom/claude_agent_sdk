@@ -36,27 +36,31 @@ defmodule ClaudeAgentSDK.PromotionPathExampleBoundaryTest do
 
   defp source_references(source, forbidden_modules) do
     forbidden_parts = Enum.map(forbidden_modules, &Module.split/1)
+    forbidden_index = Map.new(forbidden_modules, &{Module.split(&1), &1})
 
     source
     |> Code.string_to_quoted!()
-    |> collect_forbidden_references(forbidden_parts)
+    |> collect_forbidden_references(forbidden_parts, forbidden_index)
   end
 
-  defp collect_forbidden_references(ast, forbidden_parts) do
+  defp collect_forbidden_references(ast, forbidden_parts, forbidden_index) do
     {_ast, refs} =
       Macro.prewalk(ast, [], fn
         {op, meta, [{:__aliases__, _, aliases} | _rest]} = node, refs
         when op in [:alias, :import, :require] ->
-          {node, references(op, aliases, meta, forbidden_parts) ++ refs}
+          {node, references(op, aliases, meta, forbidden_parts, forbidden_index) ++ refs}
 
         {{:., meta, [{:__aliases__, _, aliases}, function]}, _, _args} = node, refs ->
-          {node, references(:remote_call, aliases, meta, forbidden_parts, function) ++ refs}
+          {node,
+           references(:remote_call, aliases, meta, forbidden_parts, forbidden_index, function) ++
+             refs}
 
         {:apply, meta, [{:__aliases__, _, aliases}, _function, _args]} = node, refs ->
-          {node, references(:apply, aliases, meta, forbidden_parts) ++ refs}
+          {node, references(:apply, aliases, meta, forbidden_parts, forbidden_index) ++ refs}
 
         {:__aliases__, meta, aliases} = node, refs ->
-          {node, references(:module_reference, aliases, meta, forbidden_parts) ++ refs}
+          {node,
+           references(:module_reference, aliases, meta, forbidden_parts, forbidden_index) ++ refs}
 
         node, refs ->
           {node, refs}
@@ -65,12 +69,19 @@ defmodule ClaudeAgentSDK.PromotionPathExampleBoundaryTest do
     Enum.reverse(refs)
   end
 
-  defp references(kind, aliases, meta, forbidden_parts, function \\ nil) do
+  defp references(kind, aliases, meta, forbidden_parts, forbidden_index, function \\ nil) do
     parts = alias_parts(aliases)
     forbidden = Enum.find(forbidden_parts, &(Enum.take(parts, length(&1)) == &1))
 
     if forbidden do
-      [%{kind: kind, module: Module.concat(forbidden), function: function, line: meta[:line]}]
+      [
+        %{
+          kind: kind,
+          module: Map.fetch!(forbidden_index, forbidden),
+          function: function,
+          line: meta[:line]
+        }
+      ]
     else
       []
     end

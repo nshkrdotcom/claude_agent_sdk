@@ -16,7 +16,7 @@ defmodule ResearchAgent.SubagentTracker do
 
   ## Example
 
-      {:ok, tracker} = SubagentTracker.start_link(name: :my_tracker)
+      {:ok, tracker} = SubagentTracker.start_link()
 
       # Track agent spawn
       SubagentTracker.track_spawn(tracker, "agent_1", "researcher", %{topic: "AI"})
@@ -58,16 +58,27 @@ defmodule ResearchAgent.SubagentTracker do
 
   ## Options
 
-  - `:name` - Required. The name for the ETS table (atom)
+  - `:name` - Optional static source-owned atom for a named ETS table
 
   ## Example
 
       {:ok, pid} = SubagentTracker.start_link(name: :research_tracker)
   """
   @spec start_link(keyword()) :: GenServer.on_start()
-  def start_link(opts) do
-    name = Keyword.fetch!(opts, :name)
-    GenServer.start_link(__MODULE__, name, [])
+  def start_link(opts \\ []) do
+    case Keyword.fetch(opts, :name) do
+      {:ok, nil} ->
+        GenServer.start_link(__MODULE__, :unnamed, [])
+
+      {:ok, name} when is_atom(name) ->
+        GenServer.start_link(__MODULE__, {:named, name}, [])
+
+      {:ok, _invalid_name} ->
+        {:error, :invalid_table_name}
+
+      :error ->
+        GenServer.start_link(__MODULE__, :unnamed, [])
+    end
   end
 
   @doc """
@@ -161,9 +172,14 @@ defmodule ResearchAgent.SubagentTracker do
   # Server Callbacks
 
   @impl true
-  def init(table_name) do
+  def init({:named, table_name}) do
     table = :ets.new(table_name, [:named_table, :set, :public, {:read_concurrency, true}])
     {:ok, %{table: table, table_name: table_name}}
+  end
+
+  def init(:unnamed) do
+    table = :ets.new(__MODULE__, [:set, :public, {:read_concurrency, true}])
+    {:ok, %{table: table, table_name: nil}}
   end
 
   @impl true

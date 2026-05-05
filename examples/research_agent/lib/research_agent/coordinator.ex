@@ -67,14 +67,10 @@ defmodule ResearchAgent.Coordinator do
 
   @impl true
   def init(init_arg) do
-    # Generate unique names for this coordinator instance
-    tracker_name = :"tracker_#{init_arg.session_id}"
-    _logger_name = :"logger_#{init_arg.session_id}"
-
     children = [
       %{
         id: :subagent_tracker,
-        start: {SubagentTracker, :start_link, [[name: tracker_name]]}
+        start: {SubagentTracker, :start_link, [[]]}
       },
       %{
         id: :transcript_logger,

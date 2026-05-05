@@ -54,7 +54,12 @@ defmodule PhoenixChat.ChatStore do
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, __MODULE__)
-    GenServer.start_link(__MODULE__, opts, name: name)
+
+    if name do
+      GenServer.start_link(__MODULE__, opts, name: name)
+    else
+      GenServer.start_link(__MODULE__, opts)
+    end
   end
 
   @doc """

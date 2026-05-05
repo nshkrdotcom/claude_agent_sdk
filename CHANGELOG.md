@@ -1390,7 +1390,7 @@ Five complete, working examples in `examples/hooks/`:
 - ✅ PreCompact - Monitor context compaction
 
 **Capabilities:**
-- Pattern-based tool matching with regex support
+- Pattern-based tool matching with exact, alternation, and wildcard support
 - Permission control (allow/deny/ask user)
 - Context injection for intelligent conversations
 - Execution control (stop/continue)

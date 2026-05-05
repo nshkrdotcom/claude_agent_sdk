@@ -498,7 +498,7 @@ defmodule ClaudeAgentSDK.Hooks.Matcher do
       # Match specific tool
       Matcher.new("Bash", [&MyModule.check_bash/3])
 
-      # Match multiple tools with regex
+      # Match multiple tools with a Claude-native alternation string
       Matcher.new("Write|Edit", [&check_file_edit/3])
 
       # Match all tools

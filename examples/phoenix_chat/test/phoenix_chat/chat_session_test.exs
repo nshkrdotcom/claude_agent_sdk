@@ -15,7 +15,7 @@ defmodule PhoenixChat.ChatSessionTest do
     end
 
     test "can be registered with a name" do
-      name = :"session_#{:erlang.unique_integer([:positive])}"
+      name = :phoenix_chat_session_registration_test
       {:ok, _pid} = ChatSession.start_link(chat_id: "test-chat", name: name)
 
       assert ChatSession.get_chat_id(name) == "test-chat"

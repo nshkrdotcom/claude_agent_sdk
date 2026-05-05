@@ -554,7 +554,7 @@ end
 | Minimum version | 2.0.0 | 2.0.0 | Identical |
 | Recommended version | N/A | 2.0.75 | Elixir adds this |
 | Skip env var | Same | Same | `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK` |
-| Version regex | Same | Same | `\d+\.\d+\.\d+` |
+| Version parser | Same | Same | Structured semantic version parsing |
 | Warning on old version | Logger + stderr | Logger | Both warn appropriately |
 | Version comparison | Manual | Uses `Version` module | Elixir is cleaner |
 
