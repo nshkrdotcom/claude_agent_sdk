@@ -2,7 +2,7 @@ defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
   @app :claude_agent_sdk
-  @version "0.17.1"
+  @version "0.17.2"
   @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
   @homepage_url "https://hex.pm/packages/claude_agent_sdk"
   @docs_url "https://hexdocs.pm/claude_agent_sdk"
@@ -46,7 +46,7 @@ defmodule ClaudeAgentSdk.MixProject do
     [
       {:cli_subprocess_core, "~> 0.1.0"},
       {:jason, "~> 1.4"},
-      {:zoi, "~> 0.18"},
+      {:zoi, "~> 0.17"},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-05-05
+
+### Changed
+
+- Restore the SDK `zoi` dependency constraint to `~> 0.17` so the Claude CLI
+  v2 stream-event compatibility fix remains installable alongside the current
+  agentjido ecosystem while its packages still depend on `zoi ~> 0.17`.
+
 ## [0.17.1] - 2026-05-05
 
 ### Fixed
@@ -1529,7 +1537,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.1...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.2...HEAD
+[0.17.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.1...v0.17.2
 [0.17.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.16.0...v0.17.0
 [0.15.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.14.0...v0.15.0
