@@ -507,7 +507,8 @@ async def _check_claude_version(self) -> None:
     if not os.environ.get("CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK"):
         # Check version with 2-second timeout
         version_output = await get_version()
-        match = re.match(r"([0-9]+\.[0-9]+\.[0-9]+)", version_output)
+        version = version_output.split(" ", 1)[0]
+        version_parts = tuple(int(part) for part in version.split("."))
         if version_parts < min_parts:
             logger.warning(f"Warning: Claude Code version {version} is unsupported...")
 ```
