@@ -24,23 +24,23 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
 
   test "governed env builder uses only authority materialized env" do
     previous = %{
-      "ANTHROPIC_API_KEY" => System.get_env("ANTHROPIC_API_KEY"),
-      "CLAUDE_AGENT_OAUTH_TOKEN" => System.get_env("CLAUDE_AGENT_OAUTH_TOKEN"),
-      "ANTHROPIC_BASE_URL" => System.get_env("ANTHROPIC_BASE_URL"),
-      "PATH" => System.get_env("PATH"),
-      "HOME" => System.get_env("HOME")
+      "ANTHROPIC_API_KEY" => ClaudeAgentSDK.Env.get("ANTHROPIC_API_KEY"),
+      "CLAUDE_AGENT_OAUTH_TOKEN" => ClaudeAgentSDK.Env.get("CLAUDE_AGENT_OAUTH_TOKEN"),
+      "ANTHROPIC_BASE_URL" => ClaudeAgentSDK.Env.get("ANTHROPIC_BASE_URL"),
+      "PATH" => ClaudeAgentSDK.Env.get("PATH"),
+      "HOME" => ClaudeAgentSDK.Env.get("HOME")
     }
 
     on_exit(fn ->
       Enum.each(previous, fn
-        {key, nil} -> System.delete_env(key)
-        {key, value} -> System.put_env(key, value)
+        {key, nil} -> ClaudeAgentSDK.Env.delete(key)
+        {key, value} -> ClaudeAgentSDK.Env.put(key, value)
       end)
     end)
 
-    System.put_env("ANTHROPIC_API_KEY", "ambient-api-key")
-    System.put_env("CLAUDE_AGENT_OAUTH_TOKEN", "ambient-oauth")
-    System.put_env("ANTHROPIC_BASE_URL", "https://ambient.example")
+    ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", "ambient-api-key")
+    ClaudeAgentSDK.Env.put("CLAUDE_AGENT_OAUTH_TOKEN", "ambient-oauth")
+    ClaudeAgentSDK.Env.put("ANTHROPIC_BASE_URL", "https://ambient.example")
 
     env_map =
       %Options{governed_authority: authority()}
@@ -104,21 +104,25 @@ defmodule ClaudeAgentSDK.ProcessEnvTest do
 
   test "env builder propagates trace context and filters CLAUDECODE" do
     previous = %{
-      "TRACEPARENT" => System.get_env("TRACEPARENT"),
-      "TRACESTATE" => System.get_env("TRACESTATE"),
-      "CLAUDECODE" => System.get_env("CLAUDECODE")
+      "TRACEPARENT" => ClaudeAgentSDK.Env.get("TRACEPARENT"),
+      "TRACESTATE" => ClaudeAgentSDK.Env.get("TRACESTATE"),
+      "CLAUDECODE" => ClaudeAgentSDK.Env.get("CLAUDECODE")
     }
 
     on_exit(fn ->
       Enum.each(previous, fn
-        {key, nil} -> System.delete_env(key)
-        {key, value} -> System.put_env(key, value)
+        {key, nil} -> ClaudeAgentSDK.Env.delete(key)
+        {key, value} -> ClaudeAgentSDK.Env.put(key, value)
       end)
     end)
 
-    System.put_env("TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00")
-    System.put_env("TRACESTATE", "vendor=value")
-    System.put_env("CLAUDECODE", "internal")
+    ClaudeAgentSDK.Env.put(
+      "TRACEPARENT",
+      "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+    )
+
+    ClaudeAgentSDK.Env.put("TRACESTATE", "vendor=value")
+    ClaudeAgentSDK.Env.put("CLAUDECODE", "internal")
 
     env_map =
       %Options{env: %{"CLAUDECODE" => "explicit"}}

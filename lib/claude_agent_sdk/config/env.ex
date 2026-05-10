@@ -5,7 +5,7 @@ defmodule ClaudeAgentSDK.Config.Env do
   Using this module instead of bare string literals eliminates typo risk
   and provides a single grep-able registry:
 
-      System.get_env(ClaudeAgentSDK.Config.Env.anthropic_api_key())
+      ClaudeAgentSDK.Env.get(ClaudeAgentSDK.Config.Env.anthropic_api_key())
   """
 
   # -- Anthropic auth --------------------------------------------------------

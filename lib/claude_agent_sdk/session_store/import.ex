@@ -38,7 +38,7 @@ defmodule ClaudeAgentSDK.SessionStore.Import do
     projects_dir =
       Keyword.get(opts, :projects_dir) ||
         Path.join(
-          System.get_env("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude"),
+          ClaudeAgentSDK.Env.get("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude"),
           "projects"
         )
 

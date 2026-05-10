@@ -472,7 +472,7 @@ defmodule ClaudeAgentSDK.Query.CLIStream do
         options.env
         |> Map.get(
           "CLAUDE_CONFIG_DIR",
-          System.get_env("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
+          ClaudeAgentSDK.Env.get("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
         )
     end
   end

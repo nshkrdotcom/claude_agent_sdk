@@ -1,5 +1,13 @@
+example_repo_root = Path.expand("../..", __DIR__)
+
+unless Code.ensure_loaded?(DependencySources) do
+  Code.require_file(Path.join(example_repo_root, "build_support/dependency_sources.exs"))
+end
+
 defmodule SkillInvocation.MixProject do
   use Mix.Project
+
+  @repo_root Path.expand("../..", __DIR__)
 
   def project do
     [
@@ -22,9 +30,23 @@ defmodule SkillInvocation.MixProject do
 
   defp deps do
     [
-      {:claude_agent_sdk, path: "../.."},
+      claude_agent_sdk_dep(),
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
+  end
+
+  defp claude_agent_sdk_dep do
+    case DependencySources.dep(:claude_agent_sdk, @repo_root) do
+      {:claude_agent_sdk, opts} when is_list(opts) ->
+        if Keyword.has_key?(opts, :path) do
+          {:claude_agent_sdk, Keyword.put(opts, :path, "../..")}
+        else
+          {:claude_agent_sdk, opts}
+        end
+
+      dep ->
+        dep
+    end
   end
 end

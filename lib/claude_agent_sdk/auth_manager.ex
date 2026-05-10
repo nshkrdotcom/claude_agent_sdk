@@ -310,7 +310,10 @@ defmodule ClaudeAgentSDK.AuthManager do
     cond do
       env_key_present?() ->
         # Prefer CLAUDE_AGENT_OAUTH_TOKEN, fallback to ANTHROPIC_API_KEY
-        token = System.get_env(Env.oauth_token()) || System.get_env(Env.anthropic_api_key())
+        token =
+          ClaudeAgentSDK.Env.get(Env.oauth_token()) ||
+            ClaudeAgentSDK.Env.get(Env.anthropic_api_key())
+
         {:reply, {:ok, token}, state}
 
       valid_token?(state) ->
@@ -403,7 +406,8 @@ defmodule ClaudeAgentSDK.AuthManager do
 
   defp env_key_present? do
     # Check both ANTHROPIC_API_KEY and CLAUDE_AGENT_OAUTH_TOKEN
-    case {System.get_env(Env.anthropic_api_key()), System.get_env(Env.oauth_token())} do
+    case {ClaudeAgentSDK.Env.get(Env.anthropic_api_key()),
+          ClaudeAgentSDK.Env.get(Env.oauth_token())} do
       {nil, nil} -> false
       {"", ""} -> false
       {nil, ""} -> false
@@ -426,7 +430,7 @@ defmodule ClaudeAgentSDK.AuthManager do
   defp can_setup_interactively? do
     # Check if we're in an interactive environment
     # (has terminal, not in CI, etc.)
-    System.get_env(Env.ci()) != "true"
+    ClaudeAgentSDK.Env.get(Env.ci()) != "true"
   end
 
   defp perform_token_setup_work(state) do
@@ -450,8 +454,8 @@ defmodule ClaudeAgentSDK.AuthManager do
 
   defp detect_provider do
     cond do
-      System.get_env(Env.use_bedrock()) == "1" -> :bedrock
-      System.get_env(Env.use_vertex()) == "1" -> :vertex
+      ClaudeAgentSDK.Env.get(Env.use_bedrock()) == "1" -> :bedrock
+      ClaudeAgentSDK.Env.get(Env.use_vertex()) == "1" -> :vertex
       true -> :anthropic
     end
   end

@@ -164,9 +164,9 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
   setup do
     # Clean environment before each test
-    System.delete_env("ANTHROPIC_API_KEY")
-    System.delete_env("CLAUDE_AGENT_OAUTH_TOKEN")
-    System.delete_env("CI")
+    ClaudeAgentSDK.Env.delete("ANTHROPIC_API_KEY")
+    ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_OAUTH_TOKEN")
+    ClaudeAgentSDK.Env.delete("CI")
 
     # Start mock storage (ETS-based, survives restarts)
     MockStorage.start_link()
@@ -179,9 +179,9 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
     on_exit(fn ->
       # Clean up environment
-      System.delete_env("ANTHROPIC_API_KEY")
-      System.delete_env("CLAUDE_AGENT_OAUTH_TOKEN")
-      System.delete_env("CI")
+      ClaudeAgentSDK.Env.delete("ANTHROPIC_API_KEY")
+      ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_OAUTH_TOKEN")
+      ClaudeAgentSDK.Env.delete("CI")
 
       # Clear mock storage
       MockStorage.reset()
@@ -193,13 +193,13 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
   describe "ensure_authenticated/0" do
     test "returns :ok when ANTHROPIC_API_KEY is set" do
-      System.put_env("ANTHROPIC_API_KEY", "sk-ant-test-key")
+      ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", "sk-ant-test-key")
 
       assert :ok = AuthManager.ensure_authenticated()
     end
 
     test "returns :ok when CLAUDE_AGENT_OAUTH_TOKEN is set" do
-      System.put_env("CLAUDE_AGENT_OAUTH_TOKEN", "sk-ant-oat01-test-token")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_OAUTH_TOKEN", "sk-ant-oat01-test-token")
 
       assert :ok = AuthManager.ensure_authenticated()
     end
@@ -222,7 +222,7 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
     test "returns error when not authenticated and not interactive" do
       # Simulate non-interactive environment (CI)
-      System.put_env("CI", "true")
+      ClaudeAgentSDK.Env.put("CI", "true")
 
       assert {:error, :authentication_required} = AuthManager.ensure_authenticated()
     end
@@ -230,7 +230,7 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
   describe "governed authority mode" do
     test "ensure_authenticated accepts authority without reading env token" do
-      System.put_env("ANTHROPIC_API_KEY", "ambient-api-key")
+      ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", "ambient-api-key")
 
       assert :ok = AuthManager.ensure_authenticated(governed_authority: authority())
 
@@ -246,7 +246,7 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
 
     test "invalid governed authority fails without env fallback" do
-      System.put_env("ANTHROPIC_API_KEY", "ambient-api-key")
+      ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", "ambient-api-key")
 
       assert {:error, {:invalid_governed_authority, _reason}} =
                AuthManager.ensure_authenticated(governed_authority: [])
@@ -262,14 +262,14 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
   describe "get_token/0" do
     test "returns env var token when ANTHROPIC_API_KEY is set" do
-      System.put_env("ANTHROPIC_API_KEY", "sk-ant-test-key-from-env")
+      ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", "sk-ant-test-key-from-env")
 
       assert {:ok, "sk-ant-test-key-from-env"} = AuthManager.get_token()
     end
 
     test "prefers CLAUDE_AGENT_OAUTH_TOKEN over ANTHROPIC_API_KEY" do
-      System.put_env("ANTHROPIC_API_KEY", "sk-ant-api-key")
-      System.put_env("CLAUDE_AGENT_OAUTH_TOKEN", "sk-ant-oat01-oauth-token")
+      ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", "sk-ant-api-key")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_OAUTH_TOKEN", "sk-ant-oat01-oauth-token")
 
       assert {:ok, "sk-ant-oat01-oauth-token"} = AuthManager.get_token()
     end
@@ -339,9 +339,9 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
   describe "status/0" do
     test "returns authentication status when authenticated via env var" do
-      previous_vertex = System.get_env("CLAUDE_AGENT_USE_VERTEX")
-      previous_bedrock = System.get_env("CLAUDE_AGENT_USE_BEDROCK")
-      previous_anthropic = System.get_env("ANTHROPIC_API_KEY")
+      previous_vertex = ClaudeAgentSDK.Env.get("CLAUDE_AGENT_USE_VERTEX")
+      previous_bedrock = ClaudeAgentSDK.Env.get("CLAUDE_AGENT_USE_BEDROCK")
+      previous_anthropic = ClaudeAgentSDK.Env.get("ANTHROPIC_API_KEY")
 
       on_exit(fn ->
         restore_env("CLAUDE_AGENT_USE_VERTEX", previous_vertex)
@@ -349,9 +349,9 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
         restore_env("ANTHROPIC_API_KEY", previous_anthropic)
       end)
 
-      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
-      System.delete_env("CLAUDE_AGENT_USE_BEDROCK")
-      System.put_env("ANTHROPIC_API_KEY", "sk-ant-test-key")
+      ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_VERTEX")
+      ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_BEDROCK")
+      ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", "sk-ant-test-key")
 
       status = AuthManager.status()
 
@@ -394,9 +394,9 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
 
   describe "backend failures and async setup behavior" do
     setup do
-      previous_bedrock = System.get_env("CLAUDE_AGENT_USE_BEDROCK")
-      previous_vertex = System.get_env("CLAUDE_AGENT_USE_VERTEX")
-      previous_profile = System.get_env("AWS_PROFILE")
+      previous_bedrock = ClaudeAgentSDK.Env.get("CLAUDE_AGENT_USE_BEDROCK")
+      previous_vertex = ClaudeAgentSDK.Env.get("CLAUDE_AGENT_USE_VERTEX")
+      previous_profile = ClaudeAgentSDK.Env.get("AWS_PROFILE")
 
       on_exit(fn ->
         restore_env("CLAUDE_AGENT_USE_BEDROCK", previous_bedrock)
@@ -417,9 +417,9 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
 
     test "setup_token surfaces backend save failure without crashing manager" do
-      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
-      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
-      System.put_env("AWS_PROFILE", "test-profile")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_USE_BEDROCK", "1")
+      ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_VERTEX")
+      ClaudeAgentSDK.Env.put("AWS_PROFILE", "test-profile")
 
       :ok = stop_supervised(AuthManager)
       InstrumentedStorage.configure(save_return: {:error, :disk_full})
@@ -430,9 +430,9 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
 
     test "status remains responsive while setup_token is in progress" do
-      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
-      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
-      System.put_env("AWS_PROFILE", "test-profile")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_USE_BEDROCK", "1")
+      ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_VERTEX")
+      ClaudeAgentSDK.Env.put("AWS_PROFILE", "test-profile")
 
       :ok = stop_supervised(AuthManager)
 
@@ -455,9 +455,9 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
 
     test "concurrent setup_token calls are deduplicated while a setup is running" do
-      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
-      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
-      System.put_env("AWS_PROFILE", "test-profile")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_USE_BEDROCK", "1")
+      ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_VERTEX")
+      ClaudeAgentSDK.Env.put("AWS_PROFILE", "test-profile")
 
       :ok = stop_supervised(AuthManager)
 
@@ -479,9 +479,9 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
 
     test "setup_token returns strict task supervisor error without crashing manager" do
-      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
-      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
-      System.put_env("AWS_PROFILE", "test-profile")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_USE_BEDROCK", "1")
+      ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_VERTEX")
+      ClaudeAgentSDK.Env.put("AWS_PROFILE", "test-profile")
 
       TestEnvHelpers.with_task_supervisor_env(
         :missing_auth_manager_task_supervisor,
@@ -496,9 +496,9 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
 
     test "stale refresh messages are ignored after auth is cleared" do
-      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
-      System.delete_env("CLAUDE_AGENT_USE_VERTEX")
-      System.put_env("AWS_PROFILE", "test-profile")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_USE_BEDROCK", "1")
+      ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_VERTEX")
+      ClaudeAgentSDK.Env.put("AWS_PROFILE", "test-profile")
 
       :ok = stop_supervised(AuthManager)
       InstrumentedStorage.configure(save_return: :ok, clear_return: :ok)
@@ -541,8 +541,8 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
       # 3. Claude subscription
       # Should be run manually
 
-      System.delete_env("ANTHROPIC_API_KEY")
-      System.delete_env("CI")
+      ClaudeAgentSDK.Env.delete("ANTHROPIC_API_KEY")
+      ClaudeAgentSDK.Env.delete("CI")
 
       case AuthManager.setup_token() do
         {:ok, token} ->
@@ -564,8 +564,8 @@ defmodule ClaudeAgentSDK.AuthManagerTest do
     end
   end
 
-  defp restore_env(key, nil), do: System.delete_env(key)
-  defp restore_env(key, value), do: System.put_env(key, value)
+  defp restore_env(key, nil), do: ClaudeAgentSDK.Env.delete(key)
+  defp restore_env(key, value), do: ClaudeAgentSDK.Env.put(key, value)
 
   defp authority do
     [

@@ -6,12 +6,12 @@ defmodule ClaudeAgentSDK.ClientInitTimeoutEnvTest do
 
   setup do
     Process.flag(:trap_exit, true)
-    original = System.get_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT")
+    original = ClaudeAgentSDK.Env.get("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT")
 
     on_exit(fn ->
       case original do
-        nil -> System.delete_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT")
-        value -> System.put_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", value)
+        nil -> ClaudeAgentSDK.Env.delete("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT")
+        value -> ClaudeAgentSDK.Env.put("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", value)
       end
     end)
 
@@ -20,30 +20,30 @@ defmodule ClaudeAgentSDK.ClientInitTimeoutEnvTest do
 
   describe "init_timeout_seconds_from_env/0" do
     test "defaults to 60s when env is missing" do
-      System.delete_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT")
+      ClaudeAgentSDK.Env.delete("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT")
       assert Client.init_timeout_seconds_from_env() == 60
     end
 
     test "floors small or invalid values to 60s" do
-      System.put_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "1000")
+      ClaudeAgentSDK.Env.put("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "1000")
       assert Client.init_timeout_seconds_from_env() == 60
 
-      System.put_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "not-a-number")
+      ClaudeAgentSDK.Env.put("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "not-a-number")
       assert Client.init_timeout_seconds_from_env() == 60
     end
 
     test "parses milliseconds into seconds" do
-      System.put_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "120000")
+      ClaudeAgentSDK.Env.put("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "120000")
       assert Client.init_timeout_seconds_from_env() == 120
 
-      System.put_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "61500")
+      ClaudeAgentSDK.Env.put("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "61500")
       assert Client.init_timeout_seconds_from_env() == 61.5
     end
   end
 
   describe "initialize control wait timeout" do
     test "uses env-derived timeout when waiting for initialize response" do
-      System.put_env("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "120000")
+      ClaudeAgentSDK.Env.put("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "120000")
 
       fake_cli = FakeCLI.new!()
 

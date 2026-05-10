@@ -1,3 +1,7 @@
+unless Code.ensure_loaded?(DependencySources) do
+  Code.require_file("build_support/dependency_sources.exs", __DIR__)
+end
+
 defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
@@ -6,7 +10,6 @@ defmodule ClaudeAgentSdk.MixProject do
   @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
   @homepage_url "https://hex.pm/packages/claude_agent_sdk"
   @docs_url "https://hexdocs.pm/claude_agent_sdk"
-  @cli_subprocess_core_version "~> 0.1.0"
 
   def project do
     [
@@ -59,25 +62,7 @@ defmodule ClaudeAgentSdk.MixProject do
   end
 
   defp cli_subprocess_core_dep do
-    case local_dep_path("../cli_subprocess_core") do
-      nil -> {:cli_subprocess_core, @cli_subprocess_core_version}
-      path -> {:cli_subprocess_core, path: path}
-    end
-  end
-
-  defp local_dep_path(relative_path) do
-    if local_workspace_deps?() do
-      path = Path.expand(relative_path, __DIR__)
-      if File.dir?(path), do: path
-    end
-  end
-
-  defp local_workspace_deps? do
-    not hex_packaging_task?() and not Enum.member?(Path.split(__DIR__), "deps")
-  end
-
-  defp hex_packaging_task? do
-    Enum.any?(System.argv(), &(&1 in ["hex.build", "hex.publish"]))
+    DependencySources.dep(:cli_subprocess_core, __DIR__)
   end
 
   defp package do
@@ -104,18 +89,31 @@ defmodule ClaudeAgentSdk.MixProject do
           CHANGELOG.md
           .formatter.exs
           guides
-          examples
-        ),
-      exclude_patterns: [
-        "**/_build/**",
-        "**/deps/**",
-        "**/doc/**",
-        "**/*.beam",
-        "**/*.plt",
-        "**/*.plt.hash",
-        "examples/_output/**"
-      ]
+          build_support
+        ) ++ example_package_files()
     ]
+  end
+
+  defp example_package_files do
+    "examples/**/*"
+    |> Path.wildcard(match_dot: true)
+    |> Enum.reject(&File.dir?/1)
+    |> Enum.reject(&example_artifact?/1)
+  end
+
+  defp example_artifact?(path) do
+    artifact_segments = [
+      "/_build/",
+      "/deps/",
+      "/doc/",
+      "/cover/",
+      "/priv/plts/",
+      "/_output/",
+      "/tmp/"
+    ]
+
+    Enum.any?(artifact_segments, &String.contains?(path, &1)) or
+      String.ends_with?(path, [".beam", ".plt", ".plt.hash", ".db", ".sqlite", ".sqlite3"])
   end
 
   defp description do

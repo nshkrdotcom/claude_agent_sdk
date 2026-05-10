@@ -515,7 +515,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
         {true, %{method: "Ollama", source: "anthropic_compatible"}}
 
       {false, true, _, _} ->
-        source = if System.get_env(Env.anthropic_api_key()), do: "env", else: "session"
+        source = if ClaudeAgentSDK.Env.get(Env.anthropic_api_key()), do: "env", else: "session"
         {true, %{method: "Anthropic API", source: source}}
 
       {false, false, true, _} ->
@@ -530,7 +530,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp check_anthropic_auth do
-    if System.get_env(Env.anthropic_api_key()) do
+    if ClaudeAgentSDK.Env.get(Env.anthropic_api_key()) do
       true
     else
       check_cli_session()
@@ -539,7 +539,7 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp check_anthropic_auth(executable) do
     # Check environment variable first
-    if System.get_env(Env.anthropic_api_key()) do
+    if ClaudeAgentSDK.Env.get(Env.anthropic_api_key()) do
       true
     else
       check_cli_session(executable)
@@ -547,17 +547,17 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp check_bedrock_auth do
-    System.get_env(Env.use_bedrock()) == "1" and check_aws_credentials()
+    ClaudeAgentSDK.Env.get(Env.use_bedrock()) == "1" and check_aws_credentials()
   end
 
   defp check_vertex_auth do
-    System.get_env(Env.use_vertex()) == "1" and check_gcp_credentials()
+    ClaudeAgentSDK.Env.get(Env.use_vertex()) == "1" and check_gcp_credentials()
   end
 
   defp check_ollama_auth do
     case {
-      System.get_env(Env.anthropic_auth_token()),
-      System.get_env(Env.anthropic_base_url())
+      ClaudeAgentSDK.Env.get(Env.anthropic_auth_token()),
+      ClaudeAgentSDK.Env.get(Env.anthropic_base_url())
     } do
       {"ollama", base_url} when is_binary(base_url) and base_url != "" ->
         ollama_api_reachable?(base_url)
@@ -569,16 +569,16 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp api_key_source_from_env do
     cond do
-      is_binary(System.get_env(Env.anthropic_api_key())) ->
+      is_binary(ClaudeAgentSDK.Env.get(Env.anthropic_api_key())) ->
         {:ok, "environment variable ANTHROPIC_API_KEY"}
 
       ollama_env_configured?() ->
         ollama_api_source()
 
-      System.get_env(Env.use_bedrock()) == "1" ->
+      ClaudeAgentSDK.Env.get(Env.use_bedrock()) == "1" ->
         bedrock_api_source()
 
-      System.get_env(Env.use_vertex()) == "1" ->
+      ClaudeAgentSDK.Env.get(Env.use_vertex()) == "1" ->
         vertex_api_source()
 
       true ->
@@ -587,8 +587,8 @@ defmodule ClaudeAgentSDK.AuthChecker do
   end
 
   defp ollama_env_configured? do
-    System.get_env(Env.anthropic_auth_token()) == "ollama" and
-      is_binary(System.get_env(Env.anthropic_base_url()))
+    ClaudeAgentSDK.Env.get(Env.anthropic_auth_token()) == "ollama" and
+      is_binary(ClaudeAgentSDK.Env.get(Env.anthropic_base_url()))
   end
 
   defp ollama_api_source do
@@ -641,15 +641,15 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp check_aws_credentials do
     # Check for AWS credentials in common locations
-    System.get_env(Env.aws_access_key_id()) != nil or
-      System.get_env(Env.aws_profile()) != nil or
+    ClaudeAgentSDK.Env.get(Env.aws_access_key_id()) != nil or
+      ClaudeAgentSDK.Env.get(Env.aws_profile()) != nil or
       File.exists?(Path.expand(Auth.aws_credentials_path()))
   end
 
   defp check_gcp_credentials do
     # Check for GCP credentials
-    System.get_env(Env.gcp_credentials()) != nil or
-      System.get_env(Env.gcp_project()) != nil or
+    ClaudeAgentSDK.Env.get(Env.gcp_credentials()) != nil or
+      ClaudeAgentSDK.Env.get(Env.gcp_project()) != nil or
       File.exists?(Path.expand(Auth.gcp_credentials_path()))
   end
 
@@ -704,10 +704,10 @@ defmodule ClaudeAgentSDK.AuthChecker do
 
   defp get_provider_specific_recommendations do
     case {
-      System.get_env(Env.anthropic_auth_token()),
-      System.get_env(Env.anthropic_base_url()),
-      System.get_env(Env.use_bedrock()),
-      System.get_env(Env.use_vertex())
+      ClaudeAgentSDK.Env.get(Env.anthropic_auth_token()),
+      ClaudeAgentSDK.Env.get(Env.anthropic_base_url()),
+      ClaudeAgentSDK.Env.get(Env.use_bedrock()),
+      ClaudeAgentSDK.Env.get(Env.use_vertex())
     } do
       {"ollama", base_url, _, _} when is_binary(base_url) and base_url != "" ->
         [

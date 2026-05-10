@@ -9,7 +9,7 @@ defmodule ClaudeAgentSDK.BuildEnv do
   end
 
   defp normalize_env(nil) do
-    case System.get_env("MIX_ENV") do
+    case ClaudeAgentSDK.Env.get("MIX_ENV") do
       nil -> :prod
       env -> normalize_env(env)
     end

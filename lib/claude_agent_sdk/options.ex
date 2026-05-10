@@ -1311,7 +1311,7 @@ defmodule ClaudeAgentSDK.Options do
   defp maybe_put_model_input_attr(attrs, key, value), do: Map.put(attrs, key, value)
 
   defp provider_backend(%__MODULE__{provider_backend: nil}) do
-    case System.get_env(Env.provider_backend()) do
+    case ClaudeAgentSDK.Env.get(Env.provider_backend()) do
       nil -> nil
       value -> normalize_provider_backend(value)
     end
@@ -1329,11 +1329,11 @@ defmodule ClaudeAgentSDK.Options do
     |> String.downcase()
   end
 
-  defp env_model(%__MODULE__{model: nil}), do: System.get_env(Env.anthropic_model())
+  defp env_model(%__MODULE__{model: nil}), do: ClaudeAgentSDK.Env.get(Env.anthropic_model())
   defp env_model(_options), do: nil
 
   defp external_model_overrides(%__MODULE__{external_model_overrides: nil}) do
-    case System.get_env(Env.external_model_overrides()) do
+    case ClaudeAgentSDK.Env.get(Env.external_model_overrides()) do
       nil ->
         nil
 
@@ -1358,12 +1358,12 @@ defmodule ClaudeAgentSDK.Options do
        do: overrides
 
   defp anthropic_base_url(%__MODULE__{anthropic_base_url: nil}),
-    do: System.get_env(Env.anthropic_base_url())
+    do: ClaudeAgentSDK.Env.get(Env.anthropic_base_url())
 
   defp anthropic_base_url(%__MODULE__{anthropic_base_url: value}), do: value
 
   defp anthropic_auth_token(%__MODULE__{anthropic_auth_token: nil}),
-    do: System.get_env(Env.anthropic_auth_token())
+    do: ClaudeAgentSDK.Env.get(Env.anthropic_auth_token())
 
   defp anthropic_auth_token(%__MODULE__{anthropic_auth_token: value}), do: value
 

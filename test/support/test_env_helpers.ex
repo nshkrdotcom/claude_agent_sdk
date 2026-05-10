@@ -47,12 +47,19 @@ defmodule ClaudeAgentSDK.TestEnvHelpers do
     with_global_state(fn ->
       previous =
         overrides
-        |> Enum.map(fn {key, _value} -> {key, System.get_env(key)} end)
+        |> Enum.map(fn {key, _value} ->
+          {key, {System.get_env(key), ClaudeAgentSDK.Env.get(key)}}
+        end)
         |> Map.new()
 
       Enum.each(overrides, fn
-        {key, nil} -> System.delete_env(key)
-        {key, value} -> System.put_env(key, value)
+        {key, nil} ->
+          System.delete_env(key)
+          ClaudeAgentSDK.Env.delete(key)
+
+        {key, value} ->
+          System.put_env(key, value)
+          ClaudeAgentSDK.Env.put(key, value)
       end)
 
       try do
@@ -92,7 +99,9 @@ defmodule ClaudeAgentSDK.TestEnvHelpers do
     with_global_state(fn ->
       previous_system =
         system_overrides
-        |> Enum.map(fn {key, _value} -> {key, System.get_env(key)} end)
+        |> Enum.map(fn {key, _value} ->
+          {key, {System.get_env(key), ClaudeAgentSDK.Env.get(key)}}
+        end)
         |> Map.new()
 
       previous_app =
@@ -101,8 +110,13 @@ defmodule ClaudeAgentSDK.TestEnvHelpers do
         |> Map.new()
 
       Enum.each(system_overrides, fn
-        {key, nil} -> System.delete_env(key)
-        {key, value} -> System.put_env(key, value)
+        {key, nil} ->
+          System.delete_env(key)
+          ClaudeAgentSDK.Env.delete(key)
+
+        {key, value} ->
+          System.put_env(key, value)
+          ClaudeAgentSDK.Env.put(key, value)
       end)
 
       Enum.each(app_overrides, fn
@@ -124,8 +138,21 @@ defmodule ClaudeAgentSDK.TestEnvHelpers do
 
   defp restore_system_env(previous) do
     Enum.each(previous, fn
-      {key, nil} -> System.delete_env(key)
-      {key, value} -> System.put_env(key, value)
+      {key, {nil, nil}} ->
+        System.delete_env(key)
+        ClaudeAgentSDK.Env.delete(key)
+
+      {key, {nil, app_value}} ->
+        System.delete_env(key)
+        ClaudeAgentSDK.Env.put(key, app_value)
+
+      {key, {value, nil}} ->
+        System.put_env(key, value)
+        ClaudeAgentSDK.Env.delete(key)
+
+      {key, {value, app_value}} ->
+        System.put_env(key, value)
+        ClaudeAgentSDK.Env.put(key, app_value)
     end)
   end
 

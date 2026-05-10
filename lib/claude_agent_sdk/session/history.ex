@@ -1150,7 +1150,7 @@ defmodule ClaudeAgentSDK.Session.History do
   end
 
   defp claude_config_home_dir do
-    case System.get_env("CLAUDE_CONFIG_DIR") do
+    case ClaudeAgentSDK.Env.get("CLAUDE_CONFIG_DIR") do
       nil -> Path.join(System.user_home!(), ".claude") |> normalize_nfc()
       config_dir -> normalize_nfc(config_dir)
     end

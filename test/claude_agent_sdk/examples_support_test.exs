@@ -127,11 +127,11 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
       restore_env(restore)
     end)
 
-    System.delete_env("CLAUDE_AGENT_PROVIDER_BACKEND")
-    System.delete_env("CLAUDE_EXAMPLES_BACKEND")
-    System.delete_env("ANTHROPIC_AUTH_TOKEN")
-    System.delete_env("ANTHROPIC_BASE_URL")
-    System.delete_env("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS")
+    ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_PROVIDER_BACKEND")
+    ClaudeAgentSDK.Env.delete("CLAUDE_EXAMPLES_BACKEND")
+    ClaudeAgentSDK.Env.delete("ANTHROPIC_AUTH_TOKEN")
+    ClaudeAgentSDK.Env.delete("ANTHROPIC_BASE_URL")
+    ClaudeAgentSDK.Env.delete("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS")
 
     assert ExamplesSupport.preflight_timeout_seconds() == 30
     assert ExamplesSupport.preflight_timeout_ms() == 30_000
@@ -144,8 +144,8 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
       restore_env(restore)
     end)
 
-    System.put_env("CLAUDE_AGENT_PROVIDER_BACKEND", "ollama")
-    System.delete_env("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS")
+    ClaudeAgentSDK.Env.put("CLAUDE_AGENT_PROVIDER_BACKEND", "ollama")
+    ClaudeAgentSDK.Env.delete("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS")
 
     assert ExamplesSupport.preflight_timeout_seconds() == 60
     assert ExamplesSupport.preflight_timeout_ms() == 60_000
@@ -158,8 +158,8 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
       restore_env(restore)
     end)
 
-    System.put_env("CLAUDE_AGENT_PROVIDER_BACKEND", "ollama")
-    System.put_env("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS", "75")
+    ClaudeAgentSDK.Env.put("CLAUDE_AGENT_PROVIDER_BACKEND", "ollama")
+    ClaudeAgentSDK.Env.put("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS", "75")
 
     assert ExamplesSupport.preflight_timeout_seconds() == 75
     assert ExamplesSupport.preflight_timeout_ms() == 75_000
@@ -172,12 +172,12 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
       restore_env(restore)
     end)
 
-    System.put_env("CLAUDE_AGENT_PROVIDER_BACKEND", "ollama")
+    ClaudeAgentSDK.Env.put("CLAUDE_AGENT_PROVIDER_BACKEND", "ollama")
 
     assert ExamplesSupport.preflight_auth_hint() =~ "Ollama"
     assert ExamplesSupport.preflight_timeout_hint() =~ "Ollama"
 
-    System.put_env("CLAUDE_AGENT_PROVIDER_BACKEND", "anthropic")
+    ClaudeAgentSDK.Env.put("CLAUDE_AGENT_PROVIDER_BACKEND", "anthropic")
 
     assert ExamplesSupport.preflight_auth_hint() =~ "claude login"
     assert ExamplesSupport.preflight_timeout_hint() =~ "CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS"
@@ -185,19 +185,19 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
 
   defp capture_env do
     %{
-      "CLAUDE_AGENT_PROVIDER_BACKEND" => System.get_env("CLAUDE_AGENT_PROVIDER_BACKEND"),
-      "CLAUDE_EXAMPLES_BACKEND" => System.get_env("CLAUDE_EXAMPLES_BACKEND"),
-      "ANTHROPIC_AUTH_TOKEN" => System.get_env("ANTHROPIC_AUTH_TOKEN"),
-      "ANTHROPIC_BASE_URL" => System.get_env("ANTHROPIC_BASE_URL"),
+      "CLAUDE_AGENT_PROVIDER_BACKEND" => ClaudeAgentSDK.Env.get("CLAUDE_AGENT_PROVIDER_BACKEND"),
+      "CLAUDE_EXAMPLES_BACKEND" => ClaudeAgentSDK.Env.get("CLAUDE_EXAMPLES_BACKEND"),
+      "ANTHROPIC_AUTH_TOKEN" => ClaudeAgentSDK.Env.get("ANTHROPIC_AUTH_TOKEN"),
+      "ANTHROPIC_BASE_URL" => ClaudeAgentSDK.Env.get("ANTHROPIC_BASE_URL"),
       "CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS" =>
-        System.get_env("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS")
+        ClaudeAgentSDK.Env.get("CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS")
     }
   end
 
   defp restore_env(env) when is_map(env) do
     Enum.each(env, fn
-      {key, nil} -> System.delete_env(key)
-      {key, value} -> System.put_env(key, value)
+      {key, nil} -> ClaudeAgentSDK.Env.delete(key)
+      {key, value} -> ClaudeAgentSDK.Env.put(key, value)
     end)
   end
 

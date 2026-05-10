@@ -12,12 +12,12 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
     lock_id = TestEnvHelpers.acquire_global_state_lock()
 
     previous = %{
-      provider_backend: System.get_env(Env.provider_backend()),
-      anthropic_model: System.get_env(Env.anthropic_model())
+      provider_backend: ClaudeAgentSDK.Env.get(Env.provider_backend()),
+      anthropic_model: ClaudeAgentSDK.Env.get(Env.anthropic_model())
     }
 
-    System.put_env(Env.provider_backend(), "anthropic")
-    System.put_env(Env.anthropic_model(), "sonnet")
+    ClaudeAgentSDK.Env.put(Env.provider_backend(), "anthropic")
+    ClaudeAgentSDK.Env.put(Env.anthropic_model(), "sonnet")
 
     on_exit(fn ->
       restore_env(Env.provider_backend(), previous.provider_backend)
@@ -665,6 +665,6 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
     end
   end
 
-  defp restore_env(key, nil), do: System.delete_env(key)
-  defp restore_env(key, value), do: System.put_env(key, value)
+  defp restore_env(key, nil), do: ClaudeAgentSDK.Env.delete(key)
+  defp restore_env(key, value), do: ClaudeAgentSDK.Env.put(key, value)
 end

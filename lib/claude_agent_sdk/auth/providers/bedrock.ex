@@ -37,8 +37,8 @@ defmodule ClaudeAgentSDK.Auth.Providers.Bedrock do
   end
 
   defp aws_credentials_available? do
-    System.get_env(Env.aws_access_key_id()) != nil ||
-      System.get_env(Env.aws_profile()) != nil ||
+    ClaudeAgentSDK.Env.get(Env.aws_access_key_id()) != nil ||
+      ClaudeAgentSDK.Env.get(Env.aws_profile()) != nil ||
       File.exists?(Path.expand(Auth.aws_credentials_path()))
   end
 end

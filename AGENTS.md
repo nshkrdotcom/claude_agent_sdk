@@ -9,7 +9,21 @@
 ## Execution Plane Stack
 - This SDK sits above `cli_subprocess_core`; do not expose raw `ExecutionPlane.*` internals in public APIs or docs.
 - Use `CliSubprocessCore` facades for execution surfaces, transport errors, transport info, process exits, sessions, commands, and provider model policy.
-- Keep `cli_subprocess_core` dependency resolution publish-aware: local path deps for sibling development, Hex constraints for release builds.
+- Dependency source selection is handled by `build_support/dependency_sources.exs`
+  and `build_support/dependency_sources.config.exs`; local overrides use
+  `.dependency_sources.local.exs`.
+- Keep `cli_subprocess_core` dependency resolution publish-aware: local path
+  deps for sibling development, GitHub fallback for clean clones, and Hex
+  constraints for release builds.
+- Dependency source selection must not use environment variables.
+- This repo is not a Weld consumer in this pass and must not receive a blind
+  Weld dependency. Weld verification is limited to discovered Weld consumers.
+- Runtime application code under `lib/**` must not call direct OS env APIs such
+  as `System.get_env`, `System.fetch_env`, `System.put_env`, or
+  `System.delete_env`.
+- Runtime and deployment env reads belong in `config/runtime.exs` or an
+  explicit `Config.Provider`; runtime modules read materialized values through
+  `ClaudeAgentSDK.Env` or explicit caller options.
 
 ## ASM Boundary
 - Claude-native controls such as hooks, MCP, permissions, permission callbacks, allowed/disallowed tools, settings, agents, control-client flows, and native system prompt channels belong in this SDK.

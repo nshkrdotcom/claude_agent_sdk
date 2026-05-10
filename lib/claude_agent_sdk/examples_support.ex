@@ -341,7 +341,7 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   end
 
   defp preflight_model do
-    case System.get_env("ANTHROPIC_MODEL") do
+    case ClaudeAgentSDK.Env.get("ANTHROPIC_MODEL") do
       model when is_binary(model) and model != "" -> model
       _ -> "haiku"
     end
@@ -432,8 +432,8 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
       normalized_env("CLAUDE_EXAMPLES_BACKEND") == "ollama" ->
         :ollama
 
-      System.get_env("ANTHROPIC_AUTH_TOKEN") == "ollama" and
-          present?(System.get_env("ANTHROPIC_BASE_URL")) ->
+      ClaudeAgentSDK.Env.get("ANTHROPIC_AUTH_TOKEN") == "ollama" and
+          present?(ClaudeAgentSDK.Env.get("ANTHROPIC_BASE_URL")) ->
         :ollama
 
       true ->
@@ -442,7 +442,7 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   end
 
   defp env_positive_integer(name) when is_binary(name) do
-    case System.get_env(name) do
+    case ClaudeAgentSDK.Env.get(name) do
       value when is_binary(value) ->
         case Integer.parse(String.trim(value)) do
           {parsed, ""} when parsed > 0 -> parsed
@@ -461,7 +461,7 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   defp normalize_example_cwd(path) when is_binary(path), do: String.trim(path)
 
   defp normalized_env(name) when is_binary(name) do
-    case System.get_env(name) do
+    case ClaudeAgentSDK.Env.get(name) do
       nil -> nil
       value -> value |> String.trim() |> String.downcase()
     end

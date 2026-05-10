@@ -155,7 +155,7 @@ defmodule ClaudeAgentSDK.CLI do
   """
   @spec warn_if_outdated() :: :ok
   def warn_if_outdated do
-    if System.get_env(Env.skip_version_check()) do
+    if ClaudeAgentSDK.Env.get(Env.skip_version_check()) do
       :ok
     else
       do_warn_if_outdated()

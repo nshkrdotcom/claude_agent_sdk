@@ -36,8 +36,8 @@ defmodule ClaudeAgentSDK.Auth.Providers.Vertex do
   end
 
   defp gcp_credentials_available? do
-    System.get_env(Env.gcp_credentials()) != nil ||
-      System.get_env(Env.gcp_project()) != nil ||
+    ClaudeAgentSDK.Env.get(Env.gcp_credentials()) != nil ||
+      ClaudeAgentSDK.Env.get(Env.gcp_project()) != nil ||
       File.exists?(Path.expand(Auth.gcp_credentials_path()))
   end
 end

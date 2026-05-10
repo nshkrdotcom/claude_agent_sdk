@@ -6,7 +6,7 @@ defmodule ClaudeAgentSDK.Runtime do
 
   @spec use_mock?() :: boolean()
   def use_mock? do
-    case {System.get_env(Env.live_mode()), System.get_env(Env.live_tests())} do
+    case {ClaudeAgentSDK.Env.get(Env.live_mode()), ClaudeAgentSDK.Env.get(Env.live_tests())} do
       {"true", _} -> false
       {_, "true"} -> false
       _ -> Config.use_mock?()

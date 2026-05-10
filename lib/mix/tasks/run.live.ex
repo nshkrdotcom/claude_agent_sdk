@@ -41,7 +41,7 @@ defmodule Mix.Tasks.Run.Live do
         end
 
         # Mark that we're running in live mode (checked by Process.use_mock?)
-        System.put_env("LIVE_MODE", "true")
+        ClaudeAgentSDK.Env.put("LIVE_MODE", "true")
 
         # Configure the application for live API
         # Note: This must be done BEFORE the script runs
@@ -53,7 +53,7 @@ defmodule Mix.Tasks.Run.Live do
         IO.puts("")
 
         # Set script arguments for System.argv()
-        System.put_env("ARGV", Enum.join(script_args, " "))
+        ClaudeAgentSDK.Env.put("ARGV", Enum.join(script_args, " "))
 
         # Run the script using Mix.Task module
         Mix.Task.run("run", [script_path | script_args])

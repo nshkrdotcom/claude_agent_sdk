@@ -1516,7 +1516,7 @@ defmodule ClaudeAgentSDK.Client do
   @doc false
   @spec init_timeout_seconds_from_env() :: number()
   def init_timeout_seconds_from_env do
-    env_value = System.get_env(Env.stream_close_timeout())
+    env_value = ClaudeAgentSDK.Env.get(Env.stream_close_timeout())
 
     parsed_ms =
       case env_value do

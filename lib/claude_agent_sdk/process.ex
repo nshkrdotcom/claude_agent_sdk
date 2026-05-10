@@ -341,7 +341,7 @@ defmodule ClaudeAgentSDK.Process do
     base_env =
       Env.passthrough_vars()
       |> Enum.reduce(%{}, fn var, acc ->
-        case System.get_env(var) do
+        case ClaudeAgentSDK.Env.get(var) do
           nil -> acc
           "" -> acc
           value -> Map.put(acc, var, value)
@@ -598,7 +598,7 @@ defmodule ClaudeAgentSDK.Process do
         options.env
         |> Map.get(
           "CLAUDE_CONFIG_DIR",
-          System.get_env("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
+          ClaudeAgentSDK.Env.get("CLAUDE_CONFIG_DIR") || Path.join(System.user_home!(), ".claude")
         )
     end
   end

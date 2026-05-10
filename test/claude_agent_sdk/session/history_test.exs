@@ -16,8 +16,8 @@ defmodule ClaudeAgentSDK.Session.HistoryTest do
     projects_dir = Path.join(config_dir, "projects")
     File.mkdir_p!(projects_dir)
 
-    original_config_dir = System.get_env("CLAUDE_CONFIG_DIR")
-    System.put_env("CLAUDE_CONFIG_DIR", config_dir)
+    original_config_dir = ClaudeAgentSDK.Env.get("CLAUDE_CONFIG_DIR")
+    ClaudeAgentSDK.Env.put("CLAUDE_CONFIG_DIR", config_dir)
 
     on_exit(fn ->
       restore_env("CLAUDE_CONFIG_DIR", original_config_dir)
@@ -660,8 +660,8 @@ defmodule ClaudeAgentSDK.Session.HistoryTest do
     end
   end
 
-  defp restore_env(key, nil), do: System.delete_env(key)
-  defp restore_env(key, value), do: System.put_env(key, value)
+  defp restore_env(key, nil), do: ClaudeAgentSDK.Env.delete(key)
+  defp restore_env(key, value), do: ClaudeAgentSDK.Env.put(key, value)
 
   defp make_project_dir(config_dir, project_path) do
     sanitized_dir = History.sanitize_path(project_path)
@@ -792,7 +792,7 @@ defmodule ClaudeAgentSDK.Session.HistoryTest do
   end
 
   defp prepend_path(path) do
-    case System.get_env("PATH") do
+    case ClaudeAgentSDK.Env.get("PATH") do
       nil -> path
       current -> path <> path_separator() <> current
     end

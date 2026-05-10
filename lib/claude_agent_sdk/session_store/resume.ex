@@ -178,7 +178,7 @@ defmodule ClaudeAgentSDK.SessionStore.Resume do
   end
 
   defp copy_auth_files(tmp_dir, env) do
-    config_dir = Map.get(env, "CLAUDE_CONFIG_DIR") || System.get_env("CLAUDE_CONFIG_DIR")
+    config_dir = Map.get(env, "CLAUDE_CONFIG_DIR") || ClaudeAgentSDK.Env.get("CLAUDE_CONFIG_DIR")
     source_config_dir = config_dir || Path.join(System.user_home!(), ".claude")
 
     copy_if_present(

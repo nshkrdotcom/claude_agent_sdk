@@ -19,16 +19,16 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
 
   describe "governed authority auth checks" do
     test "valid governed authority ignores ambient standalone env" do
-      previous_api_key = System.get_env("ANTHROPIC_API_KEY")
-      previous_oauth = System.get_env("CLAUDE_AGENT_OAUTH_TOKEN")
+      previous_api_key = ClaudeAgentSDK.Env.get("ANTHROPIC_API_KEY")
+      previous_oauth = ClaudeAgentSDK.Env.get("CLAUDE_AGENT_OAUTH_TOKEN")
 
       on_exit(fn ->
         restore_env("ANTHROPIC_API_KEY", previous_api_key)
         restore_env("CLAUDE_AGENT_OAUTH_TOKEN", previous_oauth)
       end)
 
-      System.put_env("ANTHROPIC_API_KEY", "ambient-api-key")
-      System.put_env("CLAUDE_AGENT_OAUTH_TOKEN", "ambient-oauth")
+      ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", "ambient-api-key")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_OAUTH_TOKEN", "ambient-oauth")
 
       assert {:ok, "Governed authority materialized"} =
                AuthChecker.check_auth(governed_authority: authority())
@@ -50,9 +50,9 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
     end
 
     test "invalid governed authority does not fall back to env" do
-      previous_api_key = System.get_env("ANTHROPIC_API_KEY")
+      previous_api_key = ClaudeAgentSDK.Env.get("ANTHROPIC_API_KEY")
       on_exit(fn -> restore_env("ANTHROPIC_API_KEY", previous_api_key) end)
-      System.put_env("ANTHROPIC_API_KEY", "ambient-api-key")
+      ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", "ambient-api-key")
 
       assert {:error, message} = AuthChecker.check_auth(governed_authority: [])
       assert String.contains?(message, "Invalid governed authority")
@@ -231,21 +231,21 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
 
     test "detects environment variable when set" do
       # Mock the environment variable
-      System.put_env("ANTHROPIC_API_KEY", "test-key")
+      ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", "test-key")
 
       try do
         {:ok, source} = AuthChecker.get_api_key_source()
         assert String.contains?(source, "ANTHROPIC_API_KEY")
       after
-        System.delete_env("ANTHROPIC_API_KEY")
+        ClaudeAgentSDK.Env.delete("ANTHROPIC_API_KEY")
       end
     end
 
     test "detects bedrock configuration when set" do
-      original_api = System.get_env("ANTHROPIC_API_KEY")
-      System.delete_env("ANTHROPIC_API_KEY")
-      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
-      System.put_env("AWS_ACCESS_KEY_ID", "test-key")
+      original_api = ClaudeAgentSDK.Env.get("ANTHROPIC_API_KEY")
+      ClaudeAgentSDK.Env.delete("ANTHROPIC_API_KEY")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_USE_BEDROCK", "1")
+      ClaudeAgentSDK.Env.put("AWS_ACCESS_KEY_ID", "test-key")
 
       try do
         result = AuthChecker.get_api_key_source()
@@ -256,17 +256,17 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
           {:error, _} -> :ok
         end
       after
-        if original_api, do: System.put_env("ANTHROPIC_API_KEY", original_api)
-        System.delete_env("CLAUDE_AGENT_USE_BEDROCK")
-        System.delete_env("AWS_ACCESS_KEY_ID")
+        if original_api, do: ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", original_api)
+        ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_BEDROCK")
+        ClaudeAgentSDK.Env.delete("AWS_ACCESS_KEY_ID")
       end
     end
 
     test "detects vertex configuration when set" do
-      original_api = System.get_env("ANTHROPIC_API_KEY")
-      System.delete_env("ANTHROPIC_API_KEY")
-      System.put_env("CLAUDE_AGENT_USE_VERTEX", "1")
-      System.put_env("GOOGLE_CLOUD_PROJECT", "test-project")
+      original_api = ClaudeAgentSDK.Env.get("ANTHROPIC_API_KEY")
+      ClaudeAgentSDK.Env.delete("ANTHROPIC_API_KEY")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_USE_VERTEX", "1")
+      ClaudeAgentSDK.Env.put("GOOGLE_CLOUD_PROJECT", "test-project")
 
       try do
         result = AuthChecker.get_api_key_source()
@@ -277,9 +277,9 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
           {:error, _} -> :ok
         end
       after
-        if original_api, do: System.put_env("ANTHROPIC_API_KEY", original_api)
-        System.delete_env("CLAUDE_AGENT_USE_VERTEX")
-        System.delete_env("GOOGLE_CLOUD_PROJECT")
+        if original_api, do: ClaudeAgentSDK.Env.put("ANTHROPIC_API_KEY", original_api)
+        ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_VERTEX")
+        ClaudeAgentSDK.Env.delete("GOOGLE_CLOUD_PROJECT")
       end
     end
   end
@@ -374,7 +374,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
     @tag :live_cli
     test "provides provider-specific recommendations (skipped in test env)" do
       # Test with Bedrock environment
-      System.put_env("CLAUDE_AGENT_USE_BEDROCK", "1")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_USE_BEDROCK", "1")
 
       try do
         diagnosis = AuthChecker.diagnose()
@@ -384,11 +384,11 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
           assert bedrock_rec, "Should include AWS-specific recommendations"
         end
       after
-        System.delete_env("CLAUDE_AGENT_USE_BEDROCK")
+        ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_BEDROCK")
       end
 
       # Test with Vertex environment
-      System.put_env("CLAUDE_AGENT_USE_VERTEX", "1")
+      ClaudeAgentSDK.Env.put("CLAUDE_AGENT_USE_VERTEX", "1")
 
       try do
         diagnosis = AuthChecker.diagnose()
@@ -398,7 +398,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
           assert vertex_rec, "Should include GCP-specific recommendations"
         end
       after
-        System.delete_env("CLAUDE_AGENT_USE_VERTEX")
+        ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_VERTEX")
       end
     end
   end
@@ -414,18 +414,18 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
     previous_cli_bundled = Application.get_env(:claude_agent_sdk, :cli_bundled_path)
     previous_known_locations = Application.get_env(:claude_agent_sdk, :cli_known_locations)
     previous_use_mock = Application.get_env(:claude_agent_sdk, :use_mock)
-    previous_api_key = System.get_env("ANTHROPIC_API_KEY")
-    previous_oauth = System.get_env("CLAUDE_AGENT_OAUTH_TOKEN")
-    previous_bedrock = System.get_env("CLAUDE_AGENT_USE_BEDROCK")
-    previous_vertex = System.get_env("CLAUDE_AGENT_USE_VERTEX")
+    previous_api_key = ClaudeAgentSDK.Env.get("ANTHROPIC_API_KEY")
+    previous_oauth = ClaudeAgentSDK.Env.get("CLAUDE_AGENT_OAUTH_TOKEN")
+    previous_bedrock = ClaudeAgentSDK.Env.get("CLAUDE_AGENT_USE_BEDROCK")
+    previous_vertex = ClaudeAgentSDK.Env.get("CLAUDE_AGENT_USE_VERTEX")
 
     Application.put_env(:claude_agent_sdk, :cli_bundled_path, cli_path)
     Application.put_env(:claude_agent_sdk, :cli_known_locations, [])
     Application.put_env(:claude_agent_sdk, :use_mock, false)
-    System.delete_env("ANTHROPIC_API_KEY")
-    System.delete_env("CLAUDE_AGENT_OAUTH_TOKEN")
-    System.delete_env("CLAUDE_AGENT_USE_BEDROCK")
-    System.delete_env("CLAUDE_AGENT_USE_VERTEX")
+    ClaudeAgentSDK.Env.delete("ANTHROPIC_API_KEY")
+    ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_OAUTH_TOKEN")
+    ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_BEDROCK")
+    ClaudeAgentSDK.Env.delete("CLAUDE_AGENT_USE_VERTEX")
 
     try do
       fun.(cli_path)
@@ -469,8 +469,8 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
   defp restore_app_env(key, nil), do: Application.delete_env(:claude_agent_sdk, key)
   defp restore_app_env(key, value), do: Application.put_env(:claude_agent_sdk, key, value)
 
-  defp restore_env(key, nil), do: System.delete_env(key)
-  defp restore_env(key, value), do: System.put_env(key, value)
+  defp restore_env(key, nil), do: ClaudeAgentSDK.Env.delete(key)
+  defp restore_env(key, value), do: ClaudeAgentSDK.Env.put(key, value)
 
   defp authority do
     [
