@@ -1,7 +1,7 @@
 defmodule DependencySources do
   @moduledoc false
 
-  @helper_version 1
+  @helper_version 2
   @source_keys [:path, :github, :hex]
   @github_option_keys [:branch, :ref, :tag, :subdir]
 
@@ -129,13 +129,59 @@ defmodule DependencySources do
         false
 
       path when is_binary(path) ->
-        File.exists?(Path.expand(path, repo_root))
+        usable_sibling_path?(path, repo_root)
 
       paths when is_list(paths) ->
-        Enum.any?(paths, &File.exists?(Path.expand(&1, repo_root)))
+        Enum.any?(paths, &usable_sibling_path?(&1, repo_root))
 
       _other ->
         false
+    end
+  end
+
+  # A configured `:path` candidate only counts as a usable sibling
+  # checkout when (1) it exists on disk and (2) it does not resolve to a
+  # Mix-managed `deps/` directory.
+  #
+  # Without (2), running `mix deps.get` from a fresh clone could
+  # materialize multiple sibling deps under the parent project's
+  # `deps/`, and this helper -- invoked from within one of those
+  # child deps with `repo_root = <parent>/deps/<child>` -- would then
+  # mistake another Mix-fetched dep for a developer sibling checkout
+  # and pick `:path`. That produces a divergent source vs. however a
+  # peer dep already declared the same app, and Mix refuses to
+  # resolve with the "overriding a child dependency" error.
+  defp usable_sibling_path?(path, repo_root) do
+    abs = Path.expand(path, repo_root)
+    File.exists?(abs) and not under_mix_deps_dir?(repo_root, abs)
+  end
+
+  # When `repo_root` itself sits under a path component named `deps`,
+  # `mix_deps_ancestor/1` returns the absolute path to that ancestor
+  # (the parent project's `deps/` directory). A candidate that resolves
+  # to anything under that same ancestor is therefore another
+  # Mix-fetched sibling, not a developer workspace checkout.
+  defp under_mix_deps_dir?(repo_root, abs) do
+    case mix_deps_ancestor(repo_root) do
+      nil -> false
+      deps_dir -> String.starts_with?(abs <> "/", deps_dir <> "/")
+    end
+  end
+
+  defp mix_deps_ancestor(repo_root) do
+    segments = repo_root |> Path.expand() |> Path.split()
+
+    segments
+    |> Enum.reverse()
+    |> Enum.with_index()
+    |> Enum.find(fn {seg, _idx} -> seg == "deps" end)
+    |> case do
+      nil ->
+        nil
+
+      {"deps", reverse_index} ->
+        forward_index = length(segments) - reverse_index
+        segments |> Enum.take(forward_index) |> Path.join()
     end
   end
 
