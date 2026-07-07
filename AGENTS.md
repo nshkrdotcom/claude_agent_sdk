@@ -8,6 +8,7 @@
 
 ## Execution Plane Stack
 - This SDK sits above `cli_subprocess_core`; do not expose raw `ExecutionPlane.*` internals in public APIs or docs.
+- This SDK must never spawn OS processes or open transports directly; all execution flows through `cli_subprocess_core` → `execution_plane`. That indirection is deliberate: Execution Plane is intended to run (optionally) as a separate, hard-isolated BEAM node so side-effecting execution is fault/security/blast-radius isolated from the SDK. Keeping execution behind the `CliSubprocessCore` facades is what lets that isolation land with no SDK change — do not re-couple execution (e.g. a direct Port/erlexec spawn) into this repo.
 - Use `CliSubprocessCore` facades for execution surfaces, transport errors, transport info, process exits, sessions, commands, and provider model policy.
 - Dependency source selection is handled by `build_support/dependency_sources.exs`
   and `build_support/dependency_sources.config.exs`; local overrides use
