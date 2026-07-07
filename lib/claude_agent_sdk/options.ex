@@ -1373,7 +1373,13 @@ defmodule ClaudeAgentSDK.Options do
   # `allow_unknown_model: false`. The pass-through decision lives in the shared
   # `CliSubprocessCore.ModelRegistry` (so every consumer behaves the same); here
   # we only surface the SDK-level warning when the core flagged a pass-through.
-  defp maybe_warn_unregistered_model(%__MODULE__{model_payload: payload}) when is_map(payload) do
+  # Called only on freshly normalized options (right after `normalize_model_payload/1`
+  # succeeds), so `model_payload` is always a populated
+  # `CliSubprocessCore.ModelRegistry.Selection` struct -- never nil. Dialyzer proves
+  # this, which is why any nil/non-map guard here is unreachable dead code. The
+  # `payload_extra/1` guard still tolerates a raw map from either struct or
+  # string-keyed shapes.
+  defp maybe_warn_unregistered_model(%__MODULE__{model_payload: payload}) do
     if Map.get(payload_extra(payload), "unregistered") == true do
       Logger.warning(
         "Model #{inspect(Map.get(payload, :resolved_model))} is not in the Claude " <>
@@ -1385,8 +1391,6 @@ defmodule ClaudeAgentSDK.Options do
 
     :ok
   end
-
-  defp maybe_warn_unregistered_model(_options), do: :ok
 
   defp payload_extra(payload) when is_map(payload) do
     Map.get(payload, :extra, Map.get(payload, "extra", %{})) || %{}
