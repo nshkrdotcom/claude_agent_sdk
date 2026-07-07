@@ -80,6 +80,7 @@ defmodule ClaudeAgentSDK.Options do
   """
 
   alias ClaudeAgentSDK.Config.Env
+  alias ClaudeAgentSDK.Config.Sandbox, as: SandboxConfig
   alias ClaudeAgentSDK.Log, as: Logger
   alias ClaudeAgentSDK.Model
   alias CliSubprocessCore.{ExecutionSurface, ModelInput}
@@ -153,6 +154,14 @@ defmodule ClaudeAgentSDK.Options do
     # Streaming + Tools (v0.8.0)
     # Enable character-level streaming with --include-partial-messages
     :include_partial_messages,
+    # Emit hook lifecycle events as HookEventMessage frames
+    # (--include-hook-events; requires stream-json output)
+    :include_hook_events,
+    # File resources to download at startup (list of %{file_id:, path:})
+    :files,
+    # Transcript mirror flush cadence when session_store is set
+    # (:batched (default) | :eager)
+    :session_store_flush,
     # Buffer inbound events/messages before a subscriber attaches
     :stream_buffer_limit,
     # Override automatic transport selection
@@ -234,6 +243,13 @@ defmodule ClaudeAgentSDK.Options do
   """
   @type task_budget ::
           %{required(:total) => pos_integer()} | %{required(String.t()) => pos_integer()}
+
+  @typedoc """
+  Startup file resource (`--file file_id:path`).
+  """
+  @type file_resource ::
+          %{required(:file_id) => String.t(), required(:path) => String.t()}
+          | %{required(String.t()) => String.t()}
 
   @typedoc """
   SDK beta feature flag.
@@ -333,6 +349,9 @@ defmodule ClaudeAgentSDK.Options do
           agent: agent_name() | nil,
           session_id: String.t() | nil,
           fork_session: boolean() | nil,
+          include_hook_events: boolean() | nil,
+          files: [file_resource()] | nil,
+          session_store_flush: :batched | :eager | nil,
           add_dir: [String.t()] | nil,
           add_dirs: [String.t()] | nil,
           strict_mcp_config: boolean() | nil,
@@ -385,9 +404,12 @@ defmodule ClaudeAgentSDK.Options do
       ClaudeAgentSDK.Options.new()
 
   """
+  @valid_flush_modes [:batched, :eager]
+
   @spec new(keyword()) :: t()
   def new(attrs \\ []) do
     validate_effort!(Keyword.get(attrs, :effort))
+    validate_session_store_flush!(Keyword.get(attrs, :session_store_flush))
 
     struct(__MODULE__, attrs)
     |> ensure_model_payload!()
@@ -556,6 +578,8 @@ defmodule ClaudeAgentSDK.Options do
     |> add_plugins_args(options)
     |> add_strict_mcp_args(options)
     |> add_partial_messages_args(options)
+    |> add_include_hook_events_args(options)
+    |> add_file_args(options)
     |> add_effort_args(options)
     |> add_thinking_args(options)
     |> add_extra_args(options)
@@ -973,7 +997,7 @@ defmodule ClaudeAgentSDK.Options do
   defp maybe_put_sandbox(settings_obj, nil), do: settings_obj
 
   defp maybe_put_sandbox(settings_obj, sandbox) do
-    Map.put(settings_obj, "sandbox", deep_stringify_keys(sandbox))
+    Map.put(settings_obj, "sandbox", SandboxConfig.normalize(sandbox))
   end
 
   defp deep_merge_maps(left, right) when left == %{}, do: right
@@ -1207,6 +1231,40 @@ defmodule ClaudeAgentSDK.Options do
     do: args ++ ["--include-partial-messages"]
 
   defp add_partial_messages_args(args, _), do: args
+
+  defp add_include_hook_events_args(args, %{include_hook_events: true}),
+    do: args ++ ["--include-hook-events"]
+
+  defp add_include_hook_events_args(args, _), do: args
+
+  defp add_file_args(args, %{files: files}) when is_list(files) do
+    Enum.reduce(files, args, fn file, acc ->
+      case normalize_file_resource(file) do
+        {:ok, spec} -> acc ++ ["--file", spec]
+        {:error, reason} -> raise ArgumentError, "Invalid file resource: #{reason}"
+      end
+    end)
+  end
+
+  defp add_file_args(args, _), do: args
+
+  defp normalize_file_resource(%{} = file) do
+    file_id = Map.get(file, :file_id, Map.get(file, "file_id"))
+    path = Map.get(file, :path, Map.get(file, "path"))
+
+    cond do
+      not (is_binary(file_id) and file_id != "") ->
+        {:error, "missing file_id in #{inspect(file)}"}
+
+      not (is_binary(path) and path != "") ->
+        {:error, "missing path in #{inspect(file)}"}
+
+      true ->
+        {:ok, "#{file_id}:#{path}"}
+    end
+  end
+
+  defp normalize_file_resource(other), do: {:error, "expected a map, got #{inspect(other)}"}
 
   defp add_plugins_args(args, %{plugins: plugins}) when is_list(plugins) do
     Enum.reduce(plugins, args, fn plugin, acc ->
@@ -1583,6 +1641,17 @@ defmodule ClaudeAgentSDK.Options do
 
   defp invalid_effort_message(effort) do
     "effort must be one of :low, :medium, :high, :xhigh, :max, or nil, got: #{inspect(effort)}"
+  end
+
+  @doc false
+  @spec validate_session_store_flush!(term()) :: :ok
+  def validate_session_store_flush!(nil), do: :ok
+  def validate_session_store_flush!(mode) when mode in @valid_flush_modes, do: :ok
+
+  def validate_session_store_flush!(mode) do
+    raise ArgumentError,
+          "session_store_flush must be one of #{inspect(@valid_flush_modes)} or nil, " <>
+            "got: #{inspect(mode)}"
   end
 
   defp normalize_plugin(%{type: type, path: path}) do

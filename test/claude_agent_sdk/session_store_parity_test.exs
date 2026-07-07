@@ -129,6 +129,24 @@ defmodule ClaudeAgentSDK.SessionStoreParityTest do
              SessionStore.list_subagents_from_store(@session_id, store, directory: @project_dir)
   end
 
+  test "mirror batcher with flush_mode: :eager persists each frame immediately" do
+    store = InMemory.new!()
+
+    projects_dir =
+      Path.join(System.tmp_dir!(), "mirror-eager-#{System.unique_integer([:positive])}")
+
+    project_key = SessionStore.project_key_for_directory(@project_dir)
+    file_path = Path.join([projects_dir, project_key, "#{@session_id}.jsonl"])
+
+    {:ok, batcher} = MirrorBatcher.start_link(store, projects_dir, flush_mode: :eager)
+
+    # No explicit flush call: eager mode persists on enqueue.
+    assert [] = MirrorBatcher.enqueue(batcher, file_path, [user_entry(@session_id, "u1", "Hi")])
+
+    assert [%{"uuid" => "u1"}] =
+             InMemory.get_entries(store, %{project_key: project_key, session_id: @session_id})
+  end
+
   test "mirror batcher stores transcript frames and surfaces append failures as mirror_error" do
     store = InMemory.new!()
 

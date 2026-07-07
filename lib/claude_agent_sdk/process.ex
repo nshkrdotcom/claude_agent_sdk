@@ -582,7 +582,9 @@ defmodule ClaudeAgentSDK.Process do
         nil
 
       projects_path ->
-        case MirrorBatcher.start_link(options.session_store, projects_path) do
+        batcher_opts = [flush_mode: options.session_store_flush || :batched]
+
+        case MirrorBatcher.start_link(options.session_store, projects_path, batcher_opts) do
           {:ok, pid} -> pid
           _other -> nil
         end

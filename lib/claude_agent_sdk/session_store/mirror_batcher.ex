@@ -31,7 +31,8 @@ defmodule ClaudeAgentSDK.SessionStore.MirrorBatcher do
         pending_bytes: 0,
         send_timeout_ms: Keyword.get(opts, :send_timeout_ms, 60_000),
         max_pending_entries: Keyword.get(opts, :max_pending_entries, @max_pending_entries),
-        max_pending_bytes: Keyword.get(opts, :max_pending_bytes, @max_pending_bytes)
+        max_pending_bytes: Keyword.get(opts, :max_pending_bytes, @max_pending_bytes),
+        flush_mode: Keyword.get(opts, :flush_mode, :batched)
       }
     end)
   end
@@ -51,7 +52,8 @@ defmodule ClaudeAgentSDK.SessionStore.MirrorBatcher do
         }
 
         flush? =
-          state.pending_entries > state.max_pending_entries or
+          state.flush_mode == :eager or
+            state.pending_entries > state.max_pending_entries or
             state.pending_bytes > state.max_pending_bytes
 
         {flush?, state}
