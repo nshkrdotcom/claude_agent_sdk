@@ -165,7 +165,8 @@ defmodule ClaudeAgentSDK.Hooks.HooksTest do
       assert :permission_request in events
       assert :session_start in events
       assert :session_end in events
-      assert length(events) == 12
+      assert :message_display in events
+      assert length(events) == 13
     end
   end
 end

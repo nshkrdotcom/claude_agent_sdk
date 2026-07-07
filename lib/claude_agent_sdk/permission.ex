@@ -89,7 +89,7 @@ defmodule ClaudeAgentSDK.Permission do
   Permission mode controlling how tool permissions are handled.
   """
   @type permission_mode ::
-          :default | :accept_edits | :plan | :bypass_permissions | :auto | :dont_ask
+          :default | :accept_edits | :plan | :bypass_permissions | :auto | :dont_ask | :manual
 
   @typedoc """
   Permission callback function type.
@@ -104,11 +104,11 @@ defmodule ClaudeAgentSDK.Permission do
   ## Examples
 
       iex> ClaudeAgentSDK.Permission.valid_modes()
-      [:default, :accept_edits, :plan, :bypass_permissions, :auto, :dont_ask]
+      [:default, :accept_edits, :plan, :bypass_permissions, :auto, :dont_ask, :manual]
   """
   @spec valid_modes() :: [permission_mode()]
   def valid_modes do
-    [:default, :accept_edits, :plan, :bypass_permissions, :auto, :dont_ask]
+    [:default, :accept_edits, :plan, :bypass_permissions, :auto, :dont_ask, :manual]
   end
 
   @doc """
@@ -149,6 +149,7 @@ defmodule ClaudeAgentSDK.Permission do
   def mode_to_string(:bypass_permissions), do: "bypassPermissions"
   def mode_to_string(:auto), do: "auto"
   def mode_to_string(:dont_ask), do: "dontAsk"
+  def mode_to_string(:manual), do: "manual"
 
   def mode_to_string(mode) when is_atom(mode) do
     raise ArgumentError,
@@ -175,6 +176,7 @@ defmodule ClaudeAgentSDK.Permission do
   def string_to_mode("bypassPermissions"), do: :bypass_permissions
   def string_to_mode("auto"), do: :auto
   def string_to_mode("dontAsk"), do: :dont_ask
+  def string_to_mode("manual"), do: :manual
   def string_to_mode(_), do: nil
 
   @doc """

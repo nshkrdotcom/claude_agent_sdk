@@ -45,8 +45,11 @@ defmodule ClaudeAgentSDK.Hooks.Output do
 
   @typedoc """
   Permission decision for PreToolUse hooks.
+
+  `:defer` postpones the tool use so the caller can inspect/resume it; the
+  deferred tool surfaces on the result message as `deferred_tool_use`.
   """
-  @type permission_decision :: :allow | :deny | :ask
+  @type permission_decision :: :allow | :deny | :ask | :defer
 
   @typedoc """
   Hook-specific output for different event types.
@@ -77,6 +80,9 @@ defmodule ClaudeAgentSDK.Hooks.Output do
           optional(:additionalContext) => String.t(),
           optional(:updatedInput) => map(),
           optional(:updatedMCPToolOutput) => term(),
+          optional(:updatedToolOutput) => term(),
+          optional(:reloadSkills) => boolean(),
+          optional(:sessionTitle) => String.t(),
           optional(:decision) => map(),
           optional(atom()) => term()
         }
@@ -229,6 +235,27 @@ defmodule ClaudeAgentSDK.Hooks.Output do
       hookSpecificOutput: %{
         hookEventName: "PreToolUse",
         permissionDecision: "ask",
+        permissionDecisionReason: reason
+      }
+    }
+  end
+
+  @doc """
+  Creates hook output to defer a PreToolUse.
+
+  The tool use is postponed instead of allowed/denied; it surfaces on the
+  result message's `deferred_tool_use` so the caller can inspect and resume it.
+
+  ## Examples
+
+      Output.defer("Needs human review before running")
+  """
+  @spec defer(String.t()) :: t()
+  def defer(reason) when is_binary(reason) do
+    %{
+      hookSpecificOutput: %{
+        hookEventName: "PreToolUse",
+        permissionDecision: "defer",
         permissionDecisionReason: reason
       }
     }
@@ -509,6 +536,55 @@ defmodule ClaudeAgentSDK.Hooks.Output do
   def with_updated_mcp_output(output, mcp_output) when is_map(output) do
     hook_output = Map.get(output, :hookSpecificOutput, %{})
     updated = Map.put(hook_output, :updatedMCPToolOutput, mcp_output)
+    Map.put(output, :hookSpecificOutput, updated)
+  end
+
+  @doc """
+  Sets updated tool output in a PostToolUse hook output.
+
+  Unlike `with_updated_mcp_output/2` (MCP tools only, legacy), this replaces the
+  output of *any* tool before it reaches the model. Accepts any value type to
+  match the Python SDK's `updatedToolOutput: Any`.
+
+  ## Examples
+
+      Output.continue()
+      |> Output.with_updated_tool_output(%{"stdout" => "redacted"})
+  """
+  @spec with_updated_tool_output(t(), term()) :: t()
+  def with_updated_tool_output(output, tool_output) when is_map(output) do
+    hook_output = Map.get(output, :hookSpecificOutput, %{})
+    updated = Map.put(hook_output, :updatedToolOutput, tool_output)
+    Map.put(output, :hookSpecificOutput, updated)
+  end
+
+  @doc """
+  Requests a skill re-scan from a SessionStart hook (`reloadSkills: true`).
+
+  ## Examples
+
+      Output.add_context("SessionStart", "loaded")
+      |> Output.with_reload_skills()
+  """
+  @spec with_reload_skills(t()) :: t()
+  def with_reload_skills(output) when is_map(output) do
+    hook_output = Map.get(output, :hookSpecificOutput, %{})
+    updated = Map.put(hook_output, :reloadSkills, true)
+    Map.put(output, :hookSpecificOutput, updated)
+  end
+
+  @doc """
+  Sets the session title from a SessionStart hook (`sessionTitle`).
+
+  ## Examples
+
+      Output.add_context("SessionStart", "loaded")
+      |> Output.with_session_title("Nightly triage")
+  """
+  @spec with_session_title(t(), String.t()) :: t()
+  def with_session_title(output, title) when is_map(output) and is_binary(title) do
+    hook_output = Map.get(output, :hookSpecificOutput, %{})
+    updated = Map.put(hook_output, :sessionTitle, title)
     Map.put(output, :hookSpecificOutput, updated)
   end
 

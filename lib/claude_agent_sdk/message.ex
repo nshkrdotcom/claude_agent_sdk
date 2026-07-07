@@ -332,17 +332,6 @@ defmodule ClaudeAgentSDK.Message do
     %{message | subtype: subtype, data: build_system_subtype_data(subtype, raw)}
   end
 
-  defp build_system_subtype_data(:init, raw), do: build_system_data(:init, raw)
-  defp build_system_subtype_data(:task_started, raw), do: build_task_started_data(raw)
-  defp build_system_subtype_data(:task_progress, raw), do: build_task_progress_data(raw)
-  defp build_system_subtype_data(:task_notification, raw), do: build_task_notification_data(raw)
-  defp build_system_subtype_data(:task_updated, raw), do: build_task_updated_data(raw)
-  defp build_system_subtype_data(:model_fallback, raw), do: build_model_fallback_data(raw)
-  defp build_system_subtype_data(:hook_started, raw), do: build_hook_event_data(raw)
-  defp build_system_subtype_data(:hook_response, raw), do: build_hook_event_data(raw)
-  defp build_system_subtype_data(:mirror_error, raw), do: build_mirror_error_data(raw)
-  defp build_system_subtype_data(_subtype, raw), do: raw
-
   defp parse_by_type(message, :stream_event, raw) do
     data = %{
       uuid: Map.get(raw, "uuid"),
@@ -361,6 +350,17 @@ defmodule ClaudeAgentSDK.Message do
   defp parse_by_type(message, _unknown_type, raw) do
     %{message | data: raw}
   end
+
+  defp build_system_subtype_data(:init, raw), do: build_system_data(:init, raw)
+  defp build_system_subtype_data(:task_started, raw), do: build_task_started_data(raw)
+  defp build_system_subtype_data(:task_progress, raw), do: build_task_progress_data(raw)
+  defp build_system_subtype_data(:task_notification, raw), do: build_task_notification_data(raw)
+  defp build_system_subtype_data(:task_updated, raw), do: build_task_updated_data(raw)
+  defp build_system_subtype_data(:model_fallback, raw), do: build_model_fallback_data(raw)
+  defp build_system_subtype_data(:hook_started, raw), do: build_hook_event_data(raw)
+  defp build_system_subtype_data(:hook_response, raw), do: build_hook_event_data(raw)
+  defp build_system_subtype_data(:mirror_error, raw), do: build_mirror_error_data(raw)
+  defp build_system_subtype_data(_subtype, raw), do: raw
 
   defp safe_type(type) when is_binary(type) do
     case type do

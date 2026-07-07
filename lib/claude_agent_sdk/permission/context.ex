@@ -81,6 +81,11 @@ defmodule ClaudeAgentSDK.Permission.Context do
           agent_id: String.t() | nil,
           suggestions: [map()],
           blocked_path: String.t() | nil,
+          decision_reason: String.t() | nil,
+          title: String.t() | nil,
+          display_name: String.t() | nil,
+          description: String.t() | nil,
+          request_id: String.t() | nil,
           signal: ClaudeAgentSDK.AbortSignal.t() | nil
         }
 
@@ -93,6 +98,11 @@ defmodule ClaudeAgentSDK.Permission.Context do
     :blocked_path,
     :tool_use_id,
     :agent_id,
+    :decision_reason,
+    :title,
+    :display_name,
+    :description,
+    :request_id,
     suggestions: []
   ]
 
@@ -167,6 +177,11 @@ defmodule ClaudeAgentSDK.Permission.Context do
       tool_use_id: request_data["tool_use_id"],
       agent_id: request_data["agent_id"],
       blocked_path: request_data["blocked_path"],
+      decision_reason: request_data["decision_reason"],
+      title: request_data["title"],
+      display_name: request_data["display_name"],
+      description: request_data["description"],
+      request_id: request["request_id"],
       suggestions: request_data["permission_suggestions"] || []
     )
   end

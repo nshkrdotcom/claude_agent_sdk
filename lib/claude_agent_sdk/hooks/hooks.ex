@@ -70,6 +70,7 @@ defmodule ClaudeAgentSDK.Hooks do
           | :permission_request
           | :session_start
           | :session_end
+          | :message_display
 
   @supported_events [
     :pre_tool_use,
@@ -83,7 +84,8 @@ defmodule ClaudeAgentSDK.Hooks do
     :notification,
     :permission_request,
     :session_start,
-    :session_end
+    :session_end,
+    :message_display
   ]
 
   # All events are now supported. Kept for future use if events become unsupported.
@@ -221,6 +223,7 @@ defmodule ClaudeAgentSDK.Hooks do
   def event_to_string(:permission_request), do: "PermissionRequest"
   def event_to_string(:session_start), do: "SessionStart"
   def event_to_string(:session_end), do: "SessionEnd"
+  def event_to_string(:message_display), do: "MessageDisplay"
 
   @doc """
   Converts a CLI hook event string to Elixir atom.
@@ -248,6 +251,7 @@ defmodule ClaudeAgentSDK.Hooks do
   def string_to_event("PermissionRequest"), do: :permission_request
   def string_to_event("SessionStart"), do: :session_start
   def string_to_event("SessionEnd"), do: :session_end
+  def string_to_event("MessageDisplay"), do: :message_display
   def string_to_event(_), do: nil
 
   @doc """

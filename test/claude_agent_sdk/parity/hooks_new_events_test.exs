@@ -40,9 +40,9 @@ defmodule ClaudeAgentSDK.Parity.HooksNewEventsTest do
   end
 
   describe "all_valid_events/0" do
-    test "returns exactly 12 events" do
+    test "returns exactly 13 events" do
       events = Hooks.all_valid_events()
-      assert length(events) == 12
+      assert length(events) == 13
     end
 
     test "includes all 6 new events" do
