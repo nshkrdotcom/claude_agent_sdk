@@ -7,8 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-07-06
+
+Upstream catch-up bringing the Elixir SDK toward parity with the official Python
+SDK `v0.2.111` and TypeScript SDK `v0.3.202`, tracking Claude CLI `2.1.202`, plus
+a refresh of the shared Claude model registry to the current lineup and a
+guaranteed custom-model override.
+
 ### Added
 
+- **Model registry refresh (Claude 5 family):** `sonnet` now maps to Claude
+  Sonnet 5, `opus` to Claude Opus 4.8, and a new `fable` alias to Claude Fable
+  5. Prior full IDs (`claude-sonnet-4-6`, `claude-opus-4-7`) remain as
+  back-compatible aliases; `[1m]` context variants follow the new base models.
+- **Custom / not-yet-registered model override:** an unknown `model:` string now
+  passes through to `--model` verbatim (with a warning) instead of raising, so a
+  just-released model can be used before it appears in the registry. Opt out with
+  `allow_unknown_model: false`. `Client.set_model/2` applies the same relaxation.
+  The pass-through policy lives in the shared `cli_subprocess_core` registry
+  (`allow_unknown`) so all consumers behave consistently.
+- **`include_hook_events` option** (`--include-hook-events`) plus a typed
+  `HookEventMessage` (`hook_started` / `hook_response`) frame.
+- **`"defer"` hook decision** (`Hooks.Output.defer/1`) and `deferred_tool_use`
+  (`DeferredToolUse`) on result messages.
+- **Generic `updatedToolOutput`** post-tool-use output
+  (`Hooks.Output.with_updated_tool_output/2`); legacy `updatedMCPToolOutput`
+  retained.
+- **Typed `task_updated` lifecycle** with `Message.terminal_task_status?/1` over
+  `completed`/`failed`/`stopped`/`killed`, so background-task tracking no longer
+  hangs when a task ends via `task_updated` without a notification.
+- **`:manual` permission mode** (CLI `manual`).
+- **Structured sandbox network configuration** (`ClaudeAgentSDK.Config.Sandbox`):
+  typed snake_case `sandbox`/`sandbox.network` keys serialize to the CLI's
+  camelCase settings JSON; opaque camelCase maps still pass through unchanged.
+- **`session_store_flush` (`:batched` | `:eager`)** transcript-mirror cadence and
+  `--file file_id:path` startup resources.
+- **Refusal handling:** `stop_reason: "refusal"` with `stop_details` on assistant
+  messages; the `model_not_found` assistant error; `api_error_status` (HTTP
+  429/500/529) on result messages.
+- **`system/model_fallback` message** (`overloaded` / `server_error` /
+  `last_resort` / `model_not_found` / `permission_denied` triggers) and
+  `tool_use_meta` (display names + `icon_url`) on assistant messages.
+- **Enriched permission context:** `decision_reason`, `title`, `display_name`,
+  `description`, and `request_id`.
+- **Rate-limit info** gains `error_code`, `can_user_purchase_credits`,
+  `has_chargeable_saved_payment_method`, and a `model_scoped` array.
+- **Surfaced message metadata:** `origin` on results; `request_id`,
+  `subagent_type`, `task_description` on task events; `parent_agent_id` on
+  assistant messages.
+- **New client control operations:** `Client.stop_task/2`,
+  `reconnect_mcp_server/2`, and `toggle_mcp_server/3`.
+- **`MessageDisplay` hook event** and SessionStart `reloadSkills` / `sessionTitle`
+  hook outputs.
 - Governed Claude launch authority support: callers can pass a materialized
   `governed_authority` carrying command, cwd, env, auth/config roots, target,
   credential lease, command reference, and redaction reference for authority
@@ -38,6 +88,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Recommended Claude CLI version bumped to `2.1.202` (minimum remains `2.1.0`).
+- Effort gating is now catalog-driven: `:xhigh` is allowed wherever the resolved
+  model's catalog efforts allow it (Claude Sonnet 5, Fable 5, Opus), not only on
+  Opus by name; Haiku still emits no `--effort`.
+- A runtime warning is emitted when `can_use_tool` is configured alongside a
+  whole-tool `allowed_tools` grant, `skills: :all`, or `bypass_permissions`
+  (which shadow the callback).
 - Standalone env, native login, Bedrock, Vertex, Ollama, token-store, and CLI
   discovery paths remain direct SDK compatibility behavior only. Governed mode
   now rejects caller env, cwd, executable, provider backend, base URL, auth
@@ -60,6 +117,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Message parsing no longer raises when a message `content` field is a plain
+  string or other non-list value.
+- Subprocess env shaping injects `CLAUDE_AGENT_SDK_VERSION` even when a custom
+  `env` is supplied, while continuing to filter inherited `CLAUDECODE`.
 - Governed auth diagnostics and token helpers fail closed instead of accepting
   ambient env credentials, cloud provider credentials, native login state, or
   default token-store paths.

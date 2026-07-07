@@ -29,6 +29,29 @@ subprocess lifecycle directly.
 :ok = ClaudeAgentSDK.Client.set_model(client, "opus")
 ```
 
+## Background Tasks & MCP Server Control
+
+The client exposes control-protocol operations for managing in-flight work and
+MCP servers at runtime:
+
+```elixir
+# Stop a background task by id. A task that is already gone (not_found /
+# not_running) is reported as success by the CLI so stale task chips prune cleanly.
+:ok = ClaudeAgentSDK.Client.stop_task(client, task_id)
+
+# Reconnect an MCP server by name.
+:ok = ClaudeAgentSDK.Client.reconnect_mcp_server(client, "github")
+
+# Enable or disable an MCP server at runtime.
+:ok = ClaudeAgentSDK.Client.toggle_mcp_server(client, "github", false)
+```
+
+Background task lifecycle is surfaced as `system` messages: `task_started`,
+`task_progress`, `task_notification`, and the typed `task_updated`. Use
+`ClaudeAgentSDK.Message.terminal_task_status?/1` to detect a terminal status
+(`completed` / `failed` / `stopped` / `killed`) from either the notification or
+the `task_updated` frame when tracking active tasks.
+
 ## Execution Surface Routing
 
 Choose local vs SSH execution with `Options.execution_surface`:

@@ -215,7 +215,7 @@ claude --version
 ### CLI Compatibility
 
 - Minimum supported Claude CLI version: `2.1.0`
-- Recommended Claude CLI version: `2.1.128`
+- Recommended Claude CLI version: `2.1.202`
 - Compatibility policy: this SDK follows the Python SDK where practical, but the Claude CLI wire protocol is authoritative. CLI-native frames such as `:rate_limit_event` are surfaced here even if the current Python SDK skips unknown message types for forward compatibility.
 
 ---
@@ -626,7 +626,7 @@ Key options for `ClaudeAgentSDK.Options`:
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `model` | string | `"sonnet"` (default/recommended Sonnet 4.6), `"sonnet[1m]"`, `"opus"` (Opus 4.7), `"opus[1m]"`, `"haiku"` |
+| `model` | string | `"sonnet"` (default/recommended, Sonnet 5), `"sonnet[1m]"`, `"opus"` (Opus 4.8), `"opus[1m]"`, `"fable"` (Fable 5), `"haiku"` (Haiku 4.5), or any custom model id (see `guides/model-configuration.md`) |
 | `effort` | atom | `:low`, `:medium`, `:high`, `:xhigh`, `:max` — controls reasoning effort; `:xhigh` is Opus-only; invalid values raise `ArgumentError` (not supported for Haiku) |
 | `thinking` | map | `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}` |
 | `skills` | `:all` / list | Enables Claude skills and defaults setting sources to user/project when set |
@@ -835,7 +835,7 @@ For breaking changes and migration notes, see `CHANGELOG.md`.
 
 **0.10.0 fix (resume turn persistence):**
 - `resume/3` no longer uses `--print --resume` (one-shot mode that dropped intermediate turns). It now uses `--resume` with `--input-format stream-json`, preserving the full conversation history across resume calls.
-- Current model defaults and aliases are owned by `cli_subprocess_core`; the native Claude default is `sonnet` (Claude Sonnet 4.6).
+- Current model defaults and aliases are owned by `cli_subprocess_core`; the native Claude default is `sonnet` (Claude Sonnet 5). Aliases: `opus` → Claude Opus 4.8, `fable` → Claude Fable 5, `haiku` → Claude Haiku 4.5. A model id newer than the registry passes through to `--model` verbatim unless `allow_unknown_model: false`.
 
 **0.9.0 breaking change (streaming):**
 - Stream event wrappers now require `uuid` and `session_id`. Missing keys raise and terminate the streaming client.

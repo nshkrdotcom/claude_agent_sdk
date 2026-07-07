@@ -132,7 +132,24 @@ Note: when `can_use_tool` is set, the SDK enables `include_partial_messages` and
 | `continue_conversation` | `boolean()` | `nil` | Continue most recent conversation |
 | `resume` | `String.t()` | `nil` | Resume specific session by ID |
 | `fork_session` | `boolean()` | `nil` | Create new session when resuming |
+| `session_store` | `module()`/`pid()` | `nil` | Transcript-mirror store (emits `--session-mirror`) |
+| `session_store_flush` | `:batched`/`:eager` | `:batched` | Mirror flush cadence (`:eager` persists each frame) |
+| `load_timeout_ms` | `integer()` | `60_000` | Per-load timeout during store-backed resume |
 | `control_request_timeout_ms` | `integer()` | `nil` | Per-client timeout for control requests |
+
+### Streaming / Events Options
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `include_partial_messages` | `boolean()` | `nil` | Character-level streaming (`--include-partial-messages`) |
+| `include_hook_events` | `boolean()` | `nil` | Emit hook lifecycle events as `HookEventMessage` frames |
+| `files` | `[map()]` | `nil` | Startup file resources: `%{file_id:, path:}` → `--file file_id:path` |
+
+### Model Override Options
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `allow_unknown_model` | `boolean()` | `true` | Pass an unregistered model through to `--model`; set `false` to require a registered model |
 
 SessionStore lifecycle note: persisted session cache is hydrated in a deferred startup step (`handle_continue/2`).
 `load_session/1` always falls back to disk, but `list/search` can be briefly incomplete right after SessionStore boot.
@@ -302,10 +319,11 @@ Claude-native `--effort`.
 
 | Shorthand | Model | CLI/API alias | Supported effort |
 |-----------|-------|---------------|------------------|
-| `"sonnet"` | Claude Sonnet 4.6 | `claude-sonnet-4-6` | `:low`, `:medium`, `:high`, `:max` |
-| `"sonnet[1m]"` | Claude Sonnet 4.6 with 1M context | `claude-sonnet-4-6[1m]` | `:low`, `:medium`, `:high`, `:max` |
-| `"opus"` | Claude Opus 4.7 | `claude-opus-4-7` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
-| `"opus[1m]"` | Claude Opus 4.7 with 1M context | `claude-opus-4-7[1m]` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
+| `"sonnet"` | Claude Sonnet 5 | `claude-sonnet-5` (also `claude-sonnet-4-6`) | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
+| `"sonnet[1m]"` | Claude Sonnet 5 with 1M context | `claude-sonnet-5[1m]` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
+| `"opus"` | Claude Opus 4.8 | `claude-opus-4-8` (also `claude-opus-4-7`) | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
+| `"opus[1m]"` | Claude Opus 4.8 with 1M context | `claude-opus-4-8[1m]` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
+| `"fable"` | Claude Fable 5 | `claude-fable-5` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
 | `"haiku"` | Claude Haiku 4.5 | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` | none |
 
 ### Model Configuration
@@ -468,6 +486,31 @@ options = %Options{
     allowed_paths: ["/tmp/sandbox", "/home/user/safe"],
     denied_paths: ["/etc", "/root"],
     network_disabled: true
+  }
+}
+```
+
+### Structured Network Configuration
+
+The `sandbox` map maps the typed snake_case schema (`ClaudeAgentSDK.Config.Sandbox`)
+to the CLI's camelCase settings JSON. A map that already uses camelCase keys is
+passed through unchanged (back-compat):
+
+```elixir
+options = %Options{
+  sandbox: %{
+    enabled: true,
+    excluded_commands: ["rm"],
+    network: %{
+      allowed_domains: ["api.example.com"],
+      denied_domains: ["evil.example"],
+      allow_managed_domains_only: false,
+      allow_unix_sockets: ["/var/run/app.sock"],
+      allow_mach_lookup: ["com.apple.*"],
+      http_proxy_port: 8080,
+      socks_proxy_port: 1080
+    },
+    ignore_violations: %{file: [], network: []}
   }
 }
 ```
@@ -807,7 +850,7 @@ diagnosis = ClaudeAgentSDK.AuthChecker.diagnose()
 IO.inspect(diagnosis)
 # %{
 #   cli_installed: true,
-#   cli_version: "2.1.128",
+#   cli_version: "2.1.202",
 #   authenticated: true,
 #   auth_method: "Anthropic API",
 #   api_key_source: "env",

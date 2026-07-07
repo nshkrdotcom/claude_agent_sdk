@@ -388,6 +388,34 @@ Output.ask("This will delete 100 files. Continue?")
 # }
 ```
 
+#### `Output.defer/1`
+
+Postpone a tool use instead of allowing or denying it. The deferred tool
+surfaces on the result message's `deferred_tool_use` so the caller can inspect
+and resume it:
+
+```elixir
+Output.defer("Needs human review before running")
+# hookSpecificOutput.permissionDecision == "defer"
+```
+
+### Tool Output & Session Helpers
+
+- `Output.with_updated_tool_output/2` — replace **any** tool's output before it
+  reaches the model (`updatedToolOutput`). The MCP-only
+  `Output.with_updated_mcp_output/2` (`updatedMCPToolOutput`) remains for
+  back-compat.
+- `Output.with_reload_skills/1` — request a skill re-scan from a `SessionStart`
+  hook (`reloadSkills: true`).
+- `Output.with_session_title/2` — set the session title from a `SessionStart`
+  hook (`sessionTitle`).
+
+Enabling `include_hook_events: true` in `Options` makes the CLI emit hook
+lifecycle frames as `HookEventMessage` messages (`hook_started` / `hook_response`)
+on the stream, in addition to invoking your registered callbacks. The
+`MessageDisplay` hook event lets a hook transform or hide assistant text as it is
+displayed.
+
 ### Context Injection
 
 #### `Output.add_context/2`

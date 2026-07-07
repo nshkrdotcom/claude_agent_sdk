@@ -35,11 +35,37 @@ The default backend is the normal Claude catalog path.
 
 Canonical Claude model names include:
 
-- `sonnet` - default/recommended, Claude Sonnet 4.6
-- `sonnet[1m]` - Claude Sonnet 4.6 with 1M context
-- `opus` - Claude Opus 4.7
-- `opus[1m]` - Claude Opus 4.7 with 1M context
+- `sonnet` - default/recommended, Claude Sonnet 5
+- `sonnet[1m]` - Claude Sonnet 5 with 1M context
+- `opus` - Claude Opus 4.8
+- `opus[1m]` - Claude Opus 4.8 with 1M context
+- `fable` - Claude Fable 5
 - `haiku` - Claude Haiku 4.5
+
+Prior full IDs (`claude-sonnet-4-6`, `claude-opus-4-7`) remain valid as
+back-compatible aliases. The registry is owned by `cli_subprocess_core`.
+
+## Using a model that is not in the registry
+
+The Claude CLI accepts arbitrary `--model` strings, so a model that is newer
+than the shared registry can be used directly. An unknown model id passes
+through to `--model` verbatim (with a warning) instead of raising:
+
+```elixir
+# Just pass the id — unknown models pass through with a warning:
+ClaudeAgentSDK.query("hi", %{model: "claude-brand-new-2027"})
+
+# Strict callers can opt out of pass-through (unknown ids then raise):
+ClaudeAgentSDK.query("hi", %{model: "claude-brand-new-2027", allow_unknown_model: false})
+
+# Runtime switch to an unregistered model:
+ClaudeAgentSDK.Client.set_model(client, "claude-brand-new-2027")
+```
+
+`fallback_model` is always passed through unvalidated. Effort validation is
+driven by the shared model catalog: for a registered model, an unsupported
+effort is dropped with a warning; for an unregistered model, the requested
+effort is forwarded as-is and validated by the CLI/API.
 
 The current native Claude aliases are:
 

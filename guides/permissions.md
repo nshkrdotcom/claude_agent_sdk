@@ -19,13 +19,23 @@ The Claude Agent SDK for Elixir provides a comprehensive permission system for c
 
 ## Understanding Permission Modes
 
-The SDK supports six permission modes that control how tool permissions are handled. Set the mode using the `permission_mode` option:
+The SDK supports seven permission modes that control how tool permissions are handled. Set the mode using the `permission_mode` option:
 
 ```elixir
 options = %ClaudeAgentSDK.Options{
-  permission_mode: :default  # or :accept_edits, :plan, :bypass_permissions, :auto, :dont_ask
+  permission_mode: :default  # or :accept_edits, :plan, :bypass_permissions, :auto, :dont_ask, :manual
 }
 ```
+
+The `:manual` mode (CLI `manual`) requires each tool call to be resolved
+manually. The `can_use_tool` context is enriched with `decision_reason`,
+`title`, `display_name`, `description`, and `request_id` (in addition to
+`tool_use_id`, `agent_id`, `blocked_path`, and `suggestions`) so richer
+permission prompts can be rendered.
+
+> Note: when `can_use_tool` is configured alongside a whole-tool `allowed_tools`
+> grant (e.g. `"Read"`), `skills: :all`, or `:bypass_permissions`, the callback
+> is shadowed and never fires — the SDK emits a warning in this case.
 
 ### `:default` Mode
 
