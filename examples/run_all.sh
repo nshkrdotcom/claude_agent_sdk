@@ -297,6 +297,7 @@ default_examples=(
   "examples/hooks/file_policy_enforcement.exs"
   "examples/hooks/logging_and_audit.exs"
   "examples/hooks/complete_workflow.exs"
+  "examples/hooks/hook_events_and_output.exs"
   "examples/streaming_tools/basic_streaming_with_hooks.exs"
   "examples/runtime_control/control_parity_live.exs"
   "examples/assistant_error_live.exs"
@@ -304,7 +305,11 @@ default_examples=(
   "examples/filesystem_agents_live.exs"
 )
 
-examples=("examples/effort_gating_live.exs" "${default_examples[@]}")
+examples=(
+  "examples/effort_gating_live.exs"
+  "examples/model_selection_live.exs"
+  "${default_examples[@]}"
+)
 
 if [[ "$BACKEND" == "ollama" ]]; then
   echo ""
