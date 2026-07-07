@@ -23,7 +23,7 @@ defmodule EffortGatingLive do
       "Supported model keeps effort",
       Options.new(
         model: "sonnet",
-        effort: :high,
+        effort: :low,
         max_turns: 1,
         setting_sources: ["user"]
       )
@@ -34,20 +34,20 @@ defmodule EffortGatingLive do
       "Haiku omits effort with warning",
       Options.new(
         model: "haiku",
-        effort: :high,
+        effort: :low,
         max_turns: 1,
         setting_sources: ["user"]
       )
       |> Support.with_execution_surface()
     )
 
-    # Sonnet 5 (cheaper than Opus) also supports :max effort; use it here to keep
-    # the live Anthropic call inexpensive while still exercising :max.
+    # Sonnet on :low keeps the live Anthropic call inexpensive while still
+    # exercising the effort flag on a model that supports it.
     run_case(
-      "Sonnet with :max effort",
+      "Sonnet with :low effort",
       Options.new(
         model: "sonnet",
-        effort: :max,
+        effort: :low,
         max_turns: 1,
         setting_sources: ["user"]
       )

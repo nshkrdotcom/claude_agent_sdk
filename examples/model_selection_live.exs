@@ -45,11 +45,11 @@ defmodule ModelSelectionLive do
   end
 
   defp show_effort_gating do
-    IO.puts("\n:xhigh effort (allowed on Sonnet 5 / Fable 5, dropped on Haiku):")
+    IO.puts("\n:low effort (kept on Sonnet 5 / Fable 5, dropped on Haiku):")
 
     for model <- ["sonnet", "fable", "haiku"] do
-      args = Options.new(model: model, effort: :xhigh, max_turns: 1) |> Options.to_args()
-      emitted = if "--effort" in args, do: "--effort xhigh", else: "(dropped)"
+      args = Options.new(model: model, effort: :low, max_turns: 1) |> Options.to_args()
+      emitted = if "--effort" in args, do: "--effort low", else: "(dropped)"
       IO.puts("  #{String.pad_trailing(model, 7)} -> #{emitted}")
     end
   end
