@@ -1319,10 +1319,24 @@ defmodule ClaudeAgentSDK.Client do
       _ = ProtocolSession.close(state.protocol_session)
     end
 
+    # The permission bridge ETS table is owned by this process and is auto-
+    # collected on exit, but delete it explicitly so teardown is deterministic
+    # and does not depend on GC timing.
+    delete_permission_bridge(state)
+
     Logger.debug("Terminating client", reason: reason)
 
     :ok
   end
+
+  defp delete_permission_bridge(%{permission_bridge: bridge}) when not is_nil(bridge) do
+    _ = :ets.delete(bridge)
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp delete_permission_bridge(_state), do: :ok
 
   ## Private Functions - Initialization
 
