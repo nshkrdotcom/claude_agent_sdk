@@ -71,10 +71,13 @@ defmodule ModelSelectionLive do
   end
 
   defp live_query do
-    IO.puts("\nLive query with the default model:")
+    # Use Haiku 4.5 (cheapest current model) for the actual inference call — the
+    # aliases and custom-model handling above are demonstrated via CLI-arg
+    # building and need no inference.
+    IO.puts("\nLive query (Haiku 4.5 — cheapest model):")
 
     options =
-      Options.new(max_turns: 1, setting_sources: ["user"])
+      Options.new(model: "haiku", max_turns: 1, setting_sources: ["user"])
       |> Support.with_execution_surface()
 
     response =

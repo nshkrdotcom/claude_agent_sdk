@@ -41,10 +41,12 @@ defmodule EffortGatingLive do
       |> Support.with_execution_surface()
     )
 
+    # Sonnet 5 (cheaper than Opus) also supports :max effort; use it here to keep
+    # the live Anthropic call inexpensive while still exercising :max.
     run_case(
-      "Opus with :max effort",
+      "Sonnet with :max effort",
       Options.new(
-        model: "opus",
+        model: "sonnet",
         effort: :max,
         max_turns: 1,
         setting_sources: ["user"]
