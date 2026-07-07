@@ -10,6 +10,7 @@ defmodule ClaudeAgentSDK.AssistantError do
           | :billing_error
           | :rate_limit
           | :invalid_request
+          | :model_not_found
           | :server_error
           | :unknown
 
@@ -18,6 +19,7 @@ defmodule ClaudeAgentSDK.AssistantError do
     :billing_error,
     :rate_limit,
     :invalid_request,
+    :model_not_found,
     :server_error,
     :unknown
   ]
@@ -52,6 +54,7 @@ defmodule ClaudeAgentSDK.AssistantError do
   defp do_cast_string("billing_error"), do: :billing_error
   defp do_cast_string("rate_limit"), do: :rate_limit
   defp do_cast_string("invalid_request"), do: :invalid_request
+  defp do_cast_string("model_not_found"), do: :model_not_found
   defp do_cast_string("server_error"), do: :server_error
   defp do_cast_string("unknown"), do: :unknown
   defp do_cast_string(_unknown), do: :unknown

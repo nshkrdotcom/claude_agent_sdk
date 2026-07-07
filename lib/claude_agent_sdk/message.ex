@@ -83,7 +83,17 @@ defmodule ClaudeAgentSDK.Message do
           | :unknown
           | String.t()
   @type result_subtype :: :success | :error_max_turns | :error_during_execution | String.t()
-  @type system_subtype :: :init | :mirror_error | String.t()
+  @type system_subtype ::
+          :init
+          | :task_started
+          | :task_progress
+          | :task_notification
+          | :task_updated
+          | :model_fallback
+          | :hook_started
+          | :hook_response
+          | :mirror_error
+          | String.t()
   @type assistant_error :: AssistantError.t()
   @type rate_limit_info :: %{
           required(:status) => String.t(),
@@ -94,6 +104,10 @@ defmodule ClaudeAgentSDK.Message do
           optional(:overage_status) => String.t() | nil,
           optional(:overage_resets_at) => integer() | nil,
           optional(:overage_disabled_reason) => String.t() | nil,
+          optional(:error_code) => String.t() | nil,
+          optional(:can_user_purchase_credits) => boolean() | nil,
+          optional(:has_chargeable_saved_payment_method) => boolean() | nil,
+          optional(:model_scoped) => [map()] | nil,
           optional(:raw) => map()
         }
   @type rate_limit_data :: %{
@@ -114,6 +128,25 @@ defmodule ClaudeAgentSDK.Message do
           data: assistant_data() | map(),
           raw: map()
         }
+
+  # Terminal task statuses span both the `task_notification` vocabulary
+  # (completed/failed/stopped) and the `task_updated` vocabulary
+  # (completed/failed/killed). Clearing active-task tracking on any of these
+  # avoids hangs when a task ends via `task_updated` without a notification.
+  @terminal_task_statuses ~w(completed failed stopped killed)
+
+  @doc """
+  Returns `true` when a task status is terminal (from either the
+  `task_notification` or `task_updated` vocabulary).
+  """
+  @spec terminal_task_status?(String.t() | atom() | nil) :: boolean()
+  def terminal_task_status?(status) when is_atom(status) and not is_nil(status),
+    do: terminal_task_status?(Atom.to_string(status))
+
+  def terminal_task_status?(status) when is_binary(status),
+    do: status in @terminal_task_statuses
+
+  def terminal_task_status?(_status), do: false
 
   @doc false
   def __safe_type__(type), do: safe_type(type)
@@ -296,18 +329,19 @@ defmodule ClaudeAgentSDK.Message do
   defp parse_by_type(message, :system, raw) do
     subtype = safe_subtype(:system, raw["subtype"])
 
-    data =
-      case subtype do
-        :init -> build_system_data(:init, raw)
-        :task_started -> build_task_started_data(raw)
-        :task_progress -> build_task_progress_data(raw)
-        :task_notification -> build_task_notification_data(raw)
-        :mirror_error -> build_mirror_error_data(raw)
-        _ -> raw
-      end
-
-    %{message | subtype: subtype, data: data}
+    %{message | subtype: subtype, data: build_system_subtype_data(subtype, raw)}
   end
+
+  defp build_system_subtype_data(:init, raw), do: build_system_data(:init, raw)
+  defp build_system_subtype_data(:task_started, raw), do: build_task_started_data(raw)
+  defp build_system_subtype_data(:task_progress, raw), do: build_task_progress_data(raw)
+  defp build_system_subtype_data(:task_notification, raw), do: build_task_notification_data(raw)
+  defp build_system_subtype_data(:task_updated, raw), do: build_task_updated_data(raw)
+  defp build_system_subtype_data(:model_fallback, raw), do: build_model_fallback_data(raw)
+  defp build_system_subtype_data(:hook_started, raw), do: build_hook_event_data(raw)
+  defp build_system_subtype_data(:hook_response, raw), do: build_hook_event_data(raw)
+  defp build_system_subtype_data(:mirror_error, raw), do: build_mirror_error_data(raw)
+  defp build_system_subtype_data(_subtype, raw), do: raw
 
   defp parse_by_type(message, :stream_event, raw) do
     data = %{
@@ -353,15 +387,20 @@ defmodule ClaudeAgentSDK.Message do
     end
   end
 
+  @system_subtypes %{
+    "init" => :init,
+    "task_started" => :task_started,
+    "task_progress" => :task_progress,
+    "task_notification" => :task_notification,
+    "task_updated" => :task_updated,
+    "model_fallback" => :model_fallback,
+    "hook_started" => :hook_started,
+    "hook_response" => :hook_response,
+    "mirror_error" => :mirror_error
+  }
+
   defp safe_subtype(:system, subtype) when is_binary(subtype) do
-    case subtype do
-      "init" -> :init
-      "task_started" -> :task_started
-      "task_progress" -> :task_progress
-      "task_notification" -> :task_notification
-      "mirror_error" -> :mirror_error
-      other -> other
-    end
+    Map.get(@system_subtypes, subtype, subtype)
   end
 
   defp safe_subtype(_type, subtype) when is_binary(subtype), do: subtype
@@ -441,7 +480,13 @@ defmodule ClaudeAgentSDK.Message do
     |> maybe_put(:uuid, raw["uuid"])
     |> maybe_put(:message_id, get_in(raw, ["message", "id"]))
     |> maybe_put(:stop_reason, get_in(raw, ["message", "stop_reason"]))
+    |> maybe_put(:stop_details, get_in(raw, ["message", "stop_details"]) || raw["stop_details"])
     |> maybe_put(:usage, get_in(raw, ["message", "usage"]))
+    |> maybe_put(
+      :tool_use_meta,
+      get_in(raw, ["message", "tool_use_meta"]) || raw["tool_use_meta"]
+    )
+    |> maybe_put(:parent_agent_id, raw["parent_agent_id"])
     |> maybe_put_assistant_error(error_value)
   end
 
@@ -493,7 +538,20 @@ defmodule ClaudeAgentSDK.Message do
     |> maybe_put(:model_usage, raw["modelUsage"])
     |> maybe_put(:permission_denials, raw["permission_denials"])
     |> maybe_put(:errors, raw["errors"])
+    |> maybe_put(:api_error_status, raw["api_error_status"])
+    |> maybe_put(:deferred_tool_use, parse_deferred_tool_use(raw["deferred_tool_use"]))
+    |> maybe_put(:origin, raw["origin"])
   end
+
+  defp parse_deferred_tool_use(%{} = deferred) do
+    %{
+      id: deferred["id"],
+      name: deferred["name"],
+      input: deferred["input"] || %{}
+    }
+  end
+
+  defp parse_deferred_tool_use(_), do: nil
 
   defp get_error_message(:error_max_turns, nil) do
     "The task exceeded the maximum number of turns allowed. Consider increasing max_turns option for complex tasks."
@@ -547,7 +605,10 @@ defmodule ClaudeAgentSDK.Message do
       uuid: raw["uuid"],
       session_id: raw["session_id"],
       tool_use_id: raw["tool_use_id"],
-      task_type: raw["task_type"]
+      task_type: raw["task_type"],
+      request_id: raw["request_id"],
+      subagent_type: raw["subagent_type"],
+      task_description: raw["task_description"]
     })
   end
 
@@ -559,7 +620,43 @@ defmodule ClaudeAgentSDK.Message do
       session_id: raw["session_id"],
       tool_use_id: raw["tool_use_id"],
       usage: raw["usage"],
-      last_tool_name: raw["last_tool_name"]
+      last_tool_name: raw["last_tool_name"],
+      request_id: raw["request_id"],
+      subagent_type: raw["subagent_type"],
+      task_description: raw["task_description"]
+    })
+  end
+
+  defp build_task_updated_data(raw) do
+    patch = raw["patch"]
+
+    Map.merge(raw, %{
+      task_id: raw["task_id"],
+      patch: patch,
+      status: task_updated_status(patch, raw["status"]),
+      session_id: raw["session_id"],
+      uuid: raw["uuid"]
+    })
+  end
+
+  defp task_updated_status(%{} = patch, fallback), do: patch["status"] || fallback
+  defp task_updated_status(_patch, fallback), do: fallback
+
+  defp build_model_fallback_data(raw) do
+    Map.merge(raw, %{
+      trigger: raw["trigger"],
+      from_model: raw["from_model"] || raw["fromModel"],
+      to_model: raw["to_model"] || raw["toModel"],
+      session_id: raw["session_id"],
+      uuid: raw["uuid"]
+    })
+  end
+
+  defp build_hook_event_data(raw) do
+    Map.merge(raw, %{
+      hook_event_name: raw["hook_event_name"] || raw["hook_event"] || raw["hook_name"],
+      session_id: raw["session_id"],
+      uuid: raw["uuid"]
     })
   end
 
@@ -589,6 +686,10 @@ defmodule ClaudeAgentSDK.Message do
         overage_status: info["overageStatus"],
         overage_resets_at: info["overageResetsAt"],
         overage_disabled_reason: info["overageDisabledReason"],
+        error_code: info["errorCode"],
+        can_user_purchase_credits: info["canUserPurchaseCredits"],
+        has_chargeable_saved_payment_method: info["hasChargeableSavedPaymentMethod"],
+        model_scoped: info["modelScoped"],
         raw: info
       },
       uuid: Map.fetch!(raw, "uuid"),

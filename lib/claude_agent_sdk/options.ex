@@ -391,6 +391,51 @@ defmodule ClaudeAgentSDK.Options do
 
     struct(__MODULE__, attrs)
     |> ensure_model_payload!()
+    |> tap(&maybe_warn_can_use_tool_shadowed/1)
+  end
+
+  @doc """
+  Returns `true` when a configured `can_use_tool` callback would be silently
+  shadowed by a whole-tool `allowed_tools` grant, `skills: :all`, or
+  `bypass_permissions` mode (in which case the callback never fires).
+  """
+  @spec can_use_tool_shadowed?(t()) :: boolean()
+  def can_use_tool_shadowed?(%__MODULE__{can_use_tool: nil}), do: false
+
+  def can_use_tool_shadowed?(%__MODULE__{} = options) do
+    options.permission_mode == :bypass_permissions or
+      options.skills in [:all, "all"] or
+      Enum.any?(options.allowed_tools || [], &whole_tool_grant?/1)
+  end
+
+  # A whole-tool grant allows every invocation of a tool with no argument
+  # constraint (e.g. "Read", "Read()", "Read(*)"), which shadows can_use_tool.
+  # An argument-scoped grant such as "Bash(git *)" does not.
+  defp whole_tool_grant?(entry) when is_binary(entry) do
+    case String.trim(entry) do
+      "" ->
+        false
+
+      trimmed ->
+        compact = String.replace(trimmed, " ", "")
+
+        not String.contains?(compact, "(") or
+          String.ends_with?(compact, "()") or
+          String.ends_with?(compact, "(*)")
+    end
+  end
+
+  defp whole_tool_grant?(_entry), do: false
+
+  defp maybe_warn_can_use_tool_shadowed(%__MODULE__{} = options) do
+    if can_use_tool_shadowed?(options) do
+      Logger.warning(
+        "can_use_tool is configured alongside allowed_tools/skills/bypass_permissions " <>
+          "that grant whole tools; the callback is shadowed and may never fire."
+      )
+    end
+
+    :ok
   end
 
   @doc false
