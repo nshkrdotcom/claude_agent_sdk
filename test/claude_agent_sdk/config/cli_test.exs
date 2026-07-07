@@ -18,7 +18,7 @@ defmodule ClaudeAgentSDK.Config.CLITest do
     end
 
     test "recommended_version" do
-      assert CLI.recommended_version() == "2.1.128"
+      assert CLI.recommended_version() == "2.1.202"
     end
 
     test "executable_candidates" do

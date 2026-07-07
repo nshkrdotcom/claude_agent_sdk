@@ -121,6 +121,9 @@ defmodule ClaudeAgentSDK.Options do
     # Model selection ("opus", "sonnet", "haiku", or full name)
     :model_payload,
     :model,
+    # Allow a model string that is not in the shared registry to pass through to
+    # `--model` as-is (default true). Set to false to require a registered model.
+    :allow_unknown_model,
     # Fallback model when primary is busy
     :fallback_model,
     # SDK beta feature flags (Python v0.1.12+)
@@ -323,6 +326,7 @@ defmodule ClaudeAgentSDK.Options do
           abort_ref: reference() | nil,
           model_payload: CliSubprocessCore.ModelRegistry.selection() | nil,
           model: model_name() | nil,
+          allow_unknown_model: boolean() | nil,
           fallback_model: model_name() | nil,
           betas: [sdk_beta()] | nil,
           agents: %{agent_name() => agent_definition()} | nil,
@@ -1180,23 +1184,24 @@ defmodule ClaudeAgentSDK.Options do
     else
       model = effective_effort_model(options)
 
-      cond do
-        haiku_model?(model) ->
+      case classify_effort(model, effort) do
+        :emit ->
+          args ++ ["--effort", to_string(effort)]
+
+        {:strip, :haiku} ->
           Logger.warning(
             "Effort level is not supported for Haiku models; ignoring effort: #{effort}"
           )
 
           args
 
-        effort == :xhigh and not opus_model?(model) ->
+        {:strip, {:unsupported, allowed}} ->
           Logger.warning(
-            "Effort :xhigh is only supported on Opus models; ignoring effort for model: #{model}"
+            "Effort #{effort} is not supported for model #{model} " <>
+              "(supported efforts: #{format_efforts(allowed)}); ignoring effort"
           )
 
           args
-
-        true ->
-          args ++ ["--effort", to_string(effort)]
       end
     end
   end
@@ -1218,25 +1223,76 @@ defmodule ClaudeAgentSDK.Options do
     Enum.any?(@haiku_patterns, &String.contains?(downcased, &1))
   end
 
-  @opus_patterns ["opus", "claude-opus"]
+  # Decide whether a requested effort should be emitted, driven by the shared
+  # model catalog rather than string heuristics. Haiku keeps a dedicated message
+  # for back-compat; a model unknown to the catalog (custom / newer than the
+  # registry) trusts the caller and emits the effort as-is.
+  @spec classify_effort(model_name(), :low | :medium | :high | :xhigh | :max) ::
+          :emit | {:strip, :haiku} | {:strip, {:unsupported, [String.t()]}}
+  defp classify_effort(model, effort) do
+    if haiku_model?(model) do
+      {:strip, :haiku}
+    else
+      case CliSubprocessCore.ModelRegistry.resolve(:claude, model, reasoning_effort: effort) do
+        {:ok, _selection} ->
+          :emit
 
-  @spec opus_model?(model_name()) :: boolean()
-  defp opus_model?(model) do
-    downcased = String.downcase(model)
-    Enum.any?(@opus_patterns, &String.contains?(downcased, &1))
+        {:error, {:invalid_reasoning_effort, _effort, allowed, _provider}} ->
+          {:strip, {:unsupported, Enum.map(allowed, &to_string/1)}}
+
+        {:error, {:unknown_model, _model, _known, _provider}} ->
+          :emit
+
+        {:error, _other} ->
+          :emit
+      end
+    end
   end
+
+  defp format_efforts([]), do: "none"
+  defp format_efforts(efforts), do: Enum.join(efforts, ", ")
 
   @doc false
   @spec ensure_model_payload!(t()) :: t()
   def ensure_model_payload!(%__MODULE__{} = options) do
     case normalize_model_payload(options) do
       {:ok, normalized} ->
+        maybe_warn_unregistered_model(normalized)
         normalized
 
       {:error, reason} ->
         raise ArgumentError, "model resolution failed for :claude: #{inspect(reason)}"
     end
   end
+
+  # The Claude CLI accepts arbitrary `--model` strings, so a model newer than the
+  # shared registry is passed through verbatim unless the caller opts out via
+  # `allow_unknown_model: false`. The pass-through decision lives in the shared
+  # `CliSubprocessCore.ModelRegistry` (so every consumer behaves the same); here
+  # we only surface the SDK-level warning when the core flagged a pass-through.
+  defp maybe_warn_unregistered_model(%__MODULE__{model_payload: payload}) when is_map(payload) do
+    if Map.get(payload_extra(payload), "unregistered") == true do
+      Logger.warning(
+        "Model #{inspect(Map.get(payload, :resolved_model))} is not in the Claude " <>
+          "model registry; passing it through to --model as-is. This is expected " <>
+          "for a model newer than the registry. Pass allow_unknown_model: false " <>
+          "to require a registered model."
+      )
+    end
+
+    :ok
+  end
+
+  defp maybe_warn_unregistered_model(_options), do: :ok
+
+  defp payload_extra(payload) when is_map(payload) do
+    Map.get(payload, :extra, Map.get(payload, "extra", %{})) || %{}
+  end
+
+  @doc false
+  @spec allow_unknown_model?(t()) :: boolean()
+  def allow_unknown_model?(%__MODULE__{allow_unknown_model: false}), do: false
+  def allow_unknown_model?(%__MODULE__{}), do: true
 
   defp maybe_ensure_model_payload!(%__MODULE__{} = options) do
     case normalize_model_payload(options) do
@@ -1300,6 +1356,13 @@ defmodule ClaudeAgentSDK.Options do
     |> maybe_put_model_input_attr(:external_model_overrides, external_model_overrides(options))
     |> maybe_put_model_input_attr(:anthropic_base_url, anthropic_base_url(options))
     |> maybe_put_model_input_attr(:anthropic_auth_token, anthropic_auth_token(options))
+    |> maybe_put_model_input_attr(:allow_unknown, unknown_model_passthrough(options))
+  end
+
+  # Only opt the shared registry into pass-through when the caller allows it.
+  # `nil` leaves the key unset so the core keeps its strict default.
+  defp unknown_model_passthrough(%__MODULE__{} = options) do
+    if allow_unknown_model?(options), do: true, else: nil
   end
 
   defp maybe_put_model_input_attr(attrs, _key, nil), do: attrs

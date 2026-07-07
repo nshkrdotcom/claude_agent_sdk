@@ -178,16 +178,34 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert "--effort" in args
     end
 
-    test "warns and strips :xhigh effort on sonnet" do
+    test "allows :xhigh effort on sonnet (Sonnet 5 supports xhigh)" do
       opts = new_options(effort: :xhigh, model: "sonnet")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+      idx = Enum.find_index(args, &(&1 == "--effort"))
+      assert Enum.at(args, idx + 1) == "xhigh"
+    end
 
-      log =
-        capture_log(fn ->
-          args = Options.to_args(opts)
-          refute "--effort" in args
-        end)
+    test "allows :xhigh effort on claude-sonnet-5" do
+      opts = new_options(effort: :xhigh, model: "claude-sonnet-5")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+    end
 
-      assert log =~ "only supported on Opus"
+    test "allows :xhigh effort on fable" do
+      opts = new_options(effort: :xhigh, model: "fable")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+      idx = Enum.find_index(args, &(&1 == "--effort"))
+      assert Enum.at(args, idx + 1) == "xhigh"
+    end
+
+    test "emits effort for an unregistered custom model (trusts the caller)" do
+      opts = new_options(effort: :xhigh, model: "claude-brand-new-2027")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+      idx = Enum.find_index(args, &(&1 == "--effort"))
+      assert Enum.at(args, idx + 1) == "xhigh"
     end
 
     test "allows effort on sonnet" do
@@ -229,19 +247,13 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       )
     end
 
-    test "warns and strips :xhigh effort when model is nil and registry default is sonnet" do
+    test "allows :xhigh effort when model is nil and registry default is sonnet" do
       TestEnvHelpers.with_system_env(
         [{Env.provider_backend(), "anthropic"}, {Env.anthropic_model(), nil}],
         fn ->
           opts = Options.new(effort: :xhigh, model: nil, provider_backend: :anthropic)
-
-          log =
-            capture_log(fn ->
-              args = Options.to_args(opts)
-              refute "--effort" in args
-            end)
-
-          assert log =~ "only supported on Opus"
+          args = Options.to_args(opts)
+          assert "--effort" in args
         end
       )
     end
@@ -258,7 +270,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert "--effort" in args
     end
 
-    test "uses the resolved payload model when gating :xhigh" do
+    test "uses the resolved payload model when gating :xhigh (sonnet payload allows it)" do
       opts =
         new_options(
           effort: :xhigh,
@@ -266,13 +278,8 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
           model_payload: resolved_payload!("sonnet")
         )
 
-      log =
-        capture_log(fn ->
-          args = Options.to_args(opts)
-          refute "--effort" in args
-        end)
-
-      assert log =~ "only supported on Opus"
+      args = Options.to_args(opts)
+      assert "--effort" in args
     end
 
     test "uses the resolved payload model when gating Haiku effort" do

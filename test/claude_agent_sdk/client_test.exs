@@ -379,10 +379,37 @@ defmodule ClaudeAgentSDK.ClientTest do
       assert {:ok, ^normalized} = Client.get_model(client)
     end
 
-    test "set_model rejects invalid models", %{client: client} do
+    test "set_model rejects unknown models when allow_unknown_model: false" do
+      %{client: client} =
+        start_initialized_client_with_fake_cli(%Options{allow_unknown_model: false})
+
       assert {:error, {:invalid_model, suggestions}} = Client.set_model(client, "unknown")
       assert is_list(suggestions)
       assert length(suggestions) <= 3
+    end
+
+    test "set_model forwards an unregistered model to the CLI by default" do
+      %{client: client, transport: transport} =
+        start_initialized_client_with_fake_cli(%Options{})
+
+      task = Task.async(fn -> Client.set_model(client, "claude-brand-new-2027") end)
+
+      request = wait_for_request(transport, 2)
+      assert request["request"]["subtype"] == "set_model"
+      assert request["request"]["model"] == "claude-brand-new-2027"
+      request_id = request["request_id"]
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => request_id,
+          "subtype" => "success",
+          "result" => %{"model" => "claude-brand-new-2027"}
+        }
+      }
+
+      FakeCLI.push_message(transport, response)
+      assert :ok = Task.await(task, 1_000)
     end
 
     test "set_model prevents concurrent requests", %{

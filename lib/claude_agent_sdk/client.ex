@@ -1043,7 +1043,7 @@ defmodule ClaudeAgentSDK.Client do
   defp set_model_request(model, from, state) do
     model_string = model |> to_string() |> String.trim()
 
-    with {:ok, normalized} <- Model.validate(model_string),
+    with {:ok, normalized} <- resolve_set_model(model_string, state.options),
          {request_id, json} = Protocol.encode_set_model_request(normalized),
          {:ok, next_state} <-
            start_request_task(
@@ -1060,14 +1060,39 @@ defmodule ClaudeAgentSDK.Client do
            ) do
       {:noreply, next_state}
     else
-      {:error, :invalid_model} ->
-        suggestions = Model.suggest(model_string)
+      {:error, {:invalid_model, suggestions}} ->
         {:reply, {:error, {:invalid_model, suggestions}}, state}
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
   end
+
+  # The Claude CLI is the authority on model names and validates a `set_model`
+  # control request before latching it. A model newer than the shared registry
+  # is therefore forwarded as-is (with a warning) unless the client opted out via
+  # `allow_unknown_model: false`, in which case it is rejected locally.
+  defp resolve_set_model(model_string, options) do
+    case Model.validate(model_string) do
+      {:ok, normalized} ->
+        {:ok, normalized}
+
+      {:error, :invalid_model} ->
+        if set_model_allows_unknown?(options) do
+          Logger.warning(
+            "set_model: #{inspect(model_string)} is not in the Claude model registry; " <>
+              "forwarding it to the CLI as-is."
+          )
+
+          {:ok, model_string}
+        else
+          {:error, {:invalid_model, Model.suggest(model_string)}}
+        end
+    end
+  end
+
+  defp set_model_allows_unknown?(%Options{} = options), do: Options.allow_unknown_model?(options)
+  defp set_model_allows_unknown?(_options), do: true
 
   defp model_change_in_progress?(state) do
     Enum.any?(state.pending_requests, fn {_request_id, entry} ->
