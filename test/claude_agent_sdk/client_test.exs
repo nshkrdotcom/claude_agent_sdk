@@ -467,6 +467,60 @@ defmodule ClaudeAgentSDK.ClientTest do
       assert :ok = Task.await(task, 1_000)
     end
 
+    test "stop_task sends stop_task control request", %{client: client, transport: transport} do
+      task = Task.async(fn -> Client.stop_task(client, "task_42") end)
+
+      request = wait_for_request(transport, 2)
+      assert request["request"]["subtype"] == "stop_task"
+      assert request["request"]["task_id"] == "task_42"
+
+      FakeCLI.push_message(transport, control_success_response(request["request_id"], %{}))
+      assert :ok = Task.await(task, 1_000)
+    end
+
+    test "reconnect_mcp_server sends mcp_reconnect", %{client: client, transport: transport} do
+      task = Task.async(fn -> Client.reconnect_mcp_server(client, "github") end)
+
+      request = wait_for_request(transport, 2)
+      assert request["request"]["subtype"] == "mcp_reconnect"
+      assert request["request"]["serverName"] == "github"
+
+      FakeCLI.push_message(transport, control_success_response(request["request_id"], %{}))
+      assert :ok = Task.await(task, 1_000)
+    end
+
+    test "toggle_mcp_server sends mcp_toggle with enabled flag", %{
+      client: client,
+      transport: transport
+    } do
+      task = Task.async(fn -> Client.toggle_mcp_server(client, "github", false) end)
+
+      request = wait_for_request(transport, 2)
+      assert request["request"]["subtype"] == "mcp_toggle"
+      assert request["request"]["serverName"] == "github"
+      assert request["request"]["enabled"] == false
+
+      FakeCLI.push_message(transport, control_success_response(request["request_id"], %{}))
+      assert :ok = Task.await(task, 1_000)
+    end
+
+    test "stop_task forwards CLI error", %{client: client, transport: transport} do
+      task = Task.async(fn -> Client.stop_task(client, "gone") end)
+
+      request = wait_for_request(transport, 2)
+
+      FakeCLI.push_message(transport, %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => request["request_id"],
+          "subtype" => "error",
+          "error" => "boom"
+        }
+      })
+
+      assert {:error, "boom"} = Task.await(task, 1_000)
+    end
+
     test "interrupt forwards CLI error", %{client: client, transport: transport} do
       task = Task.async(fn -> Client.interrupt(client) end)
 

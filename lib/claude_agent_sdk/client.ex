@@ -462,6 +462,35 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @doc """
+  Requests the CLI stop a background task by id.
+
+  The CLI is authoritative; a task that is already gone (`not_found` /
+  `not_running`) is reported as success so stale task chips can be pruned.
+  """
+  @spec stop_task(pid(), String.t()) :: :ok | {:error, term()}
+  def stop_task(client, task_id) when is_pid(client) and is_binary(task_id) do
+    GenServer.call(client, {:stop_task, task_id}, :infinity)
+  end
+
+  @doc """
+  Requests the CLI reconnect an MCP server by name.
+  """
+  @spec reconnect_mcp_server(pid(), String.t()) :: :ok | {:error, term()}
+  def reconnect_mcp_server(client, server_name)
+      when is_pid(client) and is_binary(server_name) do
+    GenServer.call(client, {:mcp_reconnect, server_name}, :infinity)
+  end
+
+  @doc """
+  Enables or disables an MCP server by name at runtime.
+  """
+  @spec toggle_mcp_server(pid(), String.t(), boolean()) :: :ok | {:error, term()}
+  def toggle_mcp_server(client, server_name, enabled)
+      when is_pid(client) and is_binary(server_name) and is_boolean(enabled) do
+    GenServer.call(client, {:mcp_toggle, server_name, enabled}, :infinity)
+  end
+
+  @doc """
   Rewinds tracked files to their state at a specific user message.
 
   Requires `Options.enable_file_checkpointing` to be enabled when starting the client.
@@ -933,6 +962,42 @@ defmodule ClaudeAgentSDK.Client do
       request_id,
       json,
       fn task_ref -> {:interrupt, from, task_ref} end,
+      fn next_state -> {:noreply, next_state} end
+    )
+  end
+
+  def handle_call({:stop_task, task_id}, from, state) do
+    {request_id, json} = Protocol.encode_stop_task_request(task_id)
+
+    start_protocol_request_task(
+      state,
+      request_id,
+      json,
+      fn task_ref -> {:stop_task, from, task_ref} end,
+      fn next_state -> {:noreply, next_state} end
+    )
+  end
+
+  def handle_call({:mcp_reconnect, server_name}, from, state) do
+    {request_id, json} = Protocol.encode_mcp_reconnect_request(server_name)
+
+    start_protocol_request_task(
+      state,
+      request_id,
+      json,
+      fn task_ref -> {:mcp_reconnect, from, task_ref} end,
+      fn next_state -> {:noreply, next_state} end
+    )
+  end
+
+  def handle_call({:mcp_toggle, server_name, enabled}, from, state) do
+    {request_id, json} = Protocol.encode_mcp_toggle_request(server_name, enabled)
+
+    start_protocol_request_task(
+      state,
+      request_id,
+      json,
+      fn task_ref -> {:mcp_toggle, from, task_ref} end,
       fn next_state -> {:noreply, next_state} end
     )
   end
@@ -1620,6 +1685,9 @@ defmodule ClaudeAgentSDK.Client do
         {:mcp_status, from, _task_ref} ->
           GenServer.reply(from, {:error, reason})
 
+        {action, from, _task_ref} when action in [:stop_task, :mcp_reconnect, :mcp_toggle] ->
+          GenServer.reply(from, {:error, reason})
+
         _ ->
           :ok
       end
@@ -1966,7 +2034,7 @@ defmodule ClaudeAgentSDK.Client do
          request_id,
          state
        )
-       when action in [:interrupt, :rewind_files] do
+       when action in [:interrupt, :rewind_files, :stop_task, :mcp_reconnect, :mcp_toggle] do
     Logger.error("#{action} request failed", request_id: request_id, error: inspect(reason))
     GenServer.reply(from, {:error, reason})
     state
@@ -2200,6 +2268,17 @@ defmodule ClaudeAgentSDK.Client do
          state
        ) do
     handle_simple_control_response(:rewind_files, from, response, request_id, state)
+  end
+
+  defp dispatch_control_response(
+         {action, from, _timer_ref},
+         _response_data,
+         response,
+         request_id,
+         state
+       )
+       when action in [:stop_task, :mcp_reconnect, :mcp_toggle] do
+    handle_simple_control_response(action, from, response, request_id, state)
   end
 
   defp dispatch_control_response(
