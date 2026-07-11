@@ -67,14 +67,38 @@ driven by the shared model catalog: for a registered model, an unsupported
 effort is dropped with a warning; for an unregistered model, the requested
 effort is forwarded as-is and validated by the CLI/API.
 
+### `allow_unknown_model` defaults across the ecosystem
+
+This SDK is **permissive by default**: `allow_unknown_model` unset means
+`true`, so unknown model ids pass through to `--model` with a warning (a
+just-released model works before it reaches the registry).
+`agent_session_manager` uses the same registry machinery but is **strict by
+default** (`allow_unknown_model: false` — unknown ids are rejected unless a
+caller opts in). The asymmetry is intentional — ASM is a governed
+multi-provider manager — so do not "align" one to the other.
+
+### Registry ownership and hex publish-ordering
+
+The model registry (catalog JSON + resolution logic) ships from
+`cli_subprocess_core`, which this SDK and `agent_session_manager` consume as
+a path dependency in this workspace and as a hex dependency when published.
+When releasing to hex, **publish `cli_subprocess_core` first**, then
+`claude_agent_sdk` / `agent_session_manager`: a hex consumer's model lineup
+comes from the *published* core package, not the workspace sibling. When
+switching a workspace checkout between `:path` and `:github`/`:hex`
+resolution (see `build_support/dependency_sources.config.exs`), prune any
+previously fetched `deps/cli_subprocess_core` copy so a stale catalog cannot
+shadow the live one.
+
 The current native Claude aliases are:
 
 | SDK name | Claude CLI/API alias |
 |----------|----------------------|
-| `sonnet` | `claude-sonnet-4-6` |
-| `sonnet[1m]` | `claude-sonnet-4-6[1m]` |
-| `opus` | `claude-opus-4-7` |
-| `opus[1m]` | `claude-opus-4-7[1m]` |
+| `sonnet` | `claude-sonnet-5` (also `claude-sonnet-4-6`, `default`) |
+| `sonnet[1m]` | `claude-sonnet-5[1m]` (also `claude-sonnet-4-6[1m]`) |
+| `opus` | `claude-opus-4-8` (also `claude-opus-4-7`) |
+| `opus[1m]` | `claude-opus-4-8[1m]` (also `claude-opus-4-7[1m]`) |
+| `fable` | `claude-fable-5` |
 | `haiku` | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` |
 
 `ClaudeAgentSDK.Model.short_forms/0`, `full_ids/0`, and `list_models/0` expose

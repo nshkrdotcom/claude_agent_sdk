@@ -192,6 +192,14 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert "--effort" in args
     end
 
+    test "allows :xhigh effort on sonnet short form" do
+      opts = new_options(effort: :xhigh, model: "sonnet")
+      args = Options.to_args(opts)
+      assert "--effort" in args
+      idx = Enum.find_index(args, &(&1 == "--effort"))
+      assert Enum.at(args, idx + 1) == "xhigh"
+    end
+
     test "allows :xhigh effort on fable" do
       opts = new_options(effort: :xhigh, model: "fable")
       args = Options.to_args(opts)
