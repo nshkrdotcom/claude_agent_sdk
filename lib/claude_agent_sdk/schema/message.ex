@@ -51,6 +51,7 @@ defmodule ClaudeAgentSDK.Schema.Message do
                      "num_turns" => Conventions.optional_any(),
                      "is_error" => Conventions.optional_any(),
                      "stop_reason" => Conventions.optional_any(),
+                     "terminal_reason" => Conventions.optional_trimmed_string(),
                      "error" => Conventions.optional_trimmed_string()
                    },
                    unrecognized_keys: :preserve

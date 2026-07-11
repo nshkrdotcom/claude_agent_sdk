@@ -148,6 +148,32 @@ defmodule ClaudeAgentSDK.Message do
 
   def terminal_task_status?(_status), do: false
 
+  # Dead-turn terminal reasons per the CLI 2.1.207 classifier: the turn died
+  # under the hood (its command lifecycle reports cancelled, not completed).
+  # Aborts (aborted_streaming/aborted_tools), max_turns, background_requested,
+  # completed, and unknown/absent reasons are NOT dead turns. Values stay
+  # strings — no atoms are minted from wire data.
+  @dead_terminal_reasons ~w(
+    blocking_limit rapid_refill_breaker prompt_too_long image_error
+    model_error api_error malformed_tool_use_exhausted budget_exhausted
+    structured_output_retry_exhausted tool_deferred_unavailable
+    turn_setup_failed
+  )
+
+  @doc """
+  Returns `true` when a result's `terminal_reason` indicates a dead turn —
+  one that failed or was cancelled under the hood rather than completing
+  cleanly (CLI 2.1.204+).
+
+  Accepts a result `Message`, a `terminal_reason` string, or `nil`. Unknown
+  and absent reasons are not dead turns.
+  """
+  @spec dead_turn?(t() | String.t() | nil) :: boolean()
+  def dead_turn?(%__MODULE__{data: %{terminal_reason: reason}}), do: dead_turn?(reason)
+  def dead_turn?(%__MODULE__{}), do: false
+  def dead_turn?(reason) when is_binary(reason), do: reason in @dead_terminal_reasons
+  def dead_turn?(_reason), do: false
+
   @doc false
   def __safe_type__(type), do: safe_type(type)
 
@@ -320,7 +346,9 @@ defmodule ClaudeAgentSDK.Message do
         :success -> build_result_data(:success, raw)
         :error_max_turns -> build_result_data(:error_max_turns, raw)
         :error_during_execution -> build_result_data(:error_during_execution, raw)
-        _ -> raw
+        # Unknown result subtypes (e.g. error_max_budget_usd) keep the raw
+        # frame but still surface the shared parity fields additively.
+        _ -> put_result_parity_fields(raw, raw)
       end
 
     %{message | subtype: subtype, data: data}
@@ -541,6 +569,7 @@ defmodule ClaudeAgentSDK.Message do
     |> maybe_put(:api_error_status, raw["api_error_status"])
     |> maybe_put(:deferred_tool_use, parse_deferred_tool_use(raw["deferred_tool_use"]))
     |> maybe_put(:origin, raw["origin"])
+    |> maybe_put(:terminal_reason, raw["terminal_reason"])
   end
 
   defp parse_deferred_tool_use(%{} = deferred) do
