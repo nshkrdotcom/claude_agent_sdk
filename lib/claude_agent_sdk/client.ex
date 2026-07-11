@@ -454,9 +454,20 @@ defmodule ClaudeAgentSDK.Client do
   end
 
   @doc """
-  Sends an interrupt control request to the CLI.
+  Sends an interrupt control request to the CLI and returns the interrupt
+  receipt.
+
+  The receipt's `still_queued` lists UUIDs of queued async messages that
+  will still run despite the interrupt (empty on CLIs without
+  `interrupt_receipt_v1` — feature-detect via the init frame's
+  `capabilities`, see `ClaudeAgentSDK.Message.capability?/2`).
+
+  > #### Breaking change vs 0.17.x {: .warning}
+  >
+  > Prior releases returned a bare `:ok`; this now returns
+  > `{:ok, ClaudeAgentSDK.InterruptReceipt.t()}`.
   """
-  @spec interrupt(pid()) :: :ok | {:error, term()}
+  @spec interrupt(pid()) :: {:ok, ClaudeAgentSDK.InterruptReceipt.t()} | {:error, term()}
   def interrupt(client) when is_pid(client) do
     GenServer.call(client, :interrupt, :infinity)
   end
@@ -2271,7 +2282,7 @@ defmodule ClaudeAgentSDK.Client do
          request_id,
          state
        ) do
-    handle_simple_control_response(:interrupt, from, response, request_id, state)
+    handle_interrupt_response(from, response, request_id, state)
   end
 
   defp dispatch_control_response(
@@ -2417,6 +2428,39 @@ defmodule ClaudeAgentSDK.Client do
 
         GenServer.reply(from, {:error, :unexpected_response})
         %{state | pending_permission_change: nil}
+    end
+  end
+
+  # Interrupt gets a dedicated handler: unlike the simple acks, the CLI's
+  # success payload carries still_queued (interrupt_receipt_v1) which
+  # handle_simple_control_response would discard.
+  defp handle_interrupt_response(from, response, request_id, state) do
+    case response["subtype"] do
+      "success" ->
+        receipt = ClaudeAgentSDK.InterruptReceipt.from_response(response["response"])
+
+        Logger.info("interrupt acknowledged",
+          request_id: request_id,
+          still_queued: length(receipt.still_queued)
+        )
+
+        GenServer.reply(from, {:ok, receipt})
+        state
+
+      "error" ->
+        error = response["error"] || "interrupt_failed"
+        Logger.error("interrupt rejected", request_id: request_id, error: error)
+        GenServer.reply(from, {:error, error})
+        state
+
+      other ->
+        Logger.warning("Unexpected subtype for interrupt response",
+          request_id: request_id,
+          subtype: other
+        )
+
+        GenServer.reply(from, {:error, :unexpected_response})
+        state
     end
   end
 

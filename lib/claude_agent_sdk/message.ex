@@ -217,6 +217,21 @@ defmodule ClaudeAgentSDK.Message do
   def command_terminal?(state) when is_binary(state), do: state in @terminal_command_states
   def command_terminal?(_state), do: false
 
+  @doc """
+  Returns `true` if a `system/init` frame advertises the given capability
+  string (e.g. `"interrupt_receipt_v1"`, CLI 2.1.205+).
+  """
+  @spec capability?(t(), String.t()) :: boolean()
+  def capability?(
+        %__MODULE__{type: :system, subtype: :init, data: %{capabilities: capabilities}},
+        capability
+      )
+      when is_list(capabilities) do
+    capability in capabilities
+  end
+
+  def capability?(%__MODULE__{}, _capability), do: false
+
   @doc false
   def __safe_type__(type), do: safe_type(type)
 
@@ -681,7 +696,8 @@ defmodule ClaudeAgentSDK.Message do
       tools: raw["tools"] || [],
       mcp_servers: raw["mcp_servers"] || [],
       model: raw["model"],
-      permission_mode: raw["permissionMode"]
+      permission_mode: raw["permissionMode"],
+      capabilities: raw["capabilities"] || []
     })
   end
 

@@ -301,8 +301,8 @@ alias ClaudeAgentSDK.Client
 # Runtime permission mode switching
 :ok = Client.set_permission_mode(client, :plan)
 
-# Interrupt current operation
-:ok = Client.interrupt(client)
+# Interrupt current operation (returns a receipt with still-queued uuids)
+{:ok, %ClaudeAgentSDK.InterruptReceipt{}} = Client.interrupt(client)
 
 # Rewind files to checkpoint (requires enable_file_checkpointing: true)
 :ok = Client.rewind_files(client, "user_message_id")

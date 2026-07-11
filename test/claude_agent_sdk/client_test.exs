@@ -448,7 +448,10 @@ defmodule ClaudeAgentSDK.ClientTest do
        start_initialized_client_with_fake_cli(%Options{}, init_response: server_info_response())}
     end
 
-    test "interrupt sends control request", %{client: client, transport: transport} do
+    test "interrupt sends control request and returns a receipt", %{
+      client: client,
+      transport: transport
+    } do
       task = Task.async(fn -> Client.interrupt(client) end)
 
       request = wait_for_request(transport, 2)
@@ -464,7 +467,50 @@ defmodule ClaudeAgentSDK.ClientTest do
       }
 
       FakeCLI.push_message(transport, response)
-      assert :ok = Task.await(task, 1_000)
+      assert {:ok, %ClaudeAgentSDK.InterruptReceipt{still_queued: []}} = Task.await(task, 1_000)
+    end
+
+    test "interrupt receipt surfaces still_queued uuids", %{
+      client: client,
+      transport: transport
+    } do
+      task = Task.async(fn -> Client.interrupt(client) end)
+
+      request = wait_for_request(transport, 2)
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => request["request_id"],
+          "subtype" => "success",
+          "response" => %{"still_queued" => ["uuid-a", "uuid-b"]}
+        }
+      }
+
+      FakeCLI.push_message(transport, response)
+
+      assert {:ok, %ClaudeAgentSDK.InterruptReceipt{still_queued: ["uuid-a", "uuid-b"]}} =
+               Task.await(task, 1_000)
+    end
+
+    test "interrupt receipt tolerates a missing response payload (older CLIs)", %{
+      client: client,
+      transport: transport
+    } do
+      task = Task.async(fn -> Client.interrupt(client) end)
+
+      request = wait_for_request(transport, 2)
+
+      response = %{
+        "type" => "control_response",
+        "response" => %{
+          "request_id" => request["request_id"],
+          "subtype" => "success"
+        }
+      }
+
+      FakeCLI.push_message(transport, response)
+      assert {:ok, %ClaudeAgentSDK.InterruptReceipt{still_queued: []}} = Task.await(task, 1_000)
     end
 
     test "stop_task sends stop_task control request", %{client: client, transport: transport} do
