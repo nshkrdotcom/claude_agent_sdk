@@ -37,6 +37,13 @@ defmodule ClaudeAgentSDK.TokenStoreTest do
     assert token_data.provider == :bedrock
   end
 
+  test "save restricts the token file to user-only permissions", %{path: path} do
+    :ok = TokenStore.save(%{token: "sk-ant-oat01-PERMTEST", expiry: nil, provider: :anthropic})
+
+    assert Bitwise.band(File.stat!(path).mode, 0o777) == 0o600
+    refute File.exists?(path <> ".tmp")
+  end
+
   test "load defaults unknown provider strings to anthropic", %{path: path} do
     write_token_file(path, "unknown-provider")
 

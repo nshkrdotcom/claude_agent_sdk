@@ -41,7 +41,9 @@ defmodule ClaudeAgentSDK.AuthManager do
   alias ClaudeAgentSDK.Config.{Env, Timeouts}
   alias ClaudeAgentSDK.GovernedLaunch
 
-  # State structure
+  # State structure. The token is a live credential — keep it out of
+  # inspect output (OTP crash reports, Logger metadata, :observer).
+  @derive {Inspect, except: [:token]}
   defstruct [
     # Current authentication token
     :token,

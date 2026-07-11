@@ -122,7 +122,11 @@ defmodule ClaudeAgentSDK.Process do
          CoreCommand.new(command_spec, ensure_json_flags(args),
            cwd: options.cwd,
            env: __env_vars__(options),
-           user: options.user
+           user: options.user,
+           # Isolate the CLI child: only the allowlisted env map above
+           # reaches it (PATH/HOME are in the allowlist). Without this the
+           # child inherits the full node environment.
+           clear_env?: true
          )}
 
       {:error, :not_found} ->

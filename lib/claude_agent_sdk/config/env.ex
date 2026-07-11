@@ -136,4 +136,70 @@ defmodule ClaudeAgentSDK.Config.Env do
       "HOME"
     ]
   end
+
+  # -- runtime snapshot allowlist ---------------------------------------------
+
+  @doc """
+  Every environment variable name the SDK reads, as a flat list.
+
+  This is the allowlist behind the `config/runtime.exs` snapshot: only these
+  names (plus the `CLAUDE_`/`ANTHROPIC_` prefixes, see `snapshot/1`) are
+  copied from the OS environment into Application config. Add new variables
+  here when introducing a new read.
+  """
+  @spec all_known_vars() :: [String.t()]
+  def all_known_vars do
+    [
+      anthropic_api_key(),
+      anthropic_auth_token(),
+      anthropic_base_url(),
+      anthropic_model(),
+      oauth_token(),
+      use_bedrock(),
+      use_vertex(),
+      provider_backend(),
+      external_model_overrides(),
+      entrypoint(),
+      sdk_version(),
+      file_checkpointing(),
+      stream_close_timeout(),
+      claudecode(),
+      skip_version_check(),
+      traceparent(),
+      tracestate(),
+      aws_access_key_id(),
+      aws_profile(),
+      gcp_credentials(),
+      gcp_project(),
+      ci(),
+      live_mode(),
+      live_tests(),
+      "CLAUDE_CONFIG_DIR",
+      "CLAUDE_EXAMPLES_BACKEND",
+      "CLAUDE_EXAMPLES_PREFLIGHT_TIMEOUT_SECONDS",
+      "MIX_ENV",
+      "PATH",
+      "HOME"
+    ]
+  end
+
+  @doc """
+  Filters an OS environment map down to the variables the SDK reads.
+
+  Keeps `all_known_vars/0` plus anything under the `CLAUDE_`/`ANTHROPIC_`
+  namespaces (so a newly introduced SDK/CLI variable cannot be silently
+  dropped), and excludes everything else — unrelated secrets in the parent
+  environment must not be copied into inspectable Application config.
+  """
+  @spec snapshot(%{optional(String.t()) => String.t()}) ::
+          %{optional(String.t()) => String.t()}
+  def snapshot(os_env) when is_map(os_env) do
+    allowed = MapSet.new(all_known_vars())
+
+    Map.filter(os_env, fn {key, _value} ->
+      MapSet.member?(allowed, key) or
+        String.starts_with?(key, "CLAUDE_") or
+        String.starts_with?(key, "ANTHROPIC_")
+    end)
+  end
 end

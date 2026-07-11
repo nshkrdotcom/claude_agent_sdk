@@ -44,14 +44,19 @@ defmodule ClaudeAgentSDK.Auth.TokenStore do
         created_at: DateTime.to_iso8601(DateTime.utc_now())
       })
 
-    # Write with restricted permissions (user-only read/write)
-    case File.write(path, json) do
-      :ok ->
-        # Set file permissions to 0600 (user read/write only)
-        File.chmod!(path, 0o600)
-        :ok
+    # Write to a sibling temp file, restrict to 0600 while it is still
+    # empty, then write + rename into place — the token is never on disk
+    # with permissions looser than user-only.
+    tmp_path = path <> ".tmp"
 
+    with :ok <- File.touch(tmp_path),
+         :ok <- File.chmod(tmp_path, 0o600),
+         :ok <- File.write(tmp_path, json),
+         :ok <- File.rename(tmp_path, path) do
+      :ok
+    else
       error ->
+        _ = File.rm(tmp_path)
         error
     end
   end

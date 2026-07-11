@@ -89,6 +89,10 @@ defmodule ClaudeAgentSDK.Options do
 
   # This struct intentionally has many fields as it mirrors the Claude Code CLI options.
   # The struct is created once per request and is short-lived, so memory overhead is minimal.
+  # anthropic_auth_token and env are excluded from inspect output: both
+  # routinely carry live credentials (auth token, ANTHROPIC_API_KEY) and the
+  # struct shows up in crash reports and error tuples.
+  @derive {Inspect, except: [:anthropic_auth_token, :env]}
   # credo:disable-for-next-line Credo.Check.Warning.StructFieldAmount
   defstruct [
     :max_turns,

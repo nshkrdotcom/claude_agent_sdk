@@ -86,6 +86,7 @@
              :reason,
              :request_id,
              :server,
+             :still_queued,
              :subtype,
              :timeout_ms,
              :type,

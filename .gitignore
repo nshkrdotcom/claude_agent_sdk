@@ -60,3 +60,8 @@ anthropics/
 claude-agent-sdk-python/
 /claude_agent_sdk/
  claude_agent_sdk-*.tar
+
+# Local secrets — never commit a real .env (templates *.env.example are fine)
+.env
+*.env
+!*.env.example
