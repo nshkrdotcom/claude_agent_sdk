@@ -89,6 +89,7 @@ defmodule ClaudeAgentSDK.Message do
           | :task_progress
           | :task_notification
           | :task_updated
+          | :background_tasks_changed
           | :model_fallback
           | :hook_started
           | :hook_response
@@ -173,6 +174,27 @@ defmodule ClaudeAgentSDK.Message do
   def dead_turn?(%__MODULE__{}), do: false
   def dead_turn?(reason) when is_binary(reason), do: reason in @dead_terminal_reasons
   def dead_turn?(_reason), do: false
+
+  @doc """
+  Returns the live (non-terminal) background tasks from a
+  `background_tasks_changed` system frame.
+
+  The frame is level-based — `tasks` is the full current set — and tasks
+  without a `status` are live, so this only drops tasks whose status is
+  terminal. Returns `[]` for any other message.
+  """
+  @spec live_background_tasks(t()) :: [map()]
+  def live_background_tasks(%__MODULE__{
+        subtype: :background_tasks_changed,
+        data: %{tasks: tasks}
+      })
+      when is_list(tasks) do
+    Enum.reject(tasks, fn task ->
+      terminal_task_status?(task[:status] || task["status"])
+    end)
+  end
+
+  def live_background_tasks(%__MODULE__{}), do: []
 
   @doc false
   def __safe_type__(type), do: safe_type(type)
@@ -384,6 +406,10 @@ defmodule ClaudeAgentSDK.Message do
   defp build_system_subtype_data(:task_progress, raw), do: build_task_progress_data(raw)
   defp build_system_subtype_data(:task_notification, raw), do: build_task_notification_data(raw)
   defp build_system_subtype_data(:task_updated, raw), do: build_task_updated_data(raw)
+
+  defp build_system_subtype_data(:background_tasks_changed, raw),
+    do: build_background_tasks_changed_data(raw)
+
   defp build_system_subtype_data(:model_fallback, raw), do: build_model_fallback_data(raw)
   defp build_system_subtype_data(:hook_started, raw), do: build_hook_event_data(raw)
   defp build_system_subtype_data(:hook_response, raw), do: build_hook_event_data(raw)
@@ -421,6 +447,7 @@ defmodule ClaudeAgentSDK.Message do
     "task_progress" => :task_progress,
     "task_notification" => :task_notification,
     "task_updated" => :task_updated,
+    "background_tasks_changed" => :background_tasks_changed,
     "model_fallback" => :model_fallback,
     "hook_started" => :hook_started,
     "hook_response" => :hook_response,
@@ -670,6 +697,33 @@ defmodule ClaudeAgentSDK.Message do
 
   defp task_updated_status(%{} = patch, fallback), do: patch["status"] || fallback
   defp task_updated_status(_patch, fallback), do: fallback
+
+  # Level-based frame: `tasks` is the full live background-task set on every
+  # membership change (an empty list means the set drained). Per-task keys
+  # observed on CLI 2.1.207: task_id, task_type, description; status is
+  # optional (absent means the task is live).
+  defp build_background_tasks_changed_data(raw) do
+    tasks = raw["tasks"] || raw["background_tasks"] || []
+
+    Map.merge(raw, %{
+      tasks: Enum.map(tasks, &build_background_task/1),
+      session_id: raw["session_id"],
+      uuid: raw["uuid"]
+    })
+  end
+
+  defp build_background_task(%{} = task) do
+    Map.merge(task, %{
+      task_id: task["task_id"],
+      task_type: task["task_type"],
+      status: task["status"],
+      description: task["description"] || task["task_description"],
+      tool_use_id: task["tool_use_id"],
+      subagent_type: task["subagent_type"]
+    })
+  end
+
+  defp build_background_task(other), do: other
 
   defp build_model_fallback_data(raw) do
     Map.merge(raw, %{
