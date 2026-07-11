@@ -594,20 +594,6 @@ defmodule ClaudeAgentSDK.Message do
     |> put_result_parity_fields(raw)
   end
 
-  # CLI 2.1.206+ emits duration_api_ms: 0 for zero-API results instead of a
-  # stale value; older CLIs may omit it. Normalize the omitted zero-API case
-  # to 0 so consumers see one shape.
-  defp normalize_duration_api_ms(raw) do
-    case raw["duration_api_ms"] do
-      nil -> if zero_api_result?(raw), do: 0, else: nil
-      value -> value
-    end
-  end
-
-  defp zero_api_result?(raw) do
-    raw["num_turns"] in [0, nil] or raw["usage"] in [nil, %{}]
-  end
-
   defp build_result_data(error_type, raw)
        when error_type in [:error_max_turns, :error_during_execution] do
     error_message = get_error_message(error_type, raw["error"] || raw["result"])
@@ -625,6 +611,20 @@ defmodule ClaudeAgentSDK.Message do
       stop_reason: raw["stop_reason"]
     }
     |> put_result_parity_fields(raw)
+  end
+
+  # CLI 2.1.206+ emits duration_api_ms: 0 for zero-API results instead of a
+  # stale value; older CLIs may omit it. Normalize the omitted zero-API case
+  # to 0 so consumers see one shape.
+  defp normalize_duration_api_ms(raw) do
+    case raw["duration_api_ms"] do
+      nil -> if zero_api_result?(raw), do: 0, else: nil
+      value -> value
+    end
+  end
+
+  defp zero_api_result?(raw) do
+    raw["num_turns"] in [0, nil] or raw["usage"] in [nil, %{}]
   end
 
   defp put_result_parity_fields(data, raw) do
