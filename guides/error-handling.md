@@ -678,6 +678,35 @@ The conversation was terminated because the `max_turns` limit was reached.
 
 An error occurred during conversation execution.
 
+### Terminal Reason & Dead Turns
+
+On CLI 2.1.204+ result frames carry a `terminal_reason` string explaining why
+the query loop ended — `"completed"` on a clean finish, `"aborted_streaming"`
+/ `"aborted_tools"` on interrupts, and failure reasons like
+`"budget_exhausted"` or `"api_error"`. The field is absent when the loop was
+bypassed (a local slash command). Unknown future values pass through as
+strings.
+
+`Message.dead_turn?/1` classifies a result (or a bare reason string) as a
+**dead turn** — one that failed or was cancelled under the hood rather than
+completing. The dead set matches the CLI's own classifier: `blocking_limit`,
+`rapid_refill_breaker`, `prompt_too_long`, `image_error`, `model_error`,
+`api_error`, `malformed_tool_use_exhausted`, `budget_exhausted`,
+`structured_output_retry_exhausted`, `tool_deferred_unavailable`, and
+`turn_setup_failed`. Aborts, `max_turns`, `completed`, unknown, and absent
+reasons are **not** dead turns.
+
+```elixir
+result = Enum.find(messages, &(&1.type == :result))
+
+if ClaudeAgentSDK.Message.dead_turn?(result) do
+  Logger.warning("turn died: #{result.data.terminal_reason}")
+end
+```
+
+A dead turn's `command_lifecycle` reports `cancelled` rather than `completed`
+(see the Runtime Control guide).
+
 ### Comprehensive Result Handling
 
 ```elixir

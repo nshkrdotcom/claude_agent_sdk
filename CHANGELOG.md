@@ -7,14 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.18.0] - 2026-07-06
+## [0.18.0] - 2026-07-10
 
 Upstream catch-up bringing the Elixir SDK toward parity with the official Python
-SDK `v0.2.111` and TypeScript SDK `v0.3.202`, tracking Claude CLI `2.1.202`, plus
-a refresh of the shared Claude model registry to the current lineup and a
-guaranteed custom-model override.
+SDK `v0.2.116` and TypeScript SDK `v0.3.207`, tracking Claude CLI `2.1.207`, plus
+a refresh of the shared Claude model registry to the current lineup, a
+guaranteed custom-model override, and an ecosystem hardening pass (atom safety,
+env-var & secrets hygiene).
 
 ### Added
+
+- **`terminal_reason` on result messages** (CLI 2.1.204+): a string field on
+  success, error, and unknown result subtypes, plus `Message.dead_turn?/1`
+  classifying the 11 dead-turn reasons per the CLI's own classifier — the six
+  changelog-new values (`api_error`, `budget_exhausted`,
+  `tool_deferred_unavailable`, `turn_setup_failed`,
+  `malformed_tool_use_exhausted`, `structured_output_retry_exhausted`) plus
+  `blocking_limit`, `rapid_refill_breaker`, `prompt_too_long`, `image_error`,
+  and `model_error`. Aborts, `max_turns`, `completed`, and unknown reasons are
+  not dead turns.
+- **`background_tasks_changed` system frame** (CLI 2.1.203+): the full live
+  background-task set on every membership change (level, not edges), plus
+  `Message.live_background_tasks/1`.
+- **`command_lifecycle` top-level frame** (CLI 2.1.206+): each uuid-stamped
+  inbound message's lifecycle state (`queued`/`started`/`completed`/
+  `cancelled`/`discarded`) keyed by `command_uuid`, plus
+  `Message.command_terminal?/1`.
+- **Typed interrupt receipt:** `Client.interrupt/1` now returns
+  `{:ok, %ClaudeAgentSDK.InterruptReceipt{still_queued: [...]}}` exposing the
+  UUIDs of queued async messages that survive the interrupt. `system/init`
+  `capabilities` (including `interrupt_receipt_v1` and `msg_lifecycle_v1`) are
+  surfaced with `Message.capability?/2` for feature detection.
+- **Peer-message provenance:** user frames surface the `origin` union;
+  `Message.peer_origin/1` types the `kind: "peer"` variant
+  (`from`/`name`/`body`/`sender_task_id`).
+- **`AgentToolCompletedOutput`:** `Message.agent_tool_completed/1` types the
+  Agent/Task tool's structured completion payload from `tool_use_result`
+  (agent id/type, content, resolved model, run totals, usage).
+- **Golden stream-json fixtures** captured live from Claude CLI 2.1.207
+  (`test/support/fixtures/cli_2_1_207/`) with a smoke test pinning that
+  unknown frames always fall through to `Message.raw`.
+- **Atom-safety guardrail:** `Credo.Check.Warning.UnsafeToAtom` enabled (it
+  was present but disabled), `scripts/atom_guard.sh` CI backstop, and
+  `guides/atom-safety.md`.
+- **Env & secrets guardrail:** `scripts/secrets_guard.sh` CI backstop and
+  `guides/env-and-secrets.md`.
 
 - **Model registry refresh (Claude 5 family):** `sonnet` now maps to Claude
   Sonnet 5, `opus` to Claude Opus 4.8, and a new `fable` alias to Claude Fable
@@ -88,7 +125,42 @@ guaranteed custom-model override.
 
 ### Changed
 
-- Recommended Claude CLI version bumped to `2.1.202` (minimum remains `2.1.0`).
+- **BREAKING (vs 0.17.2):** `Client.interrupt/1` now returns
+  `{:ok, %ClaudeAgentSDK.InterruptReceipt{}} | {:error, term()}` instead of a
+  bare `:ok`, to carry `still_queued`. Update `:ok = interrupt(client)` call
+  sites to `{:ok, _receipt} = interrupt(client)`.
+- Recommended Claude CLI version bumped to `2.1.207` (minimum remains `2.1.0`).
+- `:manual` added to the `Options.permission_mode` typespec (already accepted
+  at runtime).
+- Zero-API results (e.g. local slash commands) normalize an omitted
+  `duration_api_ms` to `0`, matching CLI 2.1.206+ which no longer reports a
+  stale value.
+- Unknown result subtypes (e.g. the CLI's `error_max_budget_usd`) now
+  additively receive the shared result parity fields (`terminal_reason`,
+  `uuid`, `model_usage`, ...) instead of staying raw-only.
+
+### Security
+
+- `AuthManager` (`:token`) and `Options` (`:anthropic_auth_token`, `:env`)
+  redact secrets from `inspect/1` via `@derive {Inspect, except: [...]}` — no
+  more credential leakage through OTP crash reports, Logger metadata, or
+  error tuples.
+- `config/runtime.exs` snapshots an **allowlist**
+  (`ClaudeAgentSDK.Config.Env.snapshot/1`: known vars + `CLAUDE_`/
+  `ANTHROPIC_` namespaces) instead of the whole OS environment.
+- CLI subprocesses launch with `clear_env?: true` — only the allowlisted env
+  map reaches the child, not the full node environment.
+- Token files are created with `0600` permissions before content is written,
+  then renamed into place.
+- `.env` files are gitignored (templates `*.env.example` remain allowed).
+
+### Notes
+
+- Deliberate divergence from upstream TS `v0.3.200`: unknown model strings
+  continue to **pass through** to `--model` behind `allow_unknown_model`
+  (default on), rather than being rejected — so newly-released models work
+  before the registry catches up. `agent_session_manager` keeps the opposite
+  (strict) default on the same machinery; do not "align" the two.
 - Effort gating is now catalog-driven: `:xhigh` is allowed wherever the resolved
   model's catalog efforts allow it (Claude Sonnet 5, Fable 5, Opus), not only on
   Opus by name; Haiku still emits no `--effort`.
@@ -106,12 +178,11 @@ guaranteed custom-model override.
   Archived deterministic/mock examples moved to `docs/archive/examples_legacy/`.
 - `examples/run_all.sh` no longer directly invokes Claude CLI commands or
   prints raw Claude CLI switch recipes.
-- Shared Claude model registry now matches the current Claude Code selector:
-  default/recommended `sonnet` maps to Claude Sonnet 4.6, `opus` maps to Claude
-  Opus 4.7, `opus[1m]` maps to Claude Opus 4.7 with 1M context, and `haiku`
-  accepts both the Claude Haiku 4.5 alias and dated API ID.
-- Claude effort validation now allows Sonnet `:max` and Opus-only `:xhigh`;
-  Haiku models still do not emit `--effort`.
+- Shared Claude model registry now matches the current Claude Code selector
+  (catalog `2026-07-06`): default/recommended `sonnet` maps to Claude Sonnet 5,
+  `opus` to Claude Opus 4.8, `fable` to Claude Fable 5 (with `[1m]` context
+  variants), and `haiku` accepts both the Claude Haiku 4.5 alias and dated API
+  ID; prior full IDs remain as aliases.
 - README and guides now document the current unreleased package line and the new
   session/session-store parity surfaces.
 

@@ -291,6 +291,13 @@ IO.puts("Session ID: #{session_id}")
 The Streaming API emits various event types for fine-grained control.
 Each event map also includes streaming metadata: `uuid`, `session_id`, `parent_tool_use_id`, and `raw_event` (the raw CLI event map with string keys). Stream event wrappers require both `uuid` and `session_id` (missing keys raise) to match Python SDK behavior.
 
+Beyond stream events, CLI 2.1.203+ sessions also emit lifecycle *message*
+frames: `system/background_tasks_changed` (the full live background-task set
+on every membership change; `Message.live_background_tasks/1`) and, for
+uuid-stamped inbound messages, top-level `command_lifecycle` frames
+(`Message.command_terminal?/1`). Result frames carry `terminal_reason`
+(`Message.dead_turn?/1`). See the Runtime Control guide for details.
+
 ### Text Streaming Events
 
 ```elixir

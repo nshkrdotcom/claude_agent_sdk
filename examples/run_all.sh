@@ -300,6 +300,7 @@ default_examples=(
   "examples/hooks/hook_events_and_output.exs"
   "examples/streaming_tools/basic_streaming_with_hooks.exs"
   "examples/runtime_control/control_parity_live.exs"
+  "examples/runtime_control/lifecycle_frames_live.exs"
   "examples/assistant_error_live.exs"
   "examples/file_checkpointing_live.exs"
   "examples/filesystem_agents_live.exs"

@@ -216,6 +216,7 @@ claude --version
 
 - Minimum supported Claude CLI version: `2.1.0`
 - Recommended Claude CLI version: `2.1.207`
+- Parity baseline: Python SDK `v0.2.116` / TypeScript SDK `v0.3.207` (CLI `2.1.207`), including the `2.1.203–2.1.207` protocol frames — `terminal_reason` (`Message.dead_turn?/1`), `background_tasks_changed` (`Message.live_background_tasks/1`), `command_lifecycle` (`Message.command_terminal?/1`), typed interrupt receipts with `still_queued`, `system/init` capabilities (`Message.capability?/2`), peer-message `origin` (`Message.peer_origin/1`), and `AgentToolCompletedOutput` (`Message.agent_tool_completed/1`).
 - Compatibility policy: this SDK follows the Python SDK where practical, but the Claude CLI wire protocol is authoritative. CLI-native frames such as `:rate_limit_event` are surfaced here even if the current Python SDK skips unknown message types for forward compatibility.
 
 ---

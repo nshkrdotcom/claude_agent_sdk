@@ -225,6 +225,7 @@ mix run examples/basic_example.exs
 | Example | Description |
 |---------|-------------|
 | `runtime_control/control_parity_live.exs` | Query/control parity, permission mode switching |
+| `runtime_control/lifecycle_frames_live.exs` | CLI 2.1.207 lifecycle surface: init `capabilities`, `terminal_reason`/`dead_turn?`, typed interrupt receipt (`still_queued`), `background_tasks_changed`/`live_background_tasks` |
 | `assistant_error_live.exs` | Assistant error metadata handling |
 | `file_checkpointing_live.exs` | `rewind_files/2` (depends on CLI support) |
 | `filesystem_agents_live.exs` | Filesystem agents via `setting_sources: ["project"]` |

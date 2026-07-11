@@ -52,6 +52,54 @@ Background task lifecycle is surfaced as `system` messages: `task_started`,
 (`completed` / `failed` / `stopped` / `killed`) from either the notification or
 the `task_updated` frame when tracking active tasks.
 
+On CLI 2.1.203+ the CLI also emits the level-based
+`system/background_tasks_changed` frame: the **full live task set** on every
+membership change (an empty `tasks` list means the set drained), so consumers
+can track background activity as state instead of stitching the edge frames.
+`ClaudeAgentSDK.Message.live_background_tasks/1` returns the non-terminal
+tasks from such a frame.
+
+## Interrupts & Receipts
+
+`ClaudeAgentSDK.Client.interrupt/1` returns a typed receipt
+(CLI 2.1.205+, upstream `interrupt_receipt_v1`):
+
+```elixir
+{:ok, %ClaudeAgentSDK.InterruptReceipt{still_queued: still_queued}} =
+  ClaudeAgentSDK.Client.interrupt(client)
+
+# still_queued lists uuids of queued async messages that survive the
+# interrupt — they WILL run unless cancelled first.
+```
+
+On CLIs that predate the receipt, the interrupt is still acknowledged and
+`still_queued` is empty. Feature-detect from the `system/init` frame:
+
+```elixir
+ClaudeAgentSDK.Message.capability?(init_message, "interrupt_receipt_v1")
+```
+
+> Breaking change vs 0.17.x: `interrupt/1` previously returned a bare `:ok`.
+
+## Command Lifecycle
+
+On CLI 2.1.206+, every **uuid-stamped** inbound message emits top-level
+`command_lifecycle` frames carrying its state (`queued` / `started` /
+`completed` / `cancelled` / `discarded`), keyed by `command_uuid` (the
+client-supplied message uuid; the frame's own `uuid` is the universal frame
+id). Messages sent without a uuid — like the one-shot `-p` prompt path —
+emit no lifecycle frames.
+
+```elixir
+%ClaudeAgentSDK.Message{type: :command_lifecycle, data: data} = msg
+data.command_uuid  # which inbound message this is about
+data.state         # "queued" | "started" | "completed" | "cancelled" | "discarded"
+ClaudeAgentSDK.Message.command_terminal?(msg)  # true for the last three
+```
+
+A dead turn (see `Message.dead_turn?/1` in the error-handling guide) reports
+its command lifecycle as `cancelled`, not `completed`.
+
 ## Execution Surface Routing
 
 Choose local vs SSH execution with `Options.execution_surface`:
