@@ -104,6 +104,7 @@
         {Credo.Check.Warning.UnusedStringOperation, []},
         {Credo.Check.Warning.UnusedTupleOperation, []},
         {Credo.Check.Warning.UnsafeExec, []},
+        {Credo.Check.Warning.UnsafeToAtom, [files: %{included: ["lib/"]}]},
 
         # Disabled checks
         {Credo.Check.Refactor.ABCSize, false},
@@ -114,8 +115,7 @@
         {Credo.Check.Refactor.PipeChainStart, false},
         {Credo.Check.Refactor.VariableRebinding, false},
         {Credo.Check.Warning.LeakyEnvironment, false},
-        {Credo.Check.Warning.MapGetUnsafePass, false},
-        {Credo.Check.Warning.UnsafeToAtom, false}
+        {Credo.Check.Warning.MapGetUnsafePass, false}
       ]
     }
   ]

@@ -191,6 +191,15 @@ defmodule ClaudeAgentSDK.MessageParityTest do
     assert subtype == "error_future"
   end
 
+  test "unknown system subtype stays a string (no atom minted)" do
+    subtype = "totally_new_#{System.unique_integer([:positive])}"
+    json = Jason.encode!(%{"type" => "system", "subtype" => subtype, "session_id" => "s"})
+
+    assert {:ok, %Message{type: :system, subtype: parsed}} = Message.from_json(json)
+    assert is_binary(parsed)
+    assert parsed == subtype
+  end
+
   test "stream_event wrappers keep control-lane metadata optional" do
     json =
       Jason.encode!(%{

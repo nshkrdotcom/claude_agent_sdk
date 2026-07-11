@@ -144,6 +144,7 @@ defmodule ClaudeAgentSdk.MixProject do
         {"docs/RUNTIME_CONTROL.md", title: "Runtime Control"},
         {"guides/testing.md", title: "Testing"},
         {"guides/error-handling.md", title: "Error Handling"},
+        {"guides/atom-safety.md", title: "Atom Safety"},
         {"guides/provider_behavior_manifest.md", title: "Provider Behavior Manifest"},
         {"examples/README.md", title: "Examples", filename: "examples"},
         {"examples/mix_task_chat/README.md",
@@ -185,6 +186,7 @@ defmodule ClaudeAgentSdk.MixProject do
         Quality: [
           "guides/testing.md",
           "guides/error-handling.md",
+          "guides/atom-safety.md",
           "guides/provider_behavior_manifest.md"
         ],
         Examples: [
@@ -322,6 +324,7 @@ defmodule ClaudeAgentSdk.MixProject do
       ci: [
         "format --check-formatted",
         "compile --warnings-as-errors",
+        "cmd ./scripts/atom_guard.sh",
         "credo --strict",
         "test"
       ]

@@ -132,10 +132,14 @@ defmodule ClaudeAgentSDK.Tool do
         input_schema: unquote(input_schema),
         annotations: unquote(escaped_annotations),
         max_result_size_chars: unquote(max_result_size_chars),
+        # atom-safe: compile-time macro, bounded by deftool decls
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
         module: Module.concat(__MODULE__, unquote(module_name))
       })
 
       # Define the nested tool module using defmodule
+      # atom-safe: compile-time macro, bounded by deftool decls
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       defmodule Module.concat(__MODULE__, unquote(module_name)) do
         @moduledoc """
         Tool: #{unquote(description)}
