@@ -100,6 +100,20 @@ defmodule ClaudeAgentSDK.Schema.Message do
                              unrecognized_keys: :preserve
                            )
 
+  # state ∈ queued|started|completed|cancelled|discarded on CLI 2.1.207;
+  # kept a plain string so future states stay additive.
+  @command_lifecycle_schema Zoi.map(
+                              %{
+                                "type" => Conventions.trimmed_string() |> Zoi.min(1),
+                                "command_uuid" => Conventions.optional_trimmed_string(),
+                                "state" => Conventions.optional_trimmed_string(),
+                                "status" => Conventions.optional_trimmed_string(),
+                                "uuid" => Conventions.optional_trimmed_string(),
+                                "session_id" => Conventions.optional_trimmed_string()
+                              },
+                              unrecognized_keys: :preserve
+                            )
+
   @message_start_schema Zoi.map(
                           %{
                             "type" => Conventions.trimmed_string() |> Zoi.min(1),
@@ -249,6 +263,9 @@ defmodule ClaudeAgentSDK.Schema.Message do
 
   defp parse_message_family("rate_limit_event", map),
     do: Schema.parse(@rate_limit_event_schema, map, :invalid_message_frame)
+
+  defp parse_message_family("command_lifecycle", map),
+    do: Schema.parse(@command_lifecycle_schema, map, :invalid_message_frame)
 
   defp parse_message_family(_other, map), do: {:ok, map}
 

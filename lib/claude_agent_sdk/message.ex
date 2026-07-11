@@ -80,6 +80,7 @@ defmodule ClaudeAgentSDK.Message do
           | :system
           | :stream_event
           | :rate_limit_event
+          | :command_lifecycle
           | :unknown
           | String.t()
   @type result_subtype :: :success | :error_max_turns | :error_during_execution | String.t()
@@ -195,6 +196,26 @@ defmodule ClaudeAgentSDK.Message do
   end
 
   def live_background_tasks(%__MODULE__{}), do: []
+
+  # command_lifecycle states per the CLI 2.1.207 schema. Values stay strings
+  # (atom-safe); unknown future states are preserved and non-terminal.
+  @terminal_command_states ~w(completed cancelled discarded)
+
+  @doc """
+  Returns `true` when a `command_lifecycle` state is terminal
+  (`completed`/`cancelled`/`discarded`).
+
+  Accepts a `command_lifecycle` `Message`, a state string, or `nil`.
+  Non-terminal states are `queued` and `started`; unknown states are not
+  terminal.
+  """
+  @spec command_terminal?(t() | String.t() | nil) :: boolean()
+  def command_terminal?(%__MODULE__{type: :command_lifecycle, data: %{state: state}}),
+    do: command_terminal?(state)
+
+  def command_terminal?(%__MODULE__{}), do: false
+  def command_terminal?(state) when is_binary(state), do: state in @terminal_command_states
+  def command_terminal?(_state), do: false
 
   @doc false
   def __safe_type__(type), do: safe_type(type)
@@ -397,6 +418,10 @@ defmodule ClaudeAgentSDK.Message do
     %{message | data: build_rate_limit_event_data(raw)}
   end
 
+  defp parse_by_type(message, :command_lifecycle, raw) do
+    %{message | data: build_command_lifecycle_data(raw)}
+  end
+
   defp parse_by_type(message, _unknown_type, raw) do
     %{message | data: raw}
   end
@@ -424,6 +449,7 @@ defmodule ClaudeAgentSDK.Message do
       "system" -> :system
       "stream_event" -> :stream_event
       "rate_limit_event" -> :rate_limit_event
+      "command_lifecycle" -> :command_lifecycle
       other -> other
     end
   end
@@ -560,12 +586,26 @@ defmodule ClaudeAgentSDK.Message do
       usage: raw["usage"],
       total_cost_usd: raw["total_cost_usd"],
       duration_ms: raw["duration_ms"],
-      duration_api_ms: raw["duration_api_ms"],
+      duration_api_ms: normalize_duration_api_ms(raw),
       num_turns: raw["num_turns"],
       is_error: raw["is_error"],
       stop_reason: raw["stop_reason"]
     }
     |> put_result_parity_fields(raw)
+  end
+
+  # CLI 2.1.206+ emits duration_api_ms: 0 for zero-API results instead of a
+  # stale value; older CLIs may omit it. Normalize the omitted zero-API case
+  # to 0 so consumers see one shape.
+  defp normalize_duration_api_ms(raw) do
+    case raw["duration_api_ms"] do
+      nil -> if zero_api_result?(raw), do: 0, else: nil
+      value -> value
+    end
+  end
+
+  defp zero_api_result?(raw) do
+    raw["num_turns"] in [0, nil] or raw["usage"] in [nil, %{}]
   end
 
   defp build_result_data(error_type, raw)
@@ -724,6 +764,18 @@ defmodule ClaudeAgentSDK.Message do
   end
 
   defp build_background_task(other), do: other
+
+  # `command_uuid` is the client-supplied uuid of the inbound message this
+  # lifecycle event is about (only uuid-stamped messages emit lifecycle
+  # frames); `uuid` is the universal per-frame uuid.
+  defp build_command_lifecycle_data(raw) do
+    Map.merge(raw, %{
+      command_uuid: raw["command_uuid"],
+      state: raw["state"] || raw["status"],
+      uuid: raw["uuid"],
+      session_id: raw["session_id"]
+    })
+  end
 
   defp build_model_fallback_data(raw) do
     Map.merge(raw, %{
