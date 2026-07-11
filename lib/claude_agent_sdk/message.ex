@@ -218,6 +218,57 @@ defmodule ClaudeAgentSDK.Message do
   def command_terminal?(_state), do: false
 
   @doc """
+  Returns the typed peer provenance of a user-role message, or `nil`.
+
+  User frames carry an optional `origin` union describing where the message
+  came from (absent or `"human"` means keyboard input). For peer messages
+  (`kind: "peer"`, TS v0.3.205) this surfaces the sender's addressable
+  identity (`from`), the normalized display `name`, the decoded message
+  `body` with the peer envelope stripped, and `sender_task_id` for
+  in-process background subagents. Raw keys are preserved alongside.
+  """
+  @spec peer_origin(t()) :: map() | nil
+  def peer_origin(%__MODULE__{type: :user, data: %{origin: %{"kind" => "peer"} = origin}}) do
+    Map.merge(origin, %{
+      from: origin["from"],
+      name: origin["name"],
+      body: origin["body"],
+      sender_task_id: origin["senderTaskId"]
+    })
+  end
+
+  def peer_origin(%__MODULE__{}), do: nil
+
+  @doc """
+  Returns the Agent/Task tool's typed completion output from a user frame's
+  `tool_use_result`, or `nil` when the result is not an agent completion.
+
+  Upstream publishes this shape as `AgentToolCompletedOutput` (TS v0.3.207):
+  the subagent's final report (`content`) plus run totals. Raw camelCase
+  keys are preserved alongside the snake_case ones.
+  """
+  @spec agent_tool_completed(t()) :: map() | nil
+  def agent_tool_completed(%__MODULE__{
+        type: :user,
+        data: %{tool_use_result: %{"agentId" => _} = result}
+      }) do
+    Map.merge(result, %{
+      agent_id: result["agentId"],
+      agent_type: result["agentType"],
+      status: result["status"],
+      prompt: result["prompt"],
+      resolved_model: result["resolvedModel"],
+      total_duration_ms: result["totalDurationMs"],
+      total_tokens: result["totalTokens"],
+      total_tool_use_count: result["totalToolUseCount"],
+      content: result["content"],
+      usage: result["usage"]
+    })
+  end
+
+  def agent_tool_completed(%__MODULE__{}), do: nil
+
+  @doc """
   Returns `true` if a `system/init` frame advertises the given capability
   string (e.g. `"interrupt_receipt_v1"`, CLI 2.1.205+).
   """
@@ -392,6 +443,7 @@ defmodule ClaudeAgentSDK.Message do
         tool_use_result: raw["tool_use_result"]
       }
       |> maybe_put_uuid(raw)
+      |> maybe_put(:origin, raw["origin"])
 
     %{message | data: data}
   end

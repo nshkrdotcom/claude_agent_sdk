@@ -202,7 +202,7 @@ defmodule ClaudeAgentSDK.Options do
 
   @type output_format :: :text | :json | :stream_json | structured_output_format()
   @type permission_mode ::
-          :default | :accept_edits | :bypass_permissions | :plan | :auto | :dont_ask
+          :default | :accept_edits | :bypass_permissions | :plan | :auto | :dont_ask | :manual
   @type model_name :: String.t()
   @type agent_name :: atom()
   @type agent_definition :: ClaudeAgentSDK.Agent.t()

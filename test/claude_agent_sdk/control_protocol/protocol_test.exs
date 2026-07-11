@@ -326,4 +326,48 @@ defmodule ClaudeAgentSDK.ControlProtocol.ProtocolTest do
                Protocol.decode_set_model_response(%{"type" => "unknown"})
     end
   end
+
+  describe "encode_permission_response/4 canUseTool allow contract" do
+    alias ClaudeAgentSDK.Permission.Result
+
+    # TS v0.3.207 contract fix: allow WITHOUT updatedInput must run the tool
+    # with the ORIGINAL input, never be treated as a deny.
+    test "allow without updated_input carries the original input" do
+      original = %{"file_path" => "/x", "content" => "data"}
+
+      json = Protocol.encode_permission_response("req-1", :allow, Result.allow(), original)
+      payload = json |> Jason.decode!() |> get_in(["response", "response"])
+
+      assert payload["behavior"] == "allow"
+      assert payload["updatedInput"] == original
+    end
+
+    test "allow with nil result still allows with the original input" do
+      original = %{"command" => "ls"}
+
+      json = Protocol.encode_permission_response("req-2", :allow, nil, original)
+      payload = json |> Jason.decode!() |> get_in(["response", "response"])
+
+      assert payload["behavior"] == "allow"
+      assert payload["updatedInput"] == original
+    end
+
+    test "allow with updated_input prefers the callback's updated input" do
+      original = %{"command" => "ls"}
+      updated = %{"command" => "ls -la"}
+
+      json =
+        Protocol.encode_permission_response(
+          "req-3",
+          :allow,
+          Result.allow(updated_input: updated),
+          original
+        )
+
+      payload = json |> Jason.decode!() |> get_in(["response", "response"])
+
+      assert payload["behavior"] == "allow"
+      assert payload["updatedInput"] == updated
+    end
+  end
 end
