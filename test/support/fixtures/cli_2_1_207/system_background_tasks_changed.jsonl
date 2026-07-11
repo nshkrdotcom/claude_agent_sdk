@@ -1,0 +1,1 @@
+{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"bmeym4cxp","task_type":"local_bash","description":"Run sleep 8 and echo done in background"}],"uuid":"363a2151-9e77-4834-9b6a-d3f8c75d2f32","session_id":"54b0fc53-4bdb-43a8-8bb0-88561ee24a92"}
