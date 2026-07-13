@@ -82,9 +82,11 @@ multi-provider manager — so do not "align" one to the other.
 The model registry (catalog JSON + resolution logic) ships from
 `cli_subprocess_core`, which this SDK and `agent_session_manager` consume as
 a path dependency in this workspace and as a hex dependency when published.
-When releasing to hex, **publish `cli_subprocess_core` first**, then
-`claude_agent_sdk` / `agent_session_manager`: a hex consumer's model lineup
-comes from the *published* core package, not the workspace sibling. When
+The full release train publishes the two Ground Plane leaves, Execution Plane,
+and then **`cli_subprocess_core` 0.2.0 before this SDK**. Publish
+`claude_agent_sdk` before its optional `agent_session_manager` consumer. A Hex
+consumer's model lineup comes from the *published* core package, not the
+workspace sibling. When
 switching a workspace checkout between `:path` and `:github`/`:hex`
 resolution (see `build_support/dependency_sources.config.exs`), prune any
 previously fetched `deps/cli_subprocess_core` copy so a stale catalog cannot

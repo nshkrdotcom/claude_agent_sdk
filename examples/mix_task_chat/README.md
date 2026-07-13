@@ -1,6 +1,6 @@
 # Mix Task Chat Example
 
-> **Note:** This example is available in the [source repository](https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples/mix_task_chat) and is not included in the Hex package. Clone the repo to run it locally.
+> **Note:** This example is available in the [source repository](https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples/mix_task_chat) and in the Hex package.
 
 A complete working example demonstrating how to use the Claude Agent SDK in Mix tasks with streaming responses.
 
@@ -14,7 +14,7 @@ A complete working example demonstrating how to use the Claude Agent SDK in Mix 
 
 ## Prerequisites
 
-1. **Elixir 1.15+** installed
+1. **Elixir 1.19+** installed
 2. **Claude Code CLI** installed and authenticated:
    ```bash
    # Install Claude Code CLI

@@ -43,7 +43,7 @@ This example showcases:
 
 ## Prerequisites
 
-- Elixir 1.15+
+- Elixir 1.19+
 - Claude CLI authenticated (`claude login`)
 - Phoenix 1.7+
 

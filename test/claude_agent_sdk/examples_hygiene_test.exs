@@ -1,6 +1,8 @@
 defmodule ClaudeAgentSDK.ExamplesHygieneTest do
   use ExUnit.Case, async: true
 
+  @repo_root Path.expand("../..", __DIR__)
+
   @forbidden_literals [
     "ClaudeAgentSDK.Mock",
     "FakeCLI",
@@ -20,6 +22,16 @@ defmodule ClaudeAgentSDK.ExamplesHygieneTest do
       |> Enum.filter(&File.regular?/1)
       |> Enum.reject(&allowed_path?/1)
       |> Enum.flat_map(&violations_for_file/1)
+
+    assert violations == []
+  end
+
+  test "packaged example projects use the release Elixir floor and shared SDK source" do
+    violations =
+      @repo_root
+      |> Path.join("examples/*/mix.exs")
+      |> Path.wildcard()
+      |> Enum.flat_map(&release_requirement_violations/1)
 
     assert violations == []
   end
@@ -45,4 +57,22 @@ defmodule ClaudeAgentSDK.ExamplesHygieneTest do
       end
     end)
   end
+
+  defp release_requirement_violations(path) do
+    text = File.read!(path)
+    relative = Path.relative_to(path, @repo_root)
+
+    []
+    |> maybe_add(
+      not String.contains?(text, ~s(elixir: "~> 1.19")),
+      "#{relative} does not require Elixir ~> 1.19"
+    )
+    |> maybe_add(
+      not String.contains?(text, "DependencySources.dep(:claude_agent_sdk"),
+      "#{relative} bypasses the shared claude_agent_sdk dependency source"
+    )
+  end
+
+  defp maybe_add(violations, true, violation), do: [violation | violations]
+  defp maybe_add(violations, false, _violation), do: violations
 end

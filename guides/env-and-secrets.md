@@ -8,9 +8,9 @@ credentials, and the rules that keep secrets out of logs and builds.
 
 - **All env reads are runtime.** `config/runtime.exs` snapshots the OS
   environment into Application config once at boot; every read goes through
-  the `ClaudeAgentSDK.Env` wrapper over that snapshot. Nothing reads env at
-  compile time, so a release built on CI cannot bake in a build-machine
-  value.
+  the internal <code>ClaudeAgentSDK.Env</code> wrapper over that snapshot.
+  Nothing reads env at compile time, so a release built on CI cannot bake in a
+  build-machine value.
 - **Variable names live in one registry** — `ClaudeAgentSDK.Config.Env` —
   not in string literals scattered through the code.
 - **The snapshot is allowlisted.** `runtime.exs` copies only

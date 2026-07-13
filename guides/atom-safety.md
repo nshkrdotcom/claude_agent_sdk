@@ -23,8 +23,9 @@ vector: one crafted stream of distinct strings can take the node down.
    this pattern — the static map is the whole point.
 2. **`String.to_existing_atom/1`** — only when the atom is provably
    pre-defined (for example a whitelist the module itself declares). See
-   `ClaudeAgentSDK.Auth.TokenStore.parse_provider/1` for a whitelist
-   variant with an explicit default.
+   the private
+   <code>ClaudeAgentSDK.Auth.TokenStore.parse_provider/1</code> helper for a
+   whitelist variant with an explicit default.
 3. **Default string keys** — `Jason.decode/1` without `keys:`; or
    `keys: :atoms!` if atom keys are truly required (existing atoms only).
 4. **Keep it a string** — MCP tool names, model IDs, and message subtypes do
@@ -42,6 +43,6 @@ Two independent guards run in `mix ci` across `claude_agent_sdk`,
   annotation.
 
 Reviewed compile-time sites (for example the `Module.concat/2` calls in
-`ClaudeAgentSDK.Tool.deftool/2` macro expansion, which are bounded by the
-number of `deftool` declarations in source) carry both a `# atom-safe:`
-annotation and a `credo:disable-for-next-line` marker.
+the <code>ClaudeAgentSDK.Tool.deftool</code> macro expansion, which are bounded
+by the number of `deftool` declarations in source) carry both a
+`# atom-safe:` annotation and a `credo:disable-for-next-line` marker.

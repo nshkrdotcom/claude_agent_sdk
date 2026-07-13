@@ -1,6 +1,6 @@
 # Examples
 
-> **Note:** Examples are available in the [source repository](https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples) and are not included in the Hex package to minimize download size. Clone the repo to run them locally.
+> **Note:** Examples are available in the [source repository](https://github.com/nshkrdotcom/claude_agent_sdk/tree/main/examples) and are included in the Hex package so release consumers can inspect and run the same examples.
 
 These examples demonstrate real integration with the Claude Code CLI through
 the Elixir SDK. Runnable examples are live-only: they do not invoke the Claude
@@ -8,6 +8,7 @@ CLI directly, build raw Claude CLI switches, or use test transports.
 
 ## Prerequisites
 
+- **Elixir:** 1.19 or later
 - **Claude Code CLI:** `npm install -g @anthropic-ai/claude-code`
 - **Authentication:** `claude login` (or set `ANTHROPIC_API_KEY` / `CLAUDE_AGENT_OAUTH_TOKEN`)
 

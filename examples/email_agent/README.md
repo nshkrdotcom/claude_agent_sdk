@@ -49,7 +49,7 @@ This example demonstrates how to build an intelligent email agent that integrate
 
 ### 1. Prerequisites
 
-- Elixir 1.15+
+- Elixir 1.19+
 - Erlang/OTP 26+
 - Claude CLI authenticated (`claude login`)
 - Email account with IMAP access

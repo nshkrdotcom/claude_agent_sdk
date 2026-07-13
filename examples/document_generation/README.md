@@ -48,7 +48,7 @@ This Mix application showcases how to:
 
 ## Installation
 
-1. Ensure you have Elixir 1.14+ installed
+1. Ensure you have Elixir 1.19+ installed
 2. Navigate to this directory:
    ```bash
    cd examples/document_generation

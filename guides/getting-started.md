@@ -23,7 +23,7 @@ Before you begin, ensure you have the following installed and configured.
 
 ### 1. Elixir and Erlang
 
-The SDK requires **Elixir 1.14 or later**. Check your version:
+The SDK requires **Elixir 1.19 or later**. Check your version:
 
 ```bash
 elixir --version
@@ -32,8 +32,8 @@ elixir --version
 If you need to install or upgrade Elixir, visit [elixir-lang.org/install](https://elixir-lang.org/install.html) or use a version manager like `asdf`:
 
 ```bash
-asdf install elixir 1.14.5
-asdf global elixir 1.14.5
+asdf install elixir 1.19.0
+asdf global elixir 1.19.0
 ```
 
 ### 2. Claude Code CLI

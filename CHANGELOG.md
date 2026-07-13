@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.18.0] - 2026-07-10
+## [0.18.0] - 2026-07-13
 
 Upstream catch-up bringing the Elixir SDK toward parity with the official Python
 SDK `v0.2.116` and TypeScript SDK `v0.3.207`, tracking Claude CLI `2.1.207`, plus
 a refresh of the shared Claude model registry to the current lineup, a
 guaranteed custom-model override, and an ecosystem hardening pass (atom safety,
 env-var & secrets hygiene).
+
+Release preparation pins the published runtime boundary to
+`cli_subprocess_core ~> 0.2.0`, adopts the ecosystem Elixir 1.19 floor, and
+keeps the packaged example projects on that same release requirement.
 
 ### Added
 
