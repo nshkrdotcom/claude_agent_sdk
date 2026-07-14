@@ -36,10 +36,16 @@ defmodule ClaudeAgentSDK.ExamplesHygieneTest do
     assert violations == []
   end
 
-  test "package selection excludes the ignored lock and preserves tracked example locks" do
-    refute ClaudeAgentSdk.MixProject.example_package_file?("examples/mix_task_chat/mix.lock")
-
-    assert ClaudeAgentSdk.MixProject.example_package_file?("examples/phoenix_chat/mix.lock")
+  test "package selection includes only HexDocs example READMEs" do
+    assert ClaudeAgentSdk.MixProject.example_package_files() == [
+             "examples/README.md",
+             "examples/mix_task_chat/README.md",
+             "examples/phoenix_chat/README.md",
+             "examples/document_generation/README.md",
+             "examples/research_agent/README.md",
+             "examples/skill_invocation/README.md",
+             "examples/email_agent/README.md"
+           ]
   end
 
   defp allowed_path?(path) do

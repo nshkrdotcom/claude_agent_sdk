@@ -129,6 +129,9 @@ keeps the packaged example projects on that same release requirement.
 
 ### Changed
 
+- Restricted the Hex archive to consumer-facing source, guides, public runtime
+  documentation, and the seven example READMEs used by HexDocs; standardized
+  the 200px README presentation while retaining the 2025 MIT copyright notice.
 - **BREAKING (vs 0.17.2):** `Client.interrupt/1` now returns
   `{:ok, %ClaudeAgentSDK.InterruptReceipt{}} | {:error, term()}` instead of a
   bare `:ok`, to carry `still_queued`. Update `:ok = interrupt(client)` call

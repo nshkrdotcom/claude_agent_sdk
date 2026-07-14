@@ -4,12 +4,10 @@
 
 # Claude Agent SDK for Elixir
 
-[![Hex.pm](https://img.shields.io/hexpm/v/claude_agent_sdk.svg)](https://hex.pm/packages/claude_agent_sdk)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/claude_agent_sdk/)
-[![Hex.pm Downloads](https://img.shields.io/hexpm/dt/claude_agent_sdk.svg)](https://hex.pm/packages/claude_agent_sdk)
-[![License](https://img.shields.io/hexpm/l/claude_agent_sdk.svg)](https://github.com/nshkrdotcom/claude_agent_sdk/blob/main/LICENSE)
-[![CI](https://github.com/nshkrdotcom/claude_agent_sdk/actions/workflows/elixir.yaml/badge.svg)](https://github.com/nshkrdotcom/claude_agent_sdk/actions/workflows/elixir.yaml)
-[![Last Commit](https://img.shields.io/github/last-commit/nshkrdotcom/claude_agent_sdk.svg)](https://github.com/nshkrdotcom/claude_agent_sdk/commits/main)
+<p align="center">
+  <a href="https://github.com/nshkrdotcom/claude_agent_sdk"><img src="https://img.shields.io/badge/GitHub-nshkrdotcom%2Fclaude_agent_sdk-24292e?logo=github" alt="GitHub"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"/></a>
+</p>
 
 An Elixir SDK aiming for high parity with the official [claude-agent-sdk-python](https://github.com/anthropics/claude-agent-sdk-python) while treating the [Claude Code CLI](https://code.claude.com/docs/en/cli-reference) as the authoritative runtime contract. Build AI-powered applications with Claude using a production-ready interface for the Claude Code CLI, featuring streaming responses, lifecycle hooks, permission controls, and in-process tool execution via MCP.
 

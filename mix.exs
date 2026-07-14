@@ -87,7 +87,6 @@ defmodule ClaudeAgentSdk.MixProject do
           README.md
           LICENSE
           CHANGELOG.md
-          .formatter.exs
           guides
           build_support
         ) ++ example_package_files()
@@ -96,31 +95,15 @@ defmodule ClaudeAgentSdk.MixProject do
 
   @doc false
   def example_package_files do
-    "examples/**/*"
-    |> Path.wildcard(match_dot: true)
-    |> Enum.reject(&File.dir?/1)
-    |> Enum.filter(&example_package_file?/1)
-  end
-
-  @doc false
-  def example_package_file?(path) when is_binary(path), do: not example_artifact?(path)
-
-  defp example_artifact?(path) do
-    artifact_segments = [
-      "/_build/",
-      "/deps/",
-      "/doc/",
-      "/cover/",
-      "/priv/plts/",
-      "/_output/",
-      "/tmp/"
-    ]
-
-    relative_path = path |> Path.expand(__DIR__) |> Path.relative_to(__DIR__)
-
-    relative_path == "examples/mix_task_chat/mix.lock" or
-      Enum.any?(artifact_segments, &String.contains?(path, &1)) or
-      String.ends_with?(path, [".beam", ".plt", ".plt.hash", ".db", ".sqlite", ".sqlite3"])
+    ~w(
+      examples/README.md
+      examples/mix_task_chat/README.md
+      examples/phoenix_chat/README.md
+      examples/document_generation/README.md
+      examples/research_agent/README.md
+      examples/skill_invocation/README.md
+      examples/email_agent/README.md
+    )
   end
 
   defp description do
