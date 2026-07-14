@@ -1,5 +1,5 @@
 defmodule ClaudeAgentSDK.ExamplesHygieneTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   @repo_root Path.expand("../..", __DIR__)
 
@@ -34,6 +34,12 @@ defmodule ClaudeAgentSDK.ExamplesHygieneTest do
       |> Enum.flat_map(&release_requirement_violations/1)
 
     assert violations == []
+  end
+
+  test "package selection excludes the ignored lock and preserves tracked example locks" do
+    refute ClaudeAgentSdk.MixProject.example_package_file?("examples/mix_task_chat/mix.lock")
+
+    assert ClaudeAgentSdk.MixProject.example_package_file?("examples/phoenix_chat/mix.lock")
   end
 
   defp allowed_path?(path) do

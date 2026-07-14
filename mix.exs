@@ -94,12 +94,16 @@ defmodule ClaudeAgentSdk.MixProject do
     ]
   end
 
-  defp example_package_files do
+  @doc false
+  def example_package_files do
     "examples/**/*"
     |> Path.wildcard(match_dot: true)
     |> Enum.reject(&File.dir?/1)
-    |> Enum.reject(&example_artifact?/1)
+    |> Enum.filter(&example_package_file?/1)
   end
+
+  @doc false
+  def example_package_file?(path) when is_binary(path), do: not example_artifact?(path)
 
   defp example_artifact?(path) do
     artifact_segments = [
@@ -112,7 +116,10 @@ defmodule ClaudeAgentSdk.MixProject do
       "/tmp/"
     ]
 
-    Enum.any?(artifact_segments, &String.contains?(path, &1)) or
+    relative_path = path |> Path.expand(__DIR__) |> Path.relative_to(__DIR__)
+
+    relative_path == "examples/mix_task_chat/mix.lock" or
+      Enum.any?(artifact_segments, &String.contains?(path, &1)) or
       String.ends_with?(path, [".beam", ".plt", ".plt.hash", ".db", ".sqlite", ".sqlite3"])
   end
 
