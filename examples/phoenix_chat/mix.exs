@@ -40,7 +40,7 @@ defmodule PhoenixChat.MixProject do
       # Reference the SDK from parent directory
       claude_agent_sdk_dep(),
       # Phoenix framework
-      {:phoenix, "~> 1.7.17"},
+      {:phoenix, "~> 1.8.9"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_view, "~> 1.0"},
       {:phoenix_live_reload, "~> 1.5", only: :dev},

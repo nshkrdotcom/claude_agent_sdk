@@ -56,7 +56,7 @@ defmodule EmailAgent.MixProject do
       {:exqlite, "~> 0.23"},
 
       # Environment variable handling
-      {:dotenvy, "~> 0.8"},
+      {:dotenvy, "~> 1.1.1"},
 
       # Development & Testing
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
