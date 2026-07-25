@@ -4,7 +4,24 @@ defmodule ClaudeAgentSDK.TestSupport.FakeCLI do
   alias ClaudeAgentSDK.Options
   alias CliSubprocessCore.TestSupport.FakeSSH
 
-  @startup_timeout_floor_ms 2_500
+  # Callers pass a nominal startup timeout (typically 1_000 ms), but the real
+  # cost of "fake CLI is running" is dominated by queueing, not by the caller's
+  # expectation: every spawn funnels through erlexec's single exec-port, so a
+  # suite running `max_cases: 48` serializes dozens of concurrent `:exec.run`
+  # calls behind one OS process, each of which then pays a `python3` interpreter
+  # cold start.
+  #
+  # Measured over 344 spawns across 4 full-suite runs (24 cores, load average
+  # 9-22): p50 55 ms, p90 77 ms, and a sharply bimodal tail - 335 samples under
+  # 200 ms, then 8 samples between 1_047 ms and 2_376 ms. The previous 2_500 ms
+  # floor left only 124 ms of margin over the worst observed sample and produced
+  # spurious `:timeout` failures on a loaded machine.
+  #
+  # This floor is a ceiling on waiting, not a delay: `wait_until/2` polls every
+  # 10 ms and returns as soon as the marker appears, so the common case is still
+  # ~55 ms. No test asserts a `:timeout` from this function, so the larger budget
+  # only ever converts a spurious failure into a pass.
+  @startup_timeout_floor_ms 15_000
 
   defstruct root_dir: nil,
             script_path: nil,
