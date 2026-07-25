@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Model registry refresh (Claude Opus 5):** the shared `cli_subprocess_core`
+  Claude catalog (`catalog_version` `2026-07-25`) now advertises Opus 5 as the
+  current Opus choice. Both `opus` and the retained `opus[1m]` compatibility
+  alias resolve to the provider id `claude-opus-5` — Opus 5 is itself a
+  1M-context model, so there is no `claude-opus-5[1m]` id. Prior full IDs
+  (`claude-opus-4-8`, `claude-opus-4-7`, and their `[1m]` forms) remain valid as
+  back-compatible aliases, exactly as `claude-sonnet-4-6` does. README, both
+  configuration guides, and the model-selection example were updated to match;
+  the catalog itself stays owned by `cli_subprocess_core`.
+
+### Removed
+
+- **Dead `:models` application config.** `config/config.exs` shipped a stale
+  duplicate of the model catalog (still naming `claude-opus-4-7`) that nothing
+  read — `Application.get_env(:claude_agent_sdk, :models)` has no caller in
+  `lib/`, `config/`, or `test/`. Removed so a local copy cannot drift from the
+  `cli_subprocess_core`-owned registry that `ClaudeAgentSDK.Model` actually
+  consults. No behavior change.
+
 ## [0.18.0] - 2026-07-13
 
 Upstream catch-up bringing the Elixir SDK toward parity with the official Python

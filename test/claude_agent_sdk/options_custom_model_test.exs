@@ -61,4 +61,57 @@ defmodule ClaudeAgentSDK.Options.CustomModelTest do
       assert Enum.at(args, idx + 1) == "fable"
     end
   end
+
+  describe "opus short forms after the Opus 5 registry refresh" do
+    for short_form <- ["opus", "opus[1m]"] do
+      test "#{short_form} resolves without an unregistered-model warning" do
+        short_form = unquote(short_form)
+
+        log =
+          capture_log(fn ->
+            opts = Options.new(model: short_form, provider_backend: :anthropic)
+            assert opts.model == short_form
+
+            args = Options.to_args(opts)
+            idx = Enum.find_index(args, &(&1 == "--model"))
+            assert Enum.at(args, idx + 1) == short_form
+          end)
+
+        refute log =~ "not in the Claude model registry"
+      end
+
+      test "#{short_form} still resolves under allow_unknown_model: false" do
+        short_form = unquote(short_form)
+
+        opts =
+          Options.new(
+            model: short_form,
+            allow_unknown_model: false,
+            provider_backend: :anthropic
+          )
+
+        assert opts.model == short_form
+      end
+    end
+
+    test "the Opus 5 full ID and the retained prior full IDs normalize to a short form" do
+      cases = [
+        {"claude-opus-5", "opus"},
+        {"claude-opus-4-8", "opus"},
+        {"claude-opus-4-7", "opus"},
+        {"claude-opus-4-8[1m]", "opus[1m]"},
+        {"claude-opus-4-7[1m]", "opus[1m]"}
+      ]
+
+      for {full_id, short_form} <- cases do
+        log =
+          capture_log(fn ->
+            opts = Options.new(model: full_id, provider_backend: :anthropic)
+            assert opts.model == short_form
+          end)
+
+        refute log =~ "not in the Claude model registry"
+      end
+    end
+  end
 end

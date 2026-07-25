@@ -37,13 +37,15 @@ Canonical Claude model names include:
 
 - `sonnet` - default/recommended, Claude Sonnet 5
 - `sonnet[1m]` - Claude Sonnet 5 with 1M context
-- `opus` - Claude Opus 4.8
-- `opus[1m]` - Claude Opus 4.8 with 1M context
+- `opus` - Claude Opus 5
+- `opus[1m]` - compatibility alias for Claude Opus 5, which is itself a
+  1M-context model
 - `fable` - Claude Fable 5
 - `haiku` - Claude Haiku 4.5
 
-Prior full IDs (`claude-sonnet-4-6`, `claude-opus-4-7`) remain valid as
-back-compatible aliases. The registry is owned by `cli_subprocess_core`.
+Prior full IDs (`claude-sonnet-4-6`, `claude-opus-4-8`, `claude-opus-4-7`)
+remain valid as back-compatible aliases. The registry is owned by
+`cli_subprocess_core`.
 
 ## Using a model that is not in the registry
 
@@ -98,8 +100,8 @@ The current native Claude aliases are:
 |----------|----------------------|
 | `sonnet` | `claude-sonnet-5` (also `claude-sonnet-4-6`, `default`) |
 | `sonnet[1m]` | `claude-sonnet-5[1m]` (also `claude-sonnet-4-6[1m]`) |
-| `opus` | `claude-opus-4-8` (also `claude-opus-4-7`) |
-| `opus[1m]` | `claude-opus-4-8[1m]` (also `claude-opus-4-7[1m]`) |
+| `opus` | `claude-opus-5` (also `claude-opus-4-8`, `claude-opus-4-7`) |
+| `opus[1m]` | `claude-opus-5` (also `claude-opus-4-8[1m]`, `claude-opus-4-7[1m]`) |
 | `fable` | `claude-fable-5` |
 | `haiku` | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` |
 

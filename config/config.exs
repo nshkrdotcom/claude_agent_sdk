@@ -24,29 +24,16 @@ logger_metadata = [
   :tool
 ]
 
-# Default configuration
+# Default configuration.
+#
+# The Claude model catalog (short forms, full ids, default) is owned by
+# `cli_subprocess_core` and read through `ClaudeAgentSDK.Model`; this app
+# deliberately ships no `:models` config so a stale local copy cannot drift
+# from the shared registry.
 config :claude_agent_sdk,
   use_mock: false,
   build_env: config_env(),
-  log_level: :warning,
-  models: %{
-    short_forms: %{
-      "opus" => "opus",
-      "sonnet" => "sonnet",
-      "haiku" => "haiku",
-      "opus[1m]" => "opus[1m]",
-      "sonnet[1m]" => "sonnet[1m]"
-    },
-    full_ids: %{
-      "claude-opus-4-7" => "claude-opus-4-7",
-      "claude-sonnet-4-6" => "claude-sonnet-4-6",
-      "claude-haiku-4-5-20251001" => "claude-haiku-4-5-20251001",
-      "claude-haiku-4-5" => "claude-haiku-4-5",
-      "claude-opus-4-7[1m]" => "claude-opus-4-7[1m]",
-      "claude-sonnet-4-6[1m]" => "claude-sonnet-4-6[1m]"
-    },
-    default: "sonnet"
-  }
+  log_level: :warning
 
 # Logger metadata used throughout the SDK (Credo strict compliance).
 config :logger, :default_formatter, metadata: logger_metadata

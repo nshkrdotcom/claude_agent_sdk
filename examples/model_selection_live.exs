@@ -4,7 +4,7 @@
 # Usage: mix run examples/model_selection_live.exs
 #
 # Demonstrates:
-#   - The current model aliases (sonnet -> Sonnet 5, opus -> Opus 4.8,
+#   - The current model aliases (sonnet -> Sonnet 5, opus -> Opus 5,
 #     fable -> Fable 5, haiku -> Haiku 4.5) and the CLI args each produces
 #   - :xhigh effort on Sonnet 5 / Fable 5 (catalog-driven gating)
 #   - Using a model NOT in the registry: it passes through to --model verbatim
