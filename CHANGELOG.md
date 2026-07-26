@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Publish preflight now verifies the exact local sibling release on Hex, so an
+  older package version cannot falsely satisfy release readiness. Nested
+  package tasks resolve the helper-owning repository, and the self-entry used
+  by packaged examples is excluded from prerequisites.
 - **Model registry refresh (Claude Opus 5):** the shared `cli_subprocess_core`
   Claude catalog (`catalog_version` `2026-07-25`) now advertises Opus 5 as the
   current Opus choice. Both `opus` and the retained `opus[1m]` compatibility

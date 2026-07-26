@@ -103,6 +103,16 @@ defmodule DependencySourcesTest do
       assert {:ok, []} = @helper.publish_preflight(root, package: nil)
     end
 
+    test "the current package is not treated as its own release prerequisite", %{
+      workspace: workspace,
+      root: root
+    } do
+      write_sibling!(workspace, "dep_a", "0.3.0")
+      write_config!(root, dep_config("dep_a", ~s("~> 0.3.0")))
+
+      assert {:ok, []} = @helper.publish_preflight(root, package: :dep_a)
+    end
+
     test "the registry check is off unless asked for", %{workspace: workspace, root: root} do
       write_sibling!(workspace, "dep_a", "0.3.0")
       write_config!(root, dep_config("dep_a", ~s("~> 0.3.0")))
@@ -112,6 +122,49 @@ defmodule DependencySourcesTest do
       assert {:ok, [entry]} = @helper.publish_preflight(root, package: nil)
       assert entry.status == :ok
       refute Map.has_key?(entry, :reason)
+    end
+
+    test "the registry check requires the exact sibling release", %{
+      workspace: workspace,
+      root: root
+    } do
+      write_sibling!(workspace, "dep_a", "0.3.0")
+      write_config!(root, dep_config("dep_a", ~s("~> 0.3.0")))
+
+      registry_lookup = fn :dep_a, "0.3.0" -> :missing end
+
+      assert {:error, [blocker]} =
+               @helper.publish_preflight(root,
+                 package: nil,
+                 check_registry?: true,
+                 registry_lookup: registry_lookup
+               )
+
+      assert blocker.app == :dep_a
+      assert blocker.reason == :hex_release_missing
+      assert blocker.sibling_version == "0.3.0"
+
+      assert @helper.format_blockers([blocker]) =~
+               "sibling version 0.3.0 is not published on Hex"
+    end
+
+    test "the registry check accepts the exact sibling release", %{
+      workspace: workspace,
+      root: root
+    } do
+      write_sibling!(workspace, "dep_a", "0.3.0")
+      write_config!(root, dep_config("dep_a", ~s("~> 0.3.0")))
+
+      registry_lookup = fn :dep_a, "0.3.0" -> :published end
+
+      assert {:ok, [entry]} =
+               @helper.publish_preflight(root,
+                 package: nil,
+                 check_registry?: true,
+                 registry_lookup: registry_lookup
+               )
+
+      assert entry.status == :ok
     end
   end
 

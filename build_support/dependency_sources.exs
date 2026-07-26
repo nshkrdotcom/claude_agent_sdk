@@ -19,8 +19,8 @@ defmodule DependencySources do
   #   H1 `publish_preflight/2` - fail-closed check that each committed `hex:`
   #      constraint admits the version in the sibling checkout that was actually
   #      developed against, naming the exact bump required, and (with
-  #      `check_registry?: true`) that a package by that name exists on Hex at
-  #      all.
+  #      `check_registry?: true`) that the exact sibling version exists as a
+  #      published Hex release.
   #   H2 `sources/2` / `format_sources/1` / `path_notice/1` and the
   #      `mix deps.sources` task, plus a one-line notice when any dependency
   #      resolves to a local path.
@@ -31,7 +31,8 @@ defmodule DependencySources do
   #   H4 `release_dag/0` / `release_order/0` - the machine-readable release
   #      order that H1 reads.
 
-  @helper_version 3
+  @helper_version 5
+  @repo_root Path.dirname(__DIR__)
 
   @source_keys [:path, :github, :hex]
   @source_by_name Map.new(@source_keys, &{Atom.to_string(&1), &1})
@@ -89,6 +90,8 @@ defmodule DependencySources do
   }
 
   def helper_version, do: @helper_version
+
+  def repo_root, do: @repo_root
 
   def release_dag, do: @release_dag
 
@@ -187,8 +190,12 @@ defmodule DependencySources do
 
     entries =
       dependencies
+      |> Enum.reject(fn {app, _dep_config} -> app == package end)
       |> Enum.map(fn {app, dep_config} -> preflight_entry(app, dep_config, repo_root) end)
-      |> check_registry(Keyword.get(opts, :check_registry?, false))
+      |> check_registry(
+        Keyword.get(opts, :check_registry?, false),
+        Keyword.get(opts, :registry_lookup, &hex_release_state/2)
+      )
       |> Enum.sort_by(& &1.app)
 
     blockers =
@@ -232,9 +239,9 @@ defmodule DependencySources do
     "#{blocker.app}: sibling checkout #{blocker.sibling_path} has no readable mix.exs version"
   end
 
-  defp format_blocker(%{reason: :hex_package_missing} = blocker) do
-    "#{blocker.app}: no package with this name exists on the Hex registry, so a " <>
-      "published package requiring #{inspect(blocker.hex)} could never resolve"
+  defp format_blocker(%{reason: :hex_release_missing} = blocker) do
+    "#{blocker.app}: sibling version #{blocker.sibling_version} is not published on Hex, so " <>
+      "a package requiring #{inspect(blocker.hex)} cannot yet publish"
   end
 
   defp format_blocker(%{reason: :missing_release_prerequisite} = blocker) do
@@ -305,31 +312,33 @@ defmodule DependencySources do
   end
 
   # A committed `hex:` constraint that admits the sibling version is still
-  # unpublishable if no such package exists. That is not hypothetical: the
-  # Execution Plane split named component packages in every consumer manifest
-  # months before either was pushed to the registry, and nothing anywhere
-  # noticed until a publish would have failed. Checking the constraint alone
-  # was the gap.
+  # unpublishable until that exact version is on Hex. That is not hypothetical:
+  # `execution_plane 0.1.0` existed as a historical monolith, so checking only
+  # the package name falsely blessed consumers developed against the canonical
+  # core-only `execution_plane 0.2.0`. The component package names were absent
+  # entirely. Querying each exact sibling version closes both gaps.
   #
   # Off by default so ordinary resolution never touches the network; the
   # `deps.publish_preflight` task turns it on. A registry that cannot be
   # reached is recorded as unverified rather than reported as missing — an
   # offline machine must not manufacture a blocker.
-  defp check_registry(entries, false), do: entries
+  defp check_registry(entries, false, _lookup), do: entries
 
-  defp check_registry(entries, true), do: Enum.map(entries, &check_registry_entry/1)
+  defp check_registry(entries, true, lookup) do
+    Enum.map(entries, &check_registry_entry(&1, lookup))
+  end
 
-  defp check_registry_entry(%{hex: nil} = entry), do: entry
+  defp check_registry_entry(%{status: status} = entry, _lookup) when status != :ok, do: entry
 
-  defp check_registry_entry(entry) do
-    case hex_package_state(entry.app) do
+  defp check_registry_entry(entry, lookup) do
+    case lookup.(entry.app, entry.sibling_version) do
       :published ->
         entry
 
       :missing ->
         entry
         |> Map.put(:status, :blocked)
-        |> Map.put(:reason, :hex_package_missing)
+        |> Map.put(:reason, :hex_release_missing)
         |> Map.put_new(:required, nil)
 
       {:unverified, reason} ->
@@ -337,13 +346,21 @@ defmodule DependencySources do
     end
   end
 
-  defp hex_package_state(app) do
-    case System.cmd("mix", ["hex.info", Atom.to_string(app)], stderr_to_stdout: true) do
+  defp hex_release_state(app, version) do
+    case System.cmd(
+           "mix",
+           ["hex.info", Atom.to_string(app), version],
+           stderr_to_stdout: true
+         ) do
+      {_output, 0} ->
+        :published
+
       {output, _status} ->
-        if String.contains?(output, "No package with name") do
+        if String.contains?(output, "No release with name") or
+             String.contains?(output, "No package with name") do
           :missing
         else
-          :published
+          {:unverified, {:hex_info_failed, String.trim(output)}}
         end
     end
   rescue
@@ -817,8 +834,7 @@ defmodule DependencySources do
   defp dep_tuple(app, config, :path, repo_root, override, extra_opts) do
     path = configured_path(config, override, repo_root)
 
-    {app,
-     Keyword.merge([path: Path.expand(path, repo_root)], dep_options(config, extra_opts))}
+    {app, Keyword.merge([path: Path.expand(path, repo_root)], dep_options(config, extra_opts))}
   end
 
   defp dep_tuple(app, config, :github, _repo_root, override, extra_opts) do
@@ -1059,7 +1075,7 @@ unless Code.ensure_loaded?(Mix.Tasks.Deps.Sources) do
         Enum.find(@helper_candidates, &Code.ensure_loaded?/1) ||
           Mix.raise("no dependency source helper is loaded")
 
-      root = File.cwd!()
+      root = helper.repo_root()
 
       root
       |> helper.sources(notify?: false)
@@ -1084,7 +1100,7 @@ unless Code.ensure_loaded?(Mix.Tasks.Deps.PublishPreflight) do
         Enum.find(@helper_candidates, &Code.ensure_loaded?/1) ||
           Mix.raise("no dependency source helper is loaded")
 
-      root = File.cwd!()
+      root = helper.repo_root()
 
       case helper.publish_preflight(root, check_registry?: true) do
         {:ok, entries} ->
