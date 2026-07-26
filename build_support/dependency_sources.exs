@@ -18,7 +18,9 @@ defmodule DependencySources do
   #
   #   H1 `publish_preflight/2` - fail-closed check that each committed `hex:`
   #      constraint admits the version in the sibling checkout that was actually
-  #      developed against, naming the exact bump required.
+  #      developed against, naming the exact bump required, and (with
+  #      `check_registry?: true`) that a package by that name exists on Hex at
+  #      all.
   #   H2 `sources/2` / `format_sources/1` / `path_notice/1` and the
   #      `mix deps.sources` task, plus a one-line notice when any dependency
   #      resolves to a local path.
@@ -61,8 +63,23 @@ defmodule DependencySources do
   # `package => [prerequisite]` means the prerequisite must be published first,
   # and its `hex:` constraint bumped in the dependent before the dependent
   # publishes. Packages absent from this map are independent.
+  #
+  # The Execution Plane components are in this graph because they are a real
+  # ordering constraint, not background detail: `cli_subprocess_core` declares
+  # all three, and `execution_plane_process` / `execution_plane_jsonrpc` are
+  # built to publish (both carry full Hex `package/0` metadata) but are not on
+  # the registry yet. Publishing `cli_subprocess_core` before them produces a
+  # package whose requirements cannot resolve, which is exactly the class of
+  # failure H1's registry check now refuses.
   @release_dag %{
-    cli_subprocess_core: [],
+    execution_plane: [],
+    execution_plane_process: [:execution_plane],
+    execution_plane_jsonrpc: [:execution_plane],
+    cli_subprocess_core: [
+      :execution_plane,
+      :execution_plane_jsonrpc,
+      :execution_plane_process
+    ],
     codex_sdk: [:cli_subprocess_core],
     claude_agent_sdk: [:cli_subprocess_core],
     cursor_cli_sdk: [:cli_subprocess_core],
@@ -171,6 +188,7 @@ defmodule DependencySources do
     entries =
       dependencies
       |> Enum.map(fn {app, dep_config} -> preflight_entry(app, dep_config, repo_root) end)
+      |> check_registry(Keyword.get(opts, :check_registry?, false))
       |> Enum.sort_by(& &1.app)
 
     blockers =
@@ -212,6 +230,11 @@ defmodule DependencySources do
 
   defp format_blocker(%{reason: :unreadable_sibling_version} = blocker) do
     "#{blocker.app}: sibling checkout #{blocker.sibling_path} has no readable mix.exs version"
+  end
+
+  defp format_blocker(%{reason: :hex_package_missing} = blocker) do
+    "#{blocker.app}: no package with this name exists on the Hex registry, so a " <>
+      "published package requiring #{inspect(blocker.hex)} could never resolve"
   end
 
   defp format_blocker(%{reason: :missing_release_prerequisite} = blocker) do
@@ -279,6 +302,54 @@ defmodule DependencySources do
   defp required(version) do
     parsed = Version.parse!(version)
     "~> #{parsed.major}.#{parsed.minor}.0"
+  end
+
+  # A committed `hex:` constraint that admits the sibling version is still
+  # unpublishable if no such package exists. That is not hypothetical: the
+  # Execution Plane split named component packages in every consumer manifest
+  # months before either was pushed to the registry, and nothing anywhere
+  # noticed until a publish would have failed. Checking the constraint alone
+  # was the gap.
+  #
+  # Off by default so ordinary resolution never touches the network; the
+  # `deps.publish_preflight` task turns it on. A registry that cannot be
+  # reached is recorded as unverified rather than reported as missing — an
+  # offline machine must not manufacture a blocker.
+  defp check_registry(entries, false), do: entries
+
+  defp check_registry(entries, true), do: Enum.map(entries, &check_registry_entry/1)
+
+  defp check_registry_entry(%{hex: nil} = entry), do: entry
+
+  defp check_registry_entry(entry) do
+    case hex_package_state(entry.app) do
+      :published ->
+        entry
+
+      :missing ->
+        entry
+        |> Map.put(:status, :blocked)
+        |> Map.put(:reason, :hex_package_missing)
+        |> Map.put_new(:required, nil)
+
+      {:unverified, reason} ->
+        Map.put(entry, :registry, {:unverified, reason})
+    end
+  end
+
+  defp hex_package_state(app) do
+    case System.cmd("mix", ["hex.info", Atom.to_string(app)], stderr_to_stdout: true) do
+      {output, _status} ->
+        if String.contains?(output, "No package with name") do
+          :missing
+        else
+          :published
+        end
+    end
+  rescue
+    error -> {:unverified, error}
+  catch
+    :exit, reason -> {:unverified, reason}
   end
 
   defp missing_release_prerequisites(nil, _dependencies), do: []
@@ -1015,7 +1086,7 @@ unless Code.ensure_loaded?(Mix.Tasks.Deps.PublishPreflight) do
 
       root = File.cwd!()
 
-      case helper.publish_preflight(root) do
+      case helper.publish_preflight(root, check_registry?: true) do
         {:ok, entries} ->
           Mix.shell().info("publish preflight: ok (#{length(entries)} managed dependencies)")
 

@@ -102,6 +102,17 @@ defmodule DependencySourcesTest do
 
       assert {:ok, []} = @helper.publish_preflight(root, package: nil)
     end
+
+    test "the registry check is off unless asked for", %{workspace: workspace, root: root} do
+      write_sibling!(workspace, "dep_a", "0.3.0")
+      write_config!(root, dep_config("dep_a", ~s("~> 0.3.0")))
+
+      # `dep_a` exists on no registry. Ordinary resolution must not consult one,
+      # so this stays green and offline.
+      assert {:ok, [entry]} = @helper.publish_preflight(root, package: nil)
+      assert entry.status == :ok
+      refute Map.has_key?(entry, :reason)
+    end
   end
 
   describe "H2 source visibility" do
@@ -190,9 +201,12 @@ defmodule DependencySourcesTest do
       write_config!(root, dep_config("dep_a", ~s("~> 0.3.0")))
       write_local_override!(root, "%{deps: %{dep_a: %{source: :path}}}\n")
 
-      assert_raise ArgumentError, ~r/publish mode/, fn ->
-        @helper.deps(root, publish?: true, notify?: false)
-      end
+      error =
+        assert_raise ArgumentError, fn ->
+          @helper.deps(root, publish?: true, notify?: false)
+        end
+
+      assert Exception.message(error) =~ "publish mode"
     end
 
     test "a local override still wins outside publish mode", %{workspace: workspace, root: root} do
@@ -208,7 +222,18 @@ defmodule DependencySourcesTest do
     test "declares the actual release edges" do
       dag = @helper.release_dag()
 
-      assert dag[:cli_subprocess_core] == []
+      # The Execution Plane components are ordering constraints, not detail:
+      # `cli_subprocess_core` declares all three, so they publish before it.
+      assert dag[:execution_plane] == []
+      assert dag[:execution_plane_process] == [:execution_plane]
+      assert dag[:execution_plane_jsonrpc] == [:execution_plane]
+
+      assert dag[:cli_subprocess_core] == [
+               :execution_plane,
+               :execution_plane_jsonrpc,
+               :execution_plane_process
+             ]
+
       assert dag[:codex_sdk] == [:cli_subprocess_core]
       assert dag[:claude_agent_sdk] == [:cli_subprocess_core]
       assert dag[:cursor_cli_sdk] == [:cli_subprocess_core]
@@ -241,16 +266,20 @@ defmodule DependencySourcesTest do
     test "a non-literal config expression is refused instead of evaluated", %{root: root} do
       write_config!(root, ~s|%{deps: %{dep_a: %{hex: System.get_env("PATH")}}}\n|)
 
-      assert_raise ArgumentError, ~r/unsupported expression/, fn -> @helper.sources(root) end
+      error = assert_raise ArgumentError, fn -> @helper.sources(root) end
+      assert Exception.message(error) =~ "unsupported expression"
     end
 
     test "a non-literal local override is refused instead of evaluated", %{root: root} do
       write_config!(root, dep_config("dep_a", ~s("~> 0.3.0")))
       write_local_override!(root, ~s|%{deps: %{dep_a: %{hex: System.get_env("PATH")}}}\n|)
 
-      assert_raise ArgumentError, ~r/non-literal/, fn ->
-        @helper.deps(root, notify?: false)
-      end
+      error =
+        assert_raise ArgumentError, fn ->
+          @helper.deps(root, notify?: false)
+        end
+
+      assert Exception.message(error) =~ "non-literal"
     end
 
     test "an unknown source name is refused without creating an atom", %{root: root} do
@@ -258,15 +287,19 @@ defmodule DependencySourcesTest do
       %{deps: %{dep_a: %{hex: "~> 0.3.0", default_order: ["mystery"]}}}
       """)
 
-      assert_raise ArgumentError, ~r/unknown dependency source/, fn ->
-        @helper.deps(root, notify?: false)
-      end
+      error =
+        assert_raise ArgumentError, fn ->
+          @helper.deps(root, notify?: false)
+        end
+
+      assert Exception.message(error) =~ "unknown dependency source"
     end
 
     test "an undeclared dependency name is refused", %{root: root} do
       write_config!(root, dep_config("dep_a", ~s("~> 0.3.0")))
 
-      assert_raise ArgumentError, ~r/dep_b/, fn -> @helper.dep("dep_b", root) end
+      error = assert_raise ArgumentError, fn -> @helper.dep("dep_b", root) end
+      assert Exception.message(error) =~ "dep_b"
     end
 
     test "the helper reports its settled version" do
@@ -305,6 +338,8 @@ defmodule DependencySourcesTest do
     dir = Path.join(workspace, name)
     File.mkdir_p!(dir)
 
+    app = ":" <> name
+
     File.write!(Path.join(dir, "mix.exs"), """
     defmodule #{Macro.camelize(name)}.MixProject do
       use Mix.Project
@@ -312,7 +347,7 @@ defmodule DependencySourcesTest do
       @version "#{version}"
 
       def project do
-        [app: :#{name}, version: @version]
+        [app: #{app}, version: @version]
       end
     end
     """)

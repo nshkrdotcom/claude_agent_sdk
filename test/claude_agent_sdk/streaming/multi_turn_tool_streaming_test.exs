@@ -96,7 +96,11 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
                       %{type: :message_stop, final_text: "Here are the files."}},
                      1_000
 
-      events = Task.await(collector, 2_000)
+      # A ceiling on waiting, not a timing assertion — the assertions below are
+      # about content. Every OS spawn in the node serializes behind erlexec's
+      # single port, so under full-suite concurrency event delivery can exceed a
+      # 2 s budget while passing in ~2 s standalone.
+      events = Task.await(collector, 15_000)
 
       text =
         events
@@ -158,7 +162,11 @@ defmodule ClaudeAgentSDK.Streaming.MultiTurnToolStreamingTest do
       :ok = Session.push_events(session, events_turn_1)
       :ok = Session.push_events(session, events_turn_2)
 
-      events = Task.await(collector, 2_000)
+      # A ceiling on waiting, not a timing assertion — the assertions below are
+      # about content. Every OS spawn in the node serializes behind erlexec's
+      # single port, so under full-suite concurrency event delivery can exceed a
+      # 2 s budget while passing in ~2 s standalone.
+      events = Task.await(collector, 15_000)
 
       text =
         events
