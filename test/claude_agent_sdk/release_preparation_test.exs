@@ -7,8 +7,8 @@ defmodule ClaudeAgentSDK.ReleasePreparationTest do
     project = Mix.Project.config()
     package_files = project[:package][:files]
 
-    assert project[:version] == "0.18.0"
-    assert project[:docs][:source_ref] == "v0.18.0"
+    assert project[:version] == "0.19.0"
+    assert project[:docs][:source_ref] == "v0.19.0"
     assert project[:docs][:assets] == %{"assets" => "assets"}
     assert project[:docs][:logo] == "assets/claude_agent_sdk.svg"
 
@@ -16,6 +16,9 @@ defmodule ClaudeAgentSDK.ReleasePreparationTest do
           ~w(lib assets build_support guides mix.exs README.md LICENSE CHANGELOG.md) do
       assert required in package_files
     end
+
+    assert project[:package][:links]["License"] ==
+             "https://github.com/nshkrdotcom/claude_agent_sdk/blob/main/LICENSE"
 
     refute ".formatter.exs" in package_files
   end

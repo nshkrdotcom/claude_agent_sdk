@@ -15,20 +15,20 @@ defmodule ClaudeAgentSDK.DependencyBoundaryTest do
     assert_forbidden_deps_absent(Mix.Project.config()[:deps], @forbidden_deps)
   end
 
-  test "release metadata retains 0.18.0 and requires Elixir 1.19" do
+  test "release metadata targets 0.19.0 and requires Elixir 1.19" do
     project = Mix.Project.config()
 
-    assert project[:version] == "0.18.0"
+    assert project[:version] == "0.19.0"
     assert project[:elixir] == "~> 1.19"
   end
 
-  test "publish mode uses CLI core 0.2 from Hex" do
+  test "publish mode uses CLI core 0.3 from Hex" do
     dep =
       @repo_root
       |> DependencySources.deps(publish?: true)
       |> Keyword.fetch!(:cli_subprocess_core)
 
-    assert dep == "~> 0.2.0"
+    assert dep == "~> 0.3.0"
   end
 
   test "public SDK source does not expose raw Execution Plane structs" do

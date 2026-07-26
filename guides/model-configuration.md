@@ -84,8 +84,9 @@ multi-provider manager — so do not "align" one to the other.
 The model registry (catalog JSON + resolution logic) ships from
 `cli_subprocess_core`, which this SDK and `agent_session_manager` consume as
 a path dependency in this workspace and as a hex dependency when published.
-The full release train publishes the two Ground Plane leaves, Execution Plane,
-and then **`cli_subprocess_core` 0.2.0 before this SDK**. Publish
+The full release train publishes the two Ground Plane leaves, the canonical
+Execution Plane components, and then **`cli_subprocess_core` 0.3.0 before this
+SDK**. Publish
 `claude_agent_sdk` before its optional `agent_session_manager` consumer. A Hex
 consumer's model lineup comes from the *published* core package, not the
 workspace sibling. When

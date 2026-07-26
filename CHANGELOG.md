@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-07-25
+
 ### Changed
 
 - **Model registry refresh (Claude Opus 5):** the shared `cli_subprocess_core`
@@ -27,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `lib/`, `config/`, or `test/`. Removed so a local copy cannot drift from the
   `cli_subprocess_core`-owned registry that `ClaudeAgentSDK.Model` actually
   consults. No behavior change.
+- Release metadata now targets `cli_subprocess_core ~> 0.3.0`.
 
 ## [0.18.0] - 2026-07-13
 
@@ -1761,7 +1764,9 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.2...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.18.0...v0.19.0
+[0.18.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.2...v0.18.0
 [0.17.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.1...v0.17.2
 [0.17.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.16.0...v0.17.0
