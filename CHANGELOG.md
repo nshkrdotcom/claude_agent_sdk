@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-07-27
+
+### Changed
+
+- Release metadata now targets `cli_subprocess_core ~> 0.4.1`, allowing this
+  SDK to resolve alongside `agent_session_manager` 0.12.1 and its fixed Claude
+  reasoning-effort propagation.
+
 ## [0.19.0] - 2026-07-27
 
 ### Changed
@@ -1768,7 +1776,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.19.1...HEAD
+[0.19.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.2...v0.18.0
 [0.17.2]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.1...v0.17.2

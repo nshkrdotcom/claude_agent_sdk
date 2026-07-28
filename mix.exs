@@ -6,7 +6,7 @@ defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
   @app :claude_agent_sdk
-  @version "0.19.0"
+  @version "0.19.1"
   @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
   @homepage_url "https://hex.pm/packages/claude_agent_sdk"
   @docs_url "https://hexdocs.pm/claude_agent_sdk"
