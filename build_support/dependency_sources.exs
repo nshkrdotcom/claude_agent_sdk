@@ -173,10 +173,32 @@ defmodule DependencySources do
     # answer there is always the one publish mode would have produced — a plain
     # Hex requirement. Taking it from the call site keeps the tarball
     # self-describing without shipping build tooling inside it.
+    # The registry may be absent (a published tarball) or present but silent on
+    # this app — which happens whenever the module was loaded from a *different*
+    # repository's build_support, as it is for any consumer resolving this
+    # package. Both mean the same thing: the registry cannot answer, so the
+    # requirement stated at the call site is the authority.
     case config(repo_root) do
-      {:ok, config} -> dep_from_config(app, config, repo_root, extra_opts)
-      :error -> hex_only_dep!(app, hex_fallback, extra_opts)
+      {:ok, config} ->
+        if known_app?(app, config) do
+          dep_from_config(app, config, repo_root, extra_opts)
+        else
+          hex_only_dep!(app, hex_fallback, extra_opts)
+        end
+
+      :error ->
+        hex_only_dep!(app, hex_fallback, extra_opts)
     end
+  end
+
+  defp known_app?(app, config) do
+    lookup = app_lookup(config)
+
+    config
+    |> deps_config()
+    |> Enum.any?(fn {configured_app, _} -> normalize_app!(configured_app, lookup) == app end)
+  rescue
+    _ -> false
   end
 
   defp hex_only_dep!(app, nil, _extra_opts) do
