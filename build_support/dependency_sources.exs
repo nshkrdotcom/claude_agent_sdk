@@ -31,7 +31,7 @@ defmodule DependencySources do
   #   H4 `release_dag/0` / `release_order/0` - the machine-readable release
   #      order that H1 reads.
 
-  @helper_version 5
+  @helper_version 7
   @repo_root Path.dirname(__DIR__)
 
   @source_keys [:path, :github, :hex]
@@ -84,7 +84,9 @@ defmodule DependencySources do
     codex_sdk: [:cli_subprocess_core],
     claude_agent_sdk: [:cli_subprocess_core],
     cursor_cli_sdk: [:cli_subprocess_core],
-    agent_session_manager: [:cli_subprocess_core, :cursor_cli_sdk],
+    antigravity_cli_sdk: [:cli_subprocess_core],
+    amp_sdk: [:cli_subprocess_core],
+    agent_session_manager: [:cli_subprocess_core],
     gemini_ex: [],
     inference: []
   }
@@ -106,10 +108,32 @@ defmodule DependencySources do
   end
 
   def config!(repo_root \\ Path.dirname(__DIR__)) do
+    case config(repo_root) do
+      {:ok, config} -> config
+      :error -> raise File.Error, reason: :enoent, action: "read file", path: config_path(repo_root)
+    end
+  end
+
+  @doc """
+  Loads the dependency source registry, or `:error` when this checkout has none.
+
+  Absence is expected inside a published package: the registry describes
+  sibling source checkouts, which a consumer resolving from Hex does not have.
+  """
+  def config(repo_root \\ Path.dirname(__DIR__)) do
+    path = config_path(repo_root)
+
+    if File.regular?(path) do
+      {:ok, load_config!(path)}
+    else
+      :error
+    end
+  end
+
+  defp config_path(repo_root) do
     repo_root
     |> Path.expand()
     |> Path.join("build_support/dependency_sources.config.exs")
-    |> load_config!()
   end
 
   def deps(repo_root \\ Path.dirname(__DIR__), opts \\ []) do
@@ -125,9 +149,48 @@ defmodule DependencySources do
     end)
   end
 
-  def dep(app, repo_root \\ Path.dirname(__DIR__), extra_opts \\ []) do
+  def dep(app, repo_root \\ Path.dirname(__DIR__), extra_opts \\ [])
+
+  # `dep(:app, hex: "~> 1.0")` — options in the second position, default root.
+  def dep(app, opts, extra_opts) when is_list(opts) do
+    dep(
+      app,
+      Path.dirname(__DIR__),
+      Keyword.merge(keyword_options(opts), keyword_options(extra_opts))
+    )
+  end
+
+  def dep(app, repo_root, extra_opts) when is_binary(repo_root) do
     repo_root = Path.expand(repo_root)
-    config = config!(repo_root)
+
+    # `hex:` at the call site is the published-package fallback, not a dep
+    # option, so it never reaches the option list.
+    {hex_fallback, extra_opts} = Keyword.pop(keyword_options(extra_opts), :hex)
+
+    # A published package carries no workspace config: the registry describes
+    # sibling checkouts, which do not exist for a consumer resolving this
+    # package from Hex. That is a legitimate state, not a missing file, and the
+    # answer there is always the one publish mode would have produced — a plain
+    # Hex requirement. Taking it from the call site keeps the tarball
+    # self-describing without shipping build tooling inside it.
+    case config(repo_root) do
+      {:ok, config} -> dep_from_config(app, config, repo_root, extra_opts)
+      :error -> hex_only_dep!(app, hex_fallback, extra_opts)
+    end
+  end
+
+  defp hex_only_dep!(app, nil, _extra_opts) do
+    raise ArgumentError,
+          "#{app}: no dependency source config was found and the call site gave no " <>
+            "`hex:` requirement to fall back on. A package that can be published must " <>
+            "state one, because a consumer resolving it from Hex has no workspace " <>
+            "registry to read."
+  end
+
+  defp hex_only_dep!(app, requirement, []), do: {app, requirement}
+  defp hex_only_dep!(app, requirement, extra_opts), do: {app, requirement, extra_opts}
+
+  defp dep_from_config(app, config, repo_root, extra_opts) do
     app_lookup = app_lookup(config)
     overrides = load_local_overrides(repo_root)
     app = normalize_app!(app, app_lookup)
