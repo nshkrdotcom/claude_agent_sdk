@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-08-11
+
+### Changed
+
+- Require `cli_subprocess_core ~> 0.7.0`, aligning the Claude SDK with the
+  current Execution Plane-backed CLI runtime and `agent_session_manager 0.14`
+  compatibility line.
+- Keep dependency-source build tooling out of the published archive while
+  retaining path-first source development and Hex-only publication.
+- Add a focused 0.20 migration guide and package-boundary regression coverage.
+
 ## [0.19.1] - 2026-07-27
 
 ### Changed
@@ -1776,7 +1787,8 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.19.1...HEAD
+[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.19.1...v0.20.0
 [0.19.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.17.2...v0.18.0

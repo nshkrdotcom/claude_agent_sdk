@@ -88,13 +88,18 @@ defmodule DependencySourcesTest do
       workspace: workspace,
       root: root
     } do
-      write_sibling!(workspace, "cli_subprocess_core", "0.2.0")
-      write_config!(root, dep_config("cli_subprocess_core", ~s("~> 0.2.0")))
+      write_sibling!(workspace, "execution_plane", "0.2.0")
+      write_config!(root, dep_config("execution_plane", ~s("~> 0.2.0")))
 
       assert {:error, blockers} =
-               @helper.publish_preflight(root, package: :agent_session_manager)
+               @helper.publish_preflight(root, package: :cli_subprocess_core)
 
-      assert [%{app: :cursor_cli_sdk, reason: :missing_release_prerequisite}] = blockers
+      assert Enum.map(blockers, & &1.app) == [
+               :execution_plane_jsonrpc,
+               :execution_plane_process
+             ]
+
+      assert Enum.all?(blockers, &(&1.reason == :missing_release_prerequisite))
     end
 
     test "an empty manifest has nothing to preflight", %{root: root} do
@@ -290,7 +295,7 @@ defmodule DependencySourcesTest do
       assert dag[:codex_sdk] == [:cli_subprocess_core]
       assert dag[:claude_agent_sdk] == [:cli_subprocess_core]
       assert dag[:cursor_cli_sdk] == [:cli_subprocess_core]
-      assert dag[:agent_session_manager] == [:cli_subprocess_core, :cursor_cli_sdk]
+      assert dag[:agent_session_manager] == [:cli_subprocess_core]
       assert dag[:gemini_ex] == []
       assert dag[:inference] == []
     end

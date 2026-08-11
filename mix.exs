@@ -14,7 +14,7 @@ defmodule ClaudeAgentSdk.MixProject do
   @workspace_checkout? File.regular?(Path.expand("build_support/dependency_sources.exs", __DIR__))
 
   @app :claude_agent_sdk
-  @version "0.19.1"
+  @version "0.20.0"
   @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
   @homepage_url "https://hex.pm/packages/claude_agent_sdk"
   @docs_url "https://hexdocs.pm/claude_agent_sdk"
@@ -70,9 +70,8 @@ defmodule ClaudeAgentSdk.MixProject do
   end
 
   defp cli_subprocess_core_dep do
-    workspace_dep(:cli_subprocess_core, "~> 0.4.1")
+    workspace_dep(:cli_subprocess_core, "~> 0.7.0")
   end
-
 
   # In a source checkout the registry decides the source (path first). In a
   # published package there is no registry, and the requirement stated here is
@@ -157,6 +156,7 @@ defmodule ClaudeAgentSdk.MixProject do
         {"guides/atom-safety.md", title: "Atom Safety"},
         {"guides/env-and-secrets.md", title: "Environment & Secrets"},
         {"guides/provider_behavior_manifest.md", title: "Provider Behavior Manifest"},
+        {"guides/migrating-to-0.20.md", title: "Migrating to 0.20"},
         {"examples/README.md", title: "Examples", filename: "examples"},
         {"examples/mix_task_chat/README.md",
          title: "Mix Task Chat Example", filename: "mix-task-chat-example"},
@@ -199,7 +199,8 @@ defmodule ClaudeAgentSdk.MixProject do
           "guides/error-handling.md",
           "guides/atom-safety.md",
           "guides/env-and-secrets.md",
-          "guides/provider_behavior_manifest.md"
+          "guides/provider_behavior_manifest.md",
+          "guides/migrating-to-0.20.md"
         ],
         Examples: [
           "examples/README.md",
