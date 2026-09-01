@@ -4,7 +4,6 @@ defmodule EmailAgent.MixProject do
   use Mix.Project
 
   @version "0.1.0"
-  @repo_root Path.expand("../..", __DIR__)
 
   def project do
     [
@@ -83,7 +82,7 @@ defmodule EmailAgent.MixProject do
 
   defp workspace_dep(committed) do
     if function_exported?(MixWorkspaceOpsBootstrap, :dep, 2),
-      do: apply(MixWorkspaceOpsBootstrap, :dep, [committed, @repo_root]),
+      do: apply(MixWorkspaceOpsBootstrap, :dep, [committed, __DIR__]),
       else: committed
   end
 end

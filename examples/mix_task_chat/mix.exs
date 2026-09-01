@@ -3,8 +3,6 @@ if bootstrap = System.get_env("MIX_WORKSPACE_OPS_BOOTSTRAP"), do: Code.require_f
 defmodule MixTaskChat.MixProject do
   use Mix.Project
 
-  @repo_root Path.expand("../..", __DIR__)
-
   def project do
     [
       app: :mix_task_chat,
@@ -34,7 +32,7 @@ defmodule MixTaskChat.MixProject do
 
   defp workspace_dep(committed) do
     if function_exported?(MixWorkspaceOpsBootstrap, :dep, 2),
-      do: apply(MixWorkspaceOpsBootstrap, :dep, [committed, @repo_root]),
+      do: apply(MixWorkspaceOpsBootstrap, :dep, [committed, __DIR__]),
       else: committed
   end
 end
