@@ -10,13 +10,12 @@
 - This SDK sits above `cli_subprocess_core`; do not expose raw `ExecutionPlane.*` internals in public APIs or docs.
 - This SDK must never spawn OS processes or open transports directly; all execution flows through `cli_subprocess_core` → `execution_plane`. That indirection is deliberate: Execution Plane is intended to run (optionally) as a separate, hard-isolated BEAM node so side-effecting execution is fault/security/blast-radius isolated from the SDK. Keeping execution behind the `CliSubprocessCore` facades is what lets that isolation land with no SDK change — do not re-couple execution (e.g. a direct Port/erlexec spawn) into this repo.
 - Use `CliSubprocessCore` facades for execution surfaces, transport errors, transport info, process exits, sessions, commands, and provider model policy.
-- Dependency source selection is handled by `build_support/dependency_sources.exs`
-  and `build_support/dependency_sources.config.exs`; local overrides use
-  `.dependency_sources.local.exs`.
-- Keep `cli_subprocess_core` dependency resolution publish-aware: local path
-  deps for sibling development, GitHub fallback for clean clones, and Hex
-  constraints for release builds.
-- Dependency source selection must not use environment variables.
+- Keep committed dependency tuples as ordinary Hex requirements so standalone
+  clones and published consumers work without workspace tooling. Managed
+  development loads the MWO bootstrap and gets eligible source coordinates
+  from Portfolio Registry; operator preferences stay outside this repository.
+- MWO's process-scoped bootstrap pointer is the only dependency-management
+  environment input read by `mix.exs`; publish mode remains Hex-only.
 - This repo is not a Weld consumer in this pass and must not receive a blind
   Weld dependency. Weld verification is limited to discovered Weld consumers.
 - Runtime application code under `lib/**` must not call direct OS env APIs such

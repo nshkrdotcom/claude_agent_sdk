@@ -90,10 +90,10 @@ SDK**. Publish
 `claude_agent_sdk` before its optional `agent_session_manager` consumer. A Hex
 consumer's model lineup comes from the *published* core package, not the
 workspace sibling. When
-switching a workspace checkout between `:path` and `:github`/`:hex`
-resolution (see `build_support/dependency_sources.config.exs`), prune any
-previously fetched `deps/cli_subprocess_core` copy so a stale catalog cannot
-shadow the live one.
+Managed workspace source selection belongs to Mix Workspace Ops and Portfolio
+Registry. MWO gives each exact dependency context a stable external dependency
+path, so changing between eligible local, Git, and Hex sources cannot leave a
+stale `deps/cli_subprocess_core` copy in this checkout.
 
 The current native Claude aliases are:
 

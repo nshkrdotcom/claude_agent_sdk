@@ -23,12 +23,9 @@ defmodule ClaudeAgentSDK.DependencyBoundaryTest do
   end
 
   test "publish mode uses CLI core 0.7 from Hex" do
-    dep =
-      @repo_root
-      |> DependencySources.deps(publish?: true)
-      |> Keyword.fetch!(:cli_subprocess_core)
+    mix_source = File.read!(Path.join(@repo_root, "mix.exs"))
 
-    assert dep == "~> 0.7.0"
+    assert mix_source =~ ~s|workspace_dep({:cli_subprocess_core, "~> 0.7.0"})|
   end
 
   test "public SDK source does not expose raw Execution Plane structs" do

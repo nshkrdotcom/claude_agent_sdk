@@ -1,8 +1,4 @@
-example_repo_root = Path.expand("../..", __DIR__)
-
-unless Code.ensure_loaded?(DependencySources) do
-  Code.require_file(Path.join(example_repo_root, "build_support/dependency_sources.exs"))
-end
+if bootstrap = System.get_env("MIX_WORKSPACE_OPS_BOOTSTRAP"), do: Code.require_file(bootstrap)
 
 defmodule PhoenixChat.MixProject do
   use Mix.Project
@@ -68,16 +64,12 @@ defmodule PhoenixChat.MixProject do
   end
 
   defp claude_agent_sdk_dep do
-    case DependencySources.dep(:claude_agent_sdk, @repo_root) do
-      {:claude_agent_sdk, opts} when is_list(opts) ->
-        if Keyword.has_key?(opts, :path) do
-          {:claude_agent_sdk, Keyword.put(opts, :path, "../..")}
-        else
-          {:claude_agent_sdk, opts}
-        end
+    workspace_dep({:claude_agent_sdk, "~> 0.20.0"})
+  end
 
-      dep ->
-        dep
-    end
+  defp workspace_dep(committed) do
+    if function_exported?(MixWorkspaceOpsBootstrap, :dep, 2),
+      do: apply(MixWorkspaceOpsBootstrap, :dep, [committed, @repo_root]),
+      else: committed
   end
 end
