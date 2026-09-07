@@ -5,6 +5,17 @@ defmodule ClaudeAgentSDK.ModelTest do
   use ClaudeAgentSDK.SupertesterCase
 
   alias ClaudeAgentSDK.Model
+  alias ClaudeAgentSDK.Options
+
+  test "restricted Mythos aliases render the full provider model ID" do
+    for model <- ["mythos-5.1", "mythos-5-1", "claude-mythos-5-1"] do
+      assert {:ok, ^model} = Model.validate(model)
+      args = Options.to_args(%Options{model: model})
+      assert ["--model", "claude-mythos-5-1"] in Enum.chunk_every(args, 2, 1, :discard)
+    end
+
+    refute "claude-mythos-5-1" in Model.list_models()
+  end
 
   # ── validate/1 ──────────────────────────────────────────────────────
 
@@ -68,6 +79,13 @@ defmodule ClaudeAgentSDK.ModelTest do
       assert "opus" in forms
       assert "sonnet" in forms
       assert "haiku" in forms
+      assert "fable" in forms
+    end
+
+    test "validates Claude Fable 5.1 aliases" do
+      assert {:ok, "claude-fable-5-1"} = Model.validate("claude-fable-5-1")
+      assert {:ok, "fable-5.1"} = Model.validate("fable-5.1")
+      assert {:ok, "fable"} = Model.validate("fable")
     end
   end
 

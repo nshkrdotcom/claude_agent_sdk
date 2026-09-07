@@ -108,8 +108,8 @@ Phase 4 finalizes the Claude release boundary:
   `ASM.Extensions.ProviderSDK.Claude`; that seam does not move the control
   family into ASM or the shared core
 - the operator publication order places the already-published Execution Plane
-  components first, then `cli_subprocess_core` 0.7.0,
-  `claude_agent_sdk` 0.20.0, then
+  components first, then `cli_subprocess_core` 0.8.0,
+  `claude_agent_sdk` 0.21.0, then
   `agent_session_manager`; this SDK does not import Execution Plane directly
 
 ## Schema Boundary
@@ -182,14 +182,14 @@ actual transport model and injects the Anthropic-compatible Ollama env.
 ## Installation
 
 Claude Agent SDK 0.20 requires Elixir 1.19 or later and
-`cli_subprocess_core ~> 0.7.0`.
+`cli_subprocess_core ~> 0.8.0`.
 
 Add to your `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.20.0"}
+    {:claude_agent_sdk, "~> 0.21.0"}
   ]
 end
 ```
@@ -629,8 +629,8 @@ Key options for `ClaudeAgentSDK.Options`:
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `model` | string | `"sonnet"` (default/recommended, Sonnet 5), `"sonnet[1m]"`, `"opus"` (Opus 5), `"opus[1m]"` (compatibility alias for Opus 5, itself a 1M-context model), `"fable"` (Fable 5), `"haiku"` (Haiku 4.5), or any custom model id (see `guides/model-configuration.md`) |
-| `effort` | atom | `:low`, `:medium`, `:high`, `:xhigh`, `:max` — controls reasoning effort; `:xhigh` is Opus-only; invalid values raise `ArgumentError` (not supported for Haiku) |
+| `model` | string | `"sonnet"` (default/recommended, Sonnet 5), `"sonnet[1m]"`, `"opus"` (Opus 5), `"opus[1m]"` (compatibility alias for Opus 5, itself a 1M-context model), `"fable"` (Claude Fable 5.1, `claude-fable-5-1`), `"haiku"` (Haiku 4.5), or any custom model id (see `guides/model-configuration.md`) |
+| `effort` | atom | `:low`, `:medium`, `:high`, `:xhigh`, `:max` — controls reasoning effort; `:xhigh` is supported by Opus and Fable/Mythos; invalid values raise `ArgumentError` (not supported for Haiku) |
 | `thinking` | map | `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}` |
 | `skills` | `:all` / list | Enables Claude skills and defaults setting sources to user/project when set |
 | `task_budget` | map | `%{total: n}` passed as an SDK task budget |
@@ -838,7 +838,7 @@ For breaking changes and migration notes, see `CHANGELOG.md`.
 
 **0.10.0 fix (resume turn persistence):**
 - `resume/3` no longer uses `--print --resume` (one-shot mode that dropped intermediate turns). It now uses `--resume` with `--input-format stream-json`, preserving the full conversation history across resume calls.
-- Current model defaults and aliases are owned by `cli_subprocess_core`; the native Claude default is `sonnet` (Claude Sonnet 5). Aliases: `opus` → Claude Opus 5, `opus[1m]` → Claude Opus 5 (compatibility alias; Opus 5 is itself a 1M-context model), `fable` → Claude Fable 5, `haiku` → Claude Haiku 4.5. A model id newer than the registry passes through to `--model` verbatim unless `allow_unknown_model: false`.
+- Current model defaults and aliases are owned by `cli_subprocess_core`; the native Claude default is `sonnet` (Claude Sonnet 5). Aliases: `opus` → Claude Opus 5, `opus[1m]` → Claude Opus 5 (compatibility alias; Opus 5 is itself a 1M-context model), `fable` → Claude Fable 5.1 (`claude-fable-5-1`), `haiku` → Claude Haiku 4.5. A model id newer than the registry passes through to `--model` verbatim unless `allow_unknown_model: false`.
 
 **0.9.0 breaking change (streaming):**
 - Stream event wrappers now require `uuid` and `session_id`. Missing keys raise and terminate the streaming client.

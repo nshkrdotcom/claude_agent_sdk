@@ -23,7 +23,6 @@ defmodule ClaudeAgentSDK.TestSupport.MockCLI do
   """
 
   use GenServer
-  require Logger
 
   alias ClaudeAgentSDK.Test.ModelFixtures
 

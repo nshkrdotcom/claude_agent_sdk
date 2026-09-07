@@ -1,0 +1,6 @@
+%{
+  "erlexec": {:hex, :erlexec, "2.4.0", "f294e9c0493cf6cc6d0c6b19e60cf6ae26cca78997e0a3693758d66dc6d4b25e", [:rebar3], [], "hexpm", "0f5de32b522a804e5141ae1bc9a9d761128008118fb3a57a9e5ef1858ff1fb71"},
+  "jason": {:hex, :jason, "1.4.5", "2e3a008590b0b8d7388c20293e9dcc9cf3e5d642fd2a114e4cbbb52e595d940a", [:mix], [{:decimal, "~> 1.0 or ~> 2.0 or ~> 3.0", [hex: :decimal, repo: "hexpm", optional: true]}], "hexpm", "b0c823996102bcd0239b3c2444eb00409b72f6a140c1950bc8b457d836b30684"},
+  "telemetry": {:hex, :telemetry, "1.4.2", "a0cb522801dffb1c49fe6e30561badffc7b6d0e180db1300df759faa22062855", [:rebar3], [], "hexpm", "928f6495066506077862c0d1646609eed891a4326bee3126ba54b60af61febb1"},
+  "zoi": {:hex, :zoi, "0.18.7", "0d6b09d19fd1feff4340b7c5660bab04fbc80c1642ee1e5c75f06d527ac326db", [:mix], [{:decimal, "~> 2.0 or ~> 3.0", [hex: :decimal, repo: "hexpm", optional: true]}, {:phoenix_html, "~> 2.14.2 or ~> 3.0 or ~> 4.1", [hex: :phoenix_html, repo: "hexpm", optional: true]}], "hexpm", "5fedddd755dec84a5e78b3671070a5e595026aa3479f7fa566a42b8c4e4e5ff2"},
+}

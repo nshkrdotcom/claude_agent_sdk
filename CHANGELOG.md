@@ -1,11 +1,22 @@
 # Changelog
 
+[0.21.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.20.0...v0.21.0
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.21.0] - 2026-09-07
+
+### Added
+
+- Support for Claude Fable 5.1 (`claude-fable-5-1`, `fable-5.1`) and Claude Mythos 5.1 (`claude-mythos-5-1`), providing state-of-the-art long-horizon reasoning and agentic software engineering capabilities.
+- Require `cli_subprocess_core ~> 0.8.0` for the refreshed catalog. Pricing is registry metadata, not SDK billing behavior.
+- Resolve restricted Mythos aliases to the full provider identifier `claude-mythos-5-1`; keep it out of the public picker. Validation does not grant provider access.
+- Updated `ClaudeAgentSDK.Model` validation and full IDs to resolve `claude-fable-5-1` and `fable-5.1` aliases to the canonical `fable` catalog entry.
 
 ## [0.20.0] - 2026-08-11
 

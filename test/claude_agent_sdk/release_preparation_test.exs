@@ -7,8 +7,8 @@ defmodule ClaudeAgentSDK.ReleasePreparationTest do
     project = Mix.Project.config()
     package_files = project[:package][:files]
 
-    assert project[:version] == "0.20.0"
-    assert project[:docs][:source_ref] == "v0.20.0"
+    assert project[:version] == "0.21.0"
+    assert project[:docs][:source_ref] == "v0.21.0"
     assert project[:docs][:assets] == %{"assets" => "assets"}
     assert project[:docs][:logo] == "assets/claude_agent_sdk.svg"
 

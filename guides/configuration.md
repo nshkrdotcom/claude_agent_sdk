@@ -323,7 +323,7 @@ Claude-native `--effort`.
 | `"sonnet[1m]"` | Claude Sonnet 5 with 1M context | `claude-sonnet-5[1m]` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
 | `"opus"` | Claude Opus 5 | `claude-opus-5` (also `claude-opus-4-8`, `claude-opus-4-7`) | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
 | `"opus[1m]"` | Claude Opus 5 (compatibility alias; Opus 5 is itself a 1M-context model) | `claude-opus-5` (also `claude-opus-4-8[1m]`, `claude-opus-4-7[1m]`) | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
-| `"fable"` | Claude Fable 5 | `claude-fable-5` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
+| `"fable"` | Claude Fable 5.1 | `claude-fable-5-1` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
 | `"haiku"` | Claude Haiku 4.5 | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` | none |
 
 ### Model Configuration

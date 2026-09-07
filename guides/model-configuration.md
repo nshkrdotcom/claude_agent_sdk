@@ -40,7 +40,7 @@ Canonical Claude model names include:
 - `opus` - Claude Opus 5
 - `opus[1m]` - compatibility alias for Claude Opus 5, which is itself a
   1M-context model
-- `fable` - Claude Fable 5
+- `fable` - Claude Fable 5.1
 - `haiku` - Claude Haiku 4.5
 
 Prior full IDs (`claude-sonnet-4-6`, `claude-opus-4-8`, `claude-opus-4-7`)
@@ -103,7 +103,11 @@ The current native Claude aliases are:
 | `sonnet[1m]` | `claude-sonnet-5[1m]` (also `claude-sonnet-4-6[1m]`) |
 | `opus` | `claude-opus-5` (also `claude-opus-4-8`, `claude-opus-4-7`) |
 | `opus[1m]` | `claude-opus-5` (also `claude-opus-4-8[1m]`, `claude-opus-4-7[1m]`) |
-| `fable` | `claude-fable-5` |
+| `fable` | `claude-fable-5-1` (also `fable-5.1`) |
+
+Restricted Mythos aliases resolve to `claude-mythos-5-1` and are excluded from
+the public picker. Model validation does not establish account access. Fable
+and Mythos changes are covered offline; no authenticated Claude probe was run.
 | `haiku` | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` |
 
 `ClaudeAgentSDK.Model.short_forms/0`, `full_ids/0`, and `list_models/0` expose

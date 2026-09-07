@@ -33,7 +33,6 @@ defmodule ResearchAgent.Coordinator do
   """
 
   use Supervisor
-  require Logger
 
   alias ResearchAgent.{HookCoordinator, SubagentTracker, TranscriptLogger}
 

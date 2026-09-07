@@ -58,7 +58,7 @@ defmodule ClaudeAgentSDK.LineFramingTest do
   end
 
   defp do_chunk(binary, size, acc) do
-    <<chunk::binary-size(size), rest::binary>> = binary
+    <<chunk::binary-size(^size), rest::binary>> = binary
     do_chunk(rest, size, [chunk | acc])
   end
 end

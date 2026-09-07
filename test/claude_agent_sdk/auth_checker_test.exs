@@ -332,7 +332,7 @@ defmodule ClaudeAgentSDK.AuthCheckerTest do
       # If CLI not installed, other fields should reflect this
       if not diagnosis.cli_installed do
         assert diagnosis.status == :cli_not_found
-        assert diagnosis.cli_error != nil
+        assert diagnosis.cli_error != ""
         assert diagnosis.authenticated == false
       end
 

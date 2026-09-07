@@ -4,7 +4,7 @@ defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
   @app :claude_agent_sdk
-  @version "0.20.0"
+  @version "0.21.0"
   @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
   @homepage_url "https://hex.pm/packages/claude_agent_sdk"
   @docs_url "https://hexdocs.pm/claude_agent_sdk"
@@ -60,7 +60,7 @@ defmodule ClaudeAgentSdk.MixProject do
   end
 
   defp cli_subprocess_core_dep do
-    workspace_dep({:cli_subprocess_core, "~> 0.7.0"})
+    workspace_dep({:cli_subprocess_core, "~> 0.8.0"})
   end
 
   defp workspace_dep(committed) do

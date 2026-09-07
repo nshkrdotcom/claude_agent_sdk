@@ -23,7 +23,6 @@ defmodule PhoenixChatWeb.ChatChannel do
   """
   use Phoenix.Channel
 
-  require Logger
 
   alias PhoenixChat.{ChatStore, ChatSession, SessionRegistry}
 

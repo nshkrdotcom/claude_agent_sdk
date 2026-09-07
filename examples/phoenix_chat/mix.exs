@@ -62,7 +62,7 @@ defmodule PhoenixChat.MixProject do
   end
 
   defp claude_agent_sdk_dep do
-    workspace_dep({:claude_agent_sdk, "~> 0.20.0"})
+    workspace_dep({:claude_agent_sdk, "~> 0.21.0"})
   end
 
   defp workspace_dep(committed) do

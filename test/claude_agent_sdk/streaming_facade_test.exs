@@ -92,7 +92,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
 
       # Should return a stream (Stream.resource/3 returns a function, not a struct)
       stream = Streaming.send_message(session, "Hello")
-      assert is_function(stream) or match?(%Stream{}, stream)
+      assert is_function(stream, 2)
 
       # Don't enumerate (would need real CLI)
       Streaming.close_session(session)
@@ -107,7 +107,7 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
 
       # Should return an enumerable/stream
       stream = Streaming.send_message(session, "Hello")
-      assert is_function(stream) or match?(%Stream{}, stream)
+      assert is_function(stream, 2)
 
       close_session_safe(session)
     end
@@ -266,11 +266,6 @@ defmodule ClaudeAgentSDK.StreamingFacadeTest do
 
   defp close_session_safe({:control_client, client}) do
     if Process.alive?(client), do: Client.stop(client)
-    :ok
-  end
-
-  defp close_session_safe(session) when is_pid(session) do
-    if Process.alive?(session), do: Streaming.close_session(session)
     :ok
   end
 end

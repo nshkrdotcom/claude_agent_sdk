@@ -34,9 +34,6 @@ erl_crash.dump
 # Ignore any .beam files that end up in the wrong place
 *.beam
 
-# Mix lock file (users should generate their own based on their environment)
-/mix.lock
-
 # IDE and editor files
 .vscode/
 .idea/
