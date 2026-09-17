@@ -629,7 +629,7 @@ Key options for `ClaudeAgentSDK.Options`:
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `model` | string | `"sonnet"` (default/recommended, Sonnet 5), `"sonnet[1m]"`, `"opus"` (Opus 5), `"opus[1m]"` (compatibility alias for Opus 5, itself a 1M-context model), `"fable"` (Claude Fable 5.1, `claude-fable-5-1`), `"haiku"` (Haiku 4.5), or any custom model id (see `guides/model-configuration.md`) |
+| `model` | string | `"sonnet"` (default/recommended, Sonnet 5), `"sonnet[1m]"`, `"opus"` (Opus 5), `"opus[1m]"` (compatibility alias for Opus 5, itself a 1M-context model), `"fable"` (provider-dependent native alias), `"claude-fable-5"` (Fable 5), `"claude-fable-5-1"` (Fable 5.1), `"haiku"` (Haiku 4.5), or any custom model id (see `guides/model-configuration.md`) |
 | `effort` | atom | `:low`, `:medium`, `:high`, `:xhigh`, `:max` — controls reasoning effort; `:xhigh` is supported by Opus and Fable/Mythos; invalid values raise `ArgumentError` (not supported for Haiku) |
 | `thinking` | map | `%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}` |
 | `skills` | `:all` / list | Enables Claude skills and defaults setting sources to user/project when set |
@@ -838,7 +838,7 @@ For breaking changes and migration notes, see `CHANGELOG.md`.
 
 **0.10.0 fix (resume turn persistence):**
 - `resume/3` no longer uses `--print --resume` (one-shot mode that dropped intermediate turns). It now uses `--resume` with `--input-format stream-json`, preserving the full conversation history across resume calls.
-- Current model defaults and aliases are owned by `cli_subprocess_core`; the native Claude default is `sonnet` (Claude Sonnet 5). Aliases: `opus` → Claude Opus 5, `opus[1m]` → Claude Opus 5 (compatibility alias; Opus 5 is itself a 1M-context model), `fable` → Claude Fable 5.1 (`claude-fable-5-1`), `haiku` → Claude Haiku 4.5. A model id newer than the registry passes through to `--model` verbatim unless `allow_unknown_model: false`.
+- Current model defaults and aliases are owned by `cli_subprocess_core`; the native Claude default is `sonnet` (Claude Sonnet 5). Aliases: `opus` → Claude Opus 5, `opus[1m]` → Claude Opus 5 (compatibility alias; Opus 5 is itself a 1M-context model), `fable` → provider-dependent native Fable alias; explicit `claude-fable-5` and `claude-fable-5-1` remain pinned, `haiku` → Claude Haiku 4.5. A model id newer than the registry passes through to `--model` verbatim unless `allow_unknown_model: false`.
 
 **0.9.0 breaking change (streaming):**
 - Stream event wrappers now require `uuid` and `session_id`. Missing keys raise and terminate the streaming client.
@@ -882,3 +882,7 @@ The Claude runtime lane now publishes an honest session-control contract for orc
 
 This is meant for recovery and operator-control flows, not blind retries. The caller should resume
 the same session when possible and only replay work when a real continuation handle is unavailable.
+
+### Pinning Fable versions
+
+Use `claude-fable-5` for Fable 5 or `claude-fable-5-1` for Fable 5.1. Both IDs remain unchanged in CLI arguments. The short `fable` alias is passed to Claude Code, which normally selects 5.1 but can select 5 depending on provider, gateway, CLI version, or configuration. See [Claude Code model configuration](https://code.claude.com/docs/en/model-config#work-with-fable).

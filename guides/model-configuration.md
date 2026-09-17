@@ -40,7 +40,9 @@ Canonical Claude model names include:
 - `opus` - Claude Opus 5
 - `opus[1m]` - compatibility alias for Claude Opus 5, which is itself a
   1M-context model
-- `fable` - Claude Fable 5.1
+- `fable` - Native provider-dependent Fable alias
+- `claude-fable-5` - Pinned Fable 5
+- `claude-fable-5-1` - Pinned Fable 5.1
 - `haiku` - Claude Haiku 4.5
 
 Prior full IDs (`claude-sonnet-4-6`, `claude-opus-4-8`, `claude-opus-4-7`)
@@ -103,12 +105,14 @@ The current native Claude aliases are:
 | `sonnet[1m]` | `claude-sonnet-5[1m]` (also `claude-sonnet-4-6[1m]`) |
 | `opus` | `claude-opus-5` (also `claude-opus-4-8`, `claude-opus-4-7`) |
 | `opus[1m]` | `claude-opus-5` (also `claude-opus-4-8[1m]`, `claude-opus-4-7[1m]`) |
-| `fable` | `claude-fable-5-1` (also `fable-5.1`) |
+| `fable` | Native provider-dependent `fable` alias |
+| `claude-fable-5-1` | Pinned Fable 5.1 (also `fable-5.1`) |
+| `claude-fable-5` | Pinned Fable 5 |
+| `haiku` | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` |
 
 Restricted Mythos aliases resolve to `claude-mythos-5-1` and are excluded from
 the public picker. Model validation does not establish account access. Fable
 and Mythos changes are covered offline; no authenticated Claude probe was run.
-| `haiku` | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` |
 
 `ClaudeAgentSDK.Model.short_forms/0`, `full_ids/0`, and `list_models/0` expose
 only public catalog entries. Core-owned private entries can still be validated
@@ -250,3 +254,7 @@ CLAUDE_EXAMPLES_OLLAMA_MODEL=llama3.2 \
 The runner maps the common Claude names used by the examples onto the selected
 Ollama model. Claude-only effort examples are skipped in that mode because the
 external backend does not support Claude-native effort semantics.
+
+### Pinning Fable versions
+
+Use `claude-fable-5` for Fable 5 or `claude-fable-5-1` for Fable 5.1. Both IDs remain unchanged in CLI arguments. The short `fable` alias is passed to Claude Code, which normally selects 5.1 but can select 5 depending on provider, gateway, CLI version, or configuration. See [Claude Code model configuration](https://code.claude.com/docs/en/model-config#work-with-fable).

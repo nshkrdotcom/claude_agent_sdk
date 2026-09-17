@@ -7,9 +7,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.21.0] - 2026-09-17
 
-## [0.21.0] - 2026-09-07
+- Preserve explicit `claude-fable-5` and `claude-fable-5-1` model IDs instead of collapsing them into the provider-dependent `fable` alias.
 
 ### Added
 
@@ -248,7 +248,7 @@ keeps the packaged example projects on that same release requirement.
   `opus` to Claude Opus 4.8, `fable` to Claude Fable 5 (with `[1m]` context
   variants), and `haiku` accepts both the Claude Haiku 4.5 alias and dated API
   ID; prior full IDs remain as aliases.
-- README and guides now document the current unreleased package line and the new
+- README and guides now document the then-current package line and the new
   session/session-store parity surfaces.
 
 ### Fixed
@@ -1798,7 +1798,6 @@ Five complete, working examples in `examples/hooks/`:
 - Configurable timeouts and options
 - Full compatibility with Claude Code CLI features
 
-[Unreleased]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.20.0...HEAD
 [0.20.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.19.1...v0.20.0
 [0.19.1]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/nshkrdotcom/claude_agent_sdk/compare/v0.18.0...v0.19.0

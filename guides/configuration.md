@@ -323,7 +323,7 @@ Claude-native `--effort`.
 | `"sonnet[1m]"` | Claude Sonnet 5 with 1M context | `claude-sonnet-5[1m]` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
 | `"opus"` | Claude Opus 5 | `claude-opus-5` (also `claude-opus-4-8`, `claude-opus-4-7`) | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
 | `"opus[1m]"` | Claude Opus 5 (compatibility alias; Opus 5 is itself a 1M-context model) | `claude-opus-5` (also `claude-opus-4-8[1m]`, `claude-opus-4-7[1m]`) | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
-| `"fable"` | Claude Fable 5.1 | `claude-fable-5-1` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
+| `"fable"` | Provider-dependent Fable alias | `fable` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
 | `"haiku"` | Claude Haiku 4.5 | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` | none |
 
 ### Model Configuration
@@ -1274,3 +1274,7 @@ options = %ClaudeAgentSDK.Options{
 - [Configuration Internals](configuration-internals.md) - Complete reference for all tunable constants
 - [Hooks Guide](hooks.md) - Comprehensive guide to lifecycle hooks
 - [MCP Tools Guide](mcp-tools.md) - MCP server design and tool creation
+
+### Pinning Fable versions
+
+Use `claude-fable-5` for Fable 5 or `claude-fable-5-1` for Fable 5.1. Both IDs remain unchanged in CLI arguments. The short `fable` alias is passed to Claude Code, which normally selects 5.1 but can select 5 depending on provider, gateway, CLI version, or configuration. See [Claude Code model configuration](https://code.claude.com/docs/en/model-config#work-with-fable).

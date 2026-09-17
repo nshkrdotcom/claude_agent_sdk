@@ -54,6 +54,14 @@ defmodule ClaudeAgentSDK.Options.CustomModelTest do
       refute log =~ "not in the Claude model registry"
     end
 
+    test "explicit Fable versions remain pinned in CLI arguments" do
+      for model <- ["claude-fable-5", "claude-fable-5-1"] do
+        args = Options.new(model: model, provider_backend: :anthropic) |> Options.to_args()
+        idx = Enum.find_index(args, &(&1 == "--model"))
+        assert Enum.at(args, idx + 1) == model
+      end
+    end
+
     test "fable alias resolves and emits --model fable" do
       opts = Options.new(model: "fable", provider_backend: :anthropic)
       args = Options.to_args(opts)
