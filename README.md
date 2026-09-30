@@ -108,8 +108,8 @@ Phase 4 finalizes the Claude release boundary:
   `ASM.Extensions.ProviderSDK.Claude`; that seam does not move the control
   family into ASM or the shared core
 - the operator publication order places the already-published Execution Plane
-  components first, then `cli_subprocess_core` 0.8.0,
-  `claude_agent_sdk` 0.21.0, then
+  components first, then `cli_subprocess_core` 0.9.3,
+  `claude_agent_sdk` 0.21.1, then
   `agent_session_manager`; this SDK does not import Execution Plane directly
 
 ## Schema Boundary
@@ -182,14 +182,14 @@ actual transport model and injects the Anthropic-compatible Ollama env.
 ## Installation
 
 Claude Agent SDK 0.20 requires Elixir 1.19 or later and
-`cli_subprocess_core ~> 0.8.0`.
+`cli_subprocess_core ~> 0.9.3`.
 
 Add to your `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.21.0"}
+    {:claude_agent_sdk, "~> 0.21.1"}
   ]
 end
 ```

@@ -33,8 +33,8 @@ defmodule DocumentGeneration.MixProject do
       claude_agent_sdk_dep(),
 
       # Development and testing
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4.8", only: [:dev], runtime: false},
+      {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -46,7 +46,7 @@ defmodule DocumentGeneration.MixProject do
   end
 
   defp claude_agent_sdk_dep do
-    workspace_dep({:claude_agent_sdk, "~> 0.21.0"})
+    workspace_dep({:claude_agent_sdk, "~> 0.21.1"})
   end
 
   defp workspace_dep(committed) do

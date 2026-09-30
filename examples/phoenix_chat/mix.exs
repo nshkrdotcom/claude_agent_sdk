@@ -34,22 +34,22 @@ defmodule PhoenixChat.MixProject do
       # Reference the SDK from parent directory
       claude_agent_sdk_dep(),
       # Phoenix framework
-      {:phoenix, "~> 1.8.9"},
-      {:phoenix_html, "~> 4.1"},
-      {:phoenix_live_view, "~> 1.0"},
-      {:phoenix_live_reload, "~> 1.5", only: :dev},
+      {:phoenix, "~> 1.8.15"},
+      {:phoenix_html, "~> 4.3.0"},
+      {:phoenix_live_view, "~> 1.2.12"},
+      {:phoenix_live_reload, "~> 1.7.0", only: :dev},
       # HTTP server
-      {:plug_cowboy, "~> 2.7"},
+      {:plug_cowboy, "~> 2.9.0"},
       # JSON parsing (already in SDK deps)
-      {:jason, "~> 1.4"},
+      {:jason, "~> 1.4.5"},
       # Telemetry
-      {:telemetry_metrics, "~> 1.0"},
-      {:telemetry_poller, "~> 1.0"},
+      {:telemetry_metrics, "~> 1.2.0"},
+      {:telemetry_poller, "~> 1.3.0"},
       # Development & Testing
-      {:floki, "~> 0.36", only: :test},
-      {:lazy_html, "~> 0.1.0", only: :test},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:floki, "~> 0.38.4", only: :test},
+      {:lazy_html, "~> 0.1.13", only: :test},
+      {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4.8", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -62,7 +62,7 @@ defmodule PhoenixChat.MixProject do
   end
 
   defp claude_agent_sdk_dep do
-    workspace_dep({:claude_agent_sdk, "~> 0.21.0"})
+    workspace_dep({:claude_agent_sdk, "~> 0.21.1"})
   end
 
   defp workspace_dep(committed) do

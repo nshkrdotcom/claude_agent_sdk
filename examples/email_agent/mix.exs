@@ -45,19 +45,19 @@ defmodule EmailAgent.MixProject do
       claude_agent_sdk_dep(),
 
       # IMAP client - using yustrianthe mail library which has IMAP support
-      {:mail, "~> 0.3"},
+      {:mail, "~> 0.5.2"},
 
       # SQLite database
-      {:exqlite, "~> 0.23"},
+      {:exqlite, "~> 0.41.0"},
 
       # Environment variable handling
-      {:dotenvy, "~> 1.1.1"},
+      {:dotenvy, "~> 1.2.1"},
 
       # Development & Testing
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:mox, "~> 1.2", only: :test},
-      {:excoveralls, "~> 0.18", only: :test}
+      {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4.8", only: [:dev, :test], runtime: false},
+      {:mox, "~> 1.3.2", only: :test},
+      {:excoveralls, "~> 0.18.5", only: :test}
     ]
   end
 
@@ -77,7 +77,7 @@ defmodule EmailAgent.MixProject do
   end
 
   defp claude_agent_sdk_dep do
-    workspace_dep({:claude_agent_sdk, "~> 0.21.0"})
+    workspace_dep({:claude_agent_sdk, "~> 0.21.1"})
   end
 
   defp workspace_dep(committed) do

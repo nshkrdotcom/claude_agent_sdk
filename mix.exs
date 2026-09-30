@@ -4,7 +4,7 @@ defmodule ClaudeAgentSdk.MixProject do
   use Mix.Project
 
   @app :claude_agent_sdk
-  @version "0.21.0"
+  @version "0.21.1"
   @source_url "https://github.com/nshkrdotcom/claude_agent_sdk"
   @homepage_url "https://hex.pm/packages/claude_agent_sdk"
   @docs_url "https://hexdocs.pm/claude_agent_sdk"
@@ -49,18 +49,18 @@ defmodule ClaudeAgentSdk.MixProject do
   defp deps do
     [
       cli_subprocess_core_dep(),
-      {:jason, "~> 1.4"},
-      {:zoi, "~> 0.18"},
-      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:supertester, "~> 0.6", only: :test},
-      {:stream_data, "~> 1.3", only: :test}
+      {:jason, "~> 1.4.5"},
+      {:zoi, "~> 0.18.11"},
+      {:ex_doc, "~> 0.40.4", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.4.8", only: [:dev], runtime: false},
+      {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
+      {:supertester, "~> 0.6.0", only: :test},
+      {:stream_data, "~> 1.4.0", only: :test}
     ]
   end
 
   defp cli_subprocess_core_dep do
-    workspace_dep({:cli_subprocess_core, "~> 0.8.0"})
+    workspace_dep({:cli_subprocess_core, "~> 0.9.3"})
   end
 
   defp workspace_dep(committed) do

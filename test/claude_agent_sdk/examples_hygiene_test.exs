@@ -80,7 +80,7 @@ defmodule ClaudeAgentSDK.ExamplesHygieneTest do
       "#{relative} does not require Elixir ~> 1.19"
     )
     |> maybe_add(
-      not String.contains?(text, ~s|workspace_dep({:claude_agent_sdk, "~> 0.21.0"})|),
+      not String.contains?(text, ~s|workspace_dep({:claude_agent_sdk, "~> 0.21.1"})|),
       "#{relative} bypasses the managed claude_agent_sdk dependency seam"
     )
   end
