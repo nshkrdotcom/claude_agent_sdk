@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Next release: **0.21.2**.
+
 ### Changed
+
+- Require `cli_subprocess_core ~> 0.9.5` and Zoi 0.19.0; refresh all dependency requirements and the complete Hex lockfile to current stable releases.
 
 - Refresh all six example project lockfiles against Claude Agent SDK 0.21.1 and current dependency pins.
 

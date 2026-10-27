@@ -4,6 +4,8 @@
 
 # Claude Agent SDK for Elixir
 
+Next release: **0.21.2** (unreleased).
+
 <p align="center">
   <a href="https://github.com/nshkrdotcom/claude_agent_sdk"><img src="https://img.shields.io/badge/GitHub-nshkrdotcom%2Fclaude_agent_sdk-24292e?logo=github" alt="GitHub"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"/></a>
@@ -108,8 +110,8 @@ Phase 4 finalizes the Claude release boundary:
   `ASM.Extensions.ProviderSDK.Claude`; that seam does not move the control
   family into ASM or the shared core
 - the operator publication order places the already-published Execution Plane
-  components first, then `cli_subprocess_core` 0.9.3,
-  `claude_agent_sdk` 0.21.1, then
+  components first, then `cli_subprocess_core` 0.9.5,
+  `claude_agent_sdk` 0.21.2, then
   `agent_session_manager`; this SDK does not import Execution Plane directly
 
 ## Schema Boundary
@@ -181,15 +183,15 @@ actual transport model and injects the Anthropic-compatible Ollama env.
 
 ## Installation
 
-Claude Agent SDK 0.20 requires Elixir 1.19 or later and
-`cli_subprocess_core ~> 0.9.3`.
+Claude Agent SDK 0.21.2 requires Elixir 1.19 or later and
+`cli_subprocess_core ~> 0.9.5`.
 
 Add to your `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:claude_agent_sdk, "~> 0.21.1"}
+    {:claude_agent_sdk, "~> 0.21.2"}
   ]
 end
 ```
