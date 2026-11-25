@@ -1,0 +1,29 @@
+{
+  "include": [
+    "AGENTS.md",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "mix.exs",
+    "mix.lock",
+    ".formatter.exs",
+    ".credo.exs",
+    ".tool-versions",
+    "config/**/*.exs",
+    "lib/**/*.ex",
+    "guides/**/*.md",
+    "docs/**/*.md",
+    "examples/**/*.{md,ex,exs,heex}",
+    "examples/run_all.sh",
+    "test/**/*.{ex,exs}",
+    "test/support/fixtures/**"
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "**/{upstream,vendor,node_modules,deps,_build}/**",
+      "docs/archive/**"
+    ]
+  }
+}
