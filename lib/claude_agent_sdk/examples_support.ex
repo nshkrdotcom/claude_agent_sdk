@@ -14,7 +14,6 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   @default_preflight_timeout_seconds 30
   @default_ollama_preflight_timeout_seconds 60
   @ignored_mix_test_flags ["--warnings-as-errors"]
-  @ignored_mix_test_filter_flags ["--exclude", "--include", "--only"]
 
   defmodule SSHContext do
     @moduledoc false
@@ -82,7 +81,7 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
   def parse_argv(argv) when is_list(argv) do
     {parsed, remaining, invalid} =
       argv
-      |> reject_ignored_argv()
+      |> Enum.reject(&ignored_argv?/1)
       |> OptionParser.parse(strict: @ssh_switches)
 
     if invalid != [] do
@@ -92,21 +91,7 @@ defmodule ClaudeAgentSDK.ExamplesSupport do
     end
   end
 
-  defp reject_ignored_argv([flag, _value | rest]) when flag in @ignored_mix_test_filter_flags,
-    do: reject_ignored_argv(rest)
-
-  defp reject_ignored_argv([value | rest]) do
-    if ignored_argv?(value),
-      do: reject_ignored_argv(rest),
-      else: [value | reject_ignored_argv(rest)]
-  end
-
-  defp reject_ignored_argv([]), do: []
-
-  defp ignored_argv?(value) do
-    value in @ignored_mix_test_flags or value == "--" or
-      Enum.any?(@ignored_mix_test_filter_flags, &String.starts_with?(value, &1 <> "="))
-  end
+  defp ignored_argv?(value), do: value in @ignored_mix_test_flags or value == "--"
 
   @spec ssh_enabled?() :: boolean()
   def ssh_enabled?, do: match?(%SSHContext{execution_surface: %ExecutionSurface{}}, context())

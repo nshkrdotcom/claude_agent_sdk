@@ -97,6 +97,9 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
   end
 
   test "preflight argv with explicit empty system prompt is accepted by command lane" do
+    {:ok, context} = ExamplesSupport.parse_argv([])
+    Process.put({ExamplesSupport, :ssh_context}, context)
+
     args = Options.to_args(ExamplesSupport.preflight_options())
 
     assert flag_with_value?(args, "--system-prompt", "")
@@ -105,6 +108,8 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
 
     assert {:ok, result} = Command.run(invocation, timeout: 1_000)
     assert result.stdout == "ok"
+  after
+    Process.delete({ExamplesSupport, :ssh_context})
   end
 
   test "preflight options ignore Mix test warning flags" do
@@ -118,16 +123,6 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
     assert flag_with_value?(args, "--system-prompt", "")
   after
     Process.delete({ExamplesSupport, :ssh_context})
-  end
-
-  test "parse_argv/1 ignores Mix test filter flags and their values" do
-    assert {:ok, context} = ExamplesSupport.parse_argv(["--exclude", "requires_cli"])
-    assert context.argv == []
-
-    assert {:ok, context} =
-             ExamplesSupport.parse_argv(["--include", "live", "--only=slow", "--", "hello"])
-
-    assert context.argv == ["hello"]
   end
 
   test "preflight_timeout_seconds/0 defaults to 30 seconds for Anthropic" do
