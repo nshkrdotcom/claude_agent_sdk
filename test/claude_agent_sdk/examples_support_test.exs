@@ -120,6 +120,16 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
     Process.delete({ExamplesSupport, :ssh_context})
   end
 
+  test "parse_argv/1 ignores Mix test filter flags and their values" do
+    assert {:ok, context} = ExamplesSupport.parse_argv(["--exclude", "requires_cli"])
+    assert context.argv == []
+
+    assert {:ok, context} =
+             ExamplesSupport.parse_argv(["--include", "live", "--only=slow", "--", "hello"])
+
+    assert context.argv == ["hello"]
+  end
+
   test "preflight_timeout_seconds/0 defaults to 30 seconds for Anthropic" do
     restore = capture_env()
 
