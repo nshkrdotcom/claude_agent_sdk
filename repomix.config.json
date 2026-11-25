@@ -9,11 +9,7 @@
     ".tool-versions",
     "config/**/*.exs",
     "lib/**/*.ex",
-    "guides/**/*.md",
-    "docs/CUSTOM_TRANSPORTS.md",
-    "docs/HOOKS_QUICK_REFERENCE.md",
-    "docs/RATE_LIMITING_BEST_PRACTICES.md",
-    "docs/RUNTIME_CONTROL.md",
+    "guides/*.md",
     "examples/basic_example.exs",
     "examples/promotion_path/sdk_direct_claude.exs",
     "test/support/fixtures/**"
