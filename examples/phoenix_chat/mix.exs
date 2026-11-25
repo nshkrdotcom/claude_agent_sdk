@@ -34,9 +34,9 @@ defmodule PhoenixChat.MixProject do
       # Reference the SDK from parent directory
       claude_agent_sdk_dep(),
       # Phoenix framework
-      {:phoenix, "~> 1.8.15"},
-      {:phoenix_html, "~> 4.3.0"},
-      {:phoenix_live_view, "~> 1.2.12"},
+      {:phoenix, "~> 1.8.17"},
+      {:phoenix_html, "~> 4.4.0"},
+      {:phoenix_live_view, "~> 1.2.15"},
       {:phoenix_live_reload, "~> 1.7.0", only: :dev},
       # HTTP server
       {:plug_cowboy, "~> 2.9.0"},
@@ -46,10 +46,10 @@ defmodule PhoenixChat.MixProject do
       {:telemetry_metrics, "~> 1.2.0"},
       {:telemetry_poller, "~> 1.3.0"},
       # Development & Testing
-      {:floki, "~> 0.38.4", only: :test},
-      {:lazy_html, "~> 0.1.13", only: :test},
+      {:floki, "~> 0.38.5", only: :test},
+      {:lazy_html, "~> 0.1.16", only: :test},
       {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4.8", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4.9", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -62,7 +62,7 @@ defmodule PhoenixChat.MixProject do
   end
 
   defp claude_agent_sdk_dep do
-    workspace_dep({:claude_agent_sdk, "~> 0.21.1"})
+    workspace_dep({:claude_agent_sdk, "~> 0.21.2"})
   end
 
   defp workspace_dep(committed) do

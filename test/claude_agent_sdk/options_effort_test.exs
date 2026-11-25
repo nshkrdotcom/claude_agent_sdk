@@ -81,19 +81,14 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
   end
 
   describe "effort + haiku gating" do
-    test "strips effort when model is haiku short form" do
-      opts = new_options(effort: :high, model: "haiku")
-
-      log =
-        capture_log(fn ->
-          args = Options.to_args(opts)
-          refute "--effort" in args
-        end)
-
-      assert log =~ "not supported for Haiku"
+    test "forwards effort for the Haiku alias and current pinned model" do
+      for model <- ["haiku", "claude-haiku-5-5"] do
+        opts = new_options(effort: :xhigh, model: model)
+        assert ["--effort", "xhigh"] in Enum.chunk_every(Options.to_args(opts), 2, 1, :discard)
+      end
     end
 
-    test "strips effort when model is haiku full ID" do
+    test "strips effort on pinned legacy Haiku" do
       opts = new_options(effort: :medium, model: "claude-haiku-4-5-20251001")
 
       log =
@@ -102,7 +97,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
           refute "--effort" in args
         end)
 
-      assert log =~ "not supported for Haiku"
+      assert log =~ "is not supported for model claude-haiku-4-5-20251001"
     end
 
     test "respects SDK log_level filter when warning is emitted" do
@@ -113,7 +108,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
         Application.put_env(:claude_agent_sdk, :log_level, previous_level)
       end)
 
-      opts = new_options(effort: :high, model: "haiku")
+      opts = new_options(effort: :high, model: "claude-haiku-4-5")
 
       log =
         capture_log(fn ->
@@ -178,7 +173,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
       assert "--effort" in args
     end
 
-    test "allows :xhigh effort on sonnet (Sonnet 5 supports xhigh)" do
+    test "allows :xhigh effort on sonnet" do
       opts = new_options(effort: :xhigh, model: "sonnet")
       args = Options.to_args(opts)
       assert "--effort" in args
@@ -209,7 +204,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
     end
 
     test "emits effort for an unregistered custom model (trusts the caller)" do
-      opts = new_options(effort: :xhigh, model: "claude-brand-new-2027")
+      opts = new_options(effort: :xhigh, model: "claude-haiku-new-2027")
       args = Options.to_args(opts)
       assert "--effort" in args
       idx = Enum.find_index(args, &(&1 == "--effort"))
@@ -295,7 +290,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
         new_options(
           effort: :high,
           model: nil,
-          model_payload: resolved_payload!("haiku")
+          model_payload: resolved_payload!("claude-haiku-4-5")
         )
 
       log =
@@ -304,7 +299,7 @@ defmodule ClaudeAgentSDK.Options.EffortTest do
           refute "--effort" in args
         end)
 
-      assert log =~ "not supported for Haiku"
+      assert log =~ "is not supported for model claude-haiku-4-5-20251001"
     end
   end
 

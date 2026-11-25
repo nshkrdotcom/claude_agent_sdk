@@ -4,12 +4,12 @@
 # Usage: mix run examples/model_selection_live.exs
 #
 # Demonstrates:
-#   - The current model aliases (sonnet -> Sonnet 5, opus -> Opus 5,
-#     fable -> Fable 5, haiku -> Haiku 4.5) and the CLI args each produces
-#   - :xhigh effort on Sonnet 5 / Fable 5 (catalog-driven gating)
+#   - The current model aliases (sonnet -> Sonnet 5.5, opus -> Opus 5.5,
+#     fable -> Fable 5.2, haiku -> Haiku 5.5) and the CLI args each produces
+#   - :low effort on current models and legacy Haiku gating
 #   - Using a model NOT in the registry: it passes through to --model verbatim
 #   - Opting out of pass-through with allow_unknown_model: false
-#   - A live query with the default model
+#   - A live query with Haiku 5.5
 
 Code.require_file(Path.expand("support/example_helper.exs", __DIR__))
 
@@ -45,12 +45,12 @@ defmodule ModelSelectionLive do
   end
 
   defp show_effort_gating do
-    IO.puts("\n:low effort (kept on Sonnet 5 / Fable 5, dropped on Haiku):")
+    IO.puts("\n:low effort across current and legacy models:")
 
-    for model <- ["sonnet", "fable", "haiku"] do
+    for model <- ["sonnet", "fable", "haiku", "claude-haiku-4-5"] do
       args = Options.new(model: model, effort: :low, max_turns: 1) |> Options.to_args()
       emitted = if "--effort" in args, do: "--effort low", else: "(dropped)"
-      IO.puts("  #{String.pad_trailing(model, 7)} -> #{emitted}")
+      IO.puts("  #{String.pad_trailing(model, 18)} -> #{emitted}")
     end
   end
 
@@ -71,13 +71,13 @@ defmodule ModelSelectionLive do
   end
 
   defp live_query do
-    # Use Haiku 4.5 (cheapest current model) for the actual inference call — the
+    # Use Haiku 5.5 for the actual inference call — the
     # aliases and custom-model handling above are demonstrated via CLI-arg
     # building and need no inference.
-    IO.puts("\nLive query (Haiku 4.5 — cheapest model):")
+    IO.puts("\nLive query (Haiku 5.5):")
 
     options =
-      Options.new(model: "haiku", max_turns: 1, setting_sources: ["user"])
+      Options.new(model: "claude-haiku-5-5", effort: :low, max_turns: 1, setting_sources: ["user"])
       |> Support.with_execution_surface()
 
     response =
@@ -87,7 +87,7 @@ defmodule ModelSelectionLive do
       |> Enum.map(&ContentExtractor.extract_text/1)
       |> Enum.reject(&(&1 in [nil, ""]))
       |> Enum.join("\n")
-      |> Support.assert_exact_text!("OK", "default-model response")
+      |> Support.assert_exact_text!("OK", "Haiku response")
 
     IO.puts("  Response: #{response}")
   end

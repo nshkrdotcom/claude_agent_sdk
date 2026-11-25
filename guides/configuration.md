@@ -90,7 +90,7 @@ ClaudeAgentSDK.query("Refactor this code for better performance", options)
 |-------|------|---------|-------------|
 | `model` | `String.t()` | `nil` | Model selection (`"sonnet"`, `"sonnet[1m]"`, `"opus"`, `"opus[1m]"`, `"haiku"`, or a current full model ID). When omitted, core defaults to `"sonnet"`. |
 | `fallback_model` | `String.t()` | `nil` | Fallback model when primary is busy |
-| `effort` | `atom()` | `nil` | Reasoning effort level (`:low`, `:medium`, `:high`, `:xhigh`, `:max`). Sonnet supports all except `:xhigh`; Opus supports all five; Haiku does not emit `--effort`. |
+| `effort` | `atom()` | `nil` | Reasoning effort level (`:low`, `:medium`, `:high`, `:xhigh`, `:max`). Current Sonnet, Opus, Haiku and Fable models support all five. |
 | `thinking` | `map()` | `nil` | Thinking config (`%{type: :adaptive}`, `%{type: :enabled, budget_tokens: N}`, `%{type: :disabled}`) |
 | `max_thinking_tokens` | `pos_integer()` | `nil` | Maximum tokens for model thinking (fallback when `thinking` is nil) |
 | `provider_backend` | `atom() \| String.t()` | `nil` | Claude backend selector. Use `:ollama` for Anthropic-compatible Ollama runs. |
@@ -317,14 +317,15 @@ options =
 When the resolved payload comes from an external backend, the SDK does not emit
 Claude-native `--effort`.
 
-| Shorthand | Model | CLI/API alias | Supported effort |
-|-----------|-------|---------------|------------------|
-| `"sonnet"` | Claude Sonnet 5 | `claude-sonnet-5` (also `claude-sonnet-4-6`) | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
-| `"sonnet[1m]"` | Claude Sonnet 5 with 1M context | `claude-sonnet-5[1m]` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
-| `"opus"` | Claude Opus 5 | `claude-opus-5` (also `claude-opus-4-8`, `claude-opus-4-7`) | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
-| `"opus[1m]"` | Claude Opus 5 (compatibility alias; Opus 5 is itself a 1M-context model) | `claude-opus-5` (also `claude-opus-4-8[1m]`, `claude-opus-4-7[1m]`) | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
-| `"fable"` | Provider-dependent Fable alias | `fable` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
-| `"haiku"` | Claude Haiku 4.5 | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` | none |
+| Shorthand | Current model | Pinned ID |
+|-----------|---------------|-----------|
+| `"sonnet"` | Claude Sonnet 5.5 | `claude-sonnet-5-5` |
+| `"opus"` | Claude Opus 5.5 | `claude-opus-5-5` |
+| `"haiku"` | Claude Haiku 5.5 | `claude-haiku-5-5` |
+| `"fable"` | Claude Fable 5.2 | `claude-fable-5-2` |
+
+These current models support all five effort levels. Claude Code determines
+the model behind an alias based on the installed version and provider.
 
 ### Model Configuration
 
@@ -333,7 +334,7 @@ Claude-native `--effort`.
 options = %Options{model: "sonnet"}
 
 # Using full model name (see Model Configuration guide for all valid IDs)
-options = %Options{model: "claude-sonnet-4-6"}
+options = %Options{model: "claude-sonnet-5-5"}
 
 # With fallback model
 options = %Options{
@@ -1277,4 +1278,4 @@ options = %ClaudeAgentSDK.Options{
 
 ### Pinning Fable versions
 
-Use `claude-fable-5` for Fable 5 or `claude-fable-5-1` for Fable 5.1. Both IDs remain unchanged in CLI arguments. The short `fable` alias is passed to Claude Code, which normally selects 5.1 but can select 5 depending on provider, gateway, CLI version, or configuration. See [Claude Code model configuration](https://code.claude.com/docs/en/model-config#work-with-fable).
+Pin `claude-fable-5-2` for Fable 5.2. The previous `claude-fable-5-1` and `claude-fable-5` IDs still select their own versions. Claude Code resolves the floating `fable` alias based on your version and provider. [Claude Code model configuration](https://code.claude.com/docs/en/model-config#work-with-fable)

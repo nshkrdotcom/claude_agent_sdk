@@ -35,6 +35,7 @@ defmodule ClaudeAgentSDK.Options do
   - `stream_buffer_limit` - Max inbound entries buffered before first subscriber (integer, default: 1000)
   - `preferred_transport` - Override automatic transport selection (`:auto | :cli | :control`) (v0.8.0+)
   - `transport_error_mode` - Surface transport/decode failures as synthetic result messages or raised errors (`:result | :raise`)
+  - `effort` - Claude Code reasoning effort (:low, :medium, :high, :xhigh, or :max)
   - `provider_backend` - Claude backend selector (`:anthropic` or `:ollama`)
   - `external_model_overrides` - Canonical Claude-to-external model map used by core model resolution
   - `anthropic_base_url` - Anthropic-compatible API base URL override
@@ -1298,13 +1299,6 @@ defmodule ClaudeAgentSDK.Options do
         :emit ->
           args ++ ["--effort", to_string(effort)]
 
-        {:strip, :haiku} ->
-          Logger.warning(
-            "Effort level is not supported for Haiku models; ignoring effort: #{effort}"
-          )
-
-          args
-
         {:strip, {:unsupported, allowed}} ->
           Logger.warning(
             "Effort #{effort} is not supported for model #{model} " <>
@@ -1325,37 +1319,15 @@ defmodule ClaudeAgentSDK.Options do
     resolved_model(options) || Model.default_model()
   end
 
-  @haiku_patterns ["haiku", "claude-haiku"]
-
-  @spec haiku_model?(model_name()) :: boolean()
-  defp haiku_model?(model) do
-    downcased = String.downcase(model)
-    Enum.any?(@haiku_patterns, &String.contains?(downcased, &1))
-  end
-
-  # Decide whether a requested effort should be emitted, driven by the shared
-  # model catalog rather than string heuristics. Haiku keeps a dedicated message
-  # for back-compat; a model unknown to the catalog (custom / newer than the
-  # registry) trusts the caller and emits the effort as-is.
   @spec classify_effort(model_name(), :low | :medium | :high | :xhigh | :max) ::
-          :emit | {:strip, :haiku} | {:strip, {:unsupported, [String.t()]}}
+          :emit | {:strip, {:unsupported, [String.t()]}}
   defp classify_effort(model, effort) do
-    if haiku_model?(model) do
-      {:strip, :haiku}
-    else
-      case CliSubprocessCore.ModelRegistry.resolve(:claude, model, reasoning_effort: effort) do
-        {:ok, _selection} ->
-          :emit
+    case CliSubprocessCore.ModelRegistry.resolve(:claude, model, reasoning_effort: effort) do
+      {:error, {:invalid_reasoning_effort, _effort, allowed, :claude}} ->
+        {:strip, {:unsupported, Enum.sort(allowed)}}
 
-        {:error, {:invalid_reasoning_effort, _effort, allowed, _provider}} ->
-          {:strip, {:unsupported, Enum.map(allowed, &to_string/1)}}
-
-        {:error, {:unknown_model, _model, _known, _provider}} ->
-          :emit
-
-        {:error, _other} ->
-          :emit
-      end
+      _result ->
+        :emit
     end
   end
 

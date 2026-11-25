@@ -22,10 +22,10 @@ defmodule ClaudeAgentSDK.DependencyBoundaryTest do
     assert project[:elixir] == "~> 1.19"
   end
 
-  test "publish mode uses CLI core 0.7 from Hex" do
+  test "publish mode requires Core 0.10.2 from Hex" do
     mix_source = File.read!(Path.join(@repo_root, "mix.exs"))
 
-    assert mix_source =~ ~s|workspace_dep({:cli_subprocess_core, "~> 0.9.5"})|
+    assert mix_source =~ ~s|workspace_dep({:cli_subprocess_core, "~> 0.10.2"})|
   end
 
   test "public SDK source does not expose raw Execution Plane structs" do

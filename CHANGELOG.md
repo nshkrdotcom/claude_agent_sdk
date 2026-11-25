@@ -7,19 +7,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-Next release: **0.21.2**.
+## [0.21.2] - 2026-11-25
 
 ### Changed
 
-- Require `cli_subprocess_core ~> 0.9.5` and Zoi 0.19.0; refresh all dependency requirements and the complete Hex lockfile to current stable releases.
-
-- Refresh all six example project lockfiles against Claude Agent SDK 0.21.1 and current dependency pins.
+- Require `cli_subprocess_core ~> 0.10.2` for the current Claude Code catalog. Document Fable 5.2, restricted Mythos 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5. Explicit model IDs stay pinned.
+- Use shared model capabilities to render effort. Haiku 5.5 supports all five levels, and explicit Haiku 4.5 still omits the flag.
+- Refresh Hex dependencies and example projects. Support Zoi 0.20 alongside 0.19.
 
 ### Fixed
 
-- Pass `resume` and `session_id` to the CLI as `--resume=<value>` / `--session-id=<value>` (including `Query.resume/3`). The CLI's `--resume` takes an optional value, so a dash-leading value in the two-token form was parsed as a separate CLI flag. Mirrors anthropics/claude-agent-sdk-python#1123.
+- Bind resume and session IDs in single CLI arguments across both query paths. Thanks to [@agustin2606](https://github.com/agustin2606) for [PR #9](https://github.com/nshkrdotcom/claude_agent_sdk/pull/9).
 
 ## [0.21.1] - 2026-09-29
 

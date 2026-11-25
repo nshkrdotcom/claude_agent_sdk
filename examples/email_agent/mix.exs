@@ -48,14 +48,14 @@ defmodule EmailAgent.MixProject do
       {:mail, "~> 0.5.2"},
 
       # SQLite database
-      {:exqlite, "~> 0.41.0"},
+      {:exqlite, "~> 0.43.0"},
 
       # Environment variable handling
       {:dotenvy, "~> 1.2.1"},
 
       # Development & Testing
       {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4.8", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4.9", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.3.2", only: :test},
       {:excoveralls, "~> 0.18.5", only: :test}
     ]
@@ -77,7 +77,7 @@ defmodule EmailAgent.MixProject do
   end
 
   defp claude_agent_sdk_dep do
-    workspace_dep({:claude_agent_sdk, "~> 0.21.1"})
+    workspace_dep({:claude_agent_sdk, "~> 0.21.2"})
   end
 
   defp workspace_dep(committed) do

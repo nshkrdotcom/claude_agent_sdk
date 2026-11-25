@@ -180,8 +180,8 @@ mix run examples/basic_example.exs
 | Example | Description |
 |---------|-------------|
 | `basic_example.exs` | Minimal `ClaudeAgentSDK.query/2` with message extraction |
-| `model_selection_live.exs` | Model aliases (`sonnet`→Sonnet 5, `opus`→Opus 5, `fable`→Fable 5, `haiku`), `:xhigh` gating, and using a model **not** in the registry (custom-model pass-through + `allow_unknown_model`) |
-| `effort_gating_live.exs` | Live effort demo showing supported models, Haiku gating, and invalid-value validation |
+| `model_selection_live.exs` | Claude alias and pinned-model rendering, effort gating, custom model passthrough, and a live Haiku 5.5 query with current Claude Code |
+| `effort_gating_live.exs` | Live effort demo showing supported models, legacy Haiku gating, and invalid-value validation |
 | `max_effort_opus_live.exs` | Opus `:max` effort — request/response and streaming for both `opus` and `opus[1m]` (**not in `run_all.sh`** — expensive) |
 | `session_features_example.exs` | SessionStore save/search, resume, session CLI flags |
 | `resume_persistence_repro_live.exs` | Standalone repro for `--print --resume` dropping intermediate turns (**not in `run_all.sh`**) |

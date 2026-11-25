@@ -48,7 +48,7 @@ defmodule ResearchAgent.MixProject do
 
       # Development and quality tools
       {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4.8", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4.9", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -60,7 +60,7 @@ defmodule ResearchAgent.MixProject do
   end
 
   defp claude_agent_sdk_dep do
-    workspace_dep({:claude_agent_sdk, "~> 0.21.1"})
+    workspace_dep({:claude_agent_sdk, "~> 0.21.2"})
   end
 
   defp workspace_dep(committed) do

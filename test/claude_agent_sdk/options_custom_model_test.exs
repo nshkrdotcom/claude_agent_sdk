@@ -55,7 +55,7 @@ defmodule ClaudeAgentSDK.Options.CustomModelTest do
     end
 
     test "explicit Fable versions remain pinned in CLI arguments" do
-      for model <- ["claude-fable-5", "claude-fable-5-1"] do
+      for model <- ["claude-fable-5", "claude-fable-5-1", "claude-fable-5-2"] do
         args = Options.new(model: model, provider_backend: :anthropic) |> Options.to_args()
         idx = Enum.find_index(args, &(&1 == "--model"))
         assert Enum.at(args, idx + 1) == model
@@ -102,23 +102,12 @@ defmodule ClaudeAgentSDK.Options.CustomModelTest do
       end
     end
 
-    test "the Opus 5 full ID and the retained prior full IDs normalize to a short form" do
-      cases = [
-        {"claude-opus-5", "opus"},
-        {"claude-opus-4-8", "opus"},
-        {"claude-opus-4-7", "opus"},
-        {"claude-opus-4-8[1m]", "opus[1m]"},
-        {"claude-opus-4-7[1m]", "opus[1m]"}
-      ]
-
-      for {full_id, short_form} <- cases do
-        log =
-          capture_log(fn ->
-            opts = Options.new(model: full_id, provider_backend: :anthropic)
-            assert opts.model == short_form
-          end)
-
-        refute log =~ "not in the Claude model registry"
+    test "explicit Opus IDs stay pinned" do
+      for model <-
+            ~w(claude-opus-5-5 claude-opus-5 claude-opus-4-8 claude-opus-4-7 claude-opus-4-8[1m] claude-opus-4-7[1m]) do
+        opts = Options.new(model: model, provider_backend: :anthropic, allow_unknown_model: false)
+        assert opts.model == model
+        assert ["--model", model] in Enum.chunk_every(Options.to_args(opts), 2, 1, :discard)
       end
     end
   end

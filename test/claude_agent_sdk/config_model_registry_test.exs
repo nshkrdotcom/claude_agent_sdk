@@ -28,18 +28,10 @@ defmodule ClaudeAgentSDK.Config.ModelRegistryTest do
       assert "claude-sonnet-4-6" in Model.full_ids()
     end
 
-    test "contains the current Opus 5 full ID" do
-      assert "claude-opus-5" in Model.full_ids()
-    end
-
-    test "both opus short forms resolve to the same Opus 5 provider id" do
-      # Opus 5 is itself a 1M-context model, so `opus[1m]` is a compatibility
-      # alias for the same provider id rather than a distinct model.
-      known = Model.known_models()
-
-      assert Map.has_key?(known, "opus")
-      assert Map.has_key?(known, "opus[1m]")
-      assert Map.has_key?(known, "claude-opus-5")
+    test "exposes current pinned IDs" do
+      for id <- ~w(claude-opus-5-5 claude-sonnet-5-5 claude-haiku-5-5 claude-fable-5-2) do
+        assert id in Model.full_ids()
+      end
     end
 
     test "does not invent a bracketed Opus 5 provider id" do

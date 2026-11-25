@@ -16,3 +16,20 @@ expose the feature as common behavior across providers.
 ## Claude 5.5 model identifiers (2026-09-29)
 
 Core 0.9.3 preserves `claude-opus-5-5` and `claude-sonnet-5-5`. See the [official model overview](https://platform.claude.com/docs/en/models/overview) and [CLI configuration](https://code.claude.com/docs/en/model-config). Claude Code defaults these to medium effort; the Sonnet API default is high. Verification is mocked through the shared registry; no live Claude account is available for this release.
+
+
+## Claude model and effort refresh (2026-11-25)
+
+Claude Code documents `low`, `medium`, `high`, `xhigh` and `max` for Fable
+5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, with medium as the CLI default.
+Thinking is adaptive on these current models. The CLI documents Ultracode as
+a workflow setting that also selects xhigh when passed as a flag. Core
+catalog capabilities and SDK argument rendering are checked by
+`test/claude_agent_sdk/options_effort_test.exs` and
+`test/claude_agent_sdk/options_custom_model_test.exs`. Local CLI 2.1.270
+confirmed the flag interface through help. Authenticated model and account
+behavior remain unverified.
+
+[Claude Code model configuration](https://code.claude.com/docs/en/model-config#adjust-effort-level) ·
+[Claude Code CLI flags](https://code.claude.com/docs/en/cli-reference) ·
+[Claude Platform model details](https://platform.claude.com/docs/en/models/overview)

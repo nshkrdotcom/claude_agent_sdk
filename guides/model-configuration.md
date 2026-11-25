@@ -1,14 +1,8 @@
 # Model Configuration
 
-`/home/home/p/g/n/claude_agent_sdk` does not own active model policy.
-
-That authority lives in:
-
-- `/home/home/p/g/n/cli_subprocess_core/lib/cli_subprocess_core/model_registry.ex`
-- `/home/home/p/g/n/cli_subprocess_core/priv/models/claude.json`
-
-The Claude SDK consumes the resolved payload from core and only turns that
-payload into Claude CLI arguments and env.
+The Claude SDK consumes the shared Claude catalog in
+`cli_subprocess_core/priv/models/claude.json` and renders the resolved model as
+Claude Code arguments and environment settings.
 
 ## Core-Owned Resolution
 
@@ -33,21 +27,18 @@ That means:
 
 The default backend is the normal Claude catalog path.
 
-Canonical Claude model names include:
+| Claude Code alias | Current pinned ID |
+|-------------------|-------------------|
+| `sonnet` (SDK default) | `claude-sonnet-5-5` |
+| `opus` | `claude-opus-5-5` |
+| `haiku` | `claude-haiku-5-5` |
+| `fable` | `claude-fable-5-2` |
 
-- `sonnet` - default/recommended, Claude Sonnet 5
-- `sonnet[1m]` - Claude Sonnet 5 with 1M context
-- `opus` - Claude Opus 5
-- `opus[1m]` - compatibility alias for Claude Opus 5, which is itself a
-  1M-context model
-- `fable` - Native provider-dependent Fable alias
-- `claude-fable-5` - Pinned Fable 5
-- `claude-fable-5-1` - Pinned Fable 5.1
-- `haiku` - Claude Haiku 4.5
-
-Prior full IDs (`claude-sonnet-4-6`, `claude-opus-4-8`, `claude-opus-4-7`)
-remain valid as back-compatible aliases. The registry is owned by
-`cli_subprocess_core`.
+Claude Code resolves its aliases based on the installed version and provider.
+The `sonnet[1m]` and `opus[1m]` compatibility choices remain available. Explicit
+older model IDs select their own versions. Use Claude Code 2.1.321 or newer
+for this lineup. Older clients can resolve the aliases to earlier models.
+[Claude Code model configuration](https://code.claude.com/docs/en/model-config#version-history)
 
 ## Using a model that is not in the registry
 
@@ -81,38 +72,15 @@ default** (`allow_unknown_model: false` — unknown ids are rejected unless a
 caller opts in). The asymmetry is intentional — ASM is a governed
 multi-provider manager — so do not "align" one to the other.
 
-### Registry ownership and hex publish-ordering
+### Registry ownership and publication
 
-The model registry (catalog JSON + resolution logic) ships from
-`cli_subprocess_core`, which this SDK and `agent_session_manager` consume as
-a path dependency in this workspace and as a hex dependency when published.
-The full release train publishes the two Ground Plane leaves, the canonical
-Execution Plane components, and then **`cli_subprocess_core` 0.4.1 before this
-SDK**. Publish
-`claude_agent_sdk` before its optional `agent_session_manager` consumer. A Hex
-consumer's model lineup comes from the *published* core package, not the
-workspace sibling. When
-Managed workspace source selection belongs to Mix Workspace Ops and Portfolio
-Registry. MWO gives each exact dependency context a stable external dependency
-path, so changing between eligible local, Git, and Hex sources cannot leave a
-stale `deps/cli_subprocess_core` copy in this checkout.
+Publish `cli_subprocess_core` 0.10.2 before Claude Agent SDK 0.21.2. Hex
+consumers use the catalog from the published Core package. Mix Workspace Ops
+and Portfolio Registry manage dependency sources for workspace development.
 
-The current native Claude aliases are:
-
-| SDK name | Claude CLI/API alias |
-|----------|----------------------|
-| `sonnet` | `claude-sonnet-5` (also `claude-sonnet-4-6`, `default`) |
-| `sonnet[1m]` | `claude-sonnet-5[1m]` (also `claude-sonnet-4-6[1m]`) |
-| `opus` | `claude-opus-5` (also `claude-opus-4-8`, `claude-opus-4-7`) |
-| `opus[1m]` | `claude-opus-5` (also `claude-opus-4-8[1m]`, `claude-opus-4-7[1m]`) |
-| `fable` | Native provider-dependent `fable` alias |
-| `claude-fable-5-1` | Pinned Fable 5.1 (also `fable-5.1`) |
-| `claude-fable-5` | Pinned Fable 5 |
-| `haiku` | `claude-haiku-4-5` or `claude-haiku-4-5-20251001` |
-
-Restricted Mythos aliases resolve to `claude-mythos-5-1` and are excluded from
-the public picker. Model validation does not establish account access. Fable
-and Mythos changes are covered offline; no authenticated Claude probe was run.
+Restricted Mythos aliases such as `mythos-5.2` resolve to
+`claude-mythos-5-2`. Account and provider eligibility govern actual access.
+Verification for this release used official documentation and offline tests.
 
 `ClaudeAgentSDK.Model.short_forms/0`, `full_ids/0`, and `list_models/0` expose
 only public catalog entries. Core-owned private entries can still be validated
@@ -204,20 +172,17 @@ outside the materialized authority contract.
 
 ## Effort Gating
 
-Effort is still a Claude-native feature.
+Current Sonnet 5.5, Opus 5.5, Haiku 5.5 and Fable 5.2 support `:low`,
+`:medium`, `:high`, `:xhigh` and `:max`. Claude Code defaults these models
+to medium. The Messages API defaults Sonnet 5.5 and Fable 5.2 to high.
 
-For native Claude models:
+When `effort` is omitted, the SDK leaves the flag unset and Claude Code
+applies its settings and defaults. For a known model with an unsupported
+level, the SDK logs a warning and omits the flag. Haiku 4.5 has no effort
+control. External Ollama requests omit Claude-native effort.
 
-| Model family | Supported efforts |
-|--------------|-------------------|
-| `sonnet`, `sonnet[1m]` | `:low`, `:medium`, `:high`, `:max` |
-| `opus`, `opus[1m]` | `:low`, `:medium`, `:high`, `:xhigh`, `:max` |
-| `haiku` | none; the SDK logs a warning and omits `--effort` |
-
-For external Claude/Ollama runs, the SDK does not emit `--effort`.
-
-That is deliberate. Once the resolved payload is an external backend model, the
-SDK stops pretending the external model supports Claude-native effort semantics.
+The current models use adaptive thinking in Claude Code. `ultracode` is a
+separate Claude Code workflow setting. [Claude Code effort and thinking](https://code.claude.com/docs/en/model-config#adjust-effort-level)
 
 ## Settings And Env From The Payload
 
@@ -257,4 +222,4 @@ external backend does not support Claude-native effort semantics.
 
 ### Pinning Fable versions
 
-Use `claude-fable-5` for Fable 5 or `claude-fable-5-1` for Fable 5.1. Both IDs remain unchanged in CLI arguments. The short `fable` alias is passed to Claude Code, which normally selects 5.1 but can select 5 depending on provider, gateway, CLI version, or configuration. See [Claude Code model configuration](https://code.claude.com/docs/en/model-config#work-with-fable).
+Pin `claude-fable-5-2` for Fable 5.2. The previous `claude-fable-5-1` and `claude-fable-5` IDs still select their own versions. Claude Code resolves the floating `fable` alias based on your version and provider. [Claude Code model configuration](https://code.claude.com/docs/en/model-config#work-with-fable)

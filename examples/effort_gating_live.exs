@@ -5,7 +5,7 @@
 #
 # Demonstrates:
 #   - Supported models keeping `effort`
-#   - Haiku omitting `effort` with a warning
+#   - Legacy Haiku omitting `effort` with a warning
 #   - Invalid effort values raising `ArgumentError`
 
 Code.require_file(Path.expand("support/example_helper.exs", __DIR__))
@@ -20,9 +20,9 @@ defmodule EffortGatingLive do
     Support.header!("Effort Gating Example (live)")
 
     run_case(
-      "Supported model keeps effort",
+      "Haiku 5.5 with low effort",
       Options.new(
-        model: "sonnet",
+        model: "claude-haiku-5-5",
         effort: :low,
         max_turns: 1,
         setting_sources: ["user"]
@@ -30,29 +30,8 @@ defmodule EffortGatingLive do
       |> Support.with_execution_surface()
     )
 
-    run_case(
-      "Haiku omits effort with warning",
-      Options.new(
-        model: "haiku",
-        effort: :low,
-        max_turns: 1,
-        setting_sources: ["user"]
-      )
-      |> Support.with_execution_surface()
-    )
-
-    # Sonnet on :low keeps the live Anthropic call inexpensive while still
-    # exercising the effort flag on a model that supports it.
-    run_case(
-      "Sonnet with :low effort",
-      Options.new(
-        model: "sonnet",
-        effort: :low,
-        max_turns: 1,
-        setting_sources: ["user"]
-      )
-      |> Support.with_execution_surface()
-    )
+    legacy = Options.new(model: "claude-haiku-4-5", effort: :low)
+    IO.inspect(Options.to_args(legacy), label: "Legacy Haiku 4.5 CLI args")
 
     IO.puts("\nInvalid effort values fail fast:")
 
@@ -67,7 +46,7 @@ defmodule EffortGatingLive do
   defp run_case(label, options) do
     IO.puts("\n#{label}")
     IO.puts(String.duplicate("-", 72))
-    IO.inspect(preview_args(options), label: "CLI args")
+    IO.inspect(Options.to_args(options), label: "CLI args")
 
     response =
       ClaudeAgentSDK.query("Reply with exactly: OK", options)
@@ -86,16 +65,7 @@ defmodule EffortGatingLive do
     |> Enum.join("\n")
   end
 
-  defp preview_args(%Options{model: model, effort: effort} = options)
-       when is_binary(model) and not is_nil(effort) do
-    if String.contains?(String.downcase(model), "haiku") do
-      Options.to_args(%{options | effort: nil})
-    else
-      Options.to_args(options)
-    end
-  end
 
-  defp preview_args(options), do: Options.to_args(options)
 end
 
 EffortGatingLive.run()

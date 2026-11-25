@@ -36,9 +36,9 @@ defmodule ClaudeAgentSDK.Model do
   @spec full_ids() :: [String.t()]
   def full_ids do
     catalog_entries()
-    |> Enum.flat_map(fn {_id, aliases} ->
-      Enum.filter(aliases, &String.starts_with?(&1, "claude-"))
-    end)
+    |> Enum.flat_map(fn {id, aliases} -> [id | aliases] end)
+    |> Enum.filter(&String.starts_with?(&1, "claude-"))
+    |> Enum.uniq()
     |> Enum.sort()
   end
 

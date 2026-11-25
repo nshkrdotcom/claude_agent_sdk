@@ -50,9 +50,9 @@ defmodule ClaudeAgentSdk.MixProject do
     [
       cli_subprocess_core_dep(),
       {:jason, "~> 1.4.5"},
-      {:zoi, "~> 0.19.0"},
-      {:ex_doc, "~> 0.40.4", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.4.8", only: [:dev], runtime: false},
+      {:zoi, "~> 0.19.0 or ~> 0.20.0"},
+      {:ex_doc, "~> 0.40.5", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.4.9", only: [:dev], runtime: false},
       {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
       {:supertester, "~> 0.6.0", only: :test},
       {:stream_data, "~> 1.4.0", only: :test}
@@ -60,7 +60,7 @@ defmodule ClaudeAgentSdk.MixProject do
   end
 
   defp cli_subprocess_core_dep do
-    workspace_dep({:cli_subprocess_core, "~> 0.9.5"})
+    workspace_dep({:cli_subprocess_core, "~> 0.10.2"})
   end
 
   defp workspace_dep(committed) do
