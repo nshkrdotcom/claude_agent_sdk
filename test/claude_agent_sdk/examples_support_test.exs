@@ -97,6 +97,9 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
   end
 
   test "preflight argv with explicit empty system prompt is accepted by command lane" do
+    {:ok, context} = ExamplesSupport.parse_argv([])
+    Process.put({ExamplesSupport, :ssh_context}, context)
+
     args = Options.to_args(ExamplesSupport.preflight_options())
 
     assert flag_with_value?(args, "--system-prompt", "")
@@ -105,6 +108,8 @@ defmodule ClaudeAgentSDK.ExamplesSupportTest do
 
     assert {:ok, result} = Command.run(invocation, timeout: 1_000)
     assert result.stdout == "ok"
+  after
+    Process.delete({ExamplesSupport, :ssh_context})
   end
 
   test "preflight options ignore Mix test warning flags" do
