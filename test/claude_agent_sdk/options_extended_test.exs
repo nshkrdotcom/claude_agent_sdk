@@ -41,10 +41,31 @@ defmodule ClaudeAgentSDK.OptionsExtendedTest do
       assert "--continue" in args
     end
 
-    test "resume adds --resume value" do
+    test "resume adds --resume=value as a single argv token" do
       options = %Options{resume: "session-123"}
       args = Options.to_args(options)
-      assert flag_with_value?(args, "--resume", "session-123")
+      assert "--resume=session-123" in args
+      refute "--resume" in args
+      refute "session-123" in args
+    end
+
+    test "session_id adds --session-id=value as a single argv token" do
+      id = "550e8400-e29b-41d4-a716-446655440000"
+      options = %Options{session_id: id}
+      args = Options.to_args(options)
+      assert "--session-id=#{id}" in args
+      refute "--session-id" in args
+      refute id in args
+    end
+
+    test "dash-leading resume and session_id values cannot inject CLI flags" do
+      # --resume takes an optional value, so ["--resume", "--evil"] would parse "--evil" as a flag.
+      options = %Options{resume: "--dangerously-skip-permissions", session_id: "-r"}
+      args = Options.to_args(options)
+      assert "--resume=--dangerously-skip-permissions" in args
+      assert "--session-id=-r" in args
+      refute "--dangerously-skip-permissions" in args
+      refute "-r" in args
     end
   end
 

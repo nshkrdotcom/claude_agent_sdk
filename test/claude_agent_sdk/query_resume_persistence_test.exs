@@ -35,8 +35,8 @@ defmodule ClaudeAgentSDK.QueryResumePersistenceTest do
              |> Enum.to_list()
 
     assert_receive {:cli_stream_args_invoked, args, %Options{}, nil, input}
-    assert "--resume" in args
-    assert "session-123" in args
+    assert "--resume=session-123" in args
+    refute "--resume" in args
     assert "--input-format" in args
     assert "stream-json" in args
     assert is_list(input)
@@ -47,5 +47,13 @@ defmodule ClaudeAgentSDK.QueryResumePersistenceTest do
     # Regression guard:
     # Using --print with --resume is one-shot and loses intermediate turns in session history.
     refute "--print" in args
+  end
+
+  test "resume binds a dash-leading session id to --resume instead of passing it as a flag" do
+    Query.resume("--dangerously-skip-permissions", "turn 2", %Options{}) |> Enum.to_list()
+
+    assert_receive {:cli_stream_args_invoked, args, %Options{}, nil, _input}
+    assert "--resume=--dangerously-skip-permissions" in args
+    refute "--dangerously-skip-permissions" in args
   end
 end

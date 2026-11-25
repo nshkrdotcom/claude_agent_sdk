@@ -898,7 +898,10 @@ defmodule ClaudeAgentSDK.Options do
   defp add_continue_args(args, _), do: args
 
   defp add_resume_args(args, %{resume: nil}), do: args
-  defp add_resume_args(args, %{resume: resume}), do: args ++ ["--resume", resume]
+
+  # The CLI declares `--resume [value]` with an optional value, so in the two-token form a
+  # dash-leading value is parsed as a separate flag. The equals form always binds it.
+  defp add_resume_args(args, %{resume: resume}), do: args ++ ["--resume=#{resume}"]
 
   defp add_settings_args(args, options) do
     case build_settings_value(options) do
@@ -1208,7 +1211,7 @@ defmodule ClaudeAgentSDK.Options do
   end
 
   defp add_session_id_args(args, %{session_id: nil}), do: args
-  defp add_session_id_args(args, %{session_id: id}), do: args ++ ["--session-id", id]
+  defp add_session_id_args(args, %{session_id: id}), do: args ++ ["--session-id=#{id}"]
 
   defp add_fork_session_args(args, %{fork_session: true}), do: args ++ ["--fork-session"]
   defp add_fork_session_args(args, _), do: args

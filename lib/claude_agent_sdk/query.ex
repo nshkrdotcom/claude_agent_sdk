@@ -134,9 +134,9 @@ defmodule ClaudeAgentSDK.Query do
 
       args =
         if prompt do
-          ["--resume", session_id, "--input-format", "stream-json"] ++ base_args
+          ["--resume=#{session_id}", "--input-format", "stream-json"] ++ base_args
         else
-          ["--resume", session_id] ++ base_args
+          ["--resume=#{session_id}"] ++ base_args
         end
 
       input = resume_input(prompt, session_id)

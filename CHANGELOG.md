@@ -17,6 +17,10 @@ Next release: **0.21.2**.
 
 - Refresh all six example project lockfiles against Claude Agent SDK 0.21.1 and current dependency pins.
 
+### Fixed
+
+- Pass `resume` and `session_id` to the CLI as `--resume=<value>` / `--session-id=<value>` (including `Query.resume/3`). The CLI's `--resume` takes an optional value, so a dash-leading value in the two-token form was parsed as a separate CLI flag. Mirrors anthropics/claude-agent-sdk-python#1123.
+
 ## [0.21.1] - 2026-09-29
 
 ### Changed
