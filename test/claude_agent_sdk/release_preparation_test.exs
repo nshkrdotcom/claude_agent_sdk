@@ -17,6 +17,15 @@ defmodule ClaudeAgentSDK.ReleasePreparationTest do
       assert required in package_files
     end
 
+    extras = Enum.map(project[:docs][:extras], &elem(&1, 0))
+
+    assert Enum.sort(extras) ==
+             Enum.sort(~w(README.md LICENSE CHANGELOG.md) ++ Path.wildcard("guides/*.md"))
+
+    assert Enum.sort(List.flatten(Keyword.values(project[:docs][:groups_for_extras]))) ==
+             Enum.sort(extras)
+
+    refute Enum.any?(package_files, &String.starts_with?(&1, ["docs", "examples"]))
     refute "build_support" in package_files
 
     assert project[:package][:links]["License"] ==

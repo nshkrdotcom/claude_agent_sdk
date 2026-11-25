@@ -36,18 +36,6 @@ defmodule ClaudeAgentSDK.ExamplesHygieneTest do
     assert violations == []
   end
 
-  test "package selection includes only HexDocs example READMEs" do
-    assert ClaudeAgentSdk.MixProject.example_package_files() == [
-             "examples/README.md",
-             "examples/mix_task_chat/README.md",
-             "examples/phoenix_chat/README.md",
-             "examples/document_generation/README.md",
-             "examples/research_agent/README.md",
-             "examples/skill_invocation/README.md",
-             "examples/email_agent/README.md"
-           ]
-  end
-
   defp allowed_path?(path) do
     normalized = Path.relative_to_cwd(path)
 

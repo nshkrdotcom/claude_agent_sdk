@@ -736,7 +736,7 @@ The `examples/` directory contains runnable demonstrations.
 
 ### Mix Task Example (Start Here)
 
-If you want to integrate Claude into your own Mix project, see the **[mix_task_chat](examples/mix_task_chat/README.md)** example — a complete working app with Mix tasks:
+If you want to integrate Claude into your own Mix project, see the **[mix_task_chat](guides/mix-task-chat-example.md)** example — a complete working app with Mix tasks:
 
 ```bash
 cd examples/mix_task_chat
@@ -759,7 +759,7 @@ mix run examples/hooks/basic_bash_blocking.exs
 ```
 
 **Key Examples:**
-- [`mix_task_chat/`](examples/mix_task_chat/README.md) - **Full Mix task integration** (streaming + interactive chat)
+- [`mix_task_chat/`](guides/mix-task-chat-example.md) - **Full Mix task integration** (streaming + interactive chat)
 - `basic_example.exs` - Minimal SDK usage
 - `streaming_tools/quick_demo.exs` - Real-time streaming
 - `hooks/complete_workflow.exs` - Full hooks integration
@@ -775,11 +775,11 @@ Complete Mix applications demonstrating production-ready SDK integration pattern
 
 | Example | Description | Key Features |
 |---------|-------------|--------------|
-| [`phoenix_chat/`](examples/phoenix_chat/README.md) | Real-time chat with Phoenix LiveView | LiveView, Channels, streaming responses, session management |
-| [`document_generation/`](examples/document_generation/README.md) | AI-powered Excel document generation | elixlsx, natural language parsing, Mix tasks |
-| [`research_agent/`](examples/research_agent/README.md) | Multi-agent research coordination | Agent tool, subagent tracking via hooks, parallel execution |
-| [`skill_invocation/`](examples/skill_invocation/README.md) | Skill tool usage and tracking | Skill definitions, hook-based tracking, GenServer state |
-| [`email_agent/`](examples/email_agent/README.md) | AI-powered email assistant | SQLite storage, rule-based processing, natural language queries |
+| [`phoenix_chat/`](guides/phoenix-chat-example.md) | Real-time chat with Phoenix LiveView | LiveView, Channels, streaming responses, session management |
+| [`document_generation/`](guides/document-generation-example.md) | AI-powered Excel document generation | elixlsx, natural language parsing, Mix tasks |
+| [`research_agent/`](guides/research-agent-example.md) | Multi-agent research coordination | Agent tool, subagent tracking via hooks, parallel execution |
+| [`skill_invocation/`](guides/skill-invocation-example.md) | Skill tool usage and tracking | Skill definitions, hook-based tracking, GenServer state |
+| [`email_agent/`](guides/email-agent-example.md) | AI-powered email assistant | SQLite storage, rule-based processing, natural language queries |
 
 ```bash
 # Run Phoenix Chat
@@ -813,7 +813,7 @@ cd examples/email_agent && mix deps.get && mix email.assistant "find emails from
 | [Configuration](guides/configuration.md) | Complete options reference |
 | [Agents](guides/agents.md) | Custom agent personas |
 | [Sessions](guides/sessions.md) | Session management and persistence |
-| [Runtime Control](docs/RUNTIME_CONTROL.md) | SDK-local runtime control features |
+| [Runtime Control](guides/runtime-control.md) | SDK-local runtime control features |
 | [Testing](guides/testing.md) | Mock system and testing patterns |
 | [Error Handling](guides/error-handling.md) | Error types and recovery |
 | [Provider Behavior Manifest](guides/provider_behavior_manifest.md) | Evidence for Claude-native feature translation |

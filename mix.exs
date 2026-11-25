@@ -86,28 +86,14 @@ defmodule ClaudeAgentSdk.MixProject do
       maintainers: ["nshkrdotcom"],
       files: ~w(
           lib
-          docs/RUNTIME_CONTROL.md
           assets
           mix.exs
           README.md
           LICENSE
           CHANGELOG.md
           guides
-        ) ++ example_package_files()
+        )
     ]
-  end
-
-  @doc false
-  def example_package_files do
-    ~w(
-      examples/README.md
-      examples/mix_task_chat/README.md
-      examples/phoenix_chat/README.md
-      examples/document_generation/README.md
-      examples/research_agent/README.md
-      examples/skill_invocation/README.md
-      examples/email_agent/README.md
-    )
   end
 
   defp description do
@@ -135,32 +121,32 @@ defmodule ClaudeAgentSdk.MixProject do
         {"guides/model-configuration.md", title: "Model Configuration"},
         {"guides/agents.md", title: "Agents"},
         {"guides/sessions.md", title: "Sessions"},
-        {"docs/RUNTIME_CONTROL.md", title: "Runtime Control"},
+        {"guides/runtime-control.md", title: "Runtime Control", filename: "runtime_control"},
         {"guides/testing.md", title: "Testing"},
         {"guides/error-handling.md", title: "Error Handling"},
         {"guides/atom-safety.md", title: "Atom Safety"},
         {"guides/env-and-secrets.md", title: "Environment & Secrets"},
         {"guides/provider_behavior_manifest.md", title: "Provider Behavior Manifest"},
         {"guides/migrating-to-0.20.md", title: "Migrating to 0.20"},
-        {"examples/README.md", title: "Examples", filename: "examples"},
-        {"examples/mix_task_chat/README.md",
+        {"guides/examples.md", title: "Examples", filename: "examples"},
+        {"guides/mix-task-chat-example.md",
          title: "Mix Task Chat Example", filename: "mix-task-chat-example"},
-        {"examples/phoenix_chat/README.md",
+        {"guides/phoenix-chat-example.md",
          title: "Phoenix Chat Example", filename: "phoenix-chat-example"},
-        {"examples/document_generation/README.md",
+        {"guides/document-generation-example.md",
          title: "Document Generation Example", filename: "document-generation-example"},
-        {"examples/research_agent/README.md",
+        {"guides/research-agent-example.md",
          title: "Research Agent Example", filename: "research-agent-example"},
-        {"examples/skill_invocation/README.md",
+        {"guides/skill-invocation-example.md",
          title: "Skill Invocation Example", filename: "skill-invocation-example"},
-        {"examples/email_agent/README.md",
+        {"guides/email-agent-example.md",
          title: "Email Agent Example", filename: "email-agent-example"},
         {"CHANGELOG.md", title: "Changelog"},
         {"LICENSE", title: "License"}
       ],
       groups_for_extras: [
-        "Project Overview": ["README.md"],
-        Foundations: [
+        "Start Here": [
+          "README.md",
           "guides/getting-started.md",
           "guides/streaming.md",
           "guides/sessions.md"
@@ -177,26 +163,27 @@ defmodule ClaudeAgentSdk.MixProject do
           "guides/agents.md"
         ],
         Operations: [
-          "docs/RUNTIME_CONTROL.md"
-        ],
-        Quality: [
+          "guides/runtime-control.md",
           "guides/testing.md",
           "guides/error-handling.md",
           "guides/atom-safety.md",
-          "guides/env-and-secrets.md",
-          "guides/provider_behavior_manifest.md",
-          "guides/migrating-to-0.20.md"
+          "guides/env-and-secrets.md"
         ],
         Examples: [
-          "examples/README.md",
-          "examples/mix_task_chat/README.md",
-          "examples/phoenix_chat/README.md",
-          "examples/document_generation/README.md",
-          "examples/research_agent/README.md",
-          "examples/skill_invocation/README.md",
-          "examples/email_agent/README.md"
+          "guides/examples.md",
+          "guides/mix-task-chat-example.md",
+          "guides/phoenix-chat-example.md",
+          "guides/document-generation-example.md",
+          "guides/research-agent-example.md",
+          "guides/skill-invocation-example.md",
+          "guides/email-agent-example.md"
         ],
-        Reference: ["CHANGELOG.md", "LICENSE"]
+        Reference: [
+          "guides/provider_behavior_manifest.md",
+          "guides/migrating-to-0.20.md",
+          "CHANGELOG.md",
+          "LICENSE"
+        ]
       ],
       groups_for_modules: [
         "Core API": [
