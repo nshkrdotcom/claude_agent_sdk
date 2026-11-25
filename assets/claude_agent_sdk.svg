@@ -1,239 +1,224 @@
-<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Claude Agent SDK">
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" fill="none">
   <defs>
-    <!-- Anthropic-inspired dark background gradient -->
-    <linearGradient id="hexBg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1a1918"/>
-      <stop offset="50%" stop-color="#141413"/>
-      <stop offset="100%" stop-color="#0d0d0c"/>
-    </linearGradient>
-
-    <!-- Primary accent gradient (Anthropic orange) -->
-    <linearGradient id="accentOrange" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#e8886a"/>
-      <stop offset="50%" stop-color="#d97757"/>
-      <stop offset="100%" stop-color="#CC785C"/>
-    </linearGradient>
-
-    <!-- Secondary accent gradient (Anthropic blue) -->
-    <linearGradient id="accentBlue" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#7eaad6"/>
-      <stop offset="50%" stop-color="#6a9bcc"/>
-      <stop offset="100%" stop-color="#5688b8"/>
-    </linearGradient>
-
-    <!-- Core glow radial for central intelligence -->
-    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#faf9f5"/>
-      <stop offset="30%" stop-color="#d97757"/>
-      <stop offset="70%" stop-color="#d97757" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#d97757" stop-opacity="0"/>
-    </radialGradient>
-
-    <!-- Agent node glow -->
-    <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#faf9f5" stop-opacity="0.9"/>
-      <stop offset="40%" stop-color="#6a9bcc" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#6a9bcc" stop-opacity="0"/>
-    </radialGradient>
-
-    <!-- Hexagon border gradient -->
-    <linearGradient id="hexBorder" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#d97757" stop-opacity="0.8"/>
-      <stop offset="50%" stop-color="#6a9bcc" stop-opacity="0.6"/>
-      <stop offset="100%" stop-color="#d97757" stop-opacity="0.8"/>
-    </linearGradient>
-
-    <!-- Subtle circuit pattern for tech feel -->
-    <pattern id="circuitPattern" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-      <circle cx="10" cy="10" r="0.5" fill="#b0aea5" opacity="0.15"/>
-      <line x1="10" y1="10" x2="20" y2="10" stroke="#b0aea5" stroke-width="0.3" opacity="0.1"/>
-      <line x1="10" y1="10" x2="10" y2="20" stroke="#b0aea5" stroke-width="0.3" opacity="0.1"/>
-    </pattern>
-
-    <!-- Soft outer shadow -->
-    <filter id="outerShadow" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.35"/>
-    </filter>
-
-    <!-- Inner glow for depth -->
-    <filter id="innerGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
-    </filter>
-
-    <!-- Pulsing core animation glow -->
-    <filter id="pulseGlow" x="-100%" y="-100%" width="300%" height="300%">
-      <feGaussianBlur stdDeviation="4" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-
-    <!-- Connection line glow -->
-    <filter id="lineGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="1.5" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-
-    <!-- Hexagon clip path for background effects -->
-    <clipPath id="hexClip">
-      <polygon points="100,8 173.3,50 173.3,150 100,192 26.7,150 26.7,50"/>
+    
+    <clipPath id="hex-clip">
+      <polygon points="100,5 182.27,52.5 182.27,147.5 100,195 17.73,147.5 17.73,52.5" />
     </clipPath>
 
-    <!-- Mask for creating depth layers -->
-    <mask id="fadeMask">
-      <radialGradient id="fadeGrad" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="white"/>
-        <stop offset="100%" stop-color="black"/>
-      </radialGradient>
-      <rect x="0" y="0" width="200" height="200" fill="url(#fadeGrad)"/>
-    </mask>
+    
+    <clipPath id="drop-clip">
+      <path d="M 100 30 C 100 58, 144 86, 144 122 A 44 44 0 0 1 100 166 A 44 44 0 0 1 56 122 C 56 86, 100 58, 100 30 Z" />
+    </clipPath>
+
+    
+    <linearGradient id="bg-grad" x1="25" y1="10" x2="175" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#28201D" />
+      <stop offset="52%" stop-color="#1D1715" />
+      <stop offset="100%" stop-color="#14100F" />
+    </linearGradient>
+
+    
+    <radialGradient id="bg-glow" cx="50%" cy="46%" r="52%">
+      <stop offset="0%" stop-color="#C86A48" stop-opacity="0.22" />
+      <stop offset="58%" stop-color="#8C422B" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#14100F" stop-opacity="0" />
+    </radialGradient>
+
+    
+    <linearGradient id="hex-border" x1="20" y1="10" x2="180" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E29A7C" stop-opacity="0.9" />
+      <stop offset="48%" stop-color="#B0573A" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="#592C1F" stop-opacity="0.88" />
+    </linearGradient>
+
+    
+    <linearGradient id="hex-inner" x1="175" y1="185" x2="25" y2="15" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#C96D4C" stop-opacity="0.38" />
+      <stop offset="50%" stop-color="#703827" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#E8B094" stop-opacity="0.36" />
+    </linearGradient>
+
+    
+    <linearGradient id="drop-base" x1="64" y1="36" x2="138" y2="162" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#D77C5B" />
+      <stop offset="50%" stop-color="#AE5336" />
+      <stop offset="100%" stop-color="#6B2F1E" />
+    </linearGradient>
+
+    
+    <linearGradient id="facet-ul" x1="100" y1="30" x2="62" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E8A283" stop-opacity="0.82" />
+      <stop offset="100%" stop-color="#BC5F40" stop-opacity="0.55" />
+    </linearGradient>
+
+    <linearGradient id="facet-ur" x1="100" y1="30" x2="140" y2="114" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#CF7352" stop-opacity="0.72" />
+      <stop offset="100%" stop-color="#8A3E27" stop-opacity="0.65" />
+    </linearGradient>
+
+    <linearGradient id="facet-ll" x1="56" y1="114" x2="100" y2="166" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9A472E" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#5E291B" stop-opacity="0.92" />
+    </linearGradient>
+
+    <linearGradient id="facet-lr" x1="144" y1="114" x2="100" y2="166" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#763421" stop-opacity="0.88" />
+      <stop offset="100%" stop-color="#451D13" stop-opacity="0.96" />
+    </linearGradient>
+
+    
+    <linearGradient id="drop-rim" x1="65" y1="34" x2="136" y2="164" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F2C8B2" stop-opacity="0.9" />
+      <stop offset="50%" stop-color="#C86A49" stop-opacity="0.65" />
+      <stop offset="100%" stop-color="#4D2116" stop-opacity="0.85" />
+    </linearGradient>
+
+    
+    <linearGradient id="core-bg" x1="78" y1="96" x2="122" y2="148" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#221917" />
+      <stop offset="100%" stop-color="#130E0D" />
+    </linearGradient>
+
+    
+    <linearGradient id="core-rim" x1="76" y1="96" x2="124" y2="148" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ECB99E" stop-opacity="0.85" />
+      <stop offset="50%" stop-color="#C46645" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="#6B3221" stop-opacity="0.85" />
+    </linearGradient>
+
+    
+    <linearGradient id="warm-sand" x1="84" y1="58" x2="116" y2="132" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F8E7DA" />
+      <stop offset="55%" stop-color="#E7AE92" />
+      <stop offset="100%" stop-color="#D47B5A" />
+    </linearGradient>
+
+    
+    <radialGradient id="spark-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F5DFCF" stop-opacity="0.34" />
+      <stop offset="100%" stop-color="#D47B5A" stop-opacity="0" />
+    </radialGradient>
+
+    
+    <linearGradient id="trace-l" x1="30" y1="100" x2="62" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#C96D4C" stop-opacity="0.28" />
+      <stop offset="100%" stop-color="#E49E80" stop-opacity="0.65" />
+    </linearGradient>
+    <linearGradient id="trace-r" x1="170" y1="100" x2="138" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#C96D4C" stop-opacity="0.28" />
+      <stop offset="100%" stop-color="#E49E80" stop-opacity="0.65" />
+    </linearGradient>
   </defs>
 
-  <!-- Main Hexagon Container with shadow -->
-  <polygon 
-    points="100,8 173.3,50 173.3,150 100,192 26.7,150 26.7,50" 
-    fill="url(#hexBg)" 
-    stroke="url(#hexBorder)" 
-    stroke-width="1.5"
-    filter="url(#outerShadow)"
-  />
-
-  <!-- Subtle circuit pattern background -->
-  <g clip-path="url(#hexClip)">
-    <rect x="0" y="0" width="200" height="200" fill="url(#circuitPattern)"/>
-  </g>
-
-  <!-- Concentric hexagonal rings for depth -->
-  <g clip-path="url(#hexClip)" opacity="0.15">
-    <polygon points="100,30 155,60 155,140 100,170 45,140 45,60" fill="none" stroke="#b0aea5" stroke-width="0.5" stroke-dasharray="3 3"/>
-    <polygon points="100,45 140,68 140,132 100,155 60,132 60,68" fill="none" stroke="#b0aea5" stroke-width="0.4" stroke-dasharray="2 4"/>
-  </g>
-
-  <!-- Agent Network Visualization -->
-  <g transform="translate(100, 100)">
+  
+  <g clip-path="url(#hex-clip)">
     
-    <!-- Orbital paths (agent communication channels) -->
-    <g fill="none" stroke="#6a9bcc" opacity="0.25">
-      <ellipse cx="0" cy="0" rx="55" ry="55" stroke-width="0.5" stroke-dasharray="4 2"/>
-      <ellipse cx="0" cy="0" rx="40" ry="40" stroke-width="0.5" stroke-dasharray="2 3"/>
-      <ellipse cx="0" cy="0" rx="25" ry="25" stroke-width="0.5" stroke-dasharray="1 2"/>
+    <polygon points="100,5 182.27,52.5 182.27,147.5 100,195 17.73,147.5 17.73,52.5" fill="url(#bg-grad)" />
+    <polygon points="100,5 182.27,52.5 182.27,147.5 100,195 17.73,147.5 17.73,52.5" fill="url(#bg-glow)" />
+
+    
+    <g stroke="#C86A48" stroke-opacity="0.09" stroke-width="0.9">
+      <line x1="100" y1="5" x2="100" y2="30" />
+      <line x1="100" y1="166" x2="100" y2="195" />
+      <line x1="17.73" y1="52.5" x2="66" y2="80" />
+      <line x1="182.27" y1="52.5" x2="134" y2="80" />
+      <line x1="17.73" y1="147.5" x2="58" y2="124" />
+      <line x1="182.27" y1="147.5" x2="142" y2="124" />
     </g>
 
-    <!-- Agent connection lines (showing orchestration) -->
-    <g stroke="url(#accentBlue)" stroke-width="1.5" opacity="0.7" fill="none" filter="url(#lineGlow)">
-      <!-- Core to outer agents -->
-      <line x1="0" y1="0" x2="0" y2="-50" stroke-linecap="round"/>
-      <line x1="0" y1="0" x2="43.3" y2="25" stroke-linecap="round"/>
-      <line x1="0" y1="0" x2="-43.3" y2="25" stroke-linecap="round"/>
-      <line x1="0" y1="0" x2="43.3" y2="-25" stroke-linecap="round"/>
-      <line x1="0" y1="0" x2="-43.3" y2="-25" stroke-linecap="round"/>
-      <line x1="0" y1="0" x2="0" y2="50" stroke-linecap="round"/>
+    
+    <polygon points="100,14 174.48,57 174.48,143 100,186 25.52,143 25.52,57" stroke="url(#hex-inner)" stroke-width="1.1" stroke-linejoin="round" />
+
+    
+    <g stroke="url(#trace-l)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="62,108 46,108 37,99 37,82" />
+      <polyline points="57,128 45,128 37,136" />
+      <line x1="46" y1="108" x2="35" y2="108" />
+    </g>
+    <g>
+      <circle cx="37" cy="80" r="3" fill="#221917" stroke="#D98262" stroke-width="1.2" />
+      <circle cx="37" cy="80" r="1.1" fill="#F0C5AA" />
+      <circle cx="33" cy="108" r="2.6" fill="#221917" stroke="#C46645" stroke-width="1.1" />
+      <circle cx="37" cy="138" r="3" fill="#221917" stroke="#B4593B" stroke-width="1.2" />
+      <circle cx="37" cy="138" r="1.1" fill="#DF9474" />
     </g>
 
-    <!-- Secondary connection lines (agent-to-agent) -->
-    <g stroke="#6a9bcc" stroke-width="0.8" opacity="0.35" fill="none">
-      <!-- Hexagonal connections between outer agents -->
-      <line x1="0" y1="-50" x2="43.3" y2="-25"/>
-      <line x1="43.3" y1="-25" x2="43.3" y2="25"/>
-      <line x1="43.3" y1="25" x2="0" y2="50"/>
-      <line x1="0" y1="50" x2="-43.3" y2="25"/>
-      <line x1="-43.3" y1="25" x2="-43.3" y2="-25"/>
-      <line x1="-43.3" y1="-25" x2="0" y2="-50"/>
+    
+    <g stroke="url(#trace-r)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="138,108 154,108 163,99 163,82" />
+      <polyline points="143,128 155,128 163,136" />
+      <line x1="154" y1="108" x2="165" y2="108" />
+    </g>
+    <g>
+      <circle cx="163" cy="80" r="3" fill="#221917" stroke="#D98262" stroke-width="1.2" />
+      <circle cx="163" cy="80" r="1.1" fill="#F0C5AA" />
+      <circle cx="167" cy="108" r="2.6" fill="#221917" stroke="#C46645" stroke-width="1.1" />
+      <circle cx="163" cy="138" r="3" fill="#221917" stroke="#B4593B" stroke-width="1.2" />
+      <circle cx="163" cy="138" r="1.1" fill="#DF9474" />
     </g>
 
-    <!-- Data flow particles (small dots along connections) -->
-    <g fill="#faf9f5" opacity="0.6">
-      <circle cx="0" cy="-25" r="1.2"/>
-      <circle cx="21.65" cy="12.5" r="1.2"/>
-      <circle cx="-21.65" cy="12.5" r="1.2"/>
-      <circle cx="21.65" cy="-12.5" r="1.2"/>
-      <circle cx="-21.65" cy="-12.5" r="1.2"/>
-      <circle cx="0" cy="25" r="1.2"/>
-    </g>
+    
+    <circle cx="100" cy="21" r="2.2" fill="#E8AE90" fill-opacity="0.75" />
+    <circle cx="100" cy="177" r="2.5" fill="#221917" stroke="#C46645" stroke-width="1.15" />
 
-    <!-- Outer Agent Nodes (6 agents in hexagonal formation) -->
-    <g filter="url(#innerGlow)">
-      <!-- Top agent -->
-      <circle cx="0" cy="-50" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
-      <circle cx="0" cy="-50" r="4" fill="#6a9bcc"/>
-      <circle cx="0" cy="-50" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
+    
+    <g clip-path="url(#drop-clip)">
       
-      <!-- Top-right agent -->
-      <circle cx="43.3" cy="-25" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
-      <circle cx="43.3" cy="-25" r="4" fill="#6a9bcc"/>
-      <circle cx="43.3" cy="-25" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
-      
-      <!-- Bottom-right agent -->
-      <circle cx="43.3" cy="25" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
-      <circle cx="43.3" cy="25" r="4" fill="#6a9bcc"/>
-      <circle cx="43.3" cy="25" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
-      
-      <!-- Bottom agent -->
-      <circle cx="0" cy="50" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
-      <circle cx="0" cy="50" r="4" fill="#6a9bcc"/>
-      <circle cx="0" cy="50" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
-      
-      <!-- Bottom-left agent -->
-      <circle cx="-43.3" cy="25" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
-      <circle cx="-43.3" cy="25" r="4" fill="#6a9bcc"/>
-      <circle cx="-43.3" cy="25" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
-      
-      <!-- Top-left agent -->
-      <circle cx="-43.3" cy="-25" r="8" fill="#141413" stroke="url(#accentBlue)" stroke-width="1.5"/>
-      <circle cx="-43.3" cy="-25" r="4" fill="#6a9bcc"/>
-      <circle cx="-43.3" cy="-25" r="12" fill="url(#nodeGlow)" opacity="0.5"/>
-    </g>
+      <rect x="52" y="28" width="96" height="142" fill="url(#drop-base)" />
 
-    <!-- Central Claude Core (The orchestrator) -->
-    <g filter="url(#pulseGlow)">
-      <!-- Outer ring -->
-      <circle cx="0" cy="0" r="20" fill="none" stroke="url(#accentOrange)" stroke-width="1" opacity="0.6"/>
       
-      <!-- Main core body -->
-      <circle cx="0" cy="0" r="16" fill="#141413" stroke="url(#accentOrange)" stroke-width="2"/>
+      <polygon points="100,30 100,96 54,116 54,30" fill="url(#facet-ul)" />
+      <polygon points="100,30 146,30 146,116 100,96" fill="url(#facet-ur)" />
+      <polygon points="100,96 100,168 54,168 54,116" fill="url(#facet-ll)" />
+      <polygon points="100,96 146,116 146,168 100,168" fill="url(#facet-lr)" />
+
       
-      <!-- Inner glow -->
-      <circle cx="0" cy="0" r="14" fill="url(#coreGlow)" opacity="0.8"/>
+      <polygon points="100,30 74,86 100,96" fill="#F3CBB4" fill-opacity="0.16" />
       
-      <!-- Claude "spark" - stylized anthropic inspired symbol -->
-      <g fill="#faf9f5">
-        <!-- Central star/spark pattern representing intelligence -->
-        <polygon points="0,-8 2,-2 8,0 2,2 0,8 -2,2 -8,0 -2,-2" opacity="0.95"/>
-        <!-- Radiating micro-details -->
-        <line x1="0" y1="-6" x2="0" y2="-10" stroke="#faf9f5" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
-        <line x1="6" y1="0" x2="10" y2="0" stroke="#faf9f5" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
-        <line x1="0" y1="6" x2="0" y2="10" stroke="#faf9f5" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
-        <line x1="-6" y1="0" x2="-10" y2="0" stroke="#faf9f5" stroke-width="1" stroke-linecap="round" opacity="0.6"/>
-        <!-- Diagonal rays -->
-        <line x1="4.24" y1="-4.24" x2="7.07" y2="-7.07" stroke="#faf9f5" stroke-width="0.8" stroke-linecap="round" opacity="0.4"/>
-        <line x1="4.24" y1="4.24" x2="7.07" y2="7.07" stroke="#faf9f5" stroke-width="0.8" stroke-linecap="round" opacity="0.4"/>
-        <line x1="-4.24" y1="4.24" x2="-7.07" y2="7.07" stroke="#faf9f5" stroke-width="0.8" stroke-linecap="round" opacity="0.4"/>
-        <line x1="-4.24" y1="-4.24" x2="-7.07" y2="-7.07" stroke="#faf9f5" stroke-width="0.8" stroke-linecap="round" opacity="0.4"/>
+      <polygon points="100,96 130,124 100,168" fill="#1F0C07" fill-opacity="0.22" />
+
+      
+      <g stroke="#F2C8B2" stroke-opacity="0.28" stroke-width="0.9">
+        <line x1="100" y1="30" x2="100" y2="166" />
+        <line x1="56" y1="115" x2="100" y2="96" />
+        <line x1="144" y1="115" x2="100" y2="96" />
       </g>
     </g>
 
+    
+    <path d="M 100 30 C 100 58, 144 86, 144 122 A 44 44 0 0 1 100 166 A 44 44 0 0 1 56 122 C 56 86, 100 58, 100 30 Z" stroke="url(#drop-rim)" stroke-width="1.6" stroke-linejoin="round" />
+
+    
+    <circle cx="100" cy="70" r="18" fill="url(#spark-glow)" />
+    <g transform="translate(100, 70)">
+      
+      <path d="M 0 -13 L 1.9 -2.8 L 0 0 L -1.9 -2.8 Z" fill="#FAF0E8" />
+      <path d="M 13 0 L 2.8 1.9 L 0 0 L 2.8 -1.9 Z" fill="#F3D6C3" />
+      <path d="M 0 13 L -1.9 2.8 L 0 0 L 1.9 2.8 Z" fill="#EBBAA0" />
+      <path d="M -13 0 L -2.8 -1.9 L 0 0 L -2.8 1.9 Z" fill="#F3D6C3" />
+      
+      <path d="M 8.6 -8.6 L 2.2 -0.9 L 0 0 L 0.9 -2.2 Z" fill="#F2CEB8" fill-opacity="0.92" />
+      <path d="M 8.6 8.6 L 0.9 2.2 L 0 0 L 2.2 0.9 Z" fill="#E3A283" fill-opacity="0.92" />
+      <path d="M -8.6 8.6 L -2.2 0.9 L 0 0 L -0.9 2.2 Z" fill="#E3A283" fill-opacity="0.92" />
+      <path d="M -8.6 -8.6 L -0.9 -2.2 L 0 0 L -2.2 -0.9 Z" fill="#F2CEB8" fill-opacity="0.92" />
+      
+      <circle cx="0" cy="0" r="2.2" fill="#FFF7F1" />
+    </g>
+
+    
+    <polygon points="100,93 125.11,107.5 125.11,136.5 100,151 74.89,136.5 74.89,107.5" fill="url(#core-bg)" stroke="url(#core-rim)" stroke-width="1.5" stroke-linejoin="round" />
+
+    
+    <polygon points="100,96.8 121.82,109.4 121.82,134.6 100,147.2 78.18,134.6 78.18,109.4" stroke="#E8B094" stroke-opacity="0.16" stroke-width="0.75" />
+
+    
+    <polyline points="86.5,114.5 96,122 86.5,129.5" stroke="url(#warm-sand)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+    <rect x="100.5" y="126.6" width="13.5" height="3.2" rx="1.6" fill="url(#warm-sand)" />
   </g>
 
-  <!-- Hexagon edge highlights for premium glass effect -->
-  <g clip-path="url(#hexClip)">
-    <!-- Top edge highlight -->
-    <line x1="26.7" y1="50" x2="100" y2="8" stroke="#faf9f5" stroke-width="0.5" opacity="0.15"/>
-    <line x1="100" y1="8" x2="173.3" y2="50" stroke="#faf9f5" stroke-width="0.5" opacity="0.1"/>
-  </g>
+  
+  <polygon points="100,5 182.27,52.5 182.27,147.5 100,195 17.73,147.5 17.73,52.5" stroke="url(#hex-border)" stroke-width="2.4" stroke-linejoin="round" />
 
-  <!-- Subtle corner accents -->
-  <g fill="#d97757" opacity="0.4">
-    <circle cx="100" cy="8" r="2"/>
-    <circle cx="173.3" cy="50" r="1.5"/>
-    <circle cx="173.3" cy="150" r="1.5"/>
-    <circle cx="100" cy="192" r="2"/>
-    <circle cx="26.7" cy="150" r="1.5"/>
-    <circle cx="26.7" cy="50" r="1.5"/>
-  </g>
-
+  
+  <polyline points="86,13.1 100,5 114,13.1" stroke="#F5D3BE" stroke-opacity="0.72" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
 </svg>
