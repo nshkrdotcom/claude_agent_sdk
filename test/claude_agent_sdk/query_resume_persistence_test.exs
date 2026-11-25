@@ -49,6 +49,14 @@ defmodule ClaudeAgentSDK.QueryResumePersistenceTest do
     refute "--print" in args
   end
 
+  test "resume without a prompt binds the session id and leaves stdin empty" do
+    assert [:stubbed_stream] == Query.resume("session-123", nil, %Options{}) |> Enum.to_list()
+
+    assert_receive {:cli_stream_args_invoked, args, %Options{}, nil, nil}
+    assert "--resume=session-123" in args
+    refute "--resume" in args
+  end
+
   test "resume binds a dash-leading session id to --resume instead of passing it as a flag" do
     Query.resume("--dangerously-skip-permissions", "turn 2", %Options{}) |> Enum.to_list()
 
