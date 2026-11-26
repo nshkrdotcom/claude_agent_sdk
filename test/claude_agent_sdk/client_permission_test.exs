@@ -124,14 +124,21 @@ defmodule ClaudeAgentSDK.ClientPermissionTest do
 
       _request_count =
         Enum.reduce(
-          [:plan, :accept_edits, :bypass_permissions, :default, :auto, :dont_ask],
+          [
+            plan: "plan",
+            accept_edits: "acceptEdits",
+            bypass_permissions: "bypassPermissions",
+            default: "default",
+            auto: "auto",
+            dont_ask: "dontAsk"
+          ],
           1,
-          fn mode, request_count ->
+          fn {mode, wire_mode}, request_count ->
             task = Task.async(fn -> Client.set_permission_mode(client, mode) end)
             request = wait_for_request(transport, request_count + 1)
 
             assert request["request"]["subtype"] == "set_permission_mode"
-            assert request["request"]["mode"] == Atom.to_string(mode)
+            assert request["request"]["mode"] == wire_mode
 
             FakeCLI.push_message(transport, success_response(request["request_id"]))
             assert :ok = Task.await(task, 500)

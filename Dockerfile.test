@@ -1,5 +1,5 @@
 # Dockerfile.test - Run SDK tests in containerized environment
-FROM hexpm/elixir:1.18.3-erlang-27.3.3-debian-bookworm-20251208
+FROM hexpm/elixir:1.19.5-erlang-28.3.1-debian-bookworm-20260610
 
 RUN apt-get update && apt-get install -y \
     curl \
